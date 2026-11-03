@@ -8,6 +8,7 @@
 
 - [ ] A player can set text and image models and providers, including splitting them
 - [ ] A player can enter API keys, and the API never returns them in full
+- [ ] API keys never enter a Save, so duplicates contain none, and a test proves it
 - [ ] A player can edit Model Instructions, blank by default
 - [ ] A player can toggle images and set font size
 - [ ] A Chat style setting exists, with its options completed in ticket 22

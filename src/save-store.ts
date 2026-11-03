@@ -8,6 +8,7 @@ export type Save = { worldBrief: string; pc: { name: string } };
 
 export class SaveNotFound extends Error {}
 export class MessageNotFound extends Error {}
+export class StaleTurn extends Error {}
 
 const SCHEMA = `
   CREATE TABLE save (
@@ -71,6 +72,30 @@ function writeSnapshot(db: Database, messageId: number, state: State) {
   }
 }
 
+const latestMessage = (db: Database) =>
+  db.query<{ id: number }, []>("SELECT coalesce(max(id), 0) AS id FROM messages").get()!.id;
+
+function requireMessage(db: Database, messageId: number) {
+  const found = db.query<{ id: number }, [number]>("SELECT id FROM messages WHERE id = ?").get(messageId);
+  if (!found) throw new MessageNotFound();
+}
+
+function countAfter(db: Database, messageId: number) {
+  requireMessage(db, messageId);
+  const { messages } = db
+    .query<{ messages: number }, [number]>("SELECT count(*) AS messages FROM messages WHERE id > ?")
+    .get(messageId)!;
+  // shortcut: Saves hold no images yet, count and delete them here in ticket 17.
+  return { messages, images: 0 };
+}
+
+function deleteAfter(db: Database, messageId: number) {
+  db.run("DELETE FROM messages WHERE id > ?", [messageId]);
+  db.run("DELETE FROM snapshot_sections WHERE message_id > ?", [messageId]);
+  // Sweeping by what is still linked keeps every section a remaining Message shares.
+  db.run("DELETE FROM sections WHERE id NOT IN (SELECT section_id FROM snapshot_sections)");
+}
+
 export type SaveStore = ReturnType<typeof saveStore>;
 export type Message = { id: number; role: "player" | "narrator"; text: string };
 
@@ -80,7 +105,8 @@ export function saveStore(savesDir: string) {
 
   const connect = (path: string) => {
     const db = new Database(path, { create: true, strict: true });
-    db.run("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL;");
+    // secure_delete zeroes deleted rows, so a Reverted future cannot be read back from a shared Save file.
+    db.run("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA secure_delete = ON;");
     return db;
   };
 
@@ -120,6 +146,11 @@ export function saveStore(savesDir: string) {
       return db.query<Message, []>("SELECT id, role, text FROM messages ORDER BY id").all();
     },
 
+    latestMessageId(id: string) {
+      using db = open(id);
+      return latestMessage(db);
+    },
+
     latestState(id: string) {
       using db = open(id);
       return toState(latestSections(db));
@@ -132,13 +163,44 @@ export function saveStore(savesDir: string) {
       return toState(sections);
     },
 
+    revertPreview(id: string, messageId: number) {
+      using db = open(id);
+      return countAfter(db, messageId);
+    },
+
+    revert(id: string, messageId: number) {
+      using db = open(id);
+      return db.transaction(() => {
+        const deleted = countAfter(db, messageId);
+        deleteAfter(db, messageId);
+        return deleted;
+      })();
+    },
+
+    /** Copies the whole Save, or only as far as `fromMessage`. */
+    duplicate(id: string, fromMessage?: number) {
+      using source = open(id);
+      if (fromMessage !== undefined) requireMessage(source, fromMessage);
+      const copyId = crypto.randomUUID();
+      const unfinishedPath = `${pathOf(copyId)}.unfinished`;
+      source.run("VACUUM INTO ?", [unfinishedPath]);
+      if (fromMessage !== undefined) {
+        using copy = connect(unfinishedPath);
+        deleteAfter(copy, fromMessage);
+      }
+      renameSync(unfinishedPath, pathOf(copyId));
+      return copyId;
+    },
+
     /** `advance` runs inside the transaction, so it always sees the latest state. */
-    commitTurn(id: string, input: string, narration: string, advance: (state: State) => State) {
+    commitTurn(id: string, basedOn: number, input: string, narration: string, advance: (state: State) => State) {
       using db = open(id);
       const insert = db.query<Message, [Message["role"], string]>(
         "INSERT INTO messages (role, text) VALUES (?, ?) RETURNING id, role, text",
       );
       return db.transaction(() => {
+        // Message ids are never reused, so any Revert or other Turn since `basedOn` is caught here.
+        if (latestMessage(db) !== basedOn) throw new StaleTurn();
         const state = toState(latestSections(db));
         const player = insert.get("player", input)!;
         writeSnapshot(db, player.id, state);

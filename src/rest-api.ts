@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MessageNotFound, SaveNotFound, saveStore } from "./save-store";
+import { MessageNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
 import { NarratorError, playTurn, type TextProvider } from "./turn-engine";
 
 const NewSaveRequest = z.object({
@@ -8,6 +8,10 @@ const NewSaveRequest = z.object({
 });
 
 const NewTurnRequest = z.object({ input: z.string().min(1) });
+
+const RevertRequest = z.object({});
+
+const DuplicateRequest = z.object({ fromMessage: z.number().optional() });
 
 // Requiring JSON also stops other websites posting here, since a cross-site JSON POST needs a CORS preflight.
 async function parseBody<T>(req: Request, schema: z.ZodType<T>) {
@@ -28,6 +32,12 @@ export function startServer(options: { savesDir: string; textProvider: TextProvi
           return Response.json({ id }, { status: 201 });
         },
       },
+      "/saves/:id/duplicate": {
+        POST: async (req) => {
+          const { fromMessage } = await parseBody(req, DuplicateRequest);
+          return Response.json({ id: saves.duplicate(req.params.id, fromMessage) }, { status: 201 });
+        },
+      },
       "/saves/:id/turns": {
         POST: async (req) => {
           const { input } = await parseBody(req, NewTurnRequest);
@@ -45,12 +55,20 @@ export function startServer(options: { savesDir: string; textProvider: TextProvi
           return Response.json({ inventory, status, pcKnown });
         },
       },
+      "/saves/:id/messages/:messageId/revert": {
+        GET: (req) => Response.json(saves.revertPreview(req.params.id, Number(req.params.messageId))),
+        POST: async (req) => {
+          await parseBody(req, RevertRequest);
+          return Response.json(saves.revert(req.params.id, Number(req.params.messageId)));
+        },
+      },
     },
     fetch: () => Response.json({ error: "Not found" }, { status: 404 }),
     error(error) {
       if (error instanceof z.ZodError) return Response.json({ error: z.prettifyError(error) }, { status: 400 });
       if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
       if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
+      if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
       if (error instanceof NarratorError) {
         console.error(error);
         return Response.json({ error: error.message }, { status: 502 });

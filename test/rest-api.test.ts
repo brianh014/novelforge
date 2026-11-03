@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
 
@@ -341,4 +341,200 @@ test("an unchanged section is stored once however many Messages share it", async
 
   expect(fileSize() - before).toBeLessThan(size / 10);
   expect(await snapshotAt(game, id, 42)).toMatchObject({ inventory: { carrying: ["x".repeat(size)] } });
+});
+
+const messageTexts = async (game: ReturnType<typeof startGame>, id: string) => {
+  const { messages } = (await game.get(`/saves/${id}/messages`).then((r) => r.json())) as {
+    messages: { text: string }[];
+  };
+  return messages.map((message) => message.text);
+};
+
+test("Revert reports what it would delete, then restores that Message's Snapshot without the Text Provider", async () => {
+  const { game, prompts } = play(
+    narration("A lantern.", { op: "add_item", slot: "carrying", item: "lantern" }),
+    narration("It breaks.", { op: "remove_item", item: "lantern" }),
+    narration("You walk on."),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I search." });
+  await game.post(`/saves/${id}/turns`, { input: "I drop it." });
+
+  const preview = await game.get(`/saves/${id}/messages/2/revert`).then((r) => r.json());
+
+  expect(preview).toEqual({ messages: 2, images: 0 });
+  expect(await messageTexts(game, id)).toHaveLength(4);
+
+  const response = await game.post(`/saves/${id}/messages/2/revert`, {});
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ messages: 2, images: 0 });
+  expect(prompts).toHaveLength(2);
+  expect(await messageTexts(game, id)).toEqual(["I search.", "A lantern."]);
+  expect((await game.get(`/saves/${id}/messages/4/snapshot`)).status).toBe(404);
+
+  await game.post(`/saves/${id}/turns`, { input: "I walk." });
+
+  expect(JSON.stringify(prompts[2])).toContain('\\"carrying\\":[\\"lantern\\"]');
+  expect(await messageTexts(game, id)).toEqual(["I search.", "A lantern.", "I walk.", "You walk on."]);
+});
+
+test("Reverting to the latest Message deletes nothing", async () => {
+  const { game } = play(narration("The tide rises."));
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  const response = await game.post(`/saves/${id}/messages/2/revert`, {});
+
+  expect(await response.json()).toEqual({ messages: 0, images: 0 });
+  expect(await messageTexts(game, id)).toHaveLength(2);
+});
+
+test.each(["0", "99", "lantern"])("Reverting to Message %s returns 404 and deletes nothing", async (messageId) => {
+  const { game } = play(narration("The tide rises."));
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect((await game.get(`/saves/${id}/messages/${messageId}/revert`)).status).toBe(404);
+  expect((await game.post(`/saves/${id}/messages/${messageId}/revert`, {})).status).toBe(404);
+  expect(await messageTexts(game, id)).toHaveLength(2);
+});
+
+test("a non-JSON Revert is rejected, so other websites cannot delete a story", async () => {
+  const { game } = play(narration("The tide rises."));
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  const response = await fetch(game.url(`/saves/${id}/messages/1/revert`), { method: "POST" });
+
+  expect(response.status).toBe(400);
+  expect(await messageTexts(game, id)).toHaveLength(2);
+});
+
+const saveFileText = (id: string) => readFileSync(join(savesDir, `${id}.sqlite`), "latin1");
+
+test("Revert sweeps orphaned Snapshot sections, and sections remaining Messages share survive", async () => {
+  const { game } = play(
+    narration("A lantern.", { op: "add_item", slot: "carrying", item: "SHARED-SECTION" }),
+    narration("You sicken.", { op: "set_health", health: "ORPHANED-SECTION" }),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I search." });
+  const kept = await snapshotAt(game, id, 2);
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+  expect(saveFileText(id)).toContain("ORPHANED-SECTION");
+
+  // Messages 3 and 4 still share the inventory section first written for Message 2.
+  await game.post(`/saves/${id}/messages/2/revert`, {});
+
+  expect(await snapshotAt(game, id, 2)).toEqual(kept);
+  expect(kept).toMatchObject({ inventory: { carrying: ["SHARED-SECTION"] } });
+  expect(saveFileText(id)).not.toContain("ORPHANED-SECTION");
+});
+
+test("a Revert that fails partway deletes nothing", async () => {
+  const { game } = play(
+    narration("A lantern.", { op: "add_item", slot: "carrying", item: "lantern" }),
+    narration("You sicken.", { op: "set_health", health: "sick" }),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I search." });
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+  {
+    // Sweeping is the last step, so failing it proves the earlier deletes roll back.
+    using db = new Database(join(savesDir, `${id}.sqlite`));
+    db.run(`CREATE TRIGGER fail_sweep BEFORE DELETE ON sections BEGIN SELECT RAISE(ABORT, 'disk full'); END`);
+  }
+
+  const response = await game.post(`/saves/${id}/messages/2/revert`, {});
+
+  expect(response.status).toBe(500);
+  expect(await messageTexts(game, id)).toHaveLength(4);
+  expect(await snapshotAt(game, id, 4)).toMatchObject({ status: { health: "sick" } });
+});
+
+const duplicate = async (game: ReturnType<typeof startGame>, id: string, body: object = {}) => {
+  const response = await game.post(`/saves/${id}/duplicate`, body);
+  expect(response.status).toBe(201);
+  return ((await response.json()) as { id: string }).id;
+};
+
+test("a duplicated Save is whole and independent of the original", async () => {
+  const { game } = play(
+    narration("A lantern.", { op: "add_item", slot: "carrying", item: "lantern" }),
+    narration("In the copy."),
+    narration("In the original."),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I search." });
+
+  const copy = await duplicate(game, id);
+
+  expect(copy).not.toBe(id);
+  expect(readdirSync(savesDir).toSorted()).toEqual([`${id}.sqlite`, `${copy}.sqlite`].toSorted());
+  expect(await snapshotAt(game, copy, 2)).toEqual(await snapshotAt(game, id, 2));
+
+  await game.post(`/saves/${copy}/turns`, { input: "Copy." });
+  await game.post(`/saves/${id}/messages/1/revert`, {});
+  await game.post(`/saves/${id}/turns`, { input: "Original." });
+
+  expect(await messageTexts(game, copy)).toEqual(["I search.", "A lantern.", "Copy.", "In the copy."]);
+  expect(await messageTexts(game, id)).toEqual(["I search.", "Original.", "In the original."]);
+});
+
+test("duplicating from a Message makes a Save that ends there and leaves the original whole", async () => {
+  const { game, prompts } = play(
+    narration("A lantern.", { op: "add_item", slot: "carrying", item: "lantern" }),
+    narration("You sicken.", { op: "set_health", health: "LATER-SECTION" }),
+    narration("You walk on."),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I search." });
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  const copy = await duplicate(game, id, { fromMessage: 2 });
+
+  expect(await messageTexts(game, id)).toHaveLength(4);
+  expect(await messageTexts(game, copy)).toEqual(["I search.", "A lantern."]);
+  expect(saveFileText(copy)).not.toContain("LATER-SECTION");
+
+  await game.post(`/saves/${copy}/turns`, { input: "I walk." });
+
+  expect(JSON.stringify(prompts[2])).toContain('\\"carrying\\":[\\"lantern\\"]');
+  expect(JSON.stringify(prompts[2])).toContain('\\"health\\":\\"unhurt\\"');
+});
+
+test("duplicating from an unknown Message returns 404 and makes no Save", async () => {
+  const { game } = play();
+  const id = await game.createSave();
+
+  expect((await game.post(`/saves/${id}/duplicate`, { fromMessage: 99 })).status).toBe(404);
+  expect(readdirSync(savesDir)).toEqual([`${id}.sqlite`]);
+});
+
+test("a non-JSON duplicate is rejected and makes no Save", async () => {
+  const { game } = play();
+  const id = await game.createSave();
+
+  const response = await fetch(game.url(`/saves/${id}/duplicate`), { method: "POST" });
+
+  expect(response.status).toBe(400);
+  expect(readdirSync(savesDir)).toEqual([`${id}.sqlite`]);
+});
+
+test("a Turn still in flight when a Revert happens is refused, so the deleted future cannot return", async () => {
+  const stale = Promise.withResolvers<string>();
+  const replies = [Promise.resolve(narration("A lantern.")), Promise.resolve(narration("Next.")), stale.promise];
+  game = startGame(savesDir, () => replies.shift()!);
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I search." });
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+  const turn = game.post(`/saves/${id}/turns`, { input: "I press on." });
+  await Bun.sleep(50);
+
+  await game.post(`/saves/${id}/messages/2/revert`, {});
+  stale.resolve(narration("Written for the deleted future."));
+
+  expect((await turn).status).toBe(409);
+  expect(await messageTexts(game, id)).toEqual(["I search.", "A lantern."]);
 });

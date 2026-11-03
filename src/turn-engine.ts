@@ -15,6 +15,7 @@ const responseSchema = JSON.stringify(z.toJSONSchema(NarratorResponse, { io: "in
 
 export async function playTurn(saves: SaveStore, textProvider: TextProvider, id: string, input: string) {
   const { worldBrief, pc } = saves.read(id);
+  const basedOn = saves.latestMessageId(id);
   const { narration, state_operations } = await narrate(textProvider, [
     {
       role: "system",
@@ -24,7 +25,7 @@ Change the state only through state_operations, naming things exactly as the cur
     },
     { role: "user", content: input },
   ]);
-  return saves.commitTurn(id, input, narration, (state) => {
+  return saves.commitTurn(id, basedOn, input, narration, (state) => {
     const { next, refused } = applyOperations(state, state_operations);
     // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
     if (refused.length > 0) throw new NarratorError("The Narrator gave no usable response", { cause: refused });

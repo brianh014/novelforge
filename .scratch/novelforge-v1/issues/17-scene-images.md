@@ -15,5 +15,5 @@
 - [ ] The payload holds a list of role-tagged references, trimmed to the model, and unsupported fields are dropped
 - [ ] The player can see how many images were generated this session
 - [ ] Turning images off stops new images, and existing ones stay visible
-- [ ] Images are stored in the Save and deleted by Revert
+- [ ] Images are stored in the Save, counted by the Revert preview and deleted by Revert
 - [ ] A manual run with a real OpenRouter image model works
