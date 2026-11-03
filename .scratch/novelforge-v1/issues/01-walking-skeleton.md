@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] A `.gitattributes` keeps line endings consistent
-- [ ] The app compiles to a single executable that starts the server on localhost only
-- [ ] The server uses `Bun.serve` with no web framework, and Zod validates API requests and Narrator JSON
-- [ ] A Save can be created through the REST API and exists as one SQLite file in the Saves folder next to the app
-- [ ] A Turn played through the REST API stores the player and Narrator Messages
-- [ ] Messages survive a server restart
-- [ ] The SQLite file uses a rollback journal with full sync, and a Turn is one transaction
-- [ ] Tests start the real server and use real Saves in a temp folder, with a scripted, recording Text Provider
+- [x] A `.gitattributes` keeps line endings consistent
+- [x] The app compiles to a single executable that starts the server on localhost only
+- [x] The server uses `Bun.serve` with no web framework, and Zod validates API requests and Narrator JSON
+- [x] A Save can be created through the REST API and exists as one SQLite file in the Saves folder next to the app
+- [x] A Turn played through the REST API stores the player and Narrator Messages
+- [x] Messages survive a server restart
+- [x] The SQLite file uses a rollback journal with full sync, and a Turn is one transaction
+- [x] Tests start the real server and use real Saves in a temp folder, with a scripted, recording Text Provider
