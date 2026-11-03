@@ -1,3 +1,5 @@
 node_modules/
 dist/
 Saves/
+settings.json
+settings.json.unfinished

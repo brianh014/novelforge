@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
 import { MessageNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
+import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { playTurn, type TextProvider, TurnFailed } from "./turn-engine";
 
 const NewSaveRequest = z.object({
@@ -20,20 +21,50 @@ async function parseBody<T>(req: Request, schema: z.ZodType<T>) {
   return schema.parse(isJson ? await req.json().catch(() => undefined) : undefined);
 }
 
+function errorResponse(error: unknown) {
+  if (error instanceof z.ZodError) return Response.json({ error: z.prettifyError(error) }, { status: 400 });
+  if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
+  if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
+  if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
+  if (error instanceof TurnFailed) {
+    console.error(error);
+    const { message, failure, input } = error;
+    return Response.json({ error: message, failure, input }, { status: failure === "refused" ? 422 : 502 });
+  }
+  console.error(error);
+  return Response.json({ error: "Internal server error" }, { status: 500 });
+}
+
 export function startServer(options: {
   savesDir: string;
   textProvider: TextProvider;
   dice: Dice;
   nearMissMargin: number;
-  modelInstructions: string;
+  settings: SettingsStore;
   port: number;
 }) {
   const saves = saveStore(options.savesDir);
+  const { settings } = options;
+
+  // An allowlist, so the API key can never reach a response.
+  const publicSettings = () => {
+    const { textBaseUrl, textModel, textApiKey, modelInstructions } = settings.read();
+    return { textBaseUrl, textModel, hasTextApiKey: textApiKey !== "", modelInstructions };
+  };
 
   return Bun.serve({
     hostname: "127.0.0.1",
     port: options.port,
+    // A Turn can stay silent past Bun's default, which would drop the client while the Turn went on to commit.
+    idleTimeout: 0,
     routes: {
+      "/settings": {
+        GET: () => Response.json(publicSettings()),
+        PATCH: async (req) => {
+          settings.update(await parseBody(req, SettingsUpdate));
+          return Response.json(publicSettings());
+        },
+      },
       "/saves": {
         POST: async (req) => {
           const id = saves.create(await parseBody(req, NewSaveRequest));
@@ -49,8 +80,26 @@ export function startServer(options: {
       "/saves/:id/turns": {
         POST: async (req) => {
           const { input } = await parseBody(req, NewTurnRequest);
-          const messages = await playTurn(saves, options, req.params.id, input);
-          return Response.json({ messages }, { status: 201 });
+          if (!req.headers.get("accept")?.includes("text/event-stream")) {
+            const messages = await playTurn(saves, options, req.params.id, input, req.signal);
+            return Response.json({ messages }, { status: 201 });
+          }
+          const stream = new ReadableStream({
+            async start(controller) {
+              // A client that leaves aborts the signal, which stops the Turn, and its stream takes no more events.
+              const send = (event: string, data: object) => {
+                if (!req.signal.aborted) controller.enqueue(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+              };
+              try {
+                send("done", { messages: await playTurn(saves, options, req.params.id, input, req.signal, send) });
+              } catch (error) {
+                const response = errorResponse(error);
+                send("error", { status: response.status, ...((await response.json()) as object) });
+              }
+              if (!req.signal.aborted) controller.close();
+            },
+          });
+          return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
         },
       },
       "/saves/:id/messages": {
@@ -72,18 +121,6 @@ export function startServer(options: {
       },
     },
     fetch: () => Response.json({ error: "Not found" }, { status: 404 }),
-    error(error) {
-      if (error instanceof z.ZodError) return Response.json({ error: z.prettifyError(error) }, { status: 400 });
-      if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
-      if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
-      if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
-      if (error instanceof TurnFailed) {
-        console.error(error);
-        const { message, failure, input } = error;
-        return Response.json({ error: message, failure, input }, { status: failure === "refused" ? 422 : 502 });
-      }
-      console.error(error);
-      return Response.json({ error: "Internal server error" }, { status: 500 });
-    },
+    error: errorResponse,
   });
 }

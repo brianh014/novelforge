@@ -1151,7 +1151,8 @@ test("the Check result call keeps the whole prompt, including world_rules and th
 
 test("Director's Notes and Model Instructions reach the Narrator as out-of-character guidance", async () => {
   const script = scriptedTextProvider(narration("Rain."));
-  game = startGame(savesDir, script.textProvider, scriptedDice(), 2, "model-instructions-text");
+  game = startGame(savesDir, script.textProvider);
+  await game.patch("/settings", { modelInstructions: "model-instructions-text" });
   const id = await game.createSave();
   seed(id, { directorsNotes: ["Ashley has green eyes"] });
 
