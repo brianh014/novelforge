@@ -298,7 +298,7 @@ If a setup can't use NPC references, the image still generates and Settings show
 
 ## Testing
 
-A fake LLM provider and a controllable dice roller let Turns be tested deterministically. Because Checks are never exposed through the SPA API, they are tested at the server level.
+A fake LLM provider and a controllable dice roller let Turns be tested deterministically. Checks are tested through the REST API by scripting the dice and asserting what the Narrator receives, and tests confirm no player-facing response reveals them.
 
 ## UI/UX
 
