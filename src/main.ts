@@ -17,6 +17,8 @@ const server = startServer({
   textProvider: placeholderTextProvider,
   dice: () => randomInt(1, 21),
   nearMissMargin: z.coerce.number().int().min(0).parse(process.env.NEAR_MISS_MARGIN ?? 2),
+  // shortcut: Model Instructions are always blank, read them from Settings in ticket 07.
+  modelInstructions: "",
   port: Number(process.env.PORT ?? 4600),
 });
 

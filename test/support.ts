@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Dice } from "../src/check-resolver";
 import { startServer } from "../src/rest-api";
-import type { Prompt, TextProvider } from "../src/turn-engine";
+import type { Prompt } from "../src/prompt-assembler";
+import type { TextProvider } from "../src/turn-engine";
 
 export const narration = (text: string, ...state_operations: unknown[]) =>
   JSON.stringify({ narration: text, state_operations });
@@ -42,8 +43,14 @@ export const postJson = (url: URL, body: unknown) =>
   });
 
 /** A real server over a real Saves folder. `restart` keeps the folder. */
-export function startGame(savesDir: string, textProvider: TextProvider, dice = scriptedDice(), nearMissMargin = 2) {
-  const start = () => startServer({ savesDir, textProvider, dice, nearMissMargin, port: 0 });
+export function startGame(
+  savesDir: string,
+  textProvider: TextProvider,
+  dice = scriptedDice(),
+  nearMissMargin = 2,
+  modelInstructions = "",
+) {
+  const start = () => startServer({ savesDir, textProvider, dice, nearMissMargin, modelInstructions, port: 0 });
   let server = start();
   const post = (path: string, body: unknown) => postJson(new URL(path, server.url), body);
   return {

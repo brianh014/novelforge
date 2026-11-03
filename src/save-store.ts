@@ -11,7 +11,7 @@ export class SaveNotFound extends Error {}
 export class MessageNotFound extends Error {}
 export class StaleTurn extends Error {}
 
-// shortcut: Saves made before hidden_check existed fail their next Turn, migrate them when opened in ticket 13.
+// shortcut: Saves made before hidden_check or the ticket 06 Snapshot sections fail their next Turn, migrate them when opened in ticket 13.
 const SCHEMA = `
   CREATE TABLE save (
     id INTEGER PRIMARY KEY CHECK (id = 1),

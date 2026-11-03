@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
+import { assemblePrompt, type Prompt, resultInstruction } from "./prompt-assembler";
 import type { SaveStore } from "./save-store";
 import { applyOperations, StateOperation } from "./state-applier";
 
-export type Prompt = { role: "system" | "user"; content: string }[];
 /** Throws ContentRefused when the content is refused. Anything else it throws is a network or API error. */
 export type TextProvider = (prompt: Prompt) => Promise<string>;
 
@@ -37,22 +37,24 @@ const MAX_ATTEMPTS = 3;
 
 export async function playTurn(
   saves: SaveStore,
-  { textProvider, dice, nearMissMargin }: { textProvider: TextProvider; dice: Dice; nearMissMargin: number },
+  {
+    textProvider,
+    dice,
+    nearMissMargin,
+    modelInstructions,
+  }: { textProvider: TextProvider; dice: Dice; nearMissMargin: number; modelInstructions: string },
   id: string,
   input: string,
 ) {
-  const { worldBrief, pc } = saves.read(id);
   const basedOn = saves.latestMessageId(id);
-  const prompt: Prompt = [
-    {
-      role: "system",
-      content: `You are the Narrator of a story. World Brief: ${worldBrief}\nThe player controls the PC, ${pc.name}.
-Current state: ${JSON.stringify(saves.latestState(id))}
-Change the state only through state_operations, naming things exactly as the current state does. Reply only with JSON matching this schema: ${responseSchema}
-If the PC attempts something risky, do not narrate it yet. Reply with a check instead, naming the action and one difficulty that already accounts for the PC's skills, condition and the situation. Safe actions need no check. Never mention dice, numbers or Checks.`,
-    },
-    { role: "user", content: input },
-  ];
+  const prompt = assemblePrompt({
+    save: saves.read(id),
+    state: saves.latestState(id),
+    messages: saves.messages(id),
+    modelInstructions,
+    input,
+    responseSchema,
+  });
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check: Check | undefined;
   for (let attempt = 1; ; attempt++) {
@@ -79,14 +81,6 @@ If the PC attempts something risky, do not narrate it yet. Reply with a check in
       }
     }
   }
-}
-
-function resultInstruction({ action, outcome, degree }: Check): Prompt[number] {
-  return {
-    role: "system",
-    content: `The Check is resolved: ${JSON.stringify({ action, outcome, degree })}
-A mixed degree means the PC succeeds at a cost. Narrate exactly this result as a finished Turn, and do not request another check.`,
-  };
 }
 
 async function askNarrator(textProvider: TextProvider, prompt: Prompt, input: string) {

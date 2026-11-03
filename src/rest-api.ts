@@ -25,6 +25,7 @@ export function startServer(options: {
   textProvider: TextProvider;
   dice: Dice;
   nearMissMargin: number;
+  modelInstructions: string;
   port: number;
 }) {
   const saves = saveStore(options.savesDir);

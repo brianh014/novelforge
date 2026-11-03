@@ -1,10 +1,17 @@
 import { z } from "zod";
 
+export type LoreEntry = { title: string; keywords: string[]; content: string; alwaysOn: boolean };
+
 export type State = {
   inventory: { wearing: string[]; carrying: string[] };
   status: { health: string; injuries: string[]; conditions: string[] };
   npcs: { name: string; appearance: string }[];
   pcKnown: { facts: string[]; npcs: string[] };
+  worldBible: LoreEntry[];
+  worldRules: string[];
+  plotThreads: string[];
+  summary: string;
+  directorsNotes: string[];
 };
 
 export const openingState: State = {
@@ -12,6 +19,11 @@ export const openingState: State = {
   status: { health: "unhurt", injuries: [], conditions: [] },
   npcs: [],
   pcKnown: { facts: [], npcs: [] },
+  worldBible: [],
+  worldRules: [],
+  plotThreads: [],
+  summary: "",
+  directorsNotes: [],
 };
 
 const nonEmpty = z.string().min(1);
@@ -27,6 +39,15 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("update_npc"), name: nonEmpty, appearance: nonEmpty }),
   z.object({ op: z.literal("add_known_fact"), fact: nonEmpty }),
   z.object({ op: z.literal("add_known_npc"), name: nonEmpty }),
+  z.object({
+    op: z.literal("add_lore_entry"),
+    title: nonEmpty,
+    keywords: z.array(nonEmpty).min(1),
+    content: nonEmpty,
+  }),
+  z.object({ op: z.literal("add_plot_thread"), thread: nonEmpty }),
+  z.object({ op: z.literal("resolve_plot_thread"), thread: nonEmpty }),
+  z.object({ op: z.literal("set_summary"), summary: nonEmpty }),
 ]);
 type StateOperation = z.infer<typeof StateOperation>;
 
@@ -74,6 +95,21 @@ function apply(state: State, operation: StateOperation) {
       return addOnce(state.pcKnown.facts, operation.fact);
     case "add_known_npc":
       return findNpc(state, operation.name) !== undefined && addOnce(state.pcKnown.npcs, operation.name);
+    case "add_lore_entry": {
+      const { title, keywords, content } = operation;
+      // The Narrator only sees activated entries, so it can repeat a title innocently: keep the first, not fail the Turn.
+      if (state.worldBible.some((entry) => entry.title === title)) return true;
+      // Always-on entries bypass the token budget, so the Narrator can only add keyword-activated ones.
+      state.worldBible.push({ title, keywords, content, alwaysOn: false });
+      return true;
+    }
+    case "add_plot_thread":
+      return addOnce(state.plotThreads, operation.thread);
+    case "resolve_plot_thread":
+      return take(state.plotThreads, operation.thread);
+    case "set_summary":
+      state.summary = operation.summary;
+      return true;
   }
 }
 
