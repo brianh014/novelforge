@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SaveNotFound, saveStore } from "./save-store";
+import { MessageNotFound, SaveNotFound, saveStore } from "./save-store";
 import { NarratorError, playTurn, type TextProvider } from "./turn-engine";
 
 const NewSaveRequest = z.object({
@@ -38,11 +38,19 @@ export function startServer(options: { savesDir: string; textProvider: TextProvi
       "/saves/:id/messages": {
         GET: (req) => Response.json({ messages: saves.messages(req.params.id) }),
       },
+      "/saves/:id/messages/:messageId/snapshot": {
+        GET: (req) => {
+          // An allowlist, so a new secret section can never reach the player by default.
+          const { inventory, status, pcKnown } = saves.snapshot(req.params.id, Number(req.params.messageId));
+          return Response.json({ inventory, status, pcKnown });
+        },
+      },
     },
     fetch: () => Response.json({ error: "Not found" }, { status: 404 }),
     error(error) {
       if (error instanceof z.ZodError) return Response.json({ error: z.prettifyError(error) }, { status: 400 });
       if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
+      if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
       if (error instanceof NarratorError) {
         console.error(error);
         return Response.json({ error: error.message }, { status: 502 });

@@ -6,10 +6,10 @@
 
 **Status:** ready-for-agent
 
-- [ ] A finished Turn's state operations update inventory, status, NPCs and PC-known information
-- [ ] Operations the server can disprove, such as removing an item the PC lacks, are refused
-- [ ] A refused operation has a defined, tested outcome and never corrupts state
-- [ ] The Narrator cannot replace the whole state
-- [ ] Every Message has a Snapshot that can be loaded whole
-- [ ] Unchanged Snapshot sections are stored once and shared, without callers seeing this
-- [ ] Snapshots are never changed after being written
+- [x] A finished Turn's state operations update inventory, status, NPCs and PC-known information
+- [x] Operations the server can disprove, such as removing an item the PC lacks, are refused
+- [x] A refused operation has a defined, tested outcome and never corrupts state
+- [x] The Narrator cannot replace the whole state
+- [x] Every Message has a Snapshot that can be loaded whole
+- [x] Unchanged Snapshot sections are stored once and shared, without callers seeing this
+- [x] Snapshots are never changed after being written

@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { startServer } from "../src/rest-api";
 import type { Prompt, TextProvider } from "../src/turn-engine";
 
-export const narration = (text: string) => JSON.stringify({ narration: text });
+export const narration = (text: string, ...state_operations: unknown[]) =>
+  JSON.stringify({ narration: text, state_operations });
 
 /** Replies with each entry in turn, throwing Errors, and records every prompt. */
 export function scriptedTextProvider(...replies: (string | Error)[]) {

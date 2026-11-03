@@ -1,6 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readdirSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
 
@@ -154,4 +154,195 @@ test("a non-JSON POST is rejected, so other websites cannot post to the server",
 
   expect(response.status).toBe(400);
   expect(readdirSync(savesDir)).toEqual([]);
+});
+
+const snapshotAt = (game: ReturnType<typeof startGame>, id: string, messageId: number) =>
+  game.get(`/saves/${id}/messages/${messageId}/snapshot`).then((r) => r.json());
+
+test("a finished Turn's state operations change the Snapshot of its Narrator Message", async () => {
+  const { game } = play(
+    narration("You find a lantern.", { op: "add_item", slot: "carrying", item: "lantern" }),
+  );
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I search the crate." });
+
+  expect(await snapshotAt(game, id, 2)).toEqual({
+    inventory: { wearing: [], carrying: ["lantern"] },
+    status: { health: "unhurt", injuries: [], conditions: [] },
+    pcKnown: { facts: [], npcs: [] },
+  });
+});
+
+test("a refused operation is dropped, while the Turn and its other operations still commit", async () => {
+  const { game } = play(
+    narration(
+      "You trade the lantern for a rope.",
+      { op: "add_item", slot: "carrying", item: "lantern" },
+      { op: "remove_item", item: "gold crown" },
+      { op: "remove_item", item: "lantern" },
+      { op: "remove_item", item: "lantern" },
+      { op: "add_item", slot: "wearing", item: "rope" },
+    ),
+  );
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I trade." });
+
+  expect(response.status).toBe(201);
+  const { messages } = (await game.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: unknown[] };
+  expect(messages).toHaveLength(2);
+  expect(await snapshotAt(game, id, 2)).toMatchObject({ inventory: { wearing: ["rope"], carrying: [] } });
+});
+
+test("state operations update status and PC-known information across Turns", async () => {
+  const { game } = play(
+    narration(
+      "A blade opens your arm. Mara tells you the tide gate is broken.",
+      { op: "set_health", health: "hurt" },
+      { op: "add_status", kind: "injuries", text: "cut forearm" },
+      { op: "add_status", kind: "conditions", text: "soaked" },
+      { op: "add_known_fact", fact: "The tide gate is broken" },
+      { op: "add_npc", name: "Mara", appearance: "grey coat" },
+      { op: "add_known_npc", name: "Mara" },
+    ),
+    narration("You dry off.", { op: "remove_status", kind: "conditions", text: "soaked" }),
+  );
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I fight." });
+  await game.post(`/saves/${id}/turns`, { input: "I rest." });
+
+  expect(await snapshotAt(game, id, 4)).toMatchObject({
+    status: { health: "hurt", injuries: ["cut forearm"], conditions: [] },
+    pcKnown: { facts: ["The tide gate is broken"], npcs: ["Mara"] },
+  });
+});
+
+test.each([
+  ["removing a status the PC lacks", { op: "remove_status", kind: "injuries", text: "broken leg" }],
+  ["repeating a status", { op: "add_status", kind: "conditions", text: "soaked" }],
+  ["repeating a known fact", { op: "add_known_fact", fact: "The gate is broken" }],
+  ["adding an NPC who exists", { op: "add_npc", name: "Mara", appearance: "a stranger" }],
+  ["updating an NPC who does not exist", { op: "update_npc", name: "Nobody", appearance: "towering" }],
+  ["knowing an NPC who does not exist", { op: "add_known_npc", name: "Nobody" }],
+  ["knowing an NPC twice", { op: "add_known_npc", name: "Mara" }],
+])("the server refuses %s", async (_, operation) => {
+  const { game, prompts } = play(
+    narration(
+      "Setup.",
+      { op: "add_status", kind: "conditions", text: "soaked" },
+      { op: "add_known_fact", fact: "The gate is broken" },
+      { op: "add_npc", name: "Mara", appearance: "grey coat" },
+      { op: "add_known_npc", name: "Mara" },
+    ),
+    narration("Refused.", operation),
+    narration("Finished."),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "One." });
+  await game.post(`/saves/${id}/turns`, { input: "Two." });
+  await game.post(`/saves/${id}/turns`, { input: "Three." });
+
+  expect(await snapshotAt(game, id, 4)).toEqual(await snapshotAt(game, id, 2));
+  // The next prompt shows the secret NPC section, which REST cannot.
+  expect(JSON.stringify(prompts[2])).toContain("grey coat");
+  expect(JSON.stringify(prompts[2])).not.toContain("a stranger");
+  expect(JSON.stringify(prompts[2])).not.toContain("towering");
+});
+
+test("a Narrator can update an NPC, and the next Turn's prompt carries the state", async () => {
+  const { game, prompts } = play(
+    narration(
+      "Mara appears.",
+      { op: "add_npc", name: "Mara", appearance: "grey coat" },
+      { op: "update_npc", name: "Mara", appearance: "scarred, grey coat" },
+    ),
+    narration("Mara nods."),
+  );
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I look around." });
+  await game.post(`/saves/${id}/turns`, { input: "I greet her." });
+
+  expect(JSON.stringify(prompts[1])).toContain("scarred, grey coat");
+});
+
+test("the Snapshot the player can read never contains the NPC section", async () => {
+  const { game } = play(
+    narration("Someone watches.", { op: "add_npc", name: "SECRET-SPY", appearance: "SECRET-COAT" }),
+  );
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(JSON.stringify(await snapshotAt(game, id, 2))).not.toContain("SECRET");
+});
+
+test.each([
+  ["a replace operation", narration("Everything changes.", { op: "replace_state", state: { inventory: {} } })],
+  ["a malformed operation", narration("Everything changes.", { op: "add_item", item: "lantern" })],
+])("%s returns 502 and writes nothing", async (_, reply) => {
+  const { game } = play(reply);
+  const id = await game.createSave();
+
+  expect((await game.post(`/saves/${id}/turns`, { input: "I wait." })).status).toBe(502);
+  expect(await game.get(`/saves/${id}/messages`).then((r) => r.json())).toEqual({ messages: [] });
+});
+
+test("a whole state in the Narrator's reply is ignored", async () => {
+  const { game } = play(
+    JSON.stringify({
+      narration: "You are suddenly rich.",
+      state: { inventory: { wearing: [], carrying: ["gold crown"] } },
+      inventory: { wearing: [], carrying: ["gold crown"] },
+    }),
+  );
+  const id = await game.createSave();
+
+  expect((await game.post(`/saves/${id}/turns`, { input: "I wish." })).status).toBe(201);
+  expect(await snapshotAt(game, id, 2)).toMatchObject({ inventory: { wearing: [], carrying: [] } });
+});
+
+test("every Message has a Snapshot, and later Turns never change earlier ones", async () => {
+  const { game } = play(
+    narration("A lantern.", { op: "add_item", slot: "carrying", item: "lantern" }),
+    narration("It breaks.", { op: "remove_item", item: "lantern" }),
+  );
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I search." });
+  const before = await Promise.all([1, 2].map((m) => snapshotAt(game, id, m)));
+  await game.post(`/saves/${id}/turns`, { input: "I drop it." });
+  await game.restart();
+
+  expect(before[0]).toMatchObject({ inventory: { carrying: [] } });
+  expect(before[1]).toMatchObject({ inventory: { carrying: ["lantern"] } });
+  expect(await Promise.all([1, 2].map((m) => snapshotAt(game, id, m)))).toEqual(before);
+  expect(await snapshotAt(game, id, 3)).toMatchObject({ inventory: { carrying: ["lantern"] } });
+  expect(await snapshotAt(game, id, 4)).toMatchObject({ inventory: { carrying: [] } });
+});
+
+test.each(["0", "99", "0.5", "lantern"])("the Snapshot of Message %s returns 404", async (messageId) => {
+  const { game } = play();
+  const id = await game.createSave();
+
+  expect((await game.get(`/saves/${id}/messages/${messageId}/snapshot`)).status).toBe(404);
+});
+
+test("an unchanged section is stored once however many Messages share it", async () => {
+  const size = 1_000_000;
+  const { game } = play(
+    narration("A huge scroll.", { op: "add_item", slot: "carrying", item: "x".repeat(size) }),
+    ...Array.from({ length: 20 }, () => narration("Time passes.")),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I take it." });
+  const fileSize = () => statSync(join(savesDir, `${id}.sqlite`)).size;
+  const before = fileSize();
+
+  for (let turn = 0; turn < 20; turn++) await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(fileSize() - before).toBeLessThan(size / 10);
+  expect(await snapshotAt(game, id, 42)).toMatchObject({ inventory: { carrying: ["x".repeat(size)] } });
 });
