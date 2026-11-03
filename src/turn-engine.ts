@@ -26,7 +26,8 @@ Change the state only through state_operations, naming things exactly as the cur
   ]);
   return saves.commitTurn(id, input, narration, (state) => {
     const { next, refused } = applyOperations(state, state_operations);
-    if (refused.length > 0) console.warn("Refused state operations:", refused);
+    // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
+    if (refused.length > 0) throw new NarratorError("The Narrator gave no usable response", { cause: refused });
     return next;
   });
 }

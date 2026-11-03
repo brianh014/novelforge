@@ -174,25 +174,21 @@ test("a finished Turn's state operations change the Snapshot of its Narrator Mes
   });
 });
 
-test("a refused operation is dropped, while the Turn and its other operations still commit", async () => {
+test("a refused operation fails the whole Turn, including its valid operations", async () => {
   const { game } = play(
     narration(
       "You trade the lantern for a rope.",
       { op: "add_item", slot: "carrying", item: "lantern" },
-      { op: "remove_item", item: "gold crown" },
       { op: "remove_item", item: "lantern" },
       { op: "remove_item", item: "lantern" },
-      { op: "add_item", slot: "wearing", item: "rope" },
     ),
   );
   const id = await game.createSave();
 
   const response = await game.post(`/saves/${id}/turns`, { input: "I trade." });
 
-  expect(response.status).toBe(201);
-  const { messages } = (await game.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: unknown[] };
-  expect(messages).toHaveLength(2);
-  expect(await snapshotAt(game, id, 2)).toMatchObject({ inventory: { wearing: ["rope"], carrying: [] } });
+  expect(response.status).toBe(502);
+  expect(await game.get(`/saves/${id}/messages`).then((r) => r.json())).toEqual({ messages: [] });
 });
 
 test("state operations update status and PC-known information across Turns", async () => {
@@ -241,8 +237,8 @@ test.each([
   );
   const id = await game.createSave();
   await game.post(`/saves/${id}/turns`, { input: "One." });
-  await game.post(`/saves/${id}/turns`, { input: "Two." });
-  await game.post(`/saves/${id}/turns`, { input: "Three." });
+  expect((await game.post(`/saves/${id}/turns`, { input: "Two." })).status).toBe(502);
+  expect((await game.post(`/saves/${id}/turns`, { input: "Three." })).status).toBe(201);
 
   expect(await snapshotAt(game, id, 4)).toEqual(await snapshotAt(game, id, 2));
   // The next prompt shows the secret NPC section, which REST cannot.

@@ -8,6 +8,7 @@
 
 - [ ] A failed Turn writes nothing to the Save, including a failure partway through a Turn
 - [ ] Invalid JSON retries automatically up to twice, then fails cleanly
+- [ ] A Narrator response with a refused state operation retries the same way
 - [ ] A content refusal is reported as a refusal, with the player's text available to edit
 - [ ] Network and API errors are reported as retryable
 - [ ] Retrying after a failure works and creates exactly one Turn
