@@ -263,6 +263,8 @@ The game is a web based SPA with a local RESTful API server. Being API based, th
 
 The app is TypeScript on both ends, compiled with Bun into a single executable with the SPA embedded, so it has low system requirements and needs nothing else installed. Local model servers are the exception (see [ADR 0001](docs/adr/0001-connect-to-local-models-not-bundle.md)).
 
+The server uses `Bun.serve` with no web framework, and Zod validates Narrator JSON and API requests. Hono is the fallback if routing gets messy. The SPA uses React with TypeScript, built by Bun and styled with plain CSS design tokens. It uses no Tailwind, component library or state library, and no client-side router library is planned.
+
 ## Storage
 
 Each Save is one SQLite file holding its Messages, Snapshots and images (see [ADR 0003](docs/adr/0003-one-sqlite-file-per-save.md)). Saves are stored in a known folder next to the app and are independent of the LLM model being used.

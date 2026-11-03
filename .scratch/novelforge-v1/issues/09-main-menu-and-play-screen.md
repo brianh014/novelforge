@@ -7,6 +7,7 @@
 **Status:** ready-for-agent
 
 - [ ] The SPA is served from the single executable, and the UI follows the recorded direction
+- [ ] The SPA uses React with TypeScript, built by Bun and styled with plain CSS design tokens, with no Tailwind, component library, state library or client-side router library
 - [ ] The main menu offers New Game, Load Game and Settings
 - [ ] A player can play Turns and watch narration stream
 - [ ] Refusals and errors are shown, and the player's text stays in the input box

@@ -8,6 +8,7 @@
 
 - [ ] A `.gitattributes` keeps line endings consistent
 - [ ] The app compiles to a single executable that starts the server on localhost only
+- [ ] The server uses `Bun.serve` with no web framework, and Zod validates API requests and Narrator JSON
 - [ ] A Save can be created through the REST API and exists as one SQLite file in the Saves folder next to the app
 - [ ] A Turn played through the REST API stores the player and Narrator Messages
 - [ ] Messages survive a server restart

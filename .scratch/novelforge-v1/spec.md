@@ -153,6 +153,8 @@ Scene Images appear above the chat, visual novel style. The Journal, inventory a
 
 - NovelForge is single player and localhost only, with no accounts, hosting or cloud.
 - TypeScript on both ends, compiled with Bun into one executable with the SPA embedded.
+- The server uses `Bun.serve` with no web framework. Zod validates Narrator JSON and API requests.
+- The SPA uses React with TypeScript, built by Bun and styled with plain CSS design tokens. No Tailwind, component library, state library or client-side router library.
 - Local inference is connected to, never bundled (ADR 0001).
 - Which content is allowed is decided by the provider and model. NovelForge has no filter or rating of its own.
 
