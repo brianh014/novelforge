@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Dice } from "../src/check-resolver";
 import { startServer } from "../src/rest-api";
 import type { Prompt, TextProvider } from "../src/turn-engine";
 
@@ -19,6 +20,15 @@ export function scriptedTextProvider(...replies: (string | Error)[]) {
   return { textProvider, prompts };
 }
 
+/** Rolls each entry in turn. Rolling past the script fails the request, so an extra roll cannot pass unnoticed. */
+export function scriptedDice(...rolls: number[]): Dice {
+  return () => {
+    const roll = rolls.shift();
+    if (roll === undefined) throw new Error("Dice script exhausted");
+    return roll;
+  };
+}
+
 export function tempFolder() {
   const path = mkdtempSync(join(tmpdir(), "novelforge-"));
   return { path, remove: () => rmSync(path, { recursive: true, force: true }) };
@@ -32,8 +42,9 @@ export const postJson = (url: URL, body: unknown) =>
   });
 
 /** A real server over a real Saves folder. `restart` keeps the folder. */
-export function startGame(savesDir: string, textProvider: TextProvider) {
-  let server = startServer({ savesDir, textProvider, port: 0 });
+export function startGame(savesDir: string, textProvider: TextProvider, dice = scriptedDice(), nearMissMargin = 2) {
+  const start = () => startServer({ savesDir, textProvider, dice, nearMissMargin, port: 0 });
+  let server = start();
   const post = (path: string, body: unknown) => postJson(new URL(path, server.url), body);
   return {
     post,
@@ -45,7 +56,7 @@ export function startGame(savesDir: string, textProvider: TextProvider) {
     },
     restart: async () => {
       await server.stop(true);
-      server = startServer({ savesDir, textProvider, port: 0 });
+      server = start();
     },
     stop: () => server.stop(true),
   };

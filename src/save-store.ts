@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import type { Check } from "./check-resolver";
 import { openingState, type State } from "./state-applier";
 
 export type Save = { worldBrief: string; pc: { name: string } };
@@ -10,6 +11,7 @@ export class SaveNotFound extends Error {}
 export class MessageNotFound extends Error {}
 export class StaleTurn extends Error {}
 
+// shortcut: Saves made before hidden_check existed fail their next Turn, migrate them when opened in ticket 13.
 const SCHEMA = `
   CREATE TABLE save (
     id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -19,7 +21,8 @@ const SCHEMA = `
   CREATE TABLE messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     role TEXT NOT NULL CHECK (role IN ('player', 'narrator')),
-    text TEXT NOT NULL
+    text TEXT NOT NULL,
+    hidden_check TEXT
   );
   CREATE TABLE sections (
     id INTEGER PRIMARY KEY,
@@ -193,18 +196,25 @@ export function saveStore(savesDir: string) {
     },
 
     /** `advance` runs inside the transaction, so it always sees the latest state. */
-    commitTurn(id: string, basedOn: number, input: string, narration: string, advance: (state: State) => State) {
+    commitTurn(
+      id: string,
+      basedOn: number,
+      input: string,
+      narration: string,
+      check: Check | undefined,
+      advance: (state: State) => State,
+    ) {
       using db = open(id);
-      const insert = db.query<Message, [Message["role"], string]>(
-        "INSERT INTO messages (role, text) VALUES (?, ?) RETURNING id, role, text",
+      const insert = db.query<Message, [Message["role"], string, string | null]>(
+        "INSERT INTO messages (role, text, hidden_check) VALUES (?, ?, ?) RETURNING id, role, text",
       );
       return db.transaction(() => {
         // Message ids are never reused, so any Revert or other Turn since `basedOn` is caught here.
         if (latestMessage(db) !== basedOn) throw new StaleTurn();
         const state = toState(latestSections(db));
-        const player = insert.get("player", input)!;
+        const player = insert.get("player", input, null)!;
         writeSnapshot(db, player.id, state);
-        const narrator = insert.get("narrator", narration)!;
+        const narrator = insert.get("narrator", narration, check ? JSON.stringify(check) : null)!;
         writeSnapshot(db, narrator.id, advance(state));
         return [player, narrator];
       })();

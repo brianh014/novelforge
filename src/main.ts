@@ -1,4 +1,6 @@
+import { randomInt } from "node:crypto";
 import { basename, dirname, join } from "node:path";
+import { z } from "zod";
 import { startServer } from "./rest-api";
 import type { TextProvider } from "./turn-engine";
 
@@ -13,6 +15,8 @@ const appDir = isCompiled ? dirname(process.execPath) : process.cwd();
 const server = startServer({
   savesDir: join(appDir, "Saves"),
   textProvider: placeholderTextProvider,
+  dice: () => randomInt(1, 21),
+  nearMissMargin: z.coerce.number().int().min(0).parse(process.env.NEAR_MISS_MARGIN ?? 2),
   port: Number(process.env.PORT ?? 4600),
 });
 

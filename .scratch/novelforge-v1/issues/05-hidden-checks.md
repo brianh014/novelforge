@@ -6,13 +6,13 @@
 
 **Status:** ready-for-agent
 
-- [ ] The Narrator's response can be either a finished Turn or a Check request
-- [ ] Safe actions use one call, and Checks use two
-- [ ] Difficulty must be Easy (5), Moderate (10), Hard (15) or Very Hard (20), and anything else is rejected
-- [ ] The d20 comes from a Dice port that tests can script
-- [ ] The second call receives the outcome and degree
-- [ ] Natural 20 is a strong success, natural 1 is a bad failure, and a near miss is mixed
-- [ ] The near-miss margin is one configurable value
-- [ ] The roll is stored with the Turn
-- [ ] Player text claiming a roll has no effect on the result
-- [ ] Tests with unique markers prove no player-facing response reveals a Check, roll or difficulty
+- [x] The Narrator's response can be either a finished Turn or a Check request
+- [x] Safe actions use one call, and Checks use two
+- [x] Difficulty must be Easy (5), Moderate (10), Hard (15) or Very Hard (20), and anything else is rejected
+- [x] The d20 comes from a Dice port that tests can script
+- [x] The second call receives the outcome and degree
+- [x] Natural 20 is a strong success, natural 1 is a bad failure, and a near miss is mixed
+- [x] The near-miss margin is one configurable value
+- [x] The roll is stored with the Turn
+- [x] Player text claiming a roll has no effect on the result
+- [x] Tests with unique markers prove no player-facing response reveals a Check, roll or difficulty

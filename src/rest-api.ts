@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Dice } from "./check-resolver";
 import { MessageNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
 import { playTurn, type TextProvider, TurnFailed } from "./turn-engine";
 
@@ -19,7 +20,13 @@ async function parseBody<T>(req: Request, schema: z.ZodType<T>) {
   return schema.parse(isJson ? await req.json().catch(() => undefined) : undefined);
 }
 
-export function startServer(options: { savesDir: string; textProvider: TextProvider; port: number }) {
+export function startServer(options: {
+  savesDir: string;
+  textProvider: TextProvider;
+  dice: Dice;
+  nearMissMargin: number;
+  port: number;
+}) {
   const saves = saveStore(options.savesDir);
 
   return Bun.serve({
@@ -41,7 +48,7 @@ export function startServer(options: { savesDir: string; textProvider: TextProvi
       "/saves/:id/turns": {
         POST: async (req) => {
           const { input } = await parseBody(req, NewTurnRequest);
-          const messages = await playTurn(saves, options.textProvider, req.params.id, input);
+          const messages = await playTurn(saves, options, req.params.id, input);
           return Response.json({ messages }, { status: 201 });
         },
       },

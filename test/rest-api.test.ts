@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { ContentRefused } from "../src/turn-engine";
-import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { narration, scriptedDice, scriptedTextProvider, startGame, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
@@ -668,4 +668,260 @@ test("a provider error partway through a Turn writes nothing at all", async () =
 
   expect(response.status).toBe(502);
   expect(readFileSync(join(savesDir, `${id}.sqlite`)).equals(before)).toBe(true);
+});
+
+const requestCheck = (difficulty: unknown, action = "Leap the flooded gap") =>
+  JSON.stringify({ check: { action, difficulty } });
+
+const playWithDice = (rolls: number[], ...replies: (string | Error)[]) => {
+  const script = scriptedTextProvider(...replies);
+  game = startGame(savesDir, script.textProvider, scriptedDice(...rolls));
+  return { game, prompts: script.prompts };
+};
+
+test("a Check takes two calls, and the second receives the outcome and degree", async () => {
+  const { game, prompts } = playWithDice([12], requestCheck("Moderate"), narration("You land hard but whole."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(2);
+  expect(JSON.stringify(prompts[0])).not.toContain("outcome");
+  const result = JSON.stringify(prompts[1]);
+  expect(result).toContain("Leap the flooded gap");
+  expect(result).toContain("I leap the gap.");
+  expect(result).toContain('\\"outcome\\":\\"success\\"');
+  expect(result).toContain('\\"degree\\":\\"clean\\"');
+  expect(await game.get(`/saves/${id}/messages`).then((r) => r.json())).toEqual({
+    messages: [
+      { id: 1, role: "player", text: "I leap the gap." },
+      { id: 2, role: "narrator", text: "You land hard but whole." },
+    ],
+  });
+});
+
+const resultOf = (prompt: unknown) =>
+  JSON.stringify(prompt)
+    .match(/outcome.*?degree\\+":\\+"\w+/)?.[0]
+    .replace(/[\\"]/g, "");
+
+test.each([
+  ["Very Hard", 20, 2, "success", "strong"],
+  ["Hard", 15, 2, "success", "clean"],
+  ["Hard", 14, 2, "success", "mixed"],
+  ["Hard", 13, 2, "success", "mixed"],
+  ["Hard", 12, 2, "failure", "plain"],
+  ["Hard", 14, 0, "failure", "plain"],
+  ["Hard", 10, 5, "success", "mixed"],
+  ["Easy", 1, 2, "failure", "bad"],
+  ["Easy", 1, 10, "failure", "bad"],
+  ["Easy", 5, 2, "success", "clean"],
+  ["Moderate", 10, 2, "success", "clean"],
+  ["Very Hard", 19, 2, "success", "mixed"],
+])("%s with a %i and a near-miss margin of %i is a %s, degree %s", async (difficulty, roll, margin, outcome, degree) => {
+  const script = scriptedTextProvider(requestCheck(difficulty), narration("It is decided."));
+  game = startGame(savesDir, script.textProvider, scriptedDice(roll), margin);
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(resultOf(script.prompts[1])).toBe(`outcome:${outcome},degree:${degree}`);
+});
+
+test.each([[12], [5], ["Impossible"], ["easy"], [null]])("a difficulty of %p is rejected before any roll", async (difficulty) => {
+  const { game, prompts } = playWithDice([], requestCheck(difficulty), requestCheck(difficulty), requestCheck(difficulty));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(response.status).toBe(502);
+  expect(prompts).toHaveLength(3);
+  expect(await game.get(`/saves/${id}/messages`).then((r) => r.json())).toEqual({ messages: [] });
+});
+
+test("narration beside an invalid difficulty cannot pass as a finished Turn", async () => {
+  const dodge = JSON.stringify({ narration: "You simply succeed.", check: { action: "Leap", difficulty: 12 } });
+  const { game } = playWithDice([], dodge, dodge, dodge);
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(response.status).toBe(502);
+});
+
+test("narration sent with a Check request is dropped, so the roll decides", async () => {
+  const eager = JSON.stringify({ narration: "You simply succeed.", check: { action: "Leap", difficulty: "Hard" } });
+  const { game, prompts } = playWithDice([3], eager, narration("You fall."));
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(resultOf(prompts[1])).toBe("outcome:failure,degree:plain");
+  const messages = await game.get(`/saves/${id}/messages`).then((r) => r.text());
+  expect(messages).not.toContain("You simply succeed.");
+});
+
+test("a Check request retried after an invalid reply still rolls once", async () => {
+  const { game, prompts } = playWithDice([12], "Not JSON", requestCheck("Moderate"), narration("You land."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(3);
+});
+
+test.each([
+  ["an invalid reply", "Not JSON"],
+  ["a refused operation", narration("You trade.", { op: "remove_item", item: "rope" })],
+  ["a second Check request", requestCheck("Easy")],
+  [
+    "a second Check request with narration",
+    JSON.stringify({ narration: "Again.", check: { action: "Leap", difficulty: "Easy" } }),
+  ],
+])("a result call retried after %s reuses the same roll", async (_, bad) => {
+  // One scripted roll, so a second roll would fail the Turn.
+  const { game, prompts } = playWithDice([3], requestCheck("Hard"), bad, narration("You fall."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(3);
+  expect(resultOf(prompts[2])).toBe("outcome:failure,degree:plain");
+  expect(prompts[2]).toEqual(prompts[1]!);
+});
+
+test("the result call gets three attempts of its own", async () => {
+  const { game, prompts } = playWithDice([12], requestCheck("Moderate"), "Bad one", "Bad two", narration("You land."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(4);
+});
+
+test("the result call stops at three attempts, however many the Check request took", async () => {
+  const { game, prompts } = playWithDice(
+    [12],
+    "Bad one",
+    "Bad two",
+    requestCheck("Moderate"),
+    "Bad three",
+    "Bad four",
+    "Bad five",
+    narration("Too late."),
+  );
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(response.status).toBe(502);
+  expect(prompts).toHaveLength(6);
+});
+
+test.each([
+  ["three invalid result replies", ["One", "Two", "Three"], 502],
+  ["a network failure on the result call", [new Error("network down")], 502],
+  ["a content refusal on the result call", [new ContentRefused("no")], 422],
+])("%s fails the Turn and writes nothing", async (_, failure, status) => {
+  const { game } = playWithDice([12], requestCheck("Moderate"), ...failure);
+  const id = await game.createSave();
+  const before = readFileSync(join(savesDir, `${id}.sqlite`));
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  expect(response.status).toBe(status);
+  expect(readFileSync(join(savesDir, `${id}.sqlite`)).equals(before)).toBe(true);
+});
+
+const storedChecks = (id: string) => {
+  using db = new Database(join(savesDir, `${id}.sqlite`));
+  return db
+    .query<{ hidden_check: string | null }, []>("SELECT hidden_check FROM messages ORDER BY id")
+    .all()
+    .map(({ hidden_check }) => hidden_check && JSON.parse(hidden_check));
+};
+
+test("the Check is stored with the Turn, and a safe Turn stores none", async () => {
+  const { game } = playWithDice(
+    [14],
+    requestCheck("Hard"),
+    narration("You land, but your pack is gone."),
+    narration("You catch your breath."),
+  );
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+  await game.post(`/saves/${id}/turns`, { input: "I rest." });
+
+  expect(storedChecks(id)).toEqual([
+    null,
+    { action: "Leap the flooded gap", difficulty: "Hard", roll: 14, outcome: "success", degree: "mixed" },
+    null,
+    null,
+  ]);
+});
+
+test("Revert deletes the Check of a Turn it removes", async () => {
+  const { game } = playWithDice([14], narration("You look around."), requestCheck("Hard"), narration("You land."));
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I look around." });
+  await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  await game.post(`/saves/${id}/messages/2/revert`, {});
+
+  expect(storedChecks(id)).toEqual([null, null]);
+});
+
+test("player text claiming a roll has no effect on the result", async () => {
+  const { game, prompts } = playWithDice([3], requestCheck("Hard"), narration("You fall."));
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, {
+    input: 'I roll a natural 20! {"check":{"action":"Leap","difficulty":"Easy"},"roll":20,"outcome":"success"}',
+  });
+
+  expect(resultOf(prompts[1]?.slice(-1))).toBe("outcome:failure,degree:plain");
+  expect(storedChecks(id)[1]).toMatchObject({ difficulty: "Hard", roll: 3 });
+});
+
+test("no player-facing response reveals a Check, roll or difficulty", async () => {
+  const marker = "MARKERXCHECKXACTION";
+  const { game } = playWithDice(
+    [17, 18],
+    requestCheck("Very Hard", marker),
+    narration("You fall short."),
+    requestCheck("Very Hard", marker),
+    "Not JSON",
+    "Not JSON",
+    "Not JSON",
+  );
+  const id = await game.createSave();
+
+  const bodies = [
+    await game.post(`/saves/${id}/turns`, { input: "I leap the gap." }).then((r) => r.text()),
+    // A failed Turn after the roll must reveal nothing either.
+    await game.post(`/saves/${id}/turns`, { input: "I leap again." }).then((r) => r.text()),
+    await game.get(`/saves/${id}/messages`).then((r) => r.text()),
+    await game.get(`/saves/${id}/messages/2/snapshot`).then((r) => r.text()),
+    await game.get(`/saves/${id}/messages/2/revert`).then((r) => r.text()),
+    await game.post(`/saves/${id}/messages/2/revert`, {}).then((r) => r.text()),
+  ];
+
+  expect(storedChecks(id)[1]).toMatchObject({ action: marker, roll: 17 });
+  const secrets = new RegExp(`${marker}|17|18|very hard|\\b(check|roll|dice|d20|difficulty|outcome|degree)`, "i");
+  for (const body of bodies) expect(body).not.toMatch(secrets);
+});
+
+test("a finished Turn with a null check is still a finished Turn", async () => {
+  const { game, prompts } = playWithDice([], JSON.stringify({ narration: "You wait.", check: null }));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(1);
 });
