@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MessageNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
-import { NarratorError, playTurn, type TextProvider } from "./turn-engine";
+import { playTurn, type TextProvider, TurnFailed } from "./turn-engine";
 
 const NewSaveRequest = z.object({
   worldBrief: z.string().min(1),
@@ -69,9 +69,10 @@ export function startServer(options: { savesDir: string; textProvider: TextProvi
       if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
       if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
       if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
-      if (error instanceof NarratorError) {
+      if (error instanceof TurnFailed) {
         console.error(error);
-        return Response.json({ error: error.message }, { status: 502 });
+        const { message, failure, input } = error;
+        return Response.json({ error: message, failure, input }, { status: failure === "refused" ? 422 : 502 });
       }
       console.error(error);
       return Response.json({ error: "Internal server error" }, { status: 500 });

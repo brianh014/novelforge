@@ -7,6 +7,7 @@
 **Status:** ready-for-agent
 
 - [ ] The Text Provider is one OpenAI-compatible client with a configurable base URL
+- [ ] A content refusal from the model is raised as `ContentRefused`, which ticket 04 reports to the player
 - [ ] Schema mode is used on models that support it, with JSON validation and retries as the fallback
 - [ ] Narration streams to the client during a Turn, and nothing is committed until the Turn is valid
 - [ ] A Check request produces no partial player-visible narration before the result

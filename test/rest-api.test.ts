@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { ContentRefused } from "../src/turn-engine";
 import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
@@ -97,7 +98,7 @@ test.each([
   ["a Narrator reply that is not JSON", "The tide rises"],
   ["a Narrator reply with the wrong shape", JSON.stringify({ text: "The tide rises" })],
 ])("%s returns 502 and writes nothing", async (_, reply) => {
-  const { game } = play(reply);
+  const { game } = play(...Array(3).fill(reply));
   const id = await game.createSave();
 
   const response = await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
@@ -176,11 +177,13 @@ test("a finished Turn's state operations change the Snapshot of its Narrator Mes
 
 test("a refused operation fails the whole Turn, including its valid operations", async () => {
   const { game } = play(
-    narration(
-      "You trade the lantern for a rope.",
-      { op: "add_item", slot: "carrying", item: "lantern" },
-      { op: "remove_item", item: "lantern" },
-      { op: "remove_item", item: "lantern" },
+    ...Array(3).fill(
+      narration(
+        "You trade the lantern for a rope.",
+        { op: "add_item", slot: "carrying", item: "lantern" },
+        { op: "remove_item", item: "lantern" },
+        { op: "remove_item", item: "lantern" },
+      ),
     ),
   );
   const id = await game.createSave();
@@ -232,7 +235,7 @@ test.each([
       { op: "add_npc", name: "Mara", appearance: "grey coat" },
       { op: "add_known_npc", name: "Mara" },
     ),
-    narration("Refused.", operation),
+    ...Array(3).fill(narration("Refused.", operation)),
     narration("Finished."),
   );
   const id = await game.createSave();
@@ -242,9 +245,9 @@ test.each([
 
   expect(await snapshotAt(game, id, 4)).toEqual(await snapshotAt(game, id, 2));
   // The next prompt shows the secret NPC section, which REST cannot.
-  expect(JSON.stringify(prompts[2])).toContain("grey coat");
-  expect(JSON.stringify(prompts[2])).not.toContain("a stranger");
-  expect(JSON.stringify(prompts[2])).not.toContain("towering");
+  expect(JSON.stringify(prompts[4])).toContain("grey coat");
+  expect(JSON.stringify(prompts[4])).not.toContain("a stranger");
+  expect(JSON.stringify(prompts[4])).not.toContain("towering");
 });
 
 test("a Narrator can update an NPC, and the next Turn's prompt carries the state", async () => {
@@ -279,7 +282,7 @@ test.each([
   ["a replace operation", narration("Everything changes.", { op: "replace_state", state: { inventory: {} } })],
   ["a malformed operation", narration("Everything changes.", { op: "add_item", item: "lantern" })],
 ])("%s returns 502 and writes nothing", async (_, reply) => {
-  const { game } = play(reply);
+  const { game } = play(...Array(3).fill(reply));
   const id = await game.createSave();
 
   expect((await game.post(`/saves/${id}/turns`, { input: "I wait." })).status).toBe(502);
@@ -537,4 +540,132 @@ test("a Turn still in flight when a Revert happens is refused, so the deleted fu
 
   expect((await turn).status).toBe(409);
   expect(await messageTexts(game, id)).toEqual(["I search.", "A lantern."]);
+});
+
+test.each([
+  ["invalid JSON", "The tide rises"],
+  ["the wrong shape", JSON.stringify({ text: "The tide rises" })],
+])("a reply with %s is retried, and the third attempt can still finish the Turn", async (_, reply) => {
+  const { game, prompts } = play(reply, reply, narration("The tide rises around you."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(3);
+  expect(prompts[2]).toEqual(prompts[0]!);
+  expect(await messageTexts(game, id)).toEqual(["I wade forward.", "The tide rises around you."]);
+});
+
+test("a third invalid reply fails cleanly, with no fourth attempt", async () => {
+  const { game, prompts } = play("One", "Two", "Three", narration("Never asked for."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({
+    error: "The Narrator gave no usable response",
+    failure: "retryable",
+    input: "I wade forward.",
+  });
+  expect(prompts).toHaveLength(3);
+  expect(await messageTexts(game, id)).toEqual([]);
+});
+
+test("a refused operation is retried, and its valid operations never reach the Snapshot", async () => {
+  const refused = narration(
+    "You trade the lantern for a rope.",
+    { op: "add_item", slot: "carrying", item: "lantern" },
+    { op: "remove_item", item: "rope" },
+  );
+  const { game, prompts } = play(refused, narration("Nobody trades."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I trade." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(2);
+  expect(await messageTexts(game, id)).toEqual(["I trade.", "Nobody trades."]);
+  expect(await snapshotAt(game, id, 2)).toMatchObject({ inventory: { wearing: [], carrying: [] } });
+});
+
+test("invalid replies and refused operations share the two retries", async () => {
+  const refused = narration("Refused.", { op: "remove_item", item: "rope" });
+  const { game, prompts } = play("Not JSON", refused, refused, narration("Never asked for."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I trade." });
+
+  expect(response.status).toBe(502);
+  expect(prompts).toHaveLength(3);
+  expect(await messageTexts(game, id)).toEqual([]);
+});
+
+test("a content refusal is reported with the player's text, and is not retried", async () => {
+  const { game, prompts } = play(new ContentRefused("policy"), narration("Never asked for."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I do something awful." });
+
+  expect(response.status).toBe(422);
+  expect(await response.json()).toEqual({
+    error: "The Narrator refused this message. Edit it and try again.",
+    failure: "refused",
+    input: "I do something awful.",
+  });
+  expect(prompts).toHaveLength(1);
+  expect(await messageTexts(game, id)).toEqual([]);
+});
+
+test("a network or API error is reported as retryable, without leaking its detail", async () => {
+  const { game, prompts } = play(new Error("401 for key sk-secret"), narration("Never asked for."));
+  const id = await game.createSave();
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+
+  expect(response.status).toBe(502);
+  expect(await response.json()).toEqual({
+    error: "The Text Provider request failed",
+    failure: "retryable",
+    input: "I wade forward.",
+  });
+  expect(prompts).toHaveLength(1);
+  expect(await messageTexts(game, id)).toEqual([]);
+});
+
+test.each([
+  ["a network error", [new Error("network down")]],
+  ["a content refusal", [new ContentRefused("policy")]],
+  ["three invalid replies", ["One", "Two", "Three"]],
+])("sending the Turn again after %s creates exactly one Turn", async (_, failure) => {
+  const { game } = play(...failure, narration("The tide rises around you."));
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+
+  expect(response.status).toBe(201);
+  expect(await game.get(`/saves/${id}/messages`).then((r) => r.json())).toEqual({
+    messages: [
+      { id: 1, role: "player", text: "I wade forward." },
+      { id: 2, role: "narrator", text: "The tide rises around you." },
+    ],
+  });
+});
+
+test("a provider error partway through a Turn writes nothing at all", async () => {
+  const refused = narration(
+    "Refused.",
+    { op: "add_item", slot: "carrying", item: "lantern" },
+    { op: "remove_item", item: "rope" },
+  );
+  const { game } = play(refused, new Error("network down"));
+  const id = await game.createSave();
+  const before = readFileSync(join(savesDir, `${id}.sqlite`));
+
+  const response = await game.post(`/saves/${id}/turns`, { input: "I trade." });
+
+  expect(response.status).toBe(502);
+  expect(readFileSync(join(savesDir, `${id}.sqlite`)).equals(before)).toBe(true);
 });
