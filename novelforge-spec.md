@@ -324,7 +324,7 @@ A fake LLM provider and a controllable dice roller let Turns be tested determini
 
 ## UI/UX
 
-An old book, open on a desk: aged paper, ink browns and bottle green, the story on the right page, and bookmarks hanging from the top right. It is responsive to screen size, with a dark version of the same palette.
+An old book, open on a desk: aged paper, ink browns and bottle green, the story on the right page, and bookmarks hanging from the top right. It is responsive to screen size. The dark theme is the same book on charcoal laid paper.
 
 **Before any UI code is written, the agent must create an HTML report of UI options.** It shows 3 distinct visual directions, each mocking up the main game screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story. It also shows the Chat style options. The player-facing UI contains no Check elements. The mockups are throwaway, and the user can pick one direction or mix parts.
 

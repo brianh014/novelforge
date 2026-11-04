@@ -17,16 +17,19 @@
 
 :root {
   color-scheme: light dark;
-  --desk: light-dark(#23382c, #0d1510);
-  --page: light-dark(#eadfc5, #33291c);
-  --ink: light-dark(#25221a, #eadfc5);
-  --muted: light-dark(#5a5340, #bcae90);
-  --line: light-dark(#b4a581, #63533c);
-  --accent: light-dark(#23503e, #93c3a2);
-  --on-accent: light-dark(#f2ead6, #10190f);
-  --soft: light-dark(#dccda9, #43362a);
+  --desk: light-dark(#23382c, #101112);
+  --page: light-dark(#eadfc5, #2b2b29);
+  --ink: light-dark(#25221a, #e8e4d8);
+  --muted: light-dark(#5a5340, #b5b2a6);
+  --line: light-dark(#b4a581, #55544e);
+  --accent: light-dark(#23503e, #b9c7a8);
+  --on-accent: light-dark(#f2ead6, #16180f);
+  --soft: light-dark(#dccda9, #3a3a37);
   --error: light-dark(#8f2f1c, #eda78f);
-  --foxing: light-dark(rgb(120 80 30 / 0.12), rgb(0 0 0 / 0.2));
+  /* Light is aged parchment, with age spots. Dark is charcoal laid paper, with the ribs and chain lines of a handmade sheet. */
+  --foxing: light-dark(rgb(120 80 30 / 0.12), transparent);
+  --laid: light-dark(transparent, rgb(255 255 255 / 0.035));
+  --chain: light-dark(transparent, rgb(0 0 0 / 0.16));
   --gutter: light-dark(rgb(40 25 5 / 0.45), rgb(0 0 0 / 0.7));
   --display: "Libre Caslon Display", "Hoefler Text", Georgia, serif;
   --body: "Libre Caslon Text", "Hoefler Text", Georgia, serif;
@@ -108,8 +111,11 @@ a {
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9 .4' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23f)' opacity='.55'/%3E%3C/svg%3E"),
     radial-gradient(circle at 8% 14%, var(--foxing), transparent 26%),
     radial-gradient(circle at 92% 82%, var(--foxing), transparent 30%),
-    radial-gradient(circle at 58% 38%, var(--foxing), transparent 18%);
-  background-blend-mode: soft-light, normal, normal, normal;
+    radial-gradient(circle at 58% 38%, var(--foxing), transparent 18%),
+    repeating-linear-gradient(0deg, var(--laid) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(90deg, var(--chain) 0 1px, transparent 1px 86px);
+  /* One per layer, as a shorter list would repeat and blend the wrong ones. */
+  background-blend-mode: soft-light, normal, normal, normal, normal, normal;
   box-shadow: 0 6px 22px rgb(0 0 0 / 0.45);
 }
 
