@@ -979,6 +979,12 @@ a.action {
   color: var(--accent);
 }
 
+.icon[aria-disabled="true"] {
+  color: var(--muted);
+  opacity: 0.5;
+  cursor: default;
+}
+
 .icon svg {
   width: 18px;
   height: 18px;
@@ -1046,10 +1052,8 @@ a.action {
 
 .compose-actions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 4px 12px;
+  gap: 6px;
 }
 
 a.begin {

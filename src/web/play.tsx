@@ -31,7 +31,7 @@ import {
   type TurnResult,
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
-import { DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
+import { DecideIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
 import { Zoomable } from "./zoom";
 
@@ -425,7 +425,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
           <textarea
             ref={inputBox}
             rows={2}
-            placeholder={`What does ${pc} say or do?`}
+            placeholder={deciding ? "The Narrator is deciding…" : `What does ${pc} say or do?`}
             value={draft}
             readOnly={!!turn}
             onChange={(e) => setDraft(e.target.value)}
@@ -435,12 +435,13 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
         <div className="compose-actions">
           <button
             type="button"
-            className="quiet"
-            title={draft.trim() ? "Clear the box to have the Narrator suggest something" : undefined}
+            className="icon"
+            title={draft.trim() ? "Decide for me: clear the box first" : "Decide for me"}
+            aria-label="Decide for me"
             aria-disabled={!!turn || deciding || !!draft.trim()}
             onClick={decide}
           >
-            {deciding ? "Deciding…" : "Decide for me"}
+            {DecideIcon}
           </button>
           {/* aria-disabled, because a disabled button would drop keyboard focus at every Send. */}
           <button className="action" aria-disabled={!!turn || !draft.trim()}>
