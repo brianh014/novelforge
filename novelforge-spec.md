@@ -26,6 +26,7 @@ The first step in a new game is creating the world, the player selects from list
   * Western  
   * Create your own  
 * World Brief \- free form field to describe the world. “Pick for me” will generate random world based on theme  
+* Title - free form field for the story's title, lettered into the Cover. “Pick for me” will generate one based on theme and World Brief  
 * Toggle for Starting Hook  
   * Yes \- the player specifies a Starting Hook at the beginning of the game, or a pick for me button for a generated one based on theme and World Brief  
   * No \- The PC just starts in the world with no immediate hook, more sandbox style start  
@@ -72,7 +73,7 @@ Once details are entered, the Narrator generates a detailed World Bible that is 
 
 The World Bible is a set of Lore Entries. Each has a title, keywords and self-contained content. The Narrator should give each entry several keywords so that paraphrases still activate it.
 
-Generation also produces a short, spoiler-free title, lettered into the Cover, and a World Overview covering what the PC would plausibly know. The player can accept it or regenerate the world before creating the PC.
+Generation also produces a World Overview covering what the PC would plausibly know. The player can accept it or regenerate the world before creating the PC.
 
 ### Create a character
 

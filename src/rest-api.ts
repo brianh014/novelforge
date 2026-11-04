@@ -33,6 +33,7 @@ const NewSaveRequest = z.object({
 });
 
 const WorldRequest = z.object({
+  title: z.string().trim().min(1).max(80),
   theme: z.string().trim().min(1),
   worldBrief: z.string().trim().min(1),
   startingHook: z.string().trim(),
@@ -40,7 +41,7 @@ const WorldRequest = z.object({
 });
 
 const PickRequest = z.object({
-  field: z.enum(["worldBrief", "startingHook"]),
+  field: z.enum(["title", "worldBrief", "startingHook"]),
   theme: z.string().trim().min(1),
   worldBrief: z.string().trim(),
 });
@@ -148,7 +149,7 @@ export function startServer(options: {
   const covers = new Map<string, { bytes: Promise<Uint8Array<ArrayBuffer> | undefined>; stop: AbortController }>();
 
   /** In the background, so a slow image never holds up the world, and a regenerated world's cover replaces the unfinished one. */
-  function startCover(id: string, { theme, artStyle }: WorldChoices, title: string, overview: string) {
+  function startCover(id: string, { title, theme, artStyle }: WorldChoices, overview: string) {
     covers.get(id)?.stop.abort();
     const stop = new AbortController();
     covers.set(id, { stop, bytes: images.drawCover({ title, theme, overview, artStyle }, stop.signal) as Promise<Uint8Array<ArrayBuffer> | undefined> });
@@ -267,10 +268,10 @@ export function startServer(options: {
       "/worlds": {
         POST: async (req) => {
           const choices = await parseBody(req, WorldRequest);
-          const { title, overview, world } = await generateWorld(options, choices, req.signal);
+          const { overview, world } = await generateWorld(options, choices, req.signal);
           const id = crypto.randomUUID();
-          worlds.set(id, { ...world, title });
-          startCover(id, choices, title, overview);
+          worlds.set(id, { ...world, title: choices.title });
+          startCover(id, choices, overview);
           return Response.json({ id, overview }, { status: 201 });
         },
       },
@@ -295,9 +296,9 @@ export function startServer(options: {
           const { id } = req.params;
           const choices = await parseBody(req, WorldRequest);
           if (!worlds.has(id)) throw new WorldNotFound();
-          const { title, overview, world } = await generateWorld(options, choices, req.signal);
-          worlds.set(id, { ...world, title });
-          startCover(id, choices, title, overview);
+          const { overview, world } = await generateWorld(options, choices, req.signal);
+          worlds.set(id, { ...world, title: choices.title });
+          startCover(id, choices, overview);
           return Response.json({ overview });
         },
       },

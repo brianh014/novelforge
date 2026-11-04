@@ -18,3 +18,5 @@
 ## Comments
 
 Prompt work done with fakes only: 587 tests pass and typecheck is clean. No real cover has been drawn with a title yet, so how well the image model spells is still unknown.
+
+Ticket 26 moved the title to a player choice, so `generateWorld` no longer returns one and Regenerate keeps it. The cover prompt is unchanged, and the real-cover criterion above stays open.

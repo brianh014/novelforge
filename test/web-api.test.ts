@@ -330,7 +330,6 @@ test("the Load Game calls duplicate, import and delete a Save", async () => {
 
 const worldReply = (overview: string) =>
   JSON.stringify({
-    title: "The Salt Reckoning",
     world_overview: overview,
     lore_entries: [{ title: "T", keywords: ["a", "b", "c"], content: "C" }],
     world_rules: ["R"],
@@ -343,7 +342,7 @@ test("the wizard's calls carry a world from Pick for me to a Save", async () => 
   start(async () => replies.shift()!);
 
   const worldBrief = await pickForMe("worldBrief", "Steampunk", "");
-  const choices = { theme: "Steampunk", worldBrief, startingHook: "" };
+  const choices = { title: "The Salt Reckoning", theme: "Steampunk", worldBrief, startingHook: "" };
   const { id: world, overview } = await generateWorld(choices);
   const regenerated = await regenerateWorld(world, choices);
   const picked = await pickPc(choices, { name: "Ash", background: "B", physicalTraits: "T", skills: "", other: "O", inventory: "coat" });
@@ -360,7 +359,7 @@ test("the wizard's calls carry a world from Pick for me to a Save", async () => 
 test("a failed generation reaches the wizard as an error it can show", async () => {
   start(unreachable("offline"));
 
-  await expect(generateWorld({ theme: "Western", worldBrief: "Dust", startingHook: "" })).rejects.toThrow(
+  await expect(generateWorld({ title: "Dust", theme: "Western", worldBrief: "Dust", startingHook: "" })).rejects.toThrow(
     "The Text Provider request failed",
   );
 });

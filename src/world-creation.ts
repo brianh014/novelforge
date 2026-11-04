@@ -7,7 +7,7 @@ import { askForJson, jsonSchemaOf, type TextProvider } from "./turn-engine";
 
 export type World = Pick<State, "worldBible" | "worldRules" | "plotThreads">;
 /** `artStyle` only paints the cover, so it never reaches the Narrator. */
-export type WorldChoices = { theme: string; worldBrief: string; startingHook: string; artStyle?: string };
+export type WorldChoices = { title: string; theme: string; worldBrief: string; startingHook: string; artStyle?: string };
 export type PickField = keyof typeof PICKS;
 // No personality, as the player shows that by how they play.
 export const PC_FIELDS = ["name", "background", "physicalTraits", "skills", "other", "inventory"] as const;
@@ -24,8 +24,6 @@ const LoreEntryReply = z.object({ title: text, keywords: z.array(text).min(3), c
 const toLoreEntries = (entries: z.infer<typeof LoreEntryReply>[]) => entries.map((entry) => ({ ...entry, alwaysOn: false }));
 
 const WorldReply = z.object({
-  // Short, as it is painted onto the cover.
-  title: text.max(80),
   world_overview: text,
   lore_entries: z.array(LoreEntryReply).min(1),
   world_rules: z.array(text).min(1),
@@ -33,6 +31,8 @@ const WorldReply = z.object({
 });
 
 const PickReply = z.object({ text });
+// Short, as it is painted onto the cover.
+const TitleReply = z.object({ text: text.max(80) });
 
 type OpeningStatus = { health: string; injuries: string[]; conditions: string[] };
 
@@ -75,24 +75,24 @@ const CHOICES_ARE_DATA =
 const modelInstructions = ({ settings }: Context) =>
   `Model Instructions, which are the player's out-of-character guidance to follow: ${settings.read().modelInstructions}`;
 
-const worldPrompt = (context: Context, { theme, worldBrief, startingHook }: WorldChoices): Prompt => [
+const worldPrompt = (context: Context, { title, theme, worldBrief, startingHook }: WorldChoices): Prompt => [
   {
     role: "system",
     content: `You are the Narrator of a story, creating its world before play begins. ${CHOICES_ARE_DATA}
-Build the world from the theme and world_brief. If there is a starting_hook, make sure the world can open with it.
+Build the world from the theme, title and world_brief. If there is a starting_hook, make sure the world can open with it.
 Reply only with JSON matching this schema, with its keys in the same order: ${JSON.stringify(jsonSchemaOf(WorldReply))}
 lore_entries is the World Bible, which is secret. Write at least twelve entries covering places, factions, people, history and how the world works. Each must make sense on its own, because in play you only see the entries a recent Message activates. Give each at least three keywords, including names, nicknames and everyday paraphrases, so that a player's wording still activates it.
 world_rules are strict statements of what is and is not possible in this world. Start with its theme and tone, because you will see these on every Turn and nothing else carries them.
 plot_threads are secret storylines for play to reveal. Write three to six.
 Keep each world rule and plot thread to a sentence or two, because they sit in every prompt.
-title is the story's title, painted on its cover: two to five evocative words, in the same language as the world_overview. Like the world_overview it must be spoiler-free.
-world_overview is the only other part the player ever reads. In a few short paragraphs, cover only what the PC would plausibly know from living in this world. It must be spoiler-free: never reveal or hint at a plot thread, and leave out every secret in the lore entries.
+world_overview is the only part the player ever reads. In a few short paragraphs, cover only what the PC would plausibly know from living in this world. It must be spoiler-free: never reveal or hint at a plot thread, and leave out every secret in the lore entries.
 ${modelInstructions(context)}`,
   },
-  playerChoices({ theme, world_brief: worldBrief, starting_hook: startingHook }),
+  playerChoices({ title, theme, world_brief: worldBrief, starting_hook: startingHook }),
 ];
 
 const PICKS = {
+  title: "a title for the story, painted on its cover: two to five evocative words, fitting the theme and any world_brief",
   worldBrief: "a World Brief: two to four sentences describing a fresh, specific world for the theme",
   startingHook: "a Starting Hook: one or two sentences of opening situation for the PC, fitting the theme and any world_brief",
 };
@@ -103,16 +103,17 @@ export async function pickForMe(
   { field, theme, worldBrief }: { field: PickField; theme: string; worldBrief: string },
   signal: AbortSignal,
 ) {
+  const reply = field === "title" ? TitleReply : PickReply;
   const prompt: Prompt = [
     {
       role: "system",
       content: `You are the Narrator of a story, helping a player set up its world. ${CHOICES_ARE_DATA}
-Write ${PICKS[field]}. Reply only with JSON matching this schema: ${JSON.stringify(jsonSchemaOf(PickReply))}
+Write ${PICKS[field]}. Reply only with JSON matching this schema: ${JSON.stringify(jsonSchemaOf(reply))}
 ${modelInstructions(context)}`,
     },
     playerChoices({ theme, world_brief: worldBrief }),
   ];
-  return (await askForJson(context.textProvider, prompt, PickReply, REFUSAL, signal)).text;
+  return (await askForJson(context.textProvider, prompt, reply, REFUSAL, signal)).text;
 }
 
 /** The empty fields of `pc`, the only ones in the reply. Like `pickForMe`, it knows only the player's choices. */
@@ -210,10 +211,10 @@ export async function fitPc(context: Context, world: World, save: Save, items: s
   return { opening: { worldBible, worldRules, plotThreads, inventory, status }, worldChanged: true };
 }
 
-/** Only `title` and `overview` may reach the player. */
+/** Only `overview` may reach the player. */
 export async function generateWorld(context: Context, choices: WorldChoices, signal: AbortSignal) {
   // shortcut: the Overview is Narrator free text, kept clean only by its prompt, even against a World Brief that asks for secrets, screen it if models leak.
-  const { title, world_overview, lore_entries, world_rules, plot_threads } = await askForJson(
+  const { world_overview, lore_entries, world_rules, plot_threads } = await askForJson(
     context.textProvider,
     worldPrompt(context, choices),
     WorldReply,
@@ -225,5 +226,5 @@ export async function generateWorld(context: Context, choices: WorldChoices, sig
     worldRules: world_rules,
     plotThreads: plot_threads,
   };
-  return { title, overview: world_overview, world };
+  return { overview: world_overview, world };
 }

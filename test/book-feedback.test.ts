@@ -22,7 +22,6 @@ afterEach(async () => {
 
 const SECRET = "ZQX-SECRET";
 const generated = JSON.stringify({
-  title: "The Salt Reckoning",
   world_overview: "Rain never stops in Saltmere.",
   lore_entries: [{ title: "Magic", keywords: ["magic", "spell", "sorcery"], content: `${SECRET} magic is real.` }],
   world_rules: [`${SECRET} rule.`],
@@ -30,7 +29,7 @@ const generated = JSON.stringify({
 });
 const sheet = JSON.stringify({ wearing: [], health: "unhurt", injuries: [], conditions: [] });
 const noConflict = JSON.stringify({ world_update: null });
-const choices = { theme: "Western", worldBrief: "A drowned city", startingHook: "", artStyle: "Ink wash" };
+const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "", artStyle: "Ink wash" };
 
 async function withImages(replies: (string | Error)[], ...images: Parameters<typeof scriptedImages>) {
   const script = scriptedTextProvider(...replies);
@@ -117,6 +116,7 @@ test("regenerating a world replaces its cover and stops the unfinished one", asy
   await game.post(`/worlds/${world}/regenerate`, choices);
 
   expect(payloads).toHaveLength(2);
+  expect(payloads[1]!.prompt).toContain(JSON.stringify(choices.title));
   expect(aborted).toEqual([1]);
   expect(new Uint8Array(await (await game.get(`/worlds/${world}/cover`)).arrayBuffer())).toEqual(png(2));
 });

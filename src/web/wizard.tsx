@@ -37,10 +37,13 @@ const OWN_THEME = "Create your own";
 
 const OWN_ART_STYLE = "Describe your own art style";
 
+const PICK_NAMES: Record<PickField, string> = { title: "Title", worldBrief: "World Brief", startingHook: "Starting Hook" };
+
 const blank = {
   theme: THEMES[0]!,
   ownTheme: "",
   worldBrief: "",
+  title: "",
   hookOn: true,
   startingHook: "",
   artStyle: Object.keys(ART_STYLES)[0]!,
@@ -162,9 +165,9 @@ export function NewGame({ step }: { step?: string }) {
 
   function generate(event: FormEvent) {
     event.preventDefault();
-    const choices = { theme, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "", artStyle };
+    const choices = { title: draft.title, theme, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "", artStyle };
     // `required` accepts spaces, and a Starting Hook of spaces would quietly become a sandbox start.
-    if (!theme || !draft.worldBrief.trim() || (draft.hookOn && !draft.startingHook.trim())) {
+    if (!theme || !draft.worldBrief.trim() || !draft.title.trim() || (draft.hookOn && !draft.startingHook.trim())) {
       return setError("Fill in each box with some words, use Pick for me, or turn the Starting Hook off.");
     }
     return run("The Narrator is building the world. This can take a few minutes.", async (signal) => {
@@ -197,7 +200,7 @@ export function NewGame({ step }: { step?: string }) {
         type="button"
         className="quiet"
         disabled={!!busy || !!draft[field] || !theme}
-        aria-label={`Pick for me: ${field === "worldBrief" ? "World Brief" : "Starting Hook"}`}
+        aria-label={`Pick for me: ${PICK_NAMES[field]}`}
         onClick={() => pick(field)}
       >
         Pick for me
@@ -333,6 +336,13 @@ export function NewGame({ step }: { step?: string }) {
             />
           </label>
           {pickButton("worldBrief")}
+        </div>
+        <div>
+          <label>
+            Title
+            <input form="world" required maxLength={80} value={draft.title} onChange={(e) => set({ title: e.target.value })} />
+          </label>
+          {pickButton("title")}
         </div>
         <label className="toggle">
           <input type="checkbox" checked={draft.hookOn} onChange={(e) => set({ hookOn: e.target.checked })} />

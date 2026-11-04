@@ -27,7 +27,6 @@ afterEach(async () => {
 
 const generated = (mark = "") =>
   JSON.stringify({
-    title: "The Salt Reckoning",
     world_overview: "Rain never stops in Saltmere.",
     lore_entries: [
       { title: "Magic", keywords: ["magic", "spell", "sorcery"], content: `${mark}Magic is a myth.` },
@@ -51,7 +50,7 @@ const pc = {
 };
 
 const newWorld = async () => {
-  const response = await game.post("/worlds", { theme: "Western", worldBrief: "A drowned city", startingHook: "" });
+  const response = await game.post("/worlds", { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "" });
   return ((await response.json()) as { id: string }).id;
 };
 
@@ -326,6 +325,7 @@ test("the player can read their own Starting Hook, to know where the story opens
 
 const emptyPc = { name: "", background: "", physicalTraits: "", skills: "", other: "", inventory: "" };
 const pickBody = (changes = {}) => ({
+  title: "The Salt Reckoning",
   theme: "Western",
   worldBrief: "A drowned city",
   startingHook: "A body washes ashore",

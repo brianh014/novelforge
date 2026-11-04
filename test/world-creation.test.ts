@@ -30,7 +30,6 @@ const fits = [JSON.stringify({ wearing: [], health: "unhurt", injuries: [], cond
 
 const generated = (mark = "", changes = {}) =>
   JSON.stringify({
-    title: "The Salt Reckoning",
     world_overview: `${mark}Rain never stops in Saltmere.`,
     lore_entries: [
       { title: `${mark}The Tide Court`, keywords: ["Tide Court", "the court", "magistrates"], content: `${mark}Its judges drown the guilty.` },
@@ -40,7 +39,7 @@ const generated = (mark = "", changes = {}) =>
     ...changes,
   });
 
-const choices = { theme: "Western", worldBrief: "A drowned city", startingHook: "" };
+const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "" };
 
 async function generate(body: object = choices) {
   const response = await game.post("/worlds", body);
@@ -66,11 +65,11 @@ test("a generated world reaches the player only as its World Overview, and its S
 
   const saves = saveStore(savesDir);
   expect(saves.read(id)).toEqual({
+    title: "The Salt Reckoning",
     worldBrief: "A drowned city",
     pc: { name: "Ash" },
     artStyle: "Ink wash",
     startingHook: "A body washes ashore",
-    title: "The Salt Reckoning",
     hasCover: false,
   });
   const { worldBible, worldRules, plotThreads } = saves.latestState(id);
@@ -110,10 +109,11 @@ test("the player's choices reach the Narrator as delimited data, with Model Inst
   play(generated());
   await game.patch("/settings", { modelInstructions: "Write darkly." });
 
-  await generate({ theme: "Cyberpunk", worldBrief: "Rain and chrome", startingHook: "A debt falls due" });
+  await generate({ title: "Chrome Debts", theme: "Cyberpunk", worldBrief: "Rain and chrome", startingHook: "A debt falls due" });
 
   const [system, user] = prompts[0]!;
   expect(JSON.parse(user!.content)).toEqual({
+    title: "Chrome Debts",
     theme: "Cyberpunk",
     world_brief: "Rain and chrome",
     starting_hook: "A debt falls due",
@@ -126,6 +126,8 @@ test("the player's choices reach the Narrator as delimited data, with Model Inst
 
 test.each([
   ["no theme", { ...choices, theme: "  " }],
+  ["no title", { ...choices, title: "  " }],
+  ["a title too long for a cover", { ...choices, title: "x".repeat(81) }],
   ["no World Brief", { ...choices, worldBrief: "" }],
 ])("a world with %s is refused without calling the Narrator", async (_name, body) => {
   play();
@@ -139,8 +141,6 @@ test.each([
   ["no Lore Entries", { lore_entries: [] }],
   ["no world_rules", { world_rules: [] }],
   ["no Plot Threads", { plot_threads: [] }],
-  ["no title", { title: "" }],
-  ["a title too long for a cover", { title: "x".repeat(81) }],
   ["no World Overview", { world_overview: "" }],
 ])("a reply with %s is retried", async (_name, changes) => {
   play(generated("", changes), generated());
@@ -224,6 +224,18 @@ test("Pick for me writes a World Brief from the theme", async () => {
   const [system, user] = prompts[0]!;
   expect(system!.content).toContain("World Brief");
   expect(JSON.parse(user!.content)).toEqual({ theme: "Steampunk", world_brief: "" });
+});
+
+test("Pick for me writes a Title from the theme and World Brief, and retries one too long for a cover", async () => {
+  play(JSON.stringify({ text: "x".repeat(81) }), JSON.stringify({ text: "The Whale City" }));
+
+  const response = await game.post("/worlds/pick", { field: "title", theme: "Steampunk", worldBrief: "A city on a whale" });
+
+  expect(await response.json()).toEqual({ text: "The Whale City" });
+  expect(prompts).toHaveLength(2);
+  const [system, user] = prompts[0]!;
+  expect(system!.content).toContain("a title for the story");
+  expect(JSON.parse(user!.content)).toEqual({ theme: "Steampunk", world_brief: "A city on a whale" });
 });
 
 test("Pick for me writes a Starting Hook from the theme and World Brief", async () => {
