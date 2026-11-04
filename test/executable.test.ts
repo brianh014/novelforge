@@ -9,7 +9,7 @@ const executable = join(folder.path, process.platform === "win32" ? "novelforge.
 const provider = fakeOpenAi([[delta(JSON.stringify({ narration: "The tide rises." }))]]);
 
 async function launch() {
-  const app = Bun.spawn([executable], { env: { ...process.env, PORT: "0" }, stdout: "pipe" });
+  const app = Bun.spawn([executable], { cwd: folder.path, env: { ...process.env, PORT: "0" }, stdout: "pipe" });
   const { value } = await app.stdout.getReader().read();
   const url = new TextDecoder().decode(value).match(/http:\S+/)![0];
   return { app, url: new URL(url) };
@@ -20,7 +20,7 @@ beforeAll(async () => {
     join(folder.path, "settings.json"),
     JSON.stringify({ textBaseUrl: provider.baseUrl, textModel: "fake/model" }),
   );
-  const build = Bun.spawn([process.execPath, "build", "src/main.ts", "--compile", "--outfile", executable], {
+  const build = Bun.spawn([process.execPath, "build", "src/main.ts", "--compile", "--production", "--outfile", executable], {
     stdout: "ignore",
   });
   expect(await build.exited).toBe(0);
@@ -50,6 +50,21 @@ test("the compiled app plays a Turn, keeps it through a kill, and stores the Sav
   expect(provider.requests).toHaveLength(1);
   expect(readdirSync(join(folder.path, "Saves"))).toEqual([`${id}.sqlite`]);
 }, 30_000);
+
+test("the compiled app serves the SPA from inside itself", async () => {
+  const { app, url } = await launch();
+  const page = await fetch(url).then((r) => r.text());
+  const assets = [...page.matchAll(/(?:src|href)="([^"]+)"/g)].map((match) => match[1]!);
+  const responses = await Promise.all(assets.map((asset) => fetch(new URL(asset, url))));
+  const script = await responses[assets.findIndex((asset) => asset.endsWith(".js"))]!.text();
+  app.kill();
+  await app.exited;
+
+  expect(page).toContain('<div id="root">');
+  expect(assets.some((asset) => asset.endsWith(".css"))).toBe(true);
+  expect(responses.map((response) => response.status)).toEqual(assets.map(() => 200));
+  expect(script).toContain("Main Menu");
+});
 
 test("the compiled app listens on localhost only", async () => {
   const { app, url } = await launch();

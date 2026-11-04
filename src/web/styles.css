@@ -1,0 +1,459 @@
+@font-face {
+  font-family: "EB Garamond";
+  src: url("./fonts/eb-garamond-latin-400-normal.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "EB Garamond";
+  font-style: italic;
+  src: url("./fonts/eb-garamond-latin-400-italic.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "IM Fell English";
+  src: url("./fonts/im-fell-english-latin-400-normal.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "IM Fell English SC";
+  src: url("./fonts/im-fell-english-sc-latin-400-normal.woff2") format("woff2");
+  font-display: swap;
+}
+
+:root {
+  color-scheme: light dark;
+  --desk: light-dark(#bccbc6, #0b1215);
+  --page: light-dark(#edf2eb, #17222a);
+  --ink: light-dark(#1b2a33, #dce5e2);
+  --muted: light-dark(#536769, #93a8aa);
+  --line: light-dark(#bdcbc4, #2e3f47);
+  --accent: light-dark(#176660, #74c8b8);
+  --on-accent: light-dark(#ffffff, #0d1a1c);
+  --soft: light-dark(#dbe6de, #203039);
+  --error: light-dark(#9c3b22, #eda78f);
+  --display: "IM Fell English", "Hoefler Text", Garamond, Georgia, serif;
+  --body: "EB Garamond", Garamond, "Hoefler Text", Georgia, serif;
+  --label: "IM Fell English SC", Garamond, Georgia, serif;
+  --tab-width: 38px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--desk);
+  color: var(--ink);
+  font: 18px/1.45 var(--body);
+}
+
+p,
+h1,
+h2,
+blockquote {
+  margin: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--accent);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The book */
+
+.desk {
+  height: 100vh;
+  height: 100dvh;
+  padding: 24px calc(var(--tab-width) + 24px) 24px 24px;
+}
+
+.book {
+  position: relative;
+  max-width: 1240px;
+  height: 100%;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  background: var(--page);
+  box-shadow: 0 6px 22px rgb(10 30 30 / 0.32);
+}
+
+.book.narrow-left {
+  grid-template-columns: clamp(240px, 30%, 380px) minmax(0, 1fr);
+}
+
+.page {
+  min-width: 0;
+  min-height: 0;
+  padding: 26px 34px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+}
+
+.page.left {
+  border-right: 1px solid var(--line);
+  background-image: linear-gradient(to left, var(--soft), transparent 40px);
+}
+
+.page.left > .quiet:last-child {
+  margin-top: auto;
+}
+
+.big {
+  font: 400 44px/1.1 var(--display);
+  text-wrap: balance;
+}
+
+.title {
+  font: 400 30px/1.15 var(--display);
+  overflow-wrap: anywhere;
+}
+
+h2 {
+  font: 400 19px var(--label);
+  color: var(--accent);
+}
+
+.muted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Bookmark tabs, and the ribbon they become on a phone */
+
+.tabs {
+  position: absolute;
+  top: 34px;
+  right: calc(var(--tab-width) * -1);
+  display: grid;
+  gap: 8px;
+  width: var(--tab-width);
+}
+
+.tabs a,
+.tabs button {
+  writing-mode: vertical-rl;
+  padding: 14px 8px;
+  border: 0;
+  background: var(--soft);
+  color: var(--ink);
+  font: 400 16px var(--label);
+  text-decoration: none;
+}
+
+.tabs [aria-current] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.tabs button:disabled {
+  color: var(--muted);
+}
+
+/* Controls */
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.action {
+  padding: 6px 18px;
+  min-height: 40px;
+  border: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 400 18px var(--label);
+  cursor: pointer;
+}
+
+.action:disabled,
+.action[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.quiet {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.quiet:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px 20px;
+}
+
+.menu {
+  margin-block: auto;
+  display: grid;
+}
+
+.menu a {
+  padding: 14px 0;
+  border-bottom: 1px dotted var(--muted);
+  color: var(--ink);
+  font: 400 28px var(--display);
+  text-decoration: none;
+}
+
+.menu a:hover {
+  color: var(--accent);
+}
+
+.fields {
+  display: grid;
+  gap: 18px;
+  margin-block: auto;
+}
+
+.fields label {
+  display: grid;
+  gap: 4px;
+  color: var(--accent);
+}
+
+.fields .action {
+  justify-self: end;
+}
+
+textarea,
+input {
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  border-radius: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  resize: none;
+}
+
+/* The story */
+
+.story {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  /* Keeps the newest text pinned to the bottom without leaving someone who scrolled back. */
+  flex-direction: column-reverse;
+}
+
+.story > div {
+  width: 100%;
+  max-width: 40em;
+  margin-inline: auto;
+}
+
+.message {
+  margin-bottom: 12px;
+}
+
+.message p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.message.player p {
+  padding-left: 1.2em;
+  border-left: 2px solid var(--line);
+  font-style: italic;
+}
+
+.revert {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+@media (hover: hover) {
+  .revert {
+    opacity: 0;
+  }
+
+  .message:hover .revert,
+  .revert:focus-visible {
+    opacity: 1;
+  }
+}
+
+.waiting {
+  color: var(--muted);
+  font-style: italic;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .waiting {
+    animation: breathe 2s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes breathe {
+  to {
+    opacity: 0.45;
+  }
+}
+
+.notice,
+.error {
+  padding: 6px 12px;
+  border-left: 3px solid currentColor;
+  background: var(--soft);
+}
+
+.notice {
+  color: var(--ink);
+}
+
+.error {
+  color: var(--error);
+}
+
+.compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.compose label {
+  flex: 1;
+  min-width: 0;
+}
+
+.compose textarea {
+  display: block;
+  max-height: 30vh;
+  field-sizing: content;
+  font-style: italic;
+}
+
+dialog {
+  width: min(32rem, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 24px;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  box-shadow: 0 6px 22px rgb(10 30 30 / 0.32);
+}
+
+dialog[open] {
+  display: grid;
+  gap: 12px;
+}
+
+dialog::backdrop {
+  background: rgb(10 30 30 / 0.5);
+}
+
+dialog blockquote {
+  max-height: 8em;
+  overflow: auto;
+  padding-left: 1em;
+  border-left: 2px solid var(--line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .desk {
+    padding: 0;
+  }
+
+  .book,
+  .book.narrow-left {
+    display: flex;
+    flex-direction: column;
+    box-shadow: none;
+  }
+
+  .page {
+    padding: 16px;
+  }
+
+  .page.left {
+    flex: none;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    background-image: none;
+  }
+
+  .page.right {
+    flex: 1;
+  }
+
+  .narrow-left .page.left {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-block: 8px;
+  }
+
+  .narrow-left .world {
+    display: none;
+  }
+
+  .title {
+    font-size: 24px;
+  }
+
+  .big {
+    font-size: 36px;
+  }
+
+  .tabs {
+    position: static;
+    width: auto;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+  }
+
+  .tabs a,
+  .tabs button {
+    writing-mode: horizontal-tb;
+    min-height: 44px;
+    padding: 10px 0;
+    background: var(--accent);
+    color: var(--on-accent);
+    text-align: center;
+  }
+
+  .tabs [aria-current] {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .tabs button:disabled {
+    color: var(--on-accent);
+    opacity: 0.6;
+  }
+}

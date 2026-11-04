@@ -1245,3 +1245,24 @@ test("a resolved Plot Thread leaves later prompts, and only one that exists can 
   expect(contents(prompts[2]).join()).not.toContain("the-missing-heir");
   expect(refused.status).toBe(502);
 });
+
+test("a Save reports its World Brief and PC, and an unknown Save is not found", async () => {
+  const { game } = play();
+  const id = await game.createSave();
+
+  const found = await game.get(`/saves/${id}`);
+  const missing = await game.get(`/saves/${crypto.randomUUID()}`);
+
+  expect(await found.json()).toEqual({ worldBrief: "A drowned city", pc: { name: "Ash" } });
+  expect(missing.status).toBe(404);
+});
+
+test("the root serves the SPA page", async () => {
+  const { game } = play();
+
+  const response = await game.get("/");
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toContain("text/html");
+  expect(await response.text()).toContain('<div id="root">');
+});

@@ -3,6 +3,7 @@ import type { Dice } from "./check-resolver";
 import { MessageNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { playTurn, type TextProvider, TurnFailed } from "./turn-engine";
+import spa from "./web/index.html";
 
 const NewSaveRequest = z.object({
   worldBrief: z.string().min(1),
@@ -58,6 +59,7 @@ export function startServer(options: {
     // A Turn can stay silent past Bun's default, which would drop the client while the Turn went on to commit.
     idleTimeout: 0,
     routes: {
+      "/": spa,
       "/settings": {
         GET: () => Response.json(publicSettings()),
         PATCH: async (req) => {
@@ -69,6 +71,13 @@ export function startServer(options: {
         POST: async (req) => {
           const id = saves.create(await parseBody(req, NewSaveRequest));
           return Response.json({ id }, { status: 201 });
+        },
+      },
+      "/saves/:id": {
+        GET: (req) => {
+          // An allowlist, so a secret added to the Save can never reach the player by default.
+          const { worldBrief, pc } = saves.read(req.params.id);
+          return Response.json({ worldBrief, pc: { name: pc.name } });
         },
       },
       "/saves/:id/duplicate": {
