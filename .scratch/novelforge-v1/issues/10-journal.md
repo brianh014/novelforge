@@ -6,9 +6,14 @@
 
 **Status:** ready-for-agent
 
-- [ ] The Journal shows the recent summary
-- [ ] The Full Log shows the story exactly as written, with images once they exist
-- [ ] The NPC section lists only NPCs the PC knows about
-- [ ] All Journal content comes from PC-known data
-- [ ] Marker tests prove the Journal never reveals secrets or Checks
-- [ ] After a Revert, the Journal matches the restored Snapshot
+- [x] The Journal shows the recent summary
+- [x] The Full Log shows the story exactly as written, with images once they exist
+- [x] The NPC section lists only NPCs the PC knows about
+- [x] All Journal content comes from PC-known data
+- [x] Marker tests prove the Journal never reveals secrets or Checks
+- [x] After a Revert, the Journal matches the restored Snapshot
+
+## Comments
+
+- No images exist yet, so the Full Log shows text only. Ticket 17 adds Scene Images to it, and ticket 18 adds portraits to the NPC section.
+- The route allowlists what it sends, but the summary is not in the PC-known section: it is Narrator free text, as are the known facts. Only the prompt keeps secrets and Checks out of them, so a model that disobeys could still show one. The marker test proves the route, not the model.

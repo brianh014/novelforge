@@ -1266,3 +1266,114 @@ test("the root serves the SPA page", async () => {
   expect(response.headers.get("content-type")).toContain("text/html");
   expect(await response.text()).toContain('<div id="root">');
 });
+
+const journalOf = (game: ReturnType<typeof startGame>, id: string) =>
+  game.get(`/saves/${id}/journal`).then((r) => r.json());
+
+test("the Journal holds the recent summary, what the PC knows, known NPCs and the Full Log", async () => {
+  const { game } = play(
+    narration(
+      "Mara waves.\n\n  \"Come in,\" she says.",
+      { op: "add_npc", name: "Mara", appearance: "grey coat" },
+      { op: "add_known_npc", name: "Mara" },
+      { op: "add_known_fact", fact: "The ferry stopped running." },
+      { op: "set_summary", summary: "Ash reached the docks." },
+    ),
+  );
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I wave back." });
+
+  expect(await journalOf(game, id)).toEqual({
+    summary: "Ash reached the docks.",
+    facts: ["The ferry stopped running."],
+    npcs: ["Mara"],
+    fullLog: [
+      { id: 1, role: "player", text: "I wave back." },
+      { id: 2, role: "narrator", text: "Mara waves.\n\n  \"Come in,\" she says." },
+    ],
+  });
+});
+
+test("the Journal of a new Save is empty, and a missing Save has none", async () => {
+  const { game } = play();
+  const id = await game.createSave();
+
+  expect(await journalOf(game, id)).toEqual({ summary: "", facts: [], npcs: [], fullLog: [] });
+  expect((await game.get(`/saves/${crypto.randomUUID()}/journal`)).status).toBe(404);
+});
+
+test("the Journal never reveals secrets or Checks", async () => {
+  const action = "MARKERXCHECKXACTION";
+  const { game } = playWithDice(
+    [17],
+    requestCheck("Very Hard", action),
+    narration(
+      "A horn sounds.",
+      { op: "add_lore_entry", title: "MARKER-LORE-TITLE", keywords: ["MARKER-KEYWORD"], content: "MARKER-LORE-TEXT" },
+      { op: "add_plot_thread", thread: "MARKER-PLOT-THREAD" },
+      { op: "add_npc", name: "MARKER-UNKNOWN-NPC", appearance: "MARKER-UNKNOWN-APPEARANCE" },
+      { op: "add_npc", name: "Mara", appearance: "MARKER-KNOWN-APPEARANCE" },
+      { op: "add_known_npc", name: "Mara" },
+      { op: "add_known_fact", fact: "The horn means a ship." },
+      { op: "set_summary", summary: "Ash heard a horn." },
+    ),
+  );
+  const id = await game.createSave();
+  seed(id, { worldRules: ["MARKER-WORLD-RULE"], directorsNotes: ["MARKER-DIRECTORS-NOTE"] });
+
+  await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  const body = await game.get(`/saves/${id}/journal`).then((r) => r.text());
+  expect(storedChecks(id)[3]).toMatchObject({ action, roll: 17 });
+  expect(body).toContain("Ash heard a horn.");
+  expect(body).not.toMatch(/MARKER|very hard|\b(check|roll|dice|d20|difficulty|outcome|degree)|\b17\b/i);
+  expect(body).not.toMatch(/worldBible|plotThreads|worldRules|directorsNotes|appearance/);
+});
+
+test("after a Revert, the Journal matches the restored Snapshot", async () => {
+  const { game } = play(
+    narration(
+      "Mara waves.",
+      { op: "add_npc", name: "Mara", appearance: "grey coat" },
+      { op: "add_known_npc", name: "Mara" },
+      { op: "add_known_fact", fact: "first-fact" },
+      { op: "set_summary", summary: "first-summary" },
+    ),
+    narration(
+      "Tobin nods.",
+      { op: "add_npc", name: "Tobin", appearance: "red scarf" },
+      { op: "add_known_npc", name: "Tobin" },
+      { op: "add_known_fact", fact: "second-fact" },
+      { op: "set_summary", summary: "second-summary" },
+    ),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "One." });
+  await game.post(`/saves/${id}/turns`, { input: "Two." });
+
+  await game.post(`/saves/${id}/messages/2/revert`, {});
+
+  const { pcKnown } = (await snapshotAt(game, id, 2)) as State;
+  expect(pcKnown).toEqual({ facts: ["first-fact"], npcs: ["Mara"] });
+  expect(await journalOf(game, id)).toEqual({
+    summary: "first-summary",
+    ...pcKnown,
+    fullLog: [
+      { id: 1, role: "player", text: "One." },
+      { id: 2, role: "narrator", text: "Mara waves." },
+    ],
+  });
+});
+
+test("the Narrator is told the player reads the summary and known facts, and how to record what the PC learns", async () => {
+  const { game, prompts } = play(narration("Rain."));
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  const [system] = contents(prompts[0]);
+  expect(system).toContain("The player reads the summary and known facts in the Journal");
+  expect(system).toContain("no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks");
+  expect(system).toContain("through add_known_npc, using add_npc first only for an NPC not yet in the state");
+});

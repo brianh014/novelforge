@@ -2,6 +2,7 @@ import type { Message, Save } from "../save-store";
 
 export type { Message, Save };
 export type Settings = { textBaseUrl: string; textModel: string; hasTextApiKey: boolean };
+export type Journal = { summary: string; facts: string[]; npcs: string[]; fullLog: Message[] };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
 
 const jsonBody = (body: object): RequestInit => ({
@@ -32,6 +33,8 @@ export function setupProblem({ textBaseUrl, textModel, hasTextApiKey }: Settings
 
 export const getMessages = (id: string) =>
   request<{ messages: Message[] }>(`/saves/${id}/messages`).then(({ messages }) => messages);
+
+export const getJournal = (id: string) => request<Journal>(`/saves/${id}/journal`);
 
 export const createSave = (save: Save) => request<{ id: string }>("/saves", jsonBody(save));
 

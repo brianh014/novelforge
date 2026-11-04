@@ -48,6 +48,7 @@ Current state: ${JSON.stringify(currentState)}
 Change the state only through state_operations, naming things exactly as the current state does. Reply only with JSON matching this schema, with its keys in the same order and check set to null for a finished Turn: ${responseSchema}
 If the PC attempts something risky, do not narrate it yet. Reply with a check instead, naming the action and one difficulty that already accounts for the PC's skills, condition and the situation. Safe actions need no check. Never mention dice, numbers or Checks.
 Older Messages leave this prompt, so keep a short summary of the story through set_summary, covering only what the PC has experienced.
+Record what the PC learns through add_known_fact, and each NPC the PC comes to know of through add_known_npc, using add_npc first only for an NPC not yet in the state. Never repeat a known fact or NPC. The player reads the summary and known facts in the Journal, so write them as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
 The Lore Entries and Plot Threads are secret. Let them shape the story and reveal them only through play. When play goes somewhere they do not cover, add a Lore Entry with several keywords so that paraphrases still activate it. Resolve a Plot Thread once play has exhausted it, and add a new one when none remain.
 Lore Entries: ${JSON.stringify(activeEntries.map(({ title, content }) => ({ title, content })))}
 Plot Threads: ${JSON.stringify(plotThreads)}

@@ -290,6 +290,28 @@ input {
   font-style: italic;
 }
 
+.journal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+
+.journal h2:not(:first-child) {
+  margin-top: 10px;
+}
+
+.journal ul {
+  margin: 0;
+  padding-left: 1.1em;
+}
+
+.full-log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .revert {
   color: var(--muted);
   font-size: 15px;
@@ -409,6 +431,24 @@ dialog blockquote {
 
   .page.right {
     flex: 1;
+  }
+
+  /* The Journal is too long for two stacked panes, so it reads as one page with the tabs held in reach. */
+  .book:has(.full-log) {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .book:has(.full-log) .page,
+  .full-log {
+    flex: none;
+    overflow: visible;
+  }
+
+  .book:has(.full-log) .tabs {
+    position: sticky;
+    bottom: 0;
+    margin-top: auto;
   }
 
   .narrow-left .page.left {

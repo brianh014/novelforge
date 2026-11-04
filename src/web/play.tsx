@@ -11,7 +11,7 @@ import {
   type Save,
   setupProblem,
 } from "./api";
-import { Book } from "./menu";
+import { Book, BookTabs } from "./menu";
 
 // Text from a Turn cut short by leaving the screen, to put back in the box on return.
 const unsent = new Map<string, string>();
@@ -97,15 +97,7 @@ export function Play({ id }: { id: string }) {
           <a className="quiet" href="#/">Main Menu</a>
         </>
       }
-      tabs={
-        <nav className="tabs" aria-label="Book sections">
-          <a href={`#/play/${id}`} aria-current="page">Story</a>
-          {/* shortcut: inert until tickets 10 and 11 build these. */}
-          <button disabled>Journal</button>
-          <button disabled>Inventory</button>
-          <a href="#/settings">Settings</a>
-        </nav>
-      }
+      tabs={<BookTabs id={id} current="Story" />}
     >
       <div className="story" tabIndex={0} role="region" aria-label="Story">
         <div>

@@ -80,6 +80,19 @@ export function startServer(options: {
           return Response.json({ worldBrief, pc: { name: pc.name } });
         },
       },
+      "/saves/:id/journal": {
+        GET: (req) => {
+          // An allowlist, so the World Bible, Plot Threads and NPC appearance text can never reach the player by default.
+          // shortcut: the summary and facts are Narrator free text, kept clean only by its prompt, screen them if models leak.
+          const { summary, pcKnown } = saves.latestState(req.params.id);
+          return Response.json({
+            summary,
+            facts: pcKnown.facts,
+            npcs: pcKnown.npcs,
+            fullLog: saves.messages(req.params.id),
+          });
+        },
+      },
       "/saves/:id/duplicate": {
         POST: async (req) => {
           const { fromMessage } = await parseBody(req, DuplicateRequest);
