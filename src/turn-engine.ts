@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
-import { assemblePrompt, type Prompt, resultInstruction } from "./prompt-assembler";
-import type { SaveStore } from "./save-store";
+import { assemblePrompt, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
+import type { Message, SaveStore } from "./save-store";
 import type { SettingsStore } from "./settings-store";
-import { applyOperations, StateOperation } from "./state-applier";
+import { applyOperations, type State, StateOperation } from "./state-applier";
 
 /** Throws ContentRefused when the content is refused. Anything else it throws is a network or API error. */
 export type TextProvider = (
@@ -11,7 +11,7 @@ export type TextProvider = (
   request: { schema: object; onText: (text: string) => void; signal: AbortSignal },
 ) => Promise<string>;
 
-type TurnEvents = (event: "narration" | "restart", data: object) => void;
+export type TurnEvents = (event: "narration" | "restart", data: object) => void;
 
 export class ContentRefused extends Error {}
 class InvalidResponse extends Error {}
@@ -70,6 +70,17 @@ function narrationSoFar(reply: string) {
 // The first try plus two automatic retries.
 const MAX_ATTEMPTS = 3;
 
+type Narrated = {
+  prompt: Prompt;
+  /** The text a failure hands back to the player. */
+  input: string;
+  refusal: string;
+  check?: Check;
+  /** Left out when no new roll is allowed, which makes a Check request an invalid reply. */
+  rollCheck?: (request: z.infer<typeof CheckRequest>) => Check;
+  commit: (narration: string, check: Check | undefined, advance: (state: State) => State) => Message[];
+};
+
 export async function playTurn(
   saves: SaveStore,
   {
@@ -92,8 +103,51 @@ export async function playTurn(
     input,
     responseSchema: JSON.stringify(responseSchema),
   });
+  return narrate(textProvider, signal, emit, {
+    prompt,
+    input,
+    refusal: "The Narrator refused this message. Edit it and try again.",
+    rollCheck: (request) => resolveCheck(request, dice, nearMissMargin),
+    commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
+  });
+}
+
+/** Rewrite, when there is `feedback`, or Regenerate. Takes no Dice: the Turn's stored Check stands, and a Turn without one stays without. */
+export async function replaceResponse(
+  saves: SaveStore,
+  { textProvider, settings }: { textProvider: TextProvider; settings: SettingsStore },
+  id: string,
+  messageId: number,
+  feedback: string | undefined,
+  signal: AbortSignal,
+  emit: TurnEvents = () => {},
+) {
+  const { input, narration, check, state, messages } = saves.turnToReplace(id, messageId);
+  const prompt = assemblePrompt({
+    save: saves.read(id),
+    state,
+    messages,
+    modelInstructions: settings.read().modelInstructions,
+    input,
+    responseSchema: JSON.stringify(responseSchema),
+  });
+  return narrate(textProvider, signal, emit, {
+    prompt: [...prompt, replacementInstruction(feedback === undefined ? undefined : { narration, feedback })],
+    input: feedback ?? "",
+    refusal: "The Narrator refused this, so the response stays as it was.",
+    check,
+    commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
+  });
+}
+
+async function narrate(
+  textProvider: TextProvider,
+  signal: AbortSignal,
+  emit: TurnEvents,
+  { prompt, input, refusal, check: storedCheck, rollCheck, commit }: Narrated,
+) {
   // Kept across attempts, so an invalid reply can never change the outcome.
-  let check: Check | undefined;
+  let check = storedCheck;
   let narrationSent = 0;
   for (let attempt = 1; ; attempt++) {
     if (narrationSent > 0) emit("restart", {});
@@ -111,17 +165,18 @@ export async function playTurn(
       check ? [...prompt, resultInstruction(check)] : prompt,
       { schema: responseSchema, onText, signal },
       input,
+      refusal,
     );
     try {
       const response = parseReply(reply);
       if (response.check) {
-        if (check) throw new InvalidResponse();
-        check = resolveCheck(response.check, dice, nearMissMargin);
+        if (check || !rollCheck) throw new InvalidResponse();
+        check = rollCheck(response.check);
         attempt = 0; // The result call gets its own retries.
         continue;
       }
       const { narration, state_operations } = response;
-      return saves.commitTurn(id, basedOn, input, narration, check, (state) => {
+      return commit(narration, check, (state) => {
         const { next, refused } = applyOperations(state, state_operations);
         // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
         if (refused.length > 0) throw new InvalidResponse(undefined, { cause: refused });
@@ -141,12 +196,13 @@ async function askNarrator(
   prompt: Prompt,
   request: Parameters<TextProvider>[1],
   input: string,
+  refusal: string,
 ) {
   try {
     return await textProvider(prompt, request);
   } catch (cause) {
     if (cause instanceof ContentRefused) {
-      throw new TurnFailed("The Narrator refused this message. Edit it and try again.", "refused", input, { cause });
+      throw new TurnFailed(refusal, "refused", input, { cause });
     }
     throw new TurnFailed("The Text Provider request failed", "retryable", input, { cause });
   }

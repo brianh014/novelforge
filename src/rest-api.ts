@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
-import { MessageNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
+import { type Message, MessageNotFound, NoteNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
-import { playTurn, type TextProvider, TurnFailed } from "./turn-engine";
+import { playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
 
 const NewSaveRequest = z.object({
@@ -12,7 +12,18 @@ const NewSaveRequest = z.object({
 
 const NewTurnRequest = z.object({ input: z.string().min(1) });
 
-const RevertRequest = z.object({});
+const NoFields = z.object({});
+
+const RewriteRequest = z.object({ feedback: z.string().trim().min(1) });
+
+const NoteRequest = z.object({ text: z.string().trim().min(1) });
+
+// shortcut: Notes are addressed by position, so a second tab can change the wrong one, give them ids if that ever matters.
+function spliceNote(notes: string[], index: string, ...replacement: string[]) {
+  const position = Number(index);
+  if (notes[position] === undefined) throw new NoteNotFound();
+  return notes.toSpliced(position, 1, ...replacement);
+}
 
 const DuplicateRequest = z.object({ fromMessage: z.number().optional() });
 
@@ -26,6 +37,7 @@ function errorResponse(error: unknown) {
   if (error instanceof z.ZodError) return Response.json({ error: z.prettifyError(error) }, { status: 400 });
   if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
   if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
+  if (error instanceof NoteNotFound) return Response.json({ error: "Note not found" }, { status: 404 });
   if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
   if (error instanceof TurnFailed) {
     console.error(error);
@@ -34,6 +46,29 @@ function errorResponse(error: unknown) {
   }
   console.error(error);
   return Response.json({ error: "Internal server error" }, { status: 500 });
+}
+
+/** Answers with the committed Messages, as one JSON body or, if the client asks, as a stream of the Turn. */
+async function turnResponse(req: Request, run: (emit?: TurnEvents) => Promise<Message[]>) {
+  if (!req.headers.get("accept")?.includes("text/event-stream")) {
+    return Response.json({ messages: await run() }, { status: 201 });
+  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      // A client that leaves aborts the signal, which stops the Turn, and its stream takes no more events.
+      const send = (event: string, data: object) => {
+        if (!req.signal.aborted) controller.enqueue(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      };
+      try {
+        send("done", { messages: await run(send) });
+      } catch (error) {
+        const response = errorResponse(error);
+        send("error", { status: response.status, ...((await response.json()) as object) });
+      }
+      if (!req.signal.aborted) controller.close();
+    },
+  });
+  return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
 }
 
 export function startServer(options: {
@@ -107,6 +142,21 @@ export function startServer(options: {
           return Response.json({ health, injuries, conditions });
         },
       },
+      "/saves/:id/notes": {
+        GET: (req) => Response.json({ notes: saves.latestState(req.params.id).directorsNotes }),
+        POST: async (req) => {
+          const { text } = await parseBody(req, NoteRequest);
+          return Response.json({ notes: saves.changeNotes(req.params.id, (notes) => [...notes, text]) }, { status: 201 });
+        },
+      },
+      "/saves/:id/notes/:index": {
+        PATCH: async (req) => {
+          const { text } = await parseBody(req, NoteRequest);
+          return Response.json({ notes: saves.changeNotes(req.params.id, (notes) => spliceNote(notes, req.params.index, text)) });
+        },
+        DELETE: (req) =>
+          Response.json({ notes: saves.changeNotes(req.params.id, (notes) => spliceNote(notes, req.params.index)) }),
+      },
       "/saves/:id/duplicate": {
         POST: async (req) => {
           const { fromMessage } = await parseBody(req, DuplicateRequest);
@@ -116,26 +166,7 @@ export function startServer(options: {
       "/saves/:id/turns": {
         POST: async (req) => {
           const { input } = await parseBody(req, NewTurnRequest);
-          if (!req.headers.get("accept")?.includes("text/event-stream")) {
-            const messages = await playTurn(saves, options, req.params.id, input, req.signal);
-            return Response.json({ messages }, { status: 201 });
-          }
-          const stream = new ReadableStream({
-            async start(controller) {
-              // A client that leaves aborts the signal, which stops the Turn, and its stream takes no more events.
-              const send = (event: string, data: object) => {
-                if (!req.signal.aborted) controller.enqueue(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-              };
-              try {
-                send("done", { messages: await playTurn(saves, options, req.params.id, input, req.signal, send) });
-              } catch (error) {
-                const response = errorResponse(error);
-                send("error", { status: response.status, ...((await response.json()) as object) });
-              }
-              if (!req.signal.aborted) controller.close();
-            },
-          });
-          return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
+          return turnResponse(req, (emit) => playTurn(saves, options, req.params.id, input, req.signal, emit));
         },
       },
       "/saves/:id/messages": {
@@ -148,10 +179,28 @@ export function startServer(options: {
           return Response.json({ inventory, status, pcKnown });
         },
       },
+      "/saves/:id/messages/:messageId/rewrite": {
+        POST: async (req) => {
+          const { feedback } = await parseBody(req, RewriteRequest);
+          const { id, messageId } = req.params;
+          return turnResponse(req, (emit) =>
+            replaceResponse(saves, options, id, Number(messageId), feedback, req.signal, emit),
+          );
+        },
+      },
+      "/saves/:id/messages/:messageId/regenerate": {
+        POST: async (req) => {
+          await parseBody(req, NoFields);
+          const { id, messageId } = req.params;
+          return turnResponse(req, (emit) =>
+            replaceResponse(saves, options, id, Number(messageId), undefined, req.signal, emit),
+          );
+        },
+      },
       "/saves/:id/messages/:messageId/revert": {
         GET: (req) => Response.json(saves.revertPreview(req.params.id, Number(req.params.messageId))),
         POST: async (req) => {
-          await parseBody(req, RevertRequest);
+          await parseBody(req, NoFields);
           return Response.json(saves.revert(req.params.id, Number(req.params.messageId)));
         },
       },

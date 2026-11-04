@@ -10,13 +10,16 @@ export type Save = { worldBrief: string; pc: { name: string } };
 export class SaveNotFound extends Error {}
 export class MessageNotFound extends Error {}
 export class StaleTurn extends Error {}
+export class NoteNotFound extends Error {}
 
-// shortcut: Saves made before hidden_check or the ticket 06 Snapshot sections fail their next Turn, migrate them when opened in ticket 13.
+// shortcut: Saves made before hidden_check, pending_notes or the ticket 06 Snapshot sections fail their next Turn, migrate them when opened in ticket 13.
 const SCHEMA = `
   CREATE TABLE save (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     world_brief TEXT NOT NULL,
-    pc_name TEXT NOT NULL
+    pc_name TEXT NOT NULL,
+    -- Director's Notes changed since the latest Message. Snapshots are immutable, so these wait for the next one.
+    pending_notes TEXT
   );
   CREATE TABLE messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,6 +61,15 @@ const latestSections = (db: Database) =>
 const toState = (sections: SectionRow[]) =>
   Object.fromEntries(sections.map(({ name, content }) => [name, JSON.parse(content)])) as State;
 
+/** The latest Snapshot with any pending Director's Notes applied, which is the state the next Message starts from. */
+function currentState(db: Database) {
+  const state = toState(latestSections(db));
+  const { pending_notes } = db.query<{ pending_notes: string | null }, []>("SELECT pending_notes FROM save").get()!;
+  return pending_notes ? { ...state, directorsNotes: JSON.parse(pending_notes) as string[] } : state;
+}
+
+const clearPendingNotes = (db: Database) => db.run("UPDATE save SET pending_notes = NULL");
+
 /** Links a section the latest Snapshot already holds rather than storing it again, and never rewrites one. */
 function writeSnapshot(db: Database, messageId: number, state: State) {
   const latest = latestSections(db);
@@ -97,10 +109,25 @@ function deleteAfter(db: Database, messageId: number) {
   db.run("DELETE FROM snapshot_sections WHERE message_id > ?", [messageId]);
   // Sweeping by what is still linked keeps every section a remaining Message shares.
   db.run("DELETE FROM sections WHERE id NOT IN (SELECT section_id FROM snapshot_sections)");
+  clearPendingNotes(db);
 }
 
 export type SaveStore = ReturnType<typeof saveStore>;
 export type Message = { id: number; role: "player" | "narrator"; text: string };
+
+/** The latest Turn, if its Narrator Message is still `messageId`, so a page behind the story can't replace what it never showed. */
+function latestTurn(db: Database, messageId: number) {
+  const [narrator, player] = db
+    .query<Message & { hidden_check: string | null }, []>(
+      "SELECT id, role, text, hidden_check FROM messages ORDER BY id DESC LIMIT 2",
+    )
+    .all();
+  // After a Revert to a player Message, the latest Message has no response to replace.
+  if (narrator!.id !== messageId || narrator!.role !== "narrator") throw new StaleTurn();
+  // Director's Notes changed since the player Message must carry across, or the replacement would undo them.
+  const { directorsNotes } = currentState(db);
+  return { narrator: narrator!, player: player!, state: { ...toState(sectionsAt(db, player!.id)), directorsNotes } };
+}
 
 export function saveStore(savesDir: string) {
   mkdirSync(savesDir, { recursive: true });
@@ -156,7 +183,7 @@ export function saveStore(savesDir: string) {
 
     latestState(id: string) {
       using db = open(id);
-      return toState(latestSections(db));
+      return currentState(db);
     },
 
     snapshot(id: string, messageId: number) {
@@ -211,12 +238,55 @@ export function saveStore(savesDir: string) {
       return db.transaction(() => {
         // Message ids are never reused, so any Revert or other Turn since `basedOn` is caught here.
         if (latestMessage(db) !== basedOn) throw new StaleTurn();
-        const state = toState(latestSections(db));
+        const state = currentState(db);
         const player = insert.get("player", input, null)!;
         writeSnapshot(db, player.id, state);
+        clearPendingNotes(db);
         const narrator = insert.get("narrator", narration, check ? JSON.stringify(check) : null)!;
         writeSnapshot(db, narrator.id, advance(state));
         return [player, narrator];
+      })();
+    },
+
+    changeNotes(id: string, change: (notes: string[]) => string[]) {
+      using db = open(id);
+      return db.transaction(() => {
+        const notes = change(currentState(db).directorsNotes);
+        db.run("UPDATE save SET pending_notes = ?", [JSON.stringify(notes)]);
+        return notes;
+      })();
+    },
+
+    /** What a new response to the latest Turn starts from: the state and story from before its Narrator Message. */
+    turnToReplace(id: string, messageId: number) {
+      using db = open(id);
+      requireMessage(db, messageId);
+      const { narrator, player, state } = latestTurn(db, messageId);
+      return {
+        input: player.text,
+        narration: narrator.text,
+        check: narrator.hidden_check ? (JSON.parse(narrator.hidden_check) as Check) : undefined,
+        state,
+        messages: db.query<Message, [number]>("SELECT id, role, text FROM messages WHERE id < ? ORDER BY id").all(player.id),
+      };
+    },
+
+    /**
+     * Swaps the latest Narrator Message for a new one that keeps its Check. The new Message gets a new id, so any
+     * Turn or replacement in flight from the old response is caught as stale.
+     */
+    replaceTurn(id: string, messageId: number, narration: string, advance: (state: State) => State) {
+      using db = open(id);
+      return db.transaction(() => {
+        const { narrator, player, state } = latestTurn(db, messageId);
+        deleteAfter(db, player.id);
+        const replacement = db
+          .query<Message, [string, string | null]>(
+            "INSERT INTO messages (role, text, hidden_check) VALUES ('narrator', ?, ?) RETURNING id, role, text",
+          )
+          .get(narration, narrator.hidden_check)!;
+        writeSnapshot(db, replacement.id, advance(state));
+        return [replacement];
       })();
     },
   };

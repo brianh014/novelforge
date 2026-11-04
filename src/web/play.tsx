@@ -1,13 +1,18 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
+  addNote,
   duplicateFrom,
+  editNote,
   getMessages,
+  getNotes,
   getSave,
   getSettings,
   getStatus,
   type Message,
   playTurn,
   previewRevert,
+  removeNote,
+  replaceResponse,
   revert,
   type Save,
   setupProblem,
@@ -36,23 +41,31 @@ export function Play({ id }: { id: string }) {
   const [save, setSave] = useState<Save>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>();
+  const [notes, setNotes] = useState<string[]>();
+  const [editingNotes, setEditingNotes] = useState(false);
   const [setupNotice, setSetupNotice] = useState<string>();
   const [draft, setDraft] = useState(unsent.get(id) ?? "");
-  const [turn, setTurn] = useState<{ input: string; narration: string }>();
+  const [turn, setTurn] = useState<{ input: string; narration: string; replaces?: Message }>();
+  // The response being rewritten, by id, so the box goes if the story moves on from it.
+  const [rewriting, setRewriting] = useState<number>();
+  const [feedback, setFeedback] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [reverting, setReverting] = useState<Message>();
   const inputBox = useRef<HTMLTextAreaElement>(null);
+  const story = useRef<HTMLDivElement>(null);
+  const rewriteButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(new AbortController());
 
   useEffect(() => {
     const action = itemActions.get(id);
     itemActions.delete(id);
-    Promise.all([getSave(id), getMessages(id), getStatus(id)]).then(([save, messages, status]) => {
+    Promise.all([getSave(id), getMessages(id), getStatus(id), getNotes(id)]).then(([save, messages, status, notes]) => {
       setSave(save);
       setMessages(messages);
       setStatus(status);
+      setNotes(notes);
       if (action) playInput(action, messages);
     }, (failure: Error) => setLoadError(failure.message));
     getSettings().then((settings) => setSetupNotice(setupProblem(settings)), () => {});
@@ -67,25 +80,57 @@ export function Play({ id }: { id: string }) {
     playInput(draft, messages);
   }
 
+  function replace(input: string) {
+    // The control that asked for this goes with the response, and focus must not fall back to the page.
+    story.current!.focus();
+    playInput(input, messages.slice(0, -1), messages.at(-1));
+  }
+
+  function sendFeedback(event: FormEvent) {
+    event.preventDefault();
+    if (feedback.trim()) replace(feedback);
+  }
+
+  function startRewrite(message: Message) {
+    if (rewriting === message.id) return;
+    setRewriting(message.id);
+    setFeedback("");
+  }
+
+  function cancelRewrite() {
+    setRewriting(undefined);
+    setFeedback("");
+    rewriteButton.current?.focus();
+  }
+
   // `before` is passed in because the load effect runs this before `messages` is set.
-  async function playInput(input: string, before: Message[]) {
+  async function playInput(input: string, before: Message[], replaces?: Message) {
     let streamed = false;
     setError("");
     setAnnouncement("");
-    setTurn({ input, narration: "" });
+    setRewriting(undefined);
+    setTurn({ input, narration: "", replaces });
     const show = (narration: string) => {
       streamed = true;
-      setTurn({ input, narration });
+      setTurn({ input, narration, replaces });
     };
-    const result = await playTurn(id, input, before.at(-1)?.id ?? 0, show, leaving.current.signal);
+    const { signal } = leaving.current;
+    const result = await (replaces
+      ? replaceResponse(id, replaces.id, input, show, signal)
+      : playTurn(id, input, before.at(-1)?.id ?? 0, show, signal));
     setTurn(undefined);
     if ("messages" in result) {
+      setFeedback("");
       setMessages([...before, ...result.messages]);
       // Streamed text was already read out by the live region, and the Message list isn't live.
       if (!streamed) setAnnouncement(result.messages.at(-1)!.text);
     } else {
-      if (leaving.current.signal.aborted) unsent.set(id, result.input);
-      setDraft(result.input);
+      if (replaces) {
+        setRewriting(result.input ? replaces.id : undefined);
+      } else {
+        if (signal.aborted) unsent.set(id, result.input);
+        setDraft(result.input);
+      }
       setError(result.error);
       // A stale Turn means the story moved on without this page.
       getMessages(id).then(setMessages, () => {});
@@ -101,8 +146,10 @@ export function Play({ id }: { id: string }) {
       </Book>
     );
   }
-  if (!save || !status) return <Book left={null}>{null}</Book>;
+  if (!save || !status || !notes) return <Book left={null}>{null}</Book>;
   const pc = save.pc.name;
+  const latest = messages.at(-1);
+  const replaceable = !turn && latest?.role === "narrator" ? latest : undefined;
 
   return (
     <Book
@@ -114,6 +161,20 @@ export function Play({ id }: { id: string }) {
             <h2>Condition</h2>
             <p className="status">{statusWords(status)}</p>
           </div>
+          <div className="notes">
+            <h2>
+              <button className="quiet" aria-haspopup="dialog" onClick={() => setEditingNotes(true)}>
+                Director's Notes
+              </button>
+            </h2>
+            {notes.length > 0 && (
+              <ul>
+                {notes.map((note, index) => (
+                  <li key={index}>{note}</li>
+                ))}
+              </ul>
+            )}
+          </div>
           <div className="world">
             <h2>World Brief</h2>
             <p>{save.worldBrief}</p>
@@ -123,10 +184,10 @@ export function Play({ id }: { id: string }) {
       }
       tabs={<BookTabs id={id} current="Story" />}
     >
-      <div className="story" tabIndex={0} role="region" aria-label="Story">
+      <div ref={story} className="story" tabIndex={0} role="region" aria-label="Story">
         <div>
           {messages.length === 0 && !turn && <p className="muted">The page is blank. What does {pc} do first?</p>}
-          {messages.map((message, index) => (
+          {(turn?.replaces ? messages.slice(0, -1) : messages).map((message, index) => (
             <div key={message.id} className={`message ${message.role}`}>
               <p>{message.text}</p>
               {!turn && index < messages.length - 1 && (
@@ -138,9 +199,24 @@ export function Play({ id }: { id: string }) {
                   Revert to here
                 </button>
               )}
+              {message === replaceable && (
+                <div className="row">
+                  <button
+                    ref={rewriteButton}
+                    className="quiet"
+                    aria-expanded={rewriting === message.id}
+                    onClick={() => startRewrite(message)}
+                  >
+                    Rewrite
+                  </button>
+                  <button className="quiet" onClick={() => replace("")}>
+                    Regenerate
+                  </button>
+                </div>
+              )}
             </div>
           ))}
-          {turn && (
+          {turn && !turn.replaces && (
             <div className="message player">
               <p>{turn.input}</p>
             </div>
@@ -158,6 +234,28 @@ export function Play({ id }: { id: string }) {
         </p>
       )}
       {error && <p role="alert" className="error">{error}</p>}
+      {replaceable && rewriting === replaceable.id && (
+        <form className="ask" onSubmit={sendFeedback}>
+          <label>
+            What should the Narrator change?
+            <textarea
+              autoFocus
+              rows={2}
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              onKeyDown={sendOnEnter}
+            />
+          </label>
+          <div className="row">
+            <button type="button" className="quiet" onClick={cancelRewrite}>
+              Cancel
+            </button>
+            <button className="action" aria-disabled={!feedback.trim()}>
+              Rewrite the response
+            </button>
+          </div>
+        </form>
+      )}
       <form className="compose" onSubmit={send}>
         <label>
           <span className="visually-hidden">What does {pc} say or do?</span>
@@ -176,6 +274,9 @@ export function Play({ id }: { id: string }) {
           Send
         </button>
       </form>
+      {editingNotes && (
+        <NotesDialog id={id} notes={notes} onChange={setNotes} onClose={() => setEditingNotes(false)} />
+      )}
       {reverting && (
         <RevertDialog
           id={id}
@@ -184,12 +285,116 @@ export function Play({ id }: { id: string }) {
           onReverted={() => {
             setMessages(messages.filter((message) => message.id <= reverting.id));
             getStatus(id).then(setStatus, () => {});
+            getNotes(id).then(setNotes, () => {});
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.
             inputBox.current!.focus();
           }}
         />
       )}
     </Book>
+  );
+}
+
+function NotesDialog(props: {
+  id: string;
+  notes: string[];
+  onChange: (notes: string[]) => void;
+  onClose: () => void;
+}) {
+  const { id, notes, onChange } = props;
+  const dialog = useRef<HTMLDialogElement>(null);
+  const box = useRef<HTMLTextAreaElement>(null);
+  const [editing, setEditing] = useState<number>();
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => dialog.current!.showModal(), []);
+
+  function startEditing(index: number | undefined, note: string) {
+    setEditing(index);
+    setText(note);
+    box.current!.focus();
+  }
+
+  async function attempt(action: () => Promise<string[]>, textAfter = "") {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      onChange(await action());
+      startEditing(undefined, textAfter);
+    } catch (failure) {
+      setError((failure as Error).message);
+      // Notes are addressed by position, so a change from another tab must show before the next try.
+      getNotes(id).then(onChange, () => {});
+    }
+    setBusy(false);
+  }
+
+  function submitNote(event: FormEvent) {
+    event.preventDefault();
+    if (!text.trim()) return;
+    attempt(() => (editing === undefined ? addNote(id, text) : editNote(id, editing, text)));
+  }
+
+  return (
+    <dialog ref={dialog} onClose={props.onClose} aria-labelledby="notes-title">
+      <h2 id="notes-title">Director's Notes</h2>
+      <p className="muted">Standing instructions the Narrator follows from now on. Older text stays as written.</p>
+      {notes.length > 0 && (
+        <ul className="note-list">
+          {notes.map((note, index) => (
+            <li key={index}>
+              <p>{note}</p>
+              <div className="row">
+                <button
+                  className="quiet"
+                  aria-label={`Edit note: ${note.slice(0, 40)}`}
+                  onClick={() => startEditing(index, note)}
+                >
+                  Edit
+                </button>
+                <button
+                  className="quiet"
+                  aria-label={`Remove note: ${note.slice(0, 40)}`}
+                  // Positions shift, so an edit in progress ends, but a new Note being typed stays.
+                  onClick={() => attempt(() => removeNote(id, index), editing === undefined ? text : "")}
+                >
+                  Remove
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form className="note-form" onSubmit={submitNote}>
+        <label>
+          {editing === undefined ? "Add a note" : "Edit this note"}
+          <textarea
+            ref={box}
+            rows={2}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={sendOnEnter}
+          />
+        </label>
+        {error && <p role="alert" className="error">{error}</p>}
+        <div className="row">
+          <button type="button" className="quiet" onClick={() => dialog.current!.close()}>
+            Close
+          </button>
+          {editing !== undefined && (
+            <button type="button" className="quiet" onClick={() => startEditing(undefined, "")}>
+              Cancel edit
+            </button>
+          )}
+          <button className="action" aria-disabled={busy || !text.trim()}>
+            {editing === undefined ? "Add" : "Save"}
+          </button>
+        </div>
+      </form>
+    </dialog>
   );
 }
 

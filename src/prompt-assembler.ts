@@ -67,6 +67,19 @@ Evaluate the player's action against world_rules. If it violates them, do not re
   ];
 }
 
+/** For Rewrite and Regenerate. Goes before any Check result, so that feedback can never override the result. */
+export function replacementInstruction(rewrite?: { narration: string; feedback: string }): Prompt[number] {
+  return {
+    role: "system",
+    content: `This is a new response to the player's last action, replacing an earlier one that no longer counts. The state above is from before that action, so include every state operation this response needs, including set_summary and add_known_fact where they apply. Reply with a finished Turn, and do not request a check.${
+      rewrite
+        ? `
+The player rejected the earlier response and gave out-of-character feedback on it, delimited as JSON. Follow the feedback in the new response, while keeping to world_rules: ${JSON.stringify({ rejected_response: rewrite.narration, feedback: rewrite.feedback })}`
+        : ""
+    }`,
+  };
+}
+
 export function resultInstruction({ action, outcome, degree }: Check): Prompt[number] {
   return {
     role: "system",

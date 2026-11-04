@@ -350,6 +350,57 @@ input {
   overflow-wrap: anywhere;
 }
 
+.notes ul {
+  margin: 4px 0 0;
+  padding-left: 1.1em;
+  overflow-wrap: anywhere;
+}
+
+.notes h2 .quiet {
+  font: inherit;
+}
+
+.note-list {
+  max-height: 40dvh;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  list-style: none;
+}
+
+.note-list p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note-form {
+  display: grid;
+  gap: 8px;
+}
+
+.note-form label {
+  display: grid;
+  gap: 4px;
+  color: var(--accent);
+}
+
+.note-form textarea {
+  max-height: 30dvh;
+  field-sizing: content;
+}
+
+.message .row,
+.note-list .row {
+  justify-content: flex-start;
+}
+
+.message .row .quiet,
+.note-list .quiet {
+  min-height: 32px;
+}
+
 .full-log {
   flex: 1;
   min-height: 0;
@@ -522,7 +573,8 @@ dialog blockquote {
     display: none;
   }
 
-  .narrow-left .world {
+  .narrow-left .world,
+  .notes ul {
     display: none;
   }
 

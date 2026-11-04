@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
-import { playTurn, setupProblem } from "../src/web/api";
+import { playTurn, replaceResponse, setupProblem } from "../src/web/api";
 import { ContentRefused, type TextProvider } from "../src/turn-engine";
 import { narration, startGame, tempFolder } from "./support";
 
@@ -13,7 +13,7 @@ function start(textProvider: TextProvider, tamper = (send: () => Promise<Respons
   const realFetch = fetch;
   spyOn(globalThis, "fetch").mockImplementation((async (path: string, init?: RequestInit) => {
     const send = () => realFetch(game.url(path), init);
-    return String(path).endsWith("/turns") ? tamper(send) : send();
+    return /\/(turns|regenerate|rewrite)$/.test(String(path)) ? tamper(send) : send();
   }) as typeof fetch);
 }
 
@@ -206,4 +206,79 @@ test("the player is told when the Narrator has no model or key, but a local serv
   expect(setupProblem({ textBaseUrl: openRouter, textModel: "a/model", hasTextApiKey: false })).toContain("key");
   expect(setupProblem({ textBaseUrl: openRouter, textModel: "a/model", hasTextApiKey: true })).toBeUndefined();
   expect(setupProblem({ textBaseUrl: local, textModel: "a/model", hasTextApiKey: false })).toBeUndefined();
+});
+
+const replace = async (id: string, messageId: number, feedback: string) => {
+  const shown: string[] = [];
+  const result = await replaceResponse(id, messageId, feedback, (text) => shown.push(text), new AbortController().signal);
+  return { result, shown };
+};
+
+test("a replacement streams, and finishes with only the new Narrator Message", async () => {
+  const replies = [reply("Rain."), streamed('{"check":null,"narration":"Sn', 'ow.","state_operations":[]}')];
+  start((prompt, request) => replies.shift()!(prompt, request));
+  const id = await game.createSave();
+  await play(id, "I wait.");
+
+  const { result, shown } = await replace(id, 2, "");
+
+  expect(shown).toEqual(["Sn", "Snow."]);
+  expect(result).toEqual({ messages: [{ id: 3, role: "narrator", text: "Snow." }] });
+});
+
+test("a Rewrite that fails hands the feedback back, with the response still in place", async () => {
+  const replies = [reply("Rain."), () => Promise.reject(new ContentRefused())];
+  start((prompt, request) => replies.shift()!(prompt, request));
+  const id = await game.createSave();
+  await play(id, "I wait.");
+
+  const { result } = await replace(id, 2, "Make it snow.");
+
+  expect(result).toEqual({
+    error: "The Narrator refused this, so the response stays as it was.",
+    input: "Make it snow.",
+  });
+});
+
+test("a failed Regenerate asks the player to try again, not to send anything", async () => {
+  const replies = [reply("Rain."), ...Array(3).fill(() => Promise.reject(new Error("network down")))];
+  start((prompt, request) => replies.shift()!(prompt, request));
+  const id = await game.createSave();
+  await play(id, "I wait.");
+
+  const { result } = await replace(id, 2, "");
+
+  expect(result).toEqual({ error: "The Text Provider request failed. Try again.", input: "" });
+});
+
+test("a replacement whose stream drops after it committed recovers the new response", async () => {
+  let dropping = false;
+  start(reply("Rain."), async (send) => {
+    const response = await send();
+    if (!dropping) return response;
+    await response.text();
+    throw new Error("connection lost");
+  });
+  const id = await game.createSave();
+  await play(id, "I wait.");
+  dropping = true;
+
+  const { result } = await replace(id, 2, "");
+
+  expect(result).toEqual({ messages: [{ id: 3, role: "narrator", text: "Rain." }] });
+});
+
+test("a replacement whose stream drops with nothing committed says so, and keeps the feedback", async () => {
+  let dropping = false;
+  start(reply("Rain."), (send) => (dropping ? Promise.reject(new Error("connection lost")) : send()));
+  const id = await game.createSave();
+  await play(id, "I wait.");
+  dropping = true;
+
+  const { result } = await replace(id, 2, "Make it snow.");
+
+  expect(result).toEqual({
+    error: "The connection dropped and this wasn't saved. Try again.",
+    input: "Make it snow.",
+  });
 });

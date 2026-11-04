@@ -55,6 +55,7 @@ export function startGame(
   return {
     post,
     patch: (path: string, body: unknown) => sendJson("PATCH", new URL(path, server.url), body),
+    delete: (path: string) => fetch(new URL(path, server.url), { method: "DELETE" }),
     get: (path: string) => fetch(new URL(path, server.url)),
     url: (path: string) => new URL(path, server.url),
     createSave: async () => {
