@@ -25,6 +25,7 @@ export class SaveNotFound extends Error {}
 export class MessageNotFound extends Error {}
 export class StaleTurn extends Error {}
 export class NoteNotFound extends Error {}
+export class PortraitNotFound extends Error {}
 export class InvalidSave extends Error {}
 
 // The shape at schema version 1, which later versions change through MIGRATIONS rather than here.
@@ -55,7 +56,7 @@ const SCHEMA = `
 `;
 
 // Message ids start at 1, so this Snapshot holds the state before the first Message.
-const OPENING_SNAPSHOT = 0;
+export const OPENING_SNAPSHOT = 0;
 
 type SectionRow = { name: string; id: number; content: string };
 
@@ -118,7 +119,10 @@ function countAfter(db: Database, messageId: number) {
   const { images } = db
     .query<{ images: number }, [number]>("SELECT count(*) AS images FROM scene_images WHERE message_id > ?")
     .get(messageId)!;
-  return { messages, images };
+  const { portraits } = db
+    .query<{ portraits: number }, [number]>("SELECT count(*) AS portraits FROM portraits WHERE message_id > ?")
+    .get(messageId)!;
+  return { messages, images, portraits };
 }
 
 // Sweeping by what is still linked keeps every section a remaining Message shares.
@@ -129,6 +133,7 @@ function deleteAfter(db: Database, messageId: number) {
   db.run("DELETE FROM messages WHERE id > ?", [messageId]);
   db.run("DELETE FROM snapshot_sections WHERE message_id > ?", [messageId]);
   db.run("DELETE FROM scene_images WHERE message_id > ?", [messageId]);
+  db.run("DELETE FROM portraits WHERE message_id > ?", [messageId]);
   sweepSections(db);
   clearPendingNotes(db);
 }
@@ -177,8 +182,18 @@ function toVersion5(db: Database) {
   addMissingSections(db);
 }
 
+/**
+ * One row per person, by the Message of their first appearance, so a Revert past it takes the portrait too, and one
+ * that leaves it standing costs no second image. The PC has a null `npc` and message 0, which no Revert reaches. Ids are what the client sees, as a name is no use in a URL, and are never reused
+ * so that a browser can't show a Reverted portrait for a new one.
+ */
+const toVersion6 = (db: Database) =>
+  db.run(
+    "CREATE TABLE IF NOT EXISTS portraits (id INTEGER PRIMARY KEY AUTOINCREMENT, npc TEXT UNIQUE, message_id INTEGER NOT NULL, bytes BLOB NOT NULL)",
+  );
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -198,7 +213,7 @@ function migrate(db: Database) {
 
 const NOT_A_SAVE = "This file isn't a valid Save.";
 
-const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images"];
+const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images", "portraits"];
 
 /** Anything in an imported file that could act while it is migrated, so it must be refused first. */
 function assertSafeToMigrate(db: Database) {
@@ -234,6 +249,8 @@ export function imageType(bytes: Uint8Array) {
   return undefined;
 }
 
+const storedImage = z.instanceof(Uint8Array).refine((bytes) => imageType(bytes) !== undefined);
+
 /** The rows of a table that must have exactly the columns of `shape`, even if it has no rows to show them. */
 function rowsOf<T extends z.ZodRawShape>(db: Database, table: string, shape: T) {
   const query = db.query(`SELECT * FROM ${table}`);
@@ -265,7 +282,13 @@ function assertValidSave(db: Database) {
   const images = rowsOf(db, "scene_images", {
     message_id: rowId,
     caption: z.string(),
-    bytes: z.instanceof(Uint8Array).refine((bytes) => imageType(bytes) !== undefined),
+    bytes: storedImage,
+  });
+  const portraits = rowsOf(db, "portraits", {
+    id: rowId.positive(),
+    npc: z.string().nullable(),
+    message_id: rowId,
+    bytes: storedImage,
   });
 
   // Replacing a response needs the player Message before it. Two player Messages in a row are fine, after a Revert.
@@ -288,7 +311,10 @@ function assertValidSave(db: Database) {
   const complete = linked.size === links.length && links.length === snapshots.size * schemas.size;
   const narrators = new Set(messages.filter(({ role }) => role === "narrator").map(({ id }) => id));
   const imagesPlaced = images.every(({ message_id }) => narrators.has(message_id));
-  if (save.length !== 1 || !answered || !complete || !imagesPlaced) throw new InvalidSave(NOT_A_SAVE);
+  const portraitsPlaced =
+    new Set(portraits.map(({ npc }) => npc)).size === portraits.length &&
+    portraits.every(({ npc, message_id }) => (npc === null ? message_id === OPENING_SNAPSHOT : narrators.has(message_id)));
+  if (save.length !== 1 || !answered || !complete || !imagesPlaced || !portraitsPlaced) throw new InvalidSave(NOT_A_SAVE);
 }
 
 /** Fills a new Save with a file's rows, so its table definitions, id sequence and spare pages stay behind. */
@@ -321,7 +347,7 @@ function latestTurn(db: Database, messageId: number) {
   return { narrator: narrator!, player: player!, state: { ...toState(sectionsAt(db, player!.id)), directorsNotes } };
 }
 
-// shortcut: room for a few hundred Scene Images, and import holds several copies in memory, so a longer game can export but not import until import streams.
+// shortcut: room for a few hundred images, and import holds several copies in memory, so a longer game can export but not import until import streams.
 export const MAX_IMPORT_BYTES = 512 * 1024 * 1024;
 
 export function saveStore(savesDir: string) {
@@ -472,6 +498,47 @@ export function saveStore(savesDir: string) {
         bytes,
         messageId,
       ]);
+    },
+
+    /** Every portrait without its bytes, including those of NPCs the player must not see yet. */
+    portraits(id: string) {
+      using db = open(id);
+      return db.query<{ id: number; npc: string | null }, []>("SELECT id, npc FROM portraits ORDER BY id").all();
+    },
+
+    portrait(id: string, portraitId: number) {
+      using db = open(id);
+      const portrait = db
+        .query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM portraits WHERE id = ?")
+        .get(portraitId);
+      if (!portrait) throw new PortraitNotFound();
+      return portrait.bytes;
+    },
+
+    /** Goes by exact name, as the state does. A null `npc` is the PC. */
+    portraitOf(id: string, npc: string | null) {
+      using db = open(id);
+      const portrait = db.query<{ bytes: Uint8Array }, [string | null]>("SELECT bytes FROM portraits WHERE npc IS ?").get(npc);
+      const mediaType = portrait && imageType(portrait.bytes);
+      return mediaType ? { bytes: portrait!.bytes, mediaType } : undefined;
+    },
+
+    /** Stores nothing if the Message that asked has gone, like `addSceneImage`. An NPC's goes by their first appearance. */
+    addPortrait(id: string, messageId: number, npc: string | null, bytes: Uint8Array) {
+      if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
+      using db = open(id);
+      if (npc === null) {
+        db.run(`INSERT INTO portraits (message_id, bytes) VALUES (${OPENING_SNAPSHOT}, ?)`, [bytes]);
+        return;
+      }
+      db.run(
+        `INSERT INTO portraits (npc, message_id, bytes)
+         SELECT ?1, min(message_id), ?3 FROM snapshot_sections
+         JOIN sections ON sections.id = section_id, json_each(content, '$.visibleCast') AS cast_member
+         WHERE name = 'scene' AND cast_member.value = ?1 AND EXISTS (SELECT 1 FROM messages WHERE id = ?2)
+         HAVING count(*) > 0`,
+        [npc, messageId, bytes],
+      );
     },
 
     latestState(id: string) {

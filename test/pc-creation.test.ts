@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
-import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { narration, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
@@ -56,6 +56,19 @@ const newWorld = async () => {
 
 const postPc = (worldId: string, inventory: string[] = [], startingHook = "") =>
   game.post("/saves", { worldId, worldBrief: "A drowned city", startingHook, pc, inventory });
+
+test("the wizard's PC gets a portrait without holding up the Save", async () => {
+  const script = scriptedTextProvider(generated(), sheet(), noConflict);
+  const images = scriptedImages(new Promise<Uint8Array>(() => {}));
+  game = startGame(savesDir, script.textProvider, undefined, undefined, images.imageAdapter);
+  await game.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
+
+  const response = await postPc(await newWorld());
+
+  expect(response.status).toBe(201);
+  expect(images.payloads[0]!.prompt).toContain("Tall, one grey eye.");
+  await game.delete(`/saves/${((await response.json()) as { id: string }).id}`);
+});
 
 const createPc = async (inventory?: string[], startingHook?: string) => {
   const response = await postPc(await newWorld(), inventory, startingHook);

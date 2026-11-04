@@ -101,6 +101,7 @@ test("the server sees a change of location or visible cast without scene_changed
     png(1),
     png(2),
     png(3),
+    png(4),
   );
   await enableImages();
   const id = await game.createSave();
@@ -119,6 +120,8 @@ test("a new description alone asks for no image, and neither does reordering the
       stay(),
       stay({ visual_description: "The same ferry, but described quite differently", state_operations: moveTo("The ferry", ["Orin", "Hesper"]) }),
     ],
+    png(1),
+    png(2),
     PNG,
   );
   await enableImages();
@@ -129,7 +132,7 @@ test("a new description alone asks for no image, and neither does reordering the
     await settled(id);
   }
 
-  expect(images.payloads).toHaveLength(1);
+  expect(images.payloads.filter(({ aspect_ratio }) => aspect_ratio === "16:9")).toHaveLength(1);
 });
 
 test("a visible cast name the state lacks is left out, and the Turn stands on its first try", async () => {
@@ -324,8 +327,8 @@ test("Revert counts and deletes the images after its Message, and keeps those be
   await playTurn(id);
   await settled(id);
 
-  expect(await game.get(`/saves/${id}/messages/2/revert`).then((r) => r.json())).toEqual({ messages: 2, images: 1 });
-  expect(await game.post(`/saves/${id}/messages/2/revert`, {}).then((r) => r.json())).toEqual({ messages: 2, images: 1 });
+  expect(await game.get(`/saves/${id}/messages/2/revert`).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 0 });
+  expect(await game.post(`/saves/${id}/messages/2/revert`, {}).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 0 });
 
   expect((await imagesOf(id)).images).toEqual([{ messageId: 2, caption: "One" }]);
   expect((await game.get(`/saves/${id}/messages/4/image`)).status).toBe(404);
@@ -496,7 +499,7 @@ test("a Save from before images opens at the new version, with an empty scene in
   const path = join(folder.path, "Saves", `${id}.sqlite`);
   {
     using db = new Database(path);
-    db.run("DROP TABLE scene_images");
+    db.run("DROP TABLE scene_images; DROP TABLE portraits");
     db.run("DELETE FROM snapshot_sections WHERE name = 'scene'");
     db.run("DELETE FROM sections WHERE id NOT IN (SELECT section_id FROM snapshot_sections)");
     db.run("PRAGMA user_version = 4");

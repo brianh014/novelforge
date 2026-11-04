@@ -5,7 +5,7 @@ export type ImagePayload = {
   prompt: string;
   negative_prompt?: string;
   aspect_ratio: string;
-  reference_images: { role: "previous_scene"; bytes: Uint8Array; mediaType: string }[];
+  reference_images: { role: "npc" | "previous_scene" | "pc"; bytes: Uint8Array; mediaType: string }[];
   style_preset: string;
 };
 

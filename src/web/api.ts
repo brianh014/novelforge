@@ -12,7 +12,9 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   hasTextApiKey: boolean;
   hasImageApiKey: boolean;
 };
-export type Journal = { summary: string; facts: string[]; npcs: string[]; fullLog: Message[] };
+export type Journal = { summary: string; facts: string[]; npcs: string[]; portraits: Portrait[]; fullLog: Message[] };
+/** A null `npc` is the PC. */
+export type Portrait = ReturnType<SaveStore["portraits"]>[number];
 export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];
 export type SceneImages = { images: SceneImageInfo[]; pending: boolean; session: number };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
@@ -78,6 +80,8 @@ export const getImages = (id: string) => request<SceneImages>(`/saves/${id}/imag
 
 export const imageUrl = (id: string, { messageId }: SceneImageInfo) => `/saves/${id}/messages/${messageId}/image`;
 
+export const portraitUrl = (id: string, portrait: Portrait) => `/saves/${id}/portraits/${portrait.id}`;
+
 export const getInventory = (id: string) => request<Inventory>(`/saves/${id}/inventory`);
 
 export const getStatus = (id: string) => request<Status>(`/saves/${id}/status`);
@@ -116,7 +120,7 @@ export const pickPc = (choices: WorldChoices, pc: PcDraft, signal?: AbortSignal)
   request<Partial<PcDraft>>("/pc/pick", { ...jsonBody({ ...choices, pc }), signal });
 
 export const previewRevert = (id: string, messageId: number) =>
-  request<{ messages: number; images: number }>(`/saves/${id}/messages/${messageId}/revert`);
+  request<{ messages: number; images: number; portraits: number }>(`/saves/${id}/messages/${messageId}/revert`);
 
 export const revert = (id: string, messageId: number) =>
   request<object>(`/saves/${id}/messages/${messageId}/revert`, jsonBody({}));

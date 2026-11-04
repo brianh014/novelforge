@@ -446,6 +446,14 @@ const withImage = (messageId: number, bytesSql: string) => (db: Database) => {
   db.run(`INSERT INTO scene_images (message_id, caption, bytes) VALUES (${messageId}, 'A pier', ${bytesSql})`);
 };
 
+/** Adds a Turn and a portrait drawn by `messageId`. */
+const withPortrait = (messageId: number, npc: string, bytesSql: string) => (db: Database) => {
+  db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello'), ('narrator', 'Hi')");
+  db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections WHERE message_id = 0");
+  db.run("INSERT INTO snapshot_sections SELECT 2, name, section_id FROM snapshot_sections WHERE message_id = 0");
+  db.run(`INSERT INTO portraits (npc, message_id, bytes) VALUES (${npc}, ${messageId}, ${bytesSql})`);
+};
+
 const TAMPERED: [string, (db: Database) => void][] = [
   ["a Save with no Art Style column", (db) => db.run("ALTER TABLE save DROP COLUMN art_style")],
   ["a Save with no Starting Hook column", (db) => db.run("ALTER TABLE save DROP COLUMN starting_hook")],
@@ -483,6 +491,18 @@ const TAMPERED: [string, (db: Database) => void][] = [
   ["a caption that isn't text", (db) => {
     withImage(2, PNG_SQL)(db);
     db.run("UPDATE scene_images SET caption = x'00ff'");
+  }],
+  ["no portrait table", (db) => db.run("DROP TABLE portraits")],
+  ["an extra portrait column", (db) => db.run("ALTER TABLE portraits ADD COLUMN extra TEXT")],
+  ["a portrait that is really HTML", withPortrait(2, "'Hesper'", "x'3c21646f63747970652068746d6c3e'")],
+  ["a portrait that is really SVG", withPortrait(2, "'Hesper'", "cast('<svg xmlns=\"http://www.w3.org/2000/svg\"/>' AS BLOB)")],
+  ["a portrait stored as text", withPortrait(2, "'Hesper'", "'not bytes'")],
+  ["a portrait too large to be one", withPortrait(2, "'Hesper'", "x'89504e470d0a1a0a' || zeroblob(33 * 1024 * 1024)")],
+  ["a portrait for no Message", withPortrait(9, "'Hesper'", PNG_SQL)],
+  ["an NPC portrait on a player Message", withPortrait(1, "'Hesper'", PNG_SQL)],
+  ["a PC portrait tied to a Message", withPortrait(2, "NULL", PNG_SQL)],
+  ["two PC portraits", (db) => {
+    db.run(`INSERT INTO portraits (npc, message_id, bytes) VALUES (NULL, 0, ${PNG_SQL}), (NULL, 0, ${PNG_SQL})`);
   }],
   ["malformed pending Notes", (db) => db.run("UPDATE save SET pending_notes = '[1]'")],
   ["a world brief that isn't text", (db) => db.run("UPDATE save SET world_brief = x'00ff'")],

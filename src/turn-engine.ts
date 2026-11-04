@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
-import { type ImagePipeline, movedScene, type Scene } from "./image-pipeline";
+import { type ImagePipeline, movedScene, type Scene, visibleNpcs } from "./image-pipeline";
 import { assemblePrompt, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import type { Message, SaveStore } from "./save-store";
 import type { SettingsStore } from "./settings-store";
@@ -197,15 +197,23 @@ async function narrate(
       const { narration, state_operations, scene_changed, visual_description } = response;
       let moved = false;
       let location = "";
+      let visible: Scene["visible"] = [];
       const messages = commit(narration, check, (state) => {
         const { next, refused } = applyOperations(state, state_operations);
         // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
         if (refused.length > 0) throw new InvalidResponse(undefined, { cause: refused });
         moved = movedScene(state, next);
         location = next.scene.location;
+        visible = visibleNpcs(next);
         return next;
       });
-      committed(messages.at(-1)!.id, { changed: moved || !!scene_changed, description: visual_description || location, location });
+      committed(messages.at(-1)!.id, {
+        changed: moved || !!scene_changed,
+        moved,
+        description: visual_description || location,
+        location,
+        visible,
+      });
       return messages;
     } catch (cause) {
       if (!(cause instanceof InvalidResponse)) throw cause;

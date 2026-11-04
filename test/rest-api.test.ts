@@ -371,13 +371,13 @@ test("Revert reports what it would delete, then restores that Message's Snapshot
 
   const preview = await game.get(`/saves/${id}/messages/2/revert`).then((r) => r.json());
 
-  expect(preview).toEqual({ messages: 2, images: 0 });
+  expect(preview).toEqual({ messages: 2, images: 0, portraits: 0 });
   expect(await messageTexts(game, id)).toHaveLength(4);
 
   const response = await game.post(`/saves/${id}/messages/2/revert`, {});
 
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ messages: 2, images: 0 });
+  expect(await response.json()).toEqual({ messages: 2, images: 0, portraits: 0 });
   expect(prompts).toHaveLength(2);
   expect(await messageTexts(game, id)).toEqual(["I search.", "A lantern."]);
   expect((await game.get(`/saves/${id}/messages/4/snapshot`)).status).toBe(404);
@@ -395,7 +395,7 @@ test("Reverting to the latest Message deletes nothing", async () => {
 
   const response = await game.post(`/saves/${id}/messages/2/revert`, {});
 
-  expect(await response.json()).toEqual({ messages: 0, images: 0 });
+  expect(await response.json()).toEqual({ messages: 0, images: 0, portraits: 0 });
   expect(await messageTexts(game, id)).toHaveLength(2);
 });
 
@@ -1291,6 +1291,7 @@ test("the Journal holds the recent summary, what the PC knows, known NPCs and th
     summary: "Ash reached the docks.",
     facts: ["The ferry stopped running."],
     npcs: ["Mara"],
+    portraits: [],
     fullLog: [
       { id: 1, role: "player", text: "I wave back." },
       { id: 2, role: "narrator", text: "Mara waves.\n\n  \"Come in,\" she says." },
@@ -1302,7 +1303,7 @@ test("the Journal of a new Save is empty, and a missing Save has none", async ()
   const { game } = play();
   const id = await game.createSave();
 
-  expect(await journalOf(game, id)).toEqual({ summary: "", facts: [], npcs: [], fullLog: [] });
+  expect(await journalOf(game, id)).toEqual({ summary: "", facts: [], npcs: [], portraits: [], fullLog: [] });
   expect((await game.get(`/saves/${crypto.randomUUID()}/journal`)).status).toBe(404);
 });
 
@@ -1362,6 +1363,7 @@ test("after a Revert, the Journal matches the restored Snapshot", async () => {
   expect(await journalOf(game, id)).toEqual({
     summary: "first-summary",
     ...pcKnown,
+    portraits: [],
     fullLog: [
       { id: 1, role: "player", text: "One." },
       { id: 2, role: "narrator", text: "Mara waves." },

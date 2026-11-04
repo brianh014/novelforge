@@ -445,7 +445,7 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 function RevertDialog(props: { id: string; message: Message; onClose: () => void; onReverted: () => void }) {
   const { id, message } = props;
   const dialog = useRef<HTMLDialogElement>(null);
-  const [preview, setPreview] = useState<{ messages: number; images: number }>();
+  const [preview, setPreview] = useState<{ messages: number; images: number; portraits: number }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -485,7 +485,8 @@ function RevertDialog(props: { id: string; message: Message; onClose: () => void
       {preview && (
         <p>
           This permanently deletes the {plural(preview.messages, "Message")} after it
-          {preview.images > 0 && ` and ${plural(preview.images, "Scene Image")}`}.
+          {preview.images > 0 && ` and ${plural(preview.images, "Scene Image")}`}
+          {preview.portraits > 0 && ` and ${plural(preview.portraits, "portrait")}`}.
         </p>
       )}
       <p className="muted">“Duplicate from here” keeps this story and carries on in a new Save instead.</p>

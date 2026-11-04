@@ -10,6 +10,7 @@ import {
   MessageNotFound,
   NoteNotFound,
   PcDetails,
+  PortraitNotFound,
   SaveNotFound,
   saveStore,
   StaleTurn,
@@ -74,6 +75,7 @@ function errorResponse(error: unknown) {
   if (error instanceof InvalidSave) return Response.json({ error: error.message }, { status: 422 });
   if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
   if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
+  if (error instanceof PortraitNotFound) return Response.json({ error: "Portrait not found" }, { status: 404 });
   if (error instanceof NoteNotFound) return Response.json({ error: "Note not found" }, { status: 404 });
   if (error instanceof WorldNotFound) {
     return Response.json({ error: "This world is no longer held. Go back to your choices and generate it again." }, { status: 404 });
@@ -87,6 +89,12 @@ function errorResponse(error: unknown) {
   console.error(error);
   return Response.json({ error: "Internal server error" }, { status: 500 });
 }
+
+// The type comes from the bytes, and a file put in the Saves folder by hand is never checked, so nothing here can run as a page.
+const imageResponse = (bytes: Uint8Array<ArrayBuffer>) =>
+  new Response(bytes, {
+    headers: { "Content-Type": imageType(bytes) ?? "application/octet-stream", "X-Content-Type-Options": "nosniff" },
+  });
 
 /** Answers with the committed Messages, as one JSON body or, if the client asks, as a stream of the Turn. */
 async function turnResponse(req: Request, run: (emit?: TurnEvents) => Promise<Message[]>) {
@@ -127,6 +135,12 @@ export function startServer(options: {
   // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
   // shortcut: an abandoned world stays until the app restarts, evict them if that ever adds up.
   const worlds = new Map<string, World>();
+
+  /** An allowlist, so a visible NPC the PC doesn't know yet stays hidden, and a Revert of that knowledge hides their portrait again. */
+  const knownPortraits = (id: string) => {
+    const known = saves.latestState(id).pcKnown.npcs;
+    return saves.portraits(id).filter(({ npc }) => npc === null || known.includes(npc));
+  };
 
   // An allowlist, so the API key can never reach a response.
   const publicSettings = () => {
@@ -176,7 +190,11 @@ export function startServer(options: {
         GET: () => Response.json({ saves: saves.list() }),
         POST: async (req) => {
           const { worldId, inventory, ...save } = await parseBody(req, NewSaveRequest);
-          if (worldId === undefined) return Response.json({ id: saves.create(save) }, { status: 201 });
+          if (worldId === undefined) {
+            const id = saves.create(save);
+            images.saveCreated(id);
+            return Response.json({ id }, { status: 201 });
+          }
           const world = worlds.get(worldId);
           if (!world) throw new WorldNotFound();
           const { opening, worldChanged } = await fitPc(options, world, save, inventory, req.signal);
@@ -184,6 +202,7 @@ export function startServer(options: {
           if (!worlds.has(worldId)) throw new WorldNotFound();
           const id = saves.create({ ...save, opening });
           worlds.delete(worldId);
+          images.saveCreated(id);
           return Response.json({ id, worldChanged }, { status: 201 });
         },
       },
@@ -237,7 +256,8 @@ export function startServer(options: {
         },
         DELETE: (req) => {
           saves.delete(req.params.id);
-          images.forget(req.params.id, 0);
+          // Below 0, because the PC's portrait belongs to no Message.
+          images.forget(req.params.id, -1);
           return new Response(null, { status: 204 });
         },
       },
@@ -259,6 +279,7 @@ export function startServer(options: {
             summary,
             facts: pcKnown.facts,
             npcs: pcKnown.npcs,
+            portraits: knownPortraits(req.params.id),
             fullLog: saves.messages(req.params.id),
           });
         },
@@ -313,15 +334,14 @@ export function startServer(options: {
         GET: (req) => Response.json({ images: saves.sceneImages(req.params.id), ...images.status(req.params.id) }),
       },
       "/saves/:id/messages/:messageId/image": {
+        GET: (req) => imageResponse(saves.sceneImage(req.params.id, Number(req.params.messageId))),
+      },
+      "/saves/:id/portraits/:portraitId": {
         GET: (req) => {
-          const bytes = saves.sceneImage(req.params.id, Number(req.params.messageId));
-          // The type comes from the bytes, and a file put in the Saves folder by hand is never checked, so nothing here can run as a page.
-          return new Response(bytes, {
-            headers: {
-              "Content-Type": imageType(bytes) ?? "application/octet-stream",
-              "X-Content-Type-Options": "nosniff",
-            },
-          });
+          const { id } = req.params;
+          const portraitId = Number(req.params.portraitId);
+          if (!knownPortraits(id).some((portrait) => portrait.id === portraitId)) throw new PortraitNotFound();
+          return imageResponse(saves.portrait(id, portraitId));
         },
       },
       "/saves/:id/messages/:messageId/snapshot": {

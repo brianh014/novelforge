@@ -1,7 +1,16 @@
 import { useEffect, useState } from "react";
-import { getImages, getJournal, getSave, type Journal as JournalContent, type Save, type SceneImageInfo } from "./api";
+import { getImages, getJournal, getSave, type Journal as JournalContent, type Portrait, portraitUrl, type Save, type SceneImageInfo } from "./api";
 import { Book, BookTabs } from "./menu";
 import { SceneImage } from "./play";
+
+function Person({ id, name, portrait }: { id: string; name: string; portrait?: Portrait }) {
+  return (
+    <>
+      {portrait ? <img className="portrait" loading="lazy" src={portraitUrl(id, portrait)} alt={name} /> : <span className="portrait" />}
+      <span>{name}</span>
+    </>
+  );
+}
 
 export function Journal({ id }: { id: string }) {
   const [save, setSave] = useState<Save>();
@@ -26,6 +35,7 @@ export function Journal({ id }: { id: string }) {
     );
   }
   if (!save || !journal) return <Book left={null}>{null}</Book>;
+  const pcPortrait = journal.portraits.find(({ npc }) => npc === null);
 
   return (
     <Book
@@ -33,6 +43,11 @@ export function Journal({ id }: { id: string }) {
         <>
           <h1 className="big">Journal</h1>
           <div className="journal">
+            {pcPortrait && (
+              <p className="person">
+                <Person id={id} name={save.pc.name} portrait={pcPortrait} />
+              </p>
+            )}
             <h2>Recent summary</h2>
             {journal.summary ? <p>{journal.summary}</p> : <p className="muted">Nothing to look back on yet.</p>}
             <h2>What {save.pc.name} knows</h2>
@@ -43,7 +58,13 @@ export function Journal({ id }: { id: string }) {
             )}
             <h2>NPCs</h2>
             {journal.npcs.length > 0 ? (
-              <ul>{journal.npcs.map((name) => <li key={name}>{name}</li>)}</ul>
+              <ul className="people">
+                {journal.npcs.map((name) => (
+                  <li key={name} className="person">
+                    <Person id={id} name={name} portrait={journal.portraits.find(({ npc }) => npc === name)} />
+                  </li>
+                ))}
+              </ul>
             ) : (
               <p className="muted">No one yet.</p>
             )}
