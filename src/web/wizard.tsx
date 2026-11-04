@@ -195,16 +195,19 @@ export function NewGame({ step }: { step?: string }) {
 
   const pickButton = (field: PickField) => (
     <div className="row">
-      {draft[field] && <span className="muted">Clear the box to pick again.</span>}
-      <button
-        type="button"
-        className="quiet"
-        disabled={!!busy || !!draft[field] || !theme}
-        aria-label={`Pick for me: ${PICK_NAMES[field]}`}
-        onClick={() => pick(field)}
-      >
-        Pick for me
-      </button>
+      {draft[field] ? (
+        <span className="muted">Clear the {PICK_NAMES[field]} to pick again.</span>
+      ) : (
+        <button
+          type="button"
+          className="quiet"
+          disabled={!!busy || !theme}
+          aria-label={`Pick for me: ${PICK_NAMES[field]}`}
+          onClick={() => pick(field)}
+        >
+          Pick for me
+        </button>
+      )}
     </div>
   );
 
