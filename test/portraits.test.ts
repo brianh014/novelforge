@@ -239,7 +239,7 @@ test("turning images off stops a waiting portrait", async () => {
   expect(images.payloads).toHaveLength(1);
 });
 
-test("Local makes no portrait calls until its adapter exists", async () => {
+test("an unfinished Local setup makes no portrait calls, and the OpenRouter adapter isn't used", async () => {
   play([turn(meet("Hesper"), inView("Hesper"))]);
   await game.patch("/settings", { imageProvider: "local", imageModel: "local/model", imageApiKey: "image-key" });
   const id = await createPc();

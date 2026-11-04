@@ -1,3 +1,4 @@
+import { chosenModels } from "./graph-builder";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
 import { OPENING_SNAPSHOT, type Save, SaveNotFound, type SaveStore } from "./save-store";
 import type { SettingsStore } from "./settings-store";
@@ -38,15 +39,22 @@ const reference = (role: Role, image: { bytes: Uint8Array; mediaType: string } |
  * Decides when a Scene Image or portrait is drawn, and draws it in the background. Jobs live in memory, so stopping the
  * server loses the one in flight: its Turn stands and that scene just has no image, which is cheaper than redrawing it.
  */
-export function imagePipeline(saves: SaveStore, adapter: ImageAdapter, settings: SettingsStore) {
+export function imagePipeline(
+  saves: SaveStore,
+  adapters: Record<ReturnType<SettingsStore["read"]>["imageProvider"], ImageAdapter>,
+  settings: SettingsStore,
+) {
   const work = new Map<string, Work>();
   let session = 0;
 
+  const adapter: ImageAdapter = (payload, signal) => adapters[settings.read().imageProvider](payload, signal);
+
   function ready() {
-    const { imagesEnabled, imageProvider, imageModel, imageApiKey } = settings.read();
-    // shortcut: Local draws nothing, add its adapter in ticket 20.
+    const current = settings.read();
     // An unfinished setup is silent too, as there is no image to report failing.
-    return imagesEnabled && imageProvider === "openrouter" && imageModel && imageApiKey;
+    const setUp =
+      current.imageProvider === "local" ? chosenModels(current).every(Boolean) : current.imageModel && current.imageApiKey;
+    return current.imagesEnabled && setUp;
   }
 
   /** Identity comes first when a model takes few references. A Scene Image is what the PC sees, so the PC is rarely in it. */

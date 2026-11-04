@@ -29,12 +29,30 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     imageModel: "",
     hasImageApiKey: false,
     imagesEnabled: true,
+    comfyUrl: "http://127.0.0.1:8188",
+    comfyFamily: "sd",
+    comfySdBase: "sdxl",
+    comfyCheckpoint: "",
+    comfyDiffusionModel: "",
+    comfyTextEncoder: "",
+    comfyVae: "",
+    comfyLoras: [],
     chatStyle: "prose",
     fontSize: "medium",
   });
 });
 
 test("every setting survives a restart, and no key comes back", async () => {
+  const comfy = {
+    comfyUrl: "http://localhost:8188",
+    comfyFamily: "flux2",
+    comfySdBase: "sd15",
+    comfyCheckpoint: "dream.safetensors",
+    comfyDiffusionModel: "flux2.safetensors",
+    comfyTextEncoder: "mistral.safetensors",
+    comfyVae: "vae.safetensors",
+    comfyLoras: [{ name: "ink.safetensors", strength: 0.7, triggerWords: "inkstyle" }],
+  };
   const response = await change({
     textBaseUrl: "http://localhost:1234/v1",
     textModel: "local/model",
@@ -44,6 +62,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     imageModel: "image/model",
     imageApiKey: "image-key-value",
     imagesEnabled: false,
+    ...comfy,
     chatStyle: "prose",
     fontSize: "large",
   });
@@ -56,6 +75,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     imageModel: "image/model",
     hasImageApiKey: true,
     imagesEnabled: false,
+    ...comfy,
     chatStyle: "prose",
     fontSize: "large",
   };

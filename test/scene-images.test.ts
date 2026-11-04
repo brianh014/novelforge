@@ -301,7 +301,7 @@ test("turning images off stops new ones, keeps the old ones, and stops a waiting
 });
 
 test.each([
-  ["Local, until its adapter exists", { imageProvider: "local", imageModel: "local/model", imageApiKey: "image-key" }],
+  ["Local with no model chosen", { imageProvider: "local", imageModel: "local/model", imageApiKey: "image-key" }],
   ["no image model", { imageModel: "", imageApiKey: "image-key" }],
   ["no image key", { imageModel: "fake/image", imageApiKey: "" }],
 ])("%s makes no call and no noise", async (_name, change) => {

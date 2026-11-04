@@ -1,3 +1,4 @@
+import type { comfyModels } from "../comfyui";
 import type { Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State } from "../state-applier";
@@ -59,6 +60,9 @@ export const getSettings = () => request<Settings>("/settings");
 
 export const saveSettings = (change: SettingsChange) =>
   request<Settings>("/settings", { ...jsonBody(change), method: "PATCH" });
+
+export type ComfyModels = Awaited<ReturnType<typeof comfyModels>>;
+export const getComfyModels = () => request<ComfyModels>("/settings/comfy-models");
 
 export const getTextModels = () => request<{ models: string[] }>("/settings/text-models").then(({ models }) => models);
 

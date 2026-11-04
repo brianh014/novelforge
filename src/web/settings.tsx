@@ -1,5 +1,16 @@
-import { type FormEvent, useEffect, useState } from "react";
-import { getSave, getSettings, getTextModels, OPENROUTER_URL, saveArtStyle, saveSettings, type Settings } from "./api";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import { chosenModels } from "../graph-builder";
+import {
+  type ComfyModels,
+  getComfyModels,
+  getSave,
+  getSettings,
+  getTextModels,
+  OPENROUTER_URL,
+  saveArtStyle,
+  saveSettings,
+  type Settings,
+} from "./api";
 import { Book, BookTabs } from "./menu";
 
 export const applyFontSize = ({ fontSize }: Settings) => {
@@ -60,6 +71,227 @@ function ArtStyle({ id }: { id: string }) {
         Save Art Style
       </button>
     </form>
+  );
+}
+
+function ModelSelect({
+  label,
+  value,
+  list,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  list: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      {label}
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {!value && <option value="">Choose a model</option>}
+        {/* A saved model that's gone stays as it is, with a notice, until the player changes it. */}
+        {[...new Set([value, ...list])].filter(Boolean).map((model) => (
+          <option key={model}>{model}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function ComfySettings({
+  draft,
+  saved,
+  set,
+}: {
+  draft: Settings;
+  saved: Settings;
+  set: (change: Partial<Settings>) => void;
+}) {
+  const [models, setModels] = useState<ComfyModels>();
+  const [refreshes, setRefreshes] = useState(0);
+  const addLora = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setModels(undefined);
+    let current = true;
+    const none = { reachable: false, hasFlux2: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [] };
+    getComfyModels().then(
+      (list) => current && setModels(list),
+      () => current && setModels(none),
+    );
+    return () => {
+      current = false;
+    };
+  }, [saved, refreshes]);
+
+  const addressSaved = draft.comfyUrl === saved.comfyUrl;
+  const flux2 = draft.comfyFamily === "flux2";
+  const loras = models?.loras ?? [];
+  const setLora = (index: number, change: Partial<Settings["comfyLoras"][number]>) =>
+    set({ comfyLoras: draft.comfyLoras.map((lora, i) => (i === index ? { ...lora, ...change } : lora)) });
+
+  const installed = models ? [...models.checkpoints, ...models.diffusionModels, ...models.textEncoders, ...models.vaes, ...loras] : [];
+  const chosen = [...chosenModels(draft), ...draft.comfyLoras.map(({ name }) => name)];
+  const missing = models?.reachable ? chosen.filter((name) => name && !installed.includes(name)) : [];
+
+  return (
+    <>
+      <label>
+        ComfyUI address
+        <input
+          type="url"
+          required
+          placeholder="http://127.0.0.1:8188"
+          value={draft.comfyUrl}
+          onChange={(e) => set({ comfyUrl: e.target.value })}
+        />
+      </label>
+      <label>
+        Model family
+        <select
+          value={draft.comfyFamily}
+          onChange={(e) => set({ comfyFamily: e.target.value as Settings["comfyFamily"] })}
+        >
+          <option value="sd">SD 1.5/SDXL</option>
+          <option value="flux2">FLUX.2</option>
+        </select>
+      </label>
+      {flux2 ? (
+        <>
+          <ModelSelect
+            label="Diffusion model"
+            value={draft.comfyDiffusionModel}
+            list={models?.diffusionModels ?? []}
+            onChange={(comfyDiffusionModel) => set({ comfyDiffusionModel })}
+          />
+          <ModelSelect
+            label="Text encoder"
+            value={draft.comfyTextEncoder}
+            list={models?.textEncoders ?? []}
+            onChange={(comfyTextEncoder) => set({ comfyTextEncoder })}
+          />
+          <ModelSelect
+            label="VAE"
+            value={draft.comfyVae}
+            list={models?.vaes ?? []}
+            onChange={(comfyVae) => set({ comfyVae })}
+          />
+        </>
+      ) : (
+        <>
+          <ModelSelect
+            label="Checkpoint"
+            value={draft.comfyCheckpoint}
+            list={models?.checkpoints ?? []}
+            onChange={(comfyCheckpoint) => set({ comfyCheckpoint })}
+          />
+          <label>
+            Checkpoint type
+            <select
+              value={draft.comfySdBase}
+              onChange={(e) => set({ comfySdBase: e.target.value as Settings["comfySdBase"] })}
+            >
+              <option value="sdxl">SDXL</option>
+              <option value="sd15">SD 1.5</option>
+            </select>
+          </label>
+        </>
+      )}
+      <fieldset>
+        <legend>LoRAs</legend>
+        {draft.comfyLoras.map((lora, index) => (
+          <div className="lora" key={index}>
+            <ModelSelect
+              label={`LoRA ${index + 1}`}
+              value={lora.name}
+              list={loras}
+              onChange={(name) => setLora(index, { name })}
+            />
+            <label>
+              Strength
+              {/* Uncontrolled, so the box can be empty while the player types. The key shows the right value after a removal. */}
+              <input
+                key={`${index} ${lora.name}`}
+                aria-label={`LoRA ${index + 1} strength`}
+                type="number"
+                required
+                step="0.05"
+                min="-100"
+                max="100"
+                defaultValue={lora.strength}
+                onChange={(e) => {
+                  if (!Number.isNaN(e.target.valueAsNumber)) setLora(index, { strength: e.target.valueAsNumber });
+                }}
+              />
+            </label>
+            <label>
+              Trigger words (optional)
+              <input
+                aria-label={`LoRA ${index + 1} trigger words (optional)`}
+                value={lora.triggerWords}
+                onChange={(e) => setLora(index, { triggerWords: e.target.value })}
+              />
+            </label>
+            <button
+              type="button"
+              className="quiet"
+              aria-label={`Remove LoRA ${index + 1}`}
+              onClick={() => {
+                set({ comfyLoras: draft.comfyLoras.filter((_, i) => i !== index) });
+                // This button may be about to go, which would drop keyboard focus to the top of the page.
+                addLora.current?.focus();
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+        <button
+          ref={addLora}
+          type="button"
+          className="quiet"
+          aria-disabled={loras.length === 0}
+          onClick={() => {
+            if (loras.length > 0) {
+              set({ comfyLoras: [...draft.comfyLoras, { name: loras[0]!, strength: 1, triggerWords: "" }] });
+            }
+          }}
+        >
+          Add LoRA
+        </button>
+      </fieldset>
+      <button
+        type="button"
+        className="quiet"
+        aria-disabled={!models || !addressSaved}
+        onClick={() => {
+          if (models && addressSaved) setRefreshes(refreshes + 1);
+        }}
+      >
+        Refresh lists
+      </button>
+      <p role="status" className="muted">
+        {!addressSaved
+          ? "Save the address to list this server's models."
+          : !models
+            ? "Asking ComfyUI what's installed."
+            : models.reachable
+              ? models.loras.length === 0 && "No LoRAs installed."
+              : "ComfyUI can't be reached at this address. Check that it's running, then refresh."}
+      </p>
+      {addressSaved && missing.length > 0 && (
+        <p className="notice">Not installed in ComfyUI: {missing.join(", ")}. Choose another or add the file, then refresh.</p>
+      )}
+      {addressSaved && flux2 && models?.reachable && !models.hasFlux2 && (
+        <p className="notice">This ComfyUI doesn't have FLUX.2's nodes yet. Update it to use this family.</p>
+      )}
+      <p className="muted">
+        {flux2
+          ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev, so a Klein model may need an Advanced workflow."
+          : "Uses the previous Scene Image as a reference. NPC references need FLUX.2 or an Advanced workflow."}
+      </p>
+    </>
   );
 }
 
@@ -197,21 +429,25 @@ function InstallSettings({ initial }: { initial: Settings }) {
           <option value="local">Local (ComfyUI)</option>
         </select>
       </label>
-      <label>
-        Image model
-        <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />
-      </label>
-      {draft.imageProvider === "openrouter" && (
-        <label>
-          Image API key
-          <input
-            type="password"
-            autoComplete="new-password"
-            placeholder={keyHint(saved.hasImageApiKey)}
-            value={imageKey}
-            onChange={(e) => setImageKey(e.target.value)}
-          />
-        </label>
+      {draft.imageProvider === "openrouter" ? (
+        <>
+          <label>
+            Image model
+            <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />
+          </label>
+          <label>
+            Image API key
+            <input
+              type="password"
+              autoComplete="new-password"
+              placeholder={keyHint(saved.hasImageApiKey)}
+              value={imageKey}
+              onChange={(e) => setImageKey(e.target.value)}
+            />
+          </label>
+        </>
+      ) : (
+        <ComfySettings draft={draft} saved={saved} set={set} />
       )}
 
       <h2>Reading</h2>

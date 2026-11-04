@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
+import { comfyImages, comfyModels } from "./comfyui";
 import type { ImageAdapter } from "./image-adapter";
 import { imagePipeline } from "./image-pipeline";
 import {
@@ -131,7 +132,7 @@ export function startServer(options: {
 }) {
   const saves = saveStore(options.savesDir);
   const { settings } = options;
-  const images = imagePipeline(saves, options.imageAdapter, settings);
+  const images = imagePipeline(saves, { openrouter: options.imageAdapter, local: comfyImages(settings) }, settings);
   const engine = { ...options, images };
   // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
   // shortcut: an abandoned world stays until the app restarts, evict them if that ever adds up.
@@ -154,6 +155,14 @@ export function startServer(options: {
       imageModel,
       imageApiKey,
       imagesEnabled,
+      comfyUrl,
+      comfyFamily,
+      comfySdBase,
+      comfyCheckpoint,
+      comfyDiffusionModel,
+      comfyTextEncoder,
+      comfyVae,
+      comfyLoras,
       chatStyle,
       fontSize,
     } = settings.read();
@@ -166,6 +175,14 @@ export function startServer(options: {
       imageModel,
       hasImageApiKey: imageApiKey !== "",
       imagesEnabled,
+      comfyUrl,
+      comfyFamily,
+      comfySdBase,
+      comfyCheckpoint,
+      comfyDiffusionModel,
+      comfyTextEncoder,
+      comfyVae,
+      comfyLoras,
       chatStyle,
       fontSize,
     };
@@ -190,6 +207,10 @@ export function startServer(options: {
       // Only ever the saved server, so a key can't reach an address that is still being typed.
       "/settings/text-models": {
         GET: async (req) => Response.json({ models: await textModels(settings, req.signal) }),
+      },
+      // Only ever the saved address, never one still being typed.
+      "/settings/comfy-models": {
+        GET: async (req) => Response.json(await comfyModels(settings, req.signal)),
       },
       "/saves": {
         GET: () => Response.json({ saves: saves.list() }),

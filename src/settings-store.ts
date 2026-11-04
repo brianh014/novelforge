@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 
+const Lora = z.object({ name: z.string().min(1), strength: z.number().min(-100).max(100), triggerWords: z.string() });
+
 export const SettingsUpdate = z
   .object({
     textBaseUrl: z.url({ protocol: /^https?$/ }),
@@ -11,6 +13,15 @@ export const SettingsUpdate = z
     imageModel: z.string(),
     imageApiKey: z.string(),
     imagesEnabled: z.boolean(),
+    comfyUrl: z.url({ protocol: /^https?$/ }),
+    comfyFamily: z.enum(["sd", "flux2"]),
+    // A checkpoint file doesn't say which it is, and each needs its own image size.
+    comfySdBase: z.enum(["sdxl", "sd15"]),
+    comfyCheckpoint: z.string(),
+    comfyDiffusionModel: z.string(),
+    comfyTextEncoder: z.string(),
+    comfyVae: z.string(),
+    comfyLoras: z.array(Lora),
     // shortcut: Prose is the only Chat style that works, add the others in ticket 22.
     chatStyle: z.enum(["prose"]),
     fontSize: z.enum(["small", "medium", "large"]),
@@ -28,6 +39,14 @@ const defaults = {
   imageModel: "",
   imageApiKey: "",
   imagesEnabled: true,
+  comfyUrl: "http://127.0.0.1:8188",
+  comfyFamily: "sd",
+  comfySdBase: "sdxl",
+  comfyCheckpoint: "",
+  comfyDiffusionModel: "",
+  comfyTextEncoder: "",
+  comfyVae: "",
+  comfyLoras: [] as z.infer<typeof Lora>[],
   chatStyle: "prose",
   fontSize: "medium",
 } satisfies SettingsChange;
