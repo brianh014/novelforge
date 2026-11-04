@@ -44,6 +44,33 @@ afterEach(async () => {
   folder.remove();
 });
 
+test("a spoken line streams intact, even when a chunk ends inside its line break", async () => {
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+  const text = "[Ashley]: \“Hey [sic].\”\n\nShe looks up.";
+  const reply = JSON.stringify({ check: null, narration: text, state_operations: [] });
+  const cut = reply.indexOf("\\n") + 1;
+  play([
+    async function* () {
+      yield delta(reply.slice(0, cut));
+      await released;
+      yield delta(reply.slice(cut));
+      yield "data: [DONE]\n\n";
+    },
+  ]);
+  const id = await game.createSave();
+
+  const response = await streamTurn(id, "I wave.");
+  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+  const { value: first } = await reader.read();
+  expect(first).toContain('"[Ashley]: \“Hey [sic].\”"');
+  release();
+  let rest = "";
+  for (let part = await reader.read(); !part.done; part = await reader.read()) rest += part.value;
+
+  expect(rest).toContain(String.raw`"\n\nShe looks up."`);
+  expect((await storedMessages(id)).at(-1)!.text).toBe(text);
+});
+
 test("narration reaches the client as it is written, and nothing is stored until the Turn is valid", async () => {
   const { promise: released, resolve: release } = Promise.withResolvers<void>();
   play([

@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import {
   addNote,
   duplicateFrom,
@@ -6,6 +6,7 @@ import {
   getMessages,
   getNotes,
   getImages,
+  getJournal,
   getSave,
   imageUrl,
   type OpenSave,
@@ -13,6 +14,8 @@ import {
   getStatus,
   type Message,
   playTurn,
+  type Portrait,
+  portraitUrl,
   previewRevert,
   removeNote,
   replaceResponse,
@@ -23,6 +26,7 @@ import {
   type Status,
   statusWords,
 } from "./api";
+import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { Book, BookTabs } from "./menu";
 
 // Text from a Turn cut short by leaving the screen, to put back in the box on return.
@@ -36,7 +40,9 @@ export function playItemAction(id: string, input: string) {
 }
 
 // Often enough to feel prompt, as an image takes many seconds anyway.
-const IMAGE_CHECK_MS = 2000;
+export const IMAGE_CHECK_MS = 2000;
+
+const WRITING = "The Narrator is writing…";
 
 export function SceneImage({ id, image }: { id: string; image: SceneImageInfo }) {
   return (
@@ -61,8 +67,12 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const [images, setImages] = useState<SceneImages>({ images: [], pending: false, session: 0 });
   const [editingNotes, setEditingNotes] = useState(false);
   const [setupNotice, setSetupNotice] = useState<string>();
+  const [chatStyle, setChatStyle] = useState<ChatStyle>("prose");
+  const [portraits, setPortraits] = useState<Portrait[]>([]);
+  // Unset until the player moves, so that each new response opens on its first beat.
+  const [chosenBeat, setChosenBeat] = useState<number>();
   const [draft, setDraft] = useState(unsent.get(id) ?? "");
-  const [turn, setTurn] = useState<{ input: string; narration: string; replaces?: Message }>();
+  const [turn, setTurn] = useState<TurnInProgress>();
   // The response being rewritten, by id, so the box goes if the story moves on from it.
   const [rewriting, setRewriting] = useState<number>();
   const [feedback, setFeedback] = useState("");
@@ -75,18 +85,24 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const rewriteButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(new AbortController());
   const imageCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const duplicating = useRef(false);
 
   useEffect(() => {
     const action = itemActions.get(id);
     itemActions.delete(id);
-    Promise.all([getSave(id), getMessages(id), getStatus(id), getNotes(id)]).then(([save, messages, status, notes]) => {
+    // Without Settings the story still reads, in Prose.
+    const reading = getSettings().catch(() => undefined);
+    Promise.all([getSave(id), getMessages(id), getStatus(id), getNotes(id), reading]).then(([save, messages, status, notes, settings]) => {
+      if (settings) {
+        setSetupNotice(setupProblem(settings));
+        setChatStyle(settings.chatStyle);
+      }
       setSave(save);
       setMessages(messages);
       setStatus(status);
       setNotes(notes);
       if (action) playInput(action, messages);
     }, (failure: Error) => setLoadError(failure.message));
-    getSettings().then((settings) => setSetupNotice(setupProblem(settings)), () => {});
     checkImages();
     return () => {
       leaving.current.abort();
@@ -100,6 +116,8 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
     getImages(id).then((next) => {
       setImages(next);
       if (next.pending && !leaving.current.signal.aborted) imageCheck.current = setTimeout(checkImages, IMAGE_CHECK_MS);
+      // Once, when drawing stops, as this holds the whole Full Log.
+      else getJournal(id).then((journal) => setPortraits(journal.portraits), () => {});
     }, () => {});
   }
 
@@ -131,7 +149,20 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   function cancelRewrite() {
     setRewriting(undefined);
     setFeedback("");
-    rewriteButton.current?.focus();
+    // Back in a Stage box can have taken the button away.
+    (rewriteButton.current ?? story.current)?.focus();
+  }
+
+  async function duplicateHere(message: Message) {
+    if (duplicating.current) return;
+    duplicating.current = true;
+    setError("");
+    try {
+      location.hash = `/play/${(await duplicateFrom(id, message.id)).id}`;
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
+    duplicating.current = false;
   }
 
   // `before` is passed in because the load effect runs this before `messages` is set.
@@ -140,6 +171,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
     setError("");
     setAnnouncement("");
     setRewriting(undefined);
+    setChosenBeat(undefined);
     setTurn({ input, narration: "", replaces });
     const show = (narration: string) => {
       streamed = true;
@@ -183,6 +215,51 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const latest = messages.at(-1);
   const replaceable = !turn && latest?.role === "narrator" ? latest : undefined;
   const scene = images.images.at(-1);
+  const told = turn?.replaces ? messages.slice(0, -1) : messages;
+  const staged = chatStyle === "stage" && (told.length > 0 || !!turn);
+  const sceneImage = (image = scene) => image && <SceneImage id={id} image={image} />;
+
+  const line = (beat: Beat, key: number) => {
+    const portrait = portraits.find(({ npc }) => npc === beat.speaker);
+    return <BeatLine key={key} beat={beat} style={chatStyle} pc={pc} face={portrait && portraitUrl(id, portrait)} />;
+  };
+
+  const controls = (message: Message) =>
+    !turn && (
+      <div className="row">
+        {message !== latest && (
+          <button
+            className="quiet revert"
+            aria-label={`Revert to this Message: ${message.text.slice(0, 40)}`}
+            onClick={() => setReverting(message)}
+          >
+            Revert to here
+          </button>
+        )}
+        <button
+          className="quiet revert"
+          aria-label={`Duplicate from this Message: ${message.text.slice(0, 40)}`}
+          onClick={() => duplicateHere(message)}
+        >
+          Duplicate from here
+        </button>
+        {message === replaceable && (
+          <>
+            <button
+              ref={rewriteButton}
+              className="quiet"
+              aria-expanded={rewriting === message.id}
+              onClick={() => startRewrite(message)}
+            >
+              Rewrite
+            </button>
+            <button className="quiet" onClick={() => replace("")}>
+              Regenerate
+            </button>
+          </>
+        )}
+      </div>
+    );
 
   return (
     <Book
@@ -218,57 +295,58 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       }
       tabs={<BookTabs id={id} current="Story" />}
     >
-      {scene && <SceneImage id={id} image={scene} />}
-      <div ref={story} className="story" tabIndex={0} role="region" aria-label="Story">
-        <div>
-          {messages.length === 0 && !turn && (
-            <>
-              {worldChanged && <p className="notice">{pc} didn't fit the world as it stood, so the world has changed to fit them.</p>}
-              <p className="muted">{save.startingHook || "The page is blank."}</p>
-              <p className="muted">What does {pc} do first?</p>
-            </>
-          )}
-          {(turn?.replaces ? messages.slice(0, -1) : messages).map((message, index) => (
-            <div key={message.id} className={`message ${message.role}`}>
-              <p>{message.text}</p>
-              {!turn && index < messages.length - 1 && (
-                <button
-                  className="quiet revert"
-                  aria-label={`Revert to this Message: ${message.text.slice(0, 40)}`}
-                  onClick={() => setReverting(message)}
-                >
-                  Revert to here
-                </button>
-              )}
-              {message === replaceable && (
-                <div className="row">
-                  <button
-                    ref={rewriteButton}
-                    className="quiet"
-                    aria-expanded={rewriting === message.id}
-                    onClick={() => startRewrite(message)}
-                  >
-                    Rewrite
-                  </button>
-                  <button className="quiet" onClick={() => replace("")}>
-                    Regenerate
-                  </button>
-                </div>
-              )}
+      {!staged && sceneImage()}
+      {staged ? (
+        <StageBox
+          story={story}
+          beats={stageBeats(told, turn)}
+          chosen={chosenBeat}
+          onChoose={setChosenBeat}
+          line={line}
+          controls={controls}
+          waiting={!!turn && !turn.narration}
+        >
+          {/* Back should show what that moment looked like, not the newest image. */}
+          {(message) => sceneImage(message && images.images.findLast(({ messageId }) => messageId <= message.id))}
+        </StageBox>
+      ) : (
+        <div ref={story} className={`story chat-${chatStyle}`} tabIndex={0} role="region" aria-label="Story">
+          <div>
+            {messages.length === 0 && !turn && (
+              <>
+                {worldChanged && <p className="notice">{pc} didn't fit the world as it stood, so the world has changed to fit them.</p>}
+                <p className="muted">{save.startingHook || "The page is blank."}</p>
+                <p className="muted">What does {pc} do first?</p>
+              </>
+            )}
+            {told.map((message) => (
+              <div key={message.id} className={`message ${message.role}`}>
+                {messageBeats(message).map(line)}
+                {controls(message)}
+              </div>
+            ))}
+            {turn && !turn.replaces && (
+              <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>
+            )}
+            {/* Mounted before any text arrives, or screen readers would not announce it. */}
+            <div aria-live="polite" className="message narrator">
+              {turn &&
+                (turn.narration ? (
+                  messageBeats({ role: "narrator", text: turn.narration }).map(line)
+                ) : (
+                  <p className="waiting">{WRITING}</p>
+                ))}
             </div>
-          ))}
-          {turn && !turn.replaces && (
-            <div className="message player">
-              <p>{turn.input}</p>
-            </div>
-          )}
-          {/* Mounted before any text arrives, or screen readers would not announce it. */}
-          <div aria-live="polite" className="message narrator">
-            {turn && (turn.narration ? <p>{turn.narration}</p> : <p className="waiting">The Narrator is writing…</p>)}
           </div>
         </div>
+      )}
+      <div className="visually-hidden" aria-live="polite">
+        {staged && turn ? (
+          turn.narration ? messageBeats({ role: "narrator", text: turn.narration }).map(line) : WRITING
+        ) : (
+          <p>{announcement}</p>
+        )}
       </div>
-      <p className="visually-hidden" aria-live="polite">{announcement}</p>
       {setupNotice && (
         <p className="notice">
           {setupNotice} The Narrator can't reply until then. <a href={`#/settings/${id}`}>Open Settings</a>
@@ -325,6 +403,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
           onClose={() => setReverting(undefined)}
           onReverted={() => {
             setMessages(messages.filter((message) => message.id <= reverting.id));
+            setChosenBeat(undefined);
             getStatus(id).then(setStatus, () => {});
             getNotes(id).then(setNotes, () => {});
             checkImages();
@@ -334,6 +413,56 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
         />
       )}
     </Book>
+  );
+}
+
+/** One beat shows at a time. The rest stay in the DOM, visually hidden, so that a screen reader can reach them all. */
+function StageBox(props: {
+  story: Ref<HTMLDivElement>;
+  beats: StageBeat[];
+  chosen: number | undefined;
+  onChoose: (beat: number) => void;
+  line: (beat: Beat, key: number) => ReactNode;
+  controls: (message: Message) => ReactNode;
+  waiting: boolean;
+  children: (message?: Message) => ReactNode;
+}) {
+  const { beats, chosen, onChoose, waiting } = props;
+  const last = beats.length - 1;
+  const at = Math.min(chosen ?? openingBeat(beats), last);
+  const current = beats[at]!;
+  return (
+    <div ref={props.story} className="stage" tabIndex={-1} role="region" aria-label="Story">
+      {props.children(current.message)}
+      <div className="stage-box">
+        {beats.map(({ beat, message }, index) =>
+          index === at ? (
+            // Focusable, because a long beat has to scroll by keyboard.
+            <div key={index} className={beat.player ? "beat player" : "beat"} tabIndex={0}>
+              {props.line(beat, index)}
+            </div>
+          ) : (
+            // A Turn in progress is read out by the live region, so it mustn't be reached twice.
+            <div key={index} className="visually-hidden" aria-hidden={!message}>
+              {props.line(beat, index)}
+            </div>
+          ),
+        )}
+        {waiting && <p className="waiting">{WRITING}</p>}
+        <div className="row stage-foot">
+          <span className="muted">
+            Beat {current.number} of {current.of}
+          </span>
+          <button className="quiet" aria-disabled={at === 0} onClick={() => at > 0 && onChoose(at - 1)}>
+            Back
+          </button>
+          <button className="action" aria-disabled={at === last} onClick={() => at < last && onChoose(at + 1)}>
+            Next
+          </button>
+        </div>
+        {current.message && props.controls(current.message)}
+      </div>
+    </div>
   );
 }
 

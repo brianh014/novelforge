@@ -25,8 +25,7 @@ export const SettingsUpdate = z
     comfyMode: z.enum(["simple", "advanced"]),
     // Kept as the player's text and checked when saved, because a bad one here must not stop every read of Settings.
     comfyWorkflow: z.string(),
-    // shortcut: Prose is the only Chat style that works, add the others in ticket 22.
-    chatStyle: z.enum(["prose"]),
+    chatStyle: z.enum(["script", "prose", "bubbles", "stage"]),
     fontSize: z.enum(["small", "medium", "large"]),
   })
   .partial();

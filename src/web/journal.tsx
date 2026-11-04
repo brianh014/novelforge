@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getImages, getJournal, getSave, type Journal as JournalContent, type Portrait, portraitUrl, type Save, type SceneImageInfo } from "./api";
 import { Book, BookTabs } from "./menu";
-import { SceneImage } from "./play";
+import { IMAGE_CHECK_MS, SceneImage } from "./play";
 
 function Person({ id, name, portrait }: { id: string; name: string; portrait?: Portrait }) {
   return (
@@ -19,11 +19,25 @@ export function Journal({ id }: { id: string }) {
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    Promise.all([getSave(id), getJournal(id), getImages(id)]).then(([save, journal, { images }]) => {
-      setSave(save);
-      setJournal(journal);
-      setImages(images);
-    }, (failure: Error) => setLoadError(failure.message));
+    let timer: ReturnType<typeof setTimeout>;
+    let leaving = false;
+    let loaded = false;
+    const load = () =>
+      Promise.all([getSave(id), getJournal(id), getImages(id)]).then(([save, journal, { images, pending }]) => {
+        setSave(save);
+        setJournal(journal);
+        setImages(images);
+        loaded = true;
+        if (pending && !leaving) timer = setTimeout(load, IMAGE_CHECK_MS);
+      }, (failure: Error) => {
+        // A failed look for a portrait mustn't take away a Journal already on the page.
+        if (!loaded) setLoadError(failure.message);
+      });
+    load();
+    return () => {
+      leaving = true;
+      clearTimeout(timer);
+    };
   }, [id]);
 
   if (loadError) {

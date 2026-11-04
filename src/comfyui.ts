@@ -113,7 +113,7 @@ function jobFailure({ messages, status_str }: NonNullable<HistoryEntry["status"]
   if (failure) return `ComfyUI's job failed at node ${failure.node_id} (${failure.node_type}): ${failure.exception_type}`;
   return status_str === "error"
     ? "The job was stopped in ComfyUI before it finished"
-    : "The job finished without an image, so check the workflow ends in a SaveImage or PreviewImage node";
+    : "The job finished without an image, so make sure the workflow ends in a SaveImage or PreviewImage node";
 }
 
 /**

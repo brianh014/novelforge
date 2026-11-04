@@ -76,6 +76,12 @@ _Avoid_: Retry, swipe
 A standing out-of-character instruction to the Narrator for one Save, such as correcting a fact without Reverting.
 _Avoid_: Author's Note, edit
 
+**Chat style**:
+How the Story shows Messages: Script, Prose, Bubbles or Stage box. It never changes the Full Log.
+
+**Beat**:
+One line of a Message, spoken or not, and what a Stage box shows at a time.
+
 **Model Instructions**:
 The player's own global guidance to the Narrator, set in Settings and applying to every Save.
 _Avoid_: System prompt

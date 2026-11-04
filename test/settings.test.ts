@@ -106,10 +106,16 @@ test("text and image can use different providers, and a text server change leave
 });
 
 test("options that don't exist are refused and change nothing", async () => {
-  for (const body of [{ fontSize: "huge" }, { chatStyle: "bubbles" }, { imageProvider: "comfy" }, { imagesEnabled: "no" }]) {
+  for (const body of [{ fontSize: "huge" }, { chatStyle: "comic" }, { imageProvider: "comfy" }, { imagesEnabled: "no" }]) {
     expect((await change(body)).status).toBe(400);
   }
   expect(await settings()).toMatchObject({ fontSize: "medium", chatStyle: "prose", imageProvider: "openrouter", imagesEnabled: true });
+});
+
+test.each(["script", "prose", "bubbles", "stage"])("the %s Chat style persists through a restart", async (chatStyle) => {
+  expect((await change({ chatStyle })).status).toBe(200);
+  await game.restart();
+  expect(await settings()).toMatchObject({ chatStyle });
 });
 
 test("an install's settings file from before these settings gets their defaults", async () => {

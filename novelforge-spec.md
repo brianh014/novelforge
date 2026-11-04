@@ -240,7 +240,7 @@ Per install:
   * Toggle images on and off, current images are kept and displayed, just no new images created
   * Model Instructions \- allows the user to add an [agents.md](http://agents.md) style instruction. Blank by default
 * UI Settings
-  * Chat style \- options to be defined in the UI options report
+  * Chat style \- Script, Prose (the default), Bubbles or Stage box, from the UI options report. It changes how the Story shows Messages, not the Full Log, which stays exactly as written
   * Font size
 
 API keys live in the install's settings file and are never written to a Save, because Saves are made to be shared.

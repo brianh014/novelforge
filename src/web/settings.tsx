@@ -371,7 +371,7 @@ function ComfySettings({
           if (models && addressSaved) setRefreshes(refreshes + 1);
         }}
       >
-        {advanced ? "Check connection" : "Refresh lists"}
+        {advanced ? "Test connection" : "Refresh lists"}
       </button>
       <p role="status" className="muted">
         {!addressSaved
@@ -380,7 +380,7 @@ function ComfySettings({
             ? "Asking ComfyUI what's installed."
             : models.reachable
               ? !advanced && models.loras.length === 0 && "No LoRAs installed."
-              : "ComfyUI can't be reached at this address. Check that it's running, then refresh."}
+              : "ComfyUI can't be reached at this address. Make sure it's running, then refresh."}
       </p>
       {addressSaved && missing.length > 0 && (
         <p className="notice">Not installed in ComfyUI: {missing.join(", ")}. Choose another or add the file, then refresh.</p>
@@ -485,7 +485,7 @@ function InstallSettings({ initial }: { initial: Settings }) {
       </label>
       {local && !addressSaved && <p className="muted">Save the address to choose from this server's models.</p>}
       {local && addressSaved && models?.length === 0 && (
-        <p className="muted">No models listed. Check that the server is running, or type the model's name.</p>
+        <p className="muted">No models listed. Make sure the server is running, or type the model's name.</p>
       )}
       <label>
         {local ? "Text API key (most local servers need none)" : "Text API key"}
@@ -561,7 +561,10 @@ function InstallSettings({ initial }: { initial: Settings }) {
           value={draft.chatStyle}
           onChange={(e) => set({ chatStyle: e.target.value as Settings["chatStyle"] })}
         >
+          <option value="script">Script</option>
           <option value="prose">Prose</option>
+          <option value="bubbles">Bubbles</option>
+          <option value="stage">Stage box</option>
         </select>
       </label>
       <label>

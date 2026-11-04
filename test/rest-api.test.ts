@@ -59,6 +59,26 @@ test("a Turn stores the player and Narrator Messages", async () => {
   expect(prompt).toContain("I wade forward.");
 });
 
+test("the Narrator is told to put each spoken line on its own [Name]: line", async () => {
+  const { game, prompts } = play(narration("The tide rises around you."));
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+
+  expect(prompts[0]![0]!.content).toContain("on its own line as [Name]: “the words”");
+});
+
+test("a response of only whitespace is retried, as it would leave a Message with nothing to show", async () => {
+  const { game, prompts } = play(narration("  \n "), narration("The tide rises."));
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+
+  expect(prompts).toHaveLength(2);
+  const { messages } = (await game.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { text: string }[] };
+  expect(messages.at(-1)!.text).toBe("The tide rises.");
+});
+
 test("Messages survive a server restart", async () => {
   const { game } = play(narration("The tide rises around you."));
   const id = await game.createSave();

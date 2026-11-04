@@ -32,7 +32,7 @@ export class TurnFailed extends Error {
 }
 
 const FinishedTurn = z.object({
-  narration: z.string().min(1),
+  narration: z.string().trim().min(1),
   state_operations: z.array(StateOperation).default([]),
   scene_changed: z.boolean().nullish(),
   visual_description: z.string().nullish(),

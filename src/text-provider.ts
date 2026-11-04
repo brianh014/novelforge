@@ -3,9 +3,9 @@ import type { SettingsStore } from "./settings-store";
 import { ContentRefused, type TextProvider, TextProviderFailed } from "./turn-engine";
 
 // The player sees these with a retry hint after them, so none ends in a full stop.
-const UNREACHABLE = "The Text Provider can't be reached, so check that it's running and that its address in Settings is right";
-const STOPPED = "The Text Provider stopped responding, so check that it isn't stuck or still loading a model";
-const REJECTED = "The Text Provider returned an error, so check its address, the text model and any API key in Settings";
+const UNREACHABLE = "The Text Provider can't be reached, so make sure it's running and that its address in Settings is right";
+const STOPPED = "The Text Provider stopped responding, so make sure it isn't stuck or still loading a model";
+const REJECTED = "The Text Provider returned an error, so look over its address, the text model and any API key in Settings";
 
 const LIMITS = {
   // Generous, as a local server can spend minutes loading a model before its first byte.

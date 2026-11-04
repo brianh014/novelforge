@@ -266,6 +266,11 @@ button {
   accent-color: var(--accent);
 }
 
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
 textarea,
 select,
 input {
@@ -432,6 +437,8 @@ a.action {
   display: flex;
   /* Keeps the newest text pinned to the bottom without leaving someone who scrolled back. */
   flex-direction: column-reverse;
+  /* Room for a focus ring, which this scroller would otherwise clip. */
+  padding-inline: 4px;
 }
 
 .story > div {
@@ -479,9 +486,163 @@ a.action {
   margin-bottom: 12px;
 }
 
-.message p {
+.message p,
+.beat p {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.message p + p,
+.message .row {
+  margin-top: 0.4em;
+}
+
+/* Chat styles */
+
+.who {
+  color: var(--accent);
+  font-family: var(--label);
+}
+
+.chat-script .told {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.chat-script .message.player p,
+.chat-bubbles .message.player p {
+  padding-left: 0;
+  border-left: 0;
+  font-style: normal;
+}
+
+.chat-bubbles .told {
+  padding-inline: 28px;
+  color: var(--muted);
+  font-size: 0.92em;
+  text-align: center;
+}
+
+.bubble-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-block: 8px;
+}
+
+.bubble-line.pc {
+  justify-content: flex-end;
+}
+
+.bubble {
+  min-width: 0;
+  max-width: 78%;
+  padding: 8px 12px;
+  border-radius: 14px 14px 14px 2px;
+  background: var(--soft);
+}
+
+.bubble .who {
+  display: block;
+  font-size: 0.8em;
+}
+
+.bubble-line.pc .bubble {
+  border-radius: 14px 14px 2px 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.bubble-line.pc .who {
+  color: inherit;
+}
+
+.bubble-line .face {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+}
+
+.face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The story's beats in a box, over the Scene Image when there is one. */
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 11em;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: var(--soft);
+}
+
+.stage .plate {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.stage .plate img {
+  height: 100%;
+  padding: 0;
+  border: 0;
+}
+
+.stage .plate figcaption {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding-inline: 8px;
+  background: var(--page);
+  color: var(--ink);
+}
+
+.stage-box {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  background: var(--page);
+}
+
+.beat {
+  min-height: 0;
+  overflow: auto;
+}
+
+.beat .who {
+  display: table;
+  margin-bottom: 6px;
+  padding-inline: 10px;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.beat.player p {
+  font-style: italic;
+}
+
+.stage-foot {
+  flex: none;
+  justify-content: flex-start;
+}
+
+.stage-foot .muted {
+  margin-right: auto;
+}
+
+.stage-box .row {
+  justify-content: flex-start;
 }
 
 .message.player p {
@@ -668,6 +829,7 @@ a.action {
 }
 
 .message .row .quiet,
+.stage-box .quiet,
 .note-list .quiet {
   min-height: 32px;
 }
@@ -684,12 +846,12 @@ a.action {
 }
 
 @media (hover: hover) {
-  .revert {
+  .message .revert {
     opacity: 0;
   }
 
   .message:hover .revert,
-  .revert:focus-visible {
+  .message .revert:focus-visible {
     opacity: 1;
   }
 }
@@ -705,9 +867,10 @@ a.action {
   }
 }
 
+/* Between two colours that both pass, as fading out would drop the text below readable contrast. */
 @keyframes breathe {
   to {
-    opacity: 0.45;
+    color: var(--ink);
   }
 }
 
@@ -816,8 +979,14 @@ dialog blockquote {
     overflow: visible;
   }
 
+  /* The response being rewritten needs the room, and the Rewrite box stands in for the Send box until it's done. */
+  .ask + .compose,
+  .page:has(> .ask) > .plate {
+    display: none;
+  }
+
   /* Clears the tabs, which are stuck to the same edge. Focus needs the room too, coming from the left page. */
-  .ask {
+  .book:has(.items) .ask {
     bottom: 44px;
     scroll-margin-bottom: 44px;
   }
@@ -892,5 +1061,11 @@ dialog blockquote {
   .tabs [aria-current] {
     text-decoration: underline;
     text-underline-offset: 4px;
+  }
+
+  /* Touching tabs share one colour, so the usual ring would vanish against the next one. */
+  .tabs a:focus-visible {
+    outline-color: var(--on-accent);
+    outline-offset: -4px;
   }
 }
