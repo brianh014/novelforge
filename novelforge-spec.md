@@ -115,7 +115,7 @@ Ashley takes the spanners from you
 
 The Narrator must not take instructions from the player in the main chat, ie no prompt/instruction injection. Player text is always passed as clearly delimited in-character data. The player can only say what the PC is saying or doing, and they cannot “break the game”/do something that doesn't fit the world. For example, in a modern day theme strictly based on the current 2026 world, a PC would not be able to cast magic if it hasn't somehow been introduced into the story.
 
-Rewrite, Director's Notes and Model Instructions are the only out-of-character inputs.
+Rewrite and Model Instructions are the only out-of-character inputs. Director's Notes have left the game until they're rethought as a way to edit the story so far (ticket 31).
 
 ### Turns
 

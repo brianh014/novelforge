@@ -14,7 +14,7 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   hasImageApiKey: boolean;
   workflowProblem: string;
 };
-export type Journal = { summary: string; facts: string[]; npcs: string[]; portraits: Portrait[]; fullLog: Message[] };
+export type Journal = { summary: string; facts: string[]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[] };
 /** A null `npc` is the PC. */
 export type Portrait = ReturnType<SaveStore["portraits"]>[number];
 export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];
@@ -103,19 +103,6 @@ export const getStatus = (id: string) => request<Status>(`/saves/${id}/status`);
 
 export const statusWords = ({ health, injuries, conditions }: Status) =>
   [health, ...injuries, ...conditions].join(", ");
-
-const notesOf = ({ notes }: { notes: string[] }) => notes;
-
-export const getNotes = (id: string) => request<{ notes: string[] }>(`/saves/${id}/notes`).then(notesOf);
-
-export const addNote = (id: string, text: string) =>
-  request<{ notes: string[] }>(`/saves/${id}/notes`, jsonBody({ text })).then(notesOf);
-
-export const editNote = (id: string, index: number, text: string) =>
-  request<{ notes: string[] }>(`/saves/${id}/notes/${index}`, { ...jsonBody({ text }), method: "PATCH" }).then(notesOf);
-
-export const removeNote = (id: string, index: number) =>
-  request<{ notes: string[] }>(`/saves/${id}/notes/${index}`, { method: "DELETE" }).then(notesOf);
 
 export const createSave = (
   save: Save & { worldId: string; artStyle: string; startingHook: string; inventory: string[] },

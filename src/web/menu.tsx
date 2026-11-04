@@ -14,52 +14,60 @@ export function Book(props: { left: ReactNode; children: ReactNode; tabs?: React
 }
 
 /** A single sheet for screens of fields: an index down the side, then one scrolling column above a pinned `foot`. */
-export function Sheet(props: { rail: ReactNode; children: ReactNode; foot?: ReactNode; tabs?: ReactNode; lockRail?: boolean; view?: unknown }) {
+/** Scrolls its `children`, with a down arrow while any of them are below the fold. */
+export function Fold({ children, view }: { children: ReactNode; view?: unknown }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState(false);
 
   useEffect(() => {
-    const view = scroller.current!;
-    const check = () => setMore(view.scrollHeight - view.clientHeight - view.scrollTop > 8);
+    const area = scroller.current!;
+    const check = () => setMore(area.scrollHeight - area.clientHeight - area.scrollTop > 8);
     // Fields, pictures and whole sections change the height without any scrolling.
     const resized = new ResizeObserver(check);
-    resized.observe(view);
-    resized.observe(view.firstElementChild!);
-    view.addEventListener("scroll", check, { passive: true });
+    resized.observe(area);
+    resized.observe(area.firstElementChild!);
+    area.addEventListener("scroll", check, { passive: true });
     return () => {
       resized.disconnect();
-      view.removeEventListener("scroll", check);
+      area.removeEventListener("scroll", check);
     };
   }, []);
 
   useEffect(() => {
     // Braces matter: scrollTo can return a promise, which React would take for a cleanup function.
     scroller.current!.scrollTo({ top: 0, behavior: "instant" });
-  }, [props.view]);
+  }, [view]);
 
+  return (
+    <div className="sheet-view">
+      <div ref={scroller} className="sheet-scroll">
+        <div className="sheet-body">{children}</div>
+      </div>
+      {more && (
+        <div className="more-below">
+          <button
+            type="button"
+            className="icon"
+            title="More below"
+            aria-label="More below"
+            onClick={() => scroller.current!.scrollBy({ top: scroller.current!.clientHeight * 0.8 })}
+          >
+            {DownIcon}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A single sheet for screens of fields: an index down the side, then one scrolling column above a pinned `foot`. */
+export function Sheet(props: { rail: ReactNode; children: ReactNode; foot?: ReactNode; tabs?: ReactNode; lockRail?: boolean; view?: unknown }) {
   return (
     <main className="desk">
       <div className="book sheet">
         <aside className="sheet-rail" inert={props.lockRail}>{props.rail}</aside>
         <section className="sheet-main">
-          <div className="sheet-view">
-            <div ref={scroller} className="sheet-scroll">
-              <div className="sheet-body">{props.children}</div>
-            </div>
-            {more && (
-              <div className="more-below">
-                <button
-                  type="button"
-                  className="icon"
-                  title="More below"
-                  aria-label="More below"
-                  onClick={() => scroller.current!.scrollBy({ top: scroller.current!.clientHeight * 0.8 })}
-                >
-                  {DownIcon}
-                </button>
-              </div>
-            )}
-          </div>
+          <Fold view={props.view}>{props.children}</Fold>
           {props.foot && <div className="sheet-foot">{props.foot}</div>}
         </section>
         {props.tabs}

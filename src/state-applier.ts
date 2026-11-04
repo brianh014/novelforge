@@ -7,7 +7,8 @@ export type State = {
   status: { health: string; injuries: string[]; conditions: string[] };
   npcs: { name: string; appearance: string }[];
   scene: { location: string; visibleCast: string[] };
-  pcKnown: { facts: string[]; npcs: string[] };
+  /** `summaries` says who each known NPC is, as the PC understands it. A Save from before them has none. */
+  pcKnown: { facts: string[]; npcs: string[]; summaries?: Record<string, string> };
   worldBible: LoreEntry[];
   worldRules: string[];
   plotThreads: string[];
@@ -36,7 +37,7 @@ export const StateSections = {
   status: z.object({ health: z.string(), injuries: stringList, conditions: stringList }),
   npcs: z.array(z.object({ name: z.string(), appearance: z.string() })),
   scene: z.object({ location: z.string(), visibleCast: stringList }),
-  pcKnown: z.object({ facts: stringList, npcs: stringList }),
+  pcKnown: z.object({ facts: stringList, npcs: stringList, summaries: z.record(z.string(), z.string()).optional() }),
   worldBible: z.array(
     z.object({ title: z.string(), keywords: stringList, content: z.string(), alwaysOn: z.boolean() }),
   ),
@@ -60,6 +61,7 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("set_scene"), location: nonEmpty, visible_cast: z.array(nonEmpty) }),
   z.object({ op: z.literal("add_known_fact"), fact: nonEmpty }),
   z.object({ op: z.literal("add_known_npc"), name: nonEmpty }),
+  z.object({ op: z.literal("set_known_npc_summary"), name: nonEmpty, summary: nonEmpty }),
   z.object({
     op: z.literal("add_lore_entry"),
     title: nonEmpty,
@@ -127,6 +129,10 @@ function apply(state: State, operation: StateOperation) {
       return addOnce(state.pcKnown.facts, operation.fact);
     case "add_known_npc":
       return findNpc(state, operation.name) !== undefined && addOnce(state.pcKnown.npcs, operation.name);
+    case "set_known_npc_summary":
+      if (!state.pcKnown.npcs.includes(operation.name)) return false;
+      state.pcKnown.summaries = { ...state.pcKnown.summaries, [operation.name]: operation.summary };
+      return true;
     case "add_lore_entry": {
       const { title, keywords, content } = operation;
       // The Narrator only sees activated entries, so it can repeat a title innocently: keep the first, not fail the Turn.

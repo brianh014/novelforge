@@ -79,7 +79,7 @@ _Avoid_: Edit
 Replacing the latest Narrator response without feedback.
 _Avoid_: Retry, swipe
 
-**Director's Note**:
+**Director's Note** (retired from play, see ticket 31):
 A standing out-of-character instruction to the Narrator for one Save, such as correcting a fact without Reverting.
 _Avoid_: Author's Note, edit
 

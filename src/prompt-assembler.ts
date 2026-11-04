@@ -37,7 +37,8 @@ ${FULL_OPENING}`;
 
 export function assemblePrompt({
   save: { worldBrief, pc, startingHook },
-  state: { worldBible, worldRules, plotThreads, summary, directorsNotes, ...currentState },
+  // Director's Notes are taken out so that any left in a Save can't steer the story now the player can't see them.
+  state: { worldBible, worldRules, plotThreads, summary, directorsNotes: _retired, ...currentState },
   messages,
   modelInstructions,
   input,
@@ -68,7 +69,7 @@ Change the state only through state_operations, naming things exactly as the cur
 If the PC attempts something risky, do not narrate it yet. Reply with a check instead, naming the action and one difficulty that already accounts for the PC's skills, condition and the situation. Safe actions need no check. Never mention dice, numbers or Checks.
 Put each spoken line of the narration on its own line as [Name]: “the words”, with the speaker's name as the state has it and nothing else on that line. Put actions and description on separate lines, with no square brackets.
 Older Messages leave this prompt, so keep a short summary of the story through set_summary, covering only what the PC has experienced.
-Record what the PC learns through add_known_fact, and each NPC the PC comes to know of through add_known_npc, using add_npc first only for an NPC not yet in the state. Never repeat a known fact or NPC. The player reads the summary and known facts in the Journal, so write them as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
+Record what the PC learns through add_known_fact, and each NPC the PC comes to know of through add_known_npc, using add_npc first only for an NPC not yet in the state. Never repeat a known fact or NPC. Right after add_known_npc, use set_known_npc_summary to say in one short sentence who that NPC is, as the PC understands them, and use it again when that understanding changes. Give one now to any known NPC in the state that has none. The player reads these too, so never put Lore Entry or Plot Thread secrets in them. The player reads the summary and known facts in the Journal, so write them as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
 The player reads the inventory and status too, so write them as the PC would, with no Lore Entry or Plot Thread secrets. Keep the inventory realistic for this world: add only what the PC could really wear or carry there, and narrate anything too heavy or bulky being left behind instead of adding it. Use remove_item only for an item the state lists, and to move an item between wearing and carrying use remove_item and then add_item. Describe health, injuries and conditions in words with no digits, never as points or percentages. Use remove_status only for an entry the state lists under that kind, and never add_status one it already lists.
 The Lore Entries and Plot Threads are secret. Let them shape the story and reveal them only through play. When play goes somewhere they do not cover, add a Lore Entry with several keywords so that paraphrases still activate it. Resolve a Plot Thread once play has exhausted it, and add a new one when none remain.
 Keep the scene in the state current. Whenever the PC reaches a new location or the NPCs they can see change, use set_scene with a short name for the location, repeated exactly while they stay there, and visible_cast listing the NPCs in view by their names in the state, using add_npc first for a new one. An NPC's appearance is used to paint them, so give their looks in a few concrete words with no name, and use update_npc when their looks change. The player reads the location as a caption, so write it as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
@@ -76,7 +77,6 @@ In a finished Turn, set visual_description to what the PC can see right now, con
 Lore Entries: ${JSON.stringify(activeEntries.map(({ title, content }) => ({ title, content })))}
 Plot Threads: ${JSON.stringify(plotThreads)}
 Summary of the story so far: ${summary}
-Director's Notes, which are the player's out-of-character corrections to follow: ${JSON.stringify(directorsNotes)}
 Model Instructions, which are the player's out-of-character guidance to follow: ${modelInstructions}${firstTurnInstruction(startingHook, messages)}`,
     },
     ...recent.map(toPrompt),

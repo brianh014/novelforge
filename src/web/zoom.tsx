@@ -1,4 +1,18 @@
 import { useRef } from "react";
+import { type Portrait, portraitUrl } from "./api";
+
+/** Someone's picture and name, with who they are when that's known. */
+export function Person({ id, name, portrait, who }: { id: string; name: string; portrait?: Portrait; who?: string }) {
+  return (
+    <>
+      {portrait ? <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={name} /> : <span className="portrait" aria-hidden="true" />}
+      <span>
+        {name}
+        {who && <span className="about">{who}</span>}
+      </span>
+    </>
+  );
+}
 
 /** A picture that opens larger in a dialog, which the browser closes on Escape. `onLoad` and `onError` are for pictures still being drawn. */
 export function Zoomable(props: {

@@ -3,16 +3,7 @@ import { getImages, getJournal, getSave, type Journal as JournalContent, type Po
 import { readable } from "./chat-style";
 import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, SceneImage } from "./play";
-import { Zoomable } from "./zoom";
-
-function Person({ id, name, portrait }: { id: string; name: string; portrait?: Portrait }) {
-  return (
-    <>
-      {portrait ? <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={name} /> : <span className="portrait" />}
-      <span>{name}</span>
-    </>
-  );
-}
+import { Person } from "./zoom";
 
 export function Journal({ id }: { id: string }) {
   const [save, setSave] = useState<Save>();
@@ -80,7 +71,7 @@ export function Journal({ id }: { id: string }) {
               <ul className="people">
                 {journal.npcs.map((name) => (
                   <li key={name} className="person">
-                    <Person id={id} name={name} portrait={journal.portraits.find(({ npc }) => npc === name)} />
+                    <Person id={id} name={name} portrait={journal.portraits.find(({ npc }) => npc === name)} who={journal.npcSummaries[name]} />
                   </li>
                 ))}
               </ul>

@@ -362,11 +362,14 @@ export function startServer(options: {
         GET: (req) => {
           // An allowlist, so the World Bible, Plot Threads and NPC appearance text can never reach the player by default.
           // shortcut: the summary and facts are Narrator free text, kept clean only by its prompt, screen them if models leak.
-          const { summary, pcKnown } = saves.latestState(req.params.id);
+          const { summary, pcKnown, scene } = saves.latestState(req.params.id);
           return Response.json({
             summary,
             facts: pcKnown.facts,
             npcs: pcKnown.npcs,
+            npcSummaries: pcKnown.summaries ?? {},
+            // Those in the scene, then the latest met. The filter keeps a visible NPC the PC doesn't know yet hidden.
+            recentNpcs: [...new Set([...scene.visibleCast.filter((name) => pcKnown.npcs.includes(name)), ...pcKnown.npcs.toReversed()])],
             portraits: knownPortraits(req.params.id),
             fullLog: saves.messages(req.params.id),
           });
@@ -386,6 +389,7 @@ export function startServer(options: {
           return Response.json({ health, injuries, conditions });
         },
       },
+      // shortcut: no screen uses these since Director's Notes left the UI, reuse or delete them once ticket 31 settles story edits.
       "/saves/:id/notes": {
         GET: (req) => Response.json({ notes: saves.latestState(req.params.id).directorsNotes }),
         POST: async (req) => {

@@ -1,12 +1,9 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import {
-  addNote,
   coverUrl,
   decideForMe,
   duplicateFrom,
-  editNote,
   getMessages,
-  getNotes,
   getImages,
   getJournal,
   getSave,
@@ -17,10 +14,9 @@ import {
   type Message,
   playOpening,
   playTurn,
-  type Portrait,
+  type Journal,
   portraitUrl,
   previewRevert,
-  removeNote,
   replaceResponse,
   revert,
   type SceneImageInfo,
@@ -32,13 +28,15 @@ import {
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { DecideIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
-import { Book, BookTabs } from "./menu";
-import { Zoomable } from "./zoom";
+import { Book, BookTabs, Fold } from "./menu";
+import { Person, Zoomable } from "./zoom";
 
 // Text from a Turn cut short by leaving the screen, to put back in the box on return.
 const unsent = new Map<string, string>();
 // An item's action, which the Story plays as a Turn once it has loaded, so it streams like any other.
 const itemActions = new Map<string, string>();
+
+const RECENT_NPCS = 3;
 
 export function playItemAction(id: string, input: string) {
   itemActions.set(id, input);
@@ -69,12 +67,10 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const [save, setSave] = useState<OpenSave>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>();
-  const [notes, setNotes] = useState<string[]>();
   const [images, setImages] = useState<SceneImages>({ images: [], pending: false, session: 0 });
-  const [editingNotes, setEditingNotes] = useState(false);
   const [setupNotice, setSetupNotice] = useState<string>();
   const [chatStyle, setChatStyle] = useState<ChatStyle>("prose");
-  const [portraits, setPortraits] = useState<Portrait[]>([]);
+  const [journal, setJournal] = useState<Journal>();
   // Unset until the player moves, so that each new response opens on its first beat.
   const [chosenBeat, setChosenBeat] = useState<number>();
   const [draft, setDraft] = useState(unsent.get(id) ?? "");
@@ -99,7 +95,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
     itemActions.delete(id);
     // Without Settings the story still reads, in Prose.
     const reading = getSettings().catch(() => undefined);
-    Promise.all([getSave(id), getMessages(id), getStatus(id), getNotes(id), reading]).then(([save, messages, status, notes, settings]) => {
+    Promise.all([getSave(id), getMessages(id), getStatus(id), reading]).then(([save, messages, status, settings]) => {
       if (settings) {
         setSetupNotice(setupProblem(settings));
         setChatStyle(settings.chatStyle);
@@ -107,7 +103,6 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       setSave(save);
       setMessages(messages);
       setStatus(status);
-      setNotes(notes);
       if (action) playInput(action, messages);
       // Without a working Narrator this would only fail, and the page already says what to fix.
       else if (messages.length === 0 && settings && !setupProblem(settings)) openStory();
@@ -126,7 +121,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       setImages(next);
       if (next.pending && !leaving.current.signal.aborted) imageCheck.current = setTimeout(checkImages, IMAGE_CHECK_MS);
       // Once, when drawing stops, as this holds the whole Full Log.
-      else getJournal(id).then((journal) => setPortraits(journal.portraits), () => {});
+      else getJournal(id).then(setJournal, () => {});
     }, () => {});
   }
 
@@ -245,8 +240,11 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       </Book>
     );
   }
-  if (!save || !status || !notes) return <Book left={null}>{null}</Book>;
+  if (!save || !status) return <Book left={null}>{null}</Book>;
   const pc = save.pc.name;
+  const portraits = journal?.portraits ?? [];
+  const portraitOf = (name?: string | null) => portraits.find(({ npc }) => npc === name);
+  const pcPortrait = portraitOf(null);
   const latest = messages.at(-1);
   const replaceable = !turn && latest?.role === "narrator" ? latest : undefined;
   const scene = images.images.at(-1);
@@ -260,7 +258,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   );
 
   const line = (beat: Beat, key: number) => {
-    const portrait = portraits.find(({ npc }) => npc === beat.speaker);
+    const portrait = portraitOf(beat.speaker);
     return <BeatLine key={key} beat={beat} style={chatStyle} pc={pc} face={portrait && portraitUrl(id, portrait)} />;
   };
 
@@ -310,31 +308,40 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       narrowLeft
       left={
         <>
-          {/* A Save from before titles has only its PC. */}
-          <div className="story-title">
-            <h1 className="title">{save.title || pc}</h1>
-            {save.title && <p className="muted">{pc}</p>}
-          </div>
-          {!staged && (sceneImage() || cover)}
-          <div className="condition">
-            <h2>Condition</h2>
-            <p className="status">{statusWords(status)}</p>
-            <p className="muted">{plural(images.session, "image")} this session</p>
-          </div>
-          <div className="notes">
-            <h2>
-              <button className="quiet" aria-haspopup="dialog" onClick={() => setEditingNotes(true)}>
-                Director's Notes
-              </button>
-            </h2>
-            {notes.length > 0 && (
-              <ul>
-                {notes.map((note, index) => (
-                  <li key={index}>{note}</li>
-                ))}
-              </ul>
+          <Fold>
+            {/* A Save from before titles has only its PC. */}
+            <div className="story-title">
+              <h1 className="title">{save.title || pc}</h1>
+              {save.title && <p className="muted">{pc}</p>}
+            </div>
+            {!staged && (sceneImage() || cover)}
+            <div className="story-card">
+              {pcPortrait && <Zoomable lazy src={portraitUrl(id, pcPortrait)} alt={`Portrait of ${pc}`} />}
+              <div className="condition">
+                <h2>Condition</h2>
+                <p className="status">{statusWords(status)}</p>
+                <p className="muted">{plural(images.session, "image")} this session</p>
+              </div>
+            </div>
+            {journal?.summary && (
+              <div className="story-recap">
+                <h2>So far</h2>
+                <p className="brief">{journal.summary}</p>
+              </div>
             )}
-          </div>
+            {!!journal?.recentNpcs.length && (
+              <div className="story-recap">
+                <h2>Recent people</h2>
+                <ul className="people">
+                  {journal.recentNpcs.slice(0, RECENT_NPCS).map((name) => (
+                    <li key={name} className="person">
+                      <Person id={id} name={name} portrait={portraitOf(name)} who={journal.npcSummaries[name]} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Fold>
           <a className="quiet" href="#/">Main Menu</a>
         </>
       }
@@ -453,9 +460,6 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
           </button>
         </div>
       </form>
-      {editingNotes && (
-        <NotesDialog id={id} notes={notes} onChange={setNotes} onClose={() => setEditingNotes(false)} />
-      )}
       {reverting && (
         <RevertDialog
           id={id}
@@ -465,7 +469,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
             setMessages(messages.filter((message) => message.id <= reverting.id));
             setChosenBeat(undefined);
             getStatus(id).then(setStatus, () => {});
-            getNotes(id).then(setNotes, () => {});
+            getJournal(id).then(setJournal, () => {});
             checkImages();
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.
             inputBox.current!.focus();
@@ -523,109 +527,6 @@ function StageBox(props: {
         {current.message && props.controls(current.message)}
       </div>
     </div>
-  );
-}
-
-function NotesDialog(props: {
-  id: string;
-  notes: string[];
-  onChange: (notes: string[]) => void;
-  onClose: () => void;
-}) {
-  const { id, notes, onChange } = props;
-  const dialog = useRef<HTMLDialogElement>(null);
-  const box = useRef<HTMLTextAreaElement>(null);
-  const [editing, setEditing] = useState<number>();
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => dialog.current!.showModal(), []);
-
-  function startEditing(index: number | undefined, note: string) {
-    setEditing(index);
-    setText(note);
-    box.current!.focus();
-  }
-
-  async function attempt(action: () => Promise<string[]>, textAfter = "") {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      onChange(await action());
-      startEditing(undefined, textAfter);
-    } catch (failure) {
-      setError((failure as Error).message);
-      // Notes are addressed by position, so a change from another tab must show before the next try.
-      getNotes(id).then(onChange, () => {});
-    }
-    setBusy(false);
-  }
-
-  function submitNote(event: FormEvent) {
-    event.preventDefault();
-    if (!text.trim()) return;
-    attempt(() => (editing === undefined ? addNote(id, text) : editNote(id, editing, text)));
-  }
-
-  return (
-    <dialog ref={dialog} onClose={props.onClose} aria-labelledby="notes-title">
-      <h2 id="notes-title">Director's Notes</h2>
-      <p className="muted">Standing instructions the Narrator follows from now on. Older text stays as written.</p>
-      {notes.length > 0 && (
-        <ul className="note-list">
-          {notes.map((note, index) => (
-            <li key={index}>
-              <p>{note}</p>
-              <div className="row">
-                <button
-                  className="quiet"
-                  aria-label={`Edit note: ${note.slice(0, 40)}`}
-                  onClick={() => startEditing(index, note)}
-                >
-                  Edit
-                </button>
-                <button
-                  className="quiet"
-                  aria-label={`Remove note: ${note.slice(0, 40)}`}
-                  // Positions shift, so an edit in progress ends, but a new Note being typed stays.
-                  onClick={() => attempt(() => removeNote(id, index), editing === undefined ? text : "")}
-                >
-                  Remove
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      <form className="note-form" onSubmit={submitNote}>
-        <label>
-          {editing === undefined ? "Add a note" : "Edit this note"}
-          <textarea
-            ref={box}
-            rows={2}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={sendOnEnter}
-          />
-        </label>
-        {error && <p role="alert" className="error">{error}</p>}
-        <div className="row">
-          <button type="button" className="quiet" onClick={() => dialog.current!.close()}>
-            Close
-          </button>
-          {editing !== undefined && (
-            <button type="button" className="quiet" onClick={() => startEditing(undefined, "")}>
-              Cancel edit
-            </button>
-          )}
-          <button className="action" aria-disabled={busy || !text.trim()}>
-            {editing === undefined ? "Add" : "Save"}
-          </button>
-        </div>
-      </form>
-    </dialog>
   );
 }
 

@@ -269,7 +269,7 @@ test("an old Save opens with its story and Snapshots whole, and keeps playing", 
 
   expect(added.status).toBe(201);
   expect(turn.status).toBe(201);
-  expect(JSON.stringify(prompts[0])).toContain("The rope is frayed.");
+  expect(JSON.stringify(prompts[0])).not.toContain("The rope is frayed.");
   expect(await messagesOf(id)).toHaveLength(4);
   const reverted = await game.post(`/saves/${id}/messages/2/revert`, {});
   expect(reverted.status).toBe(200);

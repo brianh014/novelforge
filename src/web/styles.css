@@ -121,7 +121,7 @@ a {
 
 /* The left page holds the picture, so it stays wide enough to show one whole. */
 .book.narrow-left {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.55fr);
 }
 
 .page {
@@ -347,6 +347,53 @@ h2 {
 .more-below button {
   color: var(--accent);
   pointer-events: auto;
+}
+
+/* The story's left page */
+
+.page .sheet-scroll,
+.book:has(.tabs) .page .sheet-scroll {
+  padding: 0 0 24px;
+}
+
+.page .sheet-body {
+  max-width: none;
+}
+
+.story-card {
+  display: flex;
+  gap: 14px;
+  align-items: start;
+}
+
+.story-card .zoom {
+  flex: none;
+  width: 104px;
+}
+
+.story-card .zoom img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+}
+
+.people {
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+
+.about {
+  display: block;
+  color: var(--muted);
+  font-size: 0.9em;
+  line-height: 1.3;
+}
+
+.story-recap .brief {
+  -webkit-line-clamp: 3;
 }
 
 /* Controls */
@@ -1084,57 +1131,6 @@ a.action {
   overflow-wrap: anywhere;
 }
 
-.notes ul {
-  margin: 4px 0 0;
-  padding-left: 1.1em;
-  overflow-wrap: anywhere;
-}
-
-.notes h2 .quiet {
-  font: inherit;
-}
-
-.note-list {
-  max-height: 40dvh;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 10px;
-  overflow: auto;
-  list-style: none;
-}
-
-.note-list p {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.note-form {
-  display: grid;
-  gap: 8px;
-}
-
-.note-form label {
-  display: grid;
-  gap: 4px;
-  color: var(--accent);
-}
-
-.note-form textarea {
-  max-height: 30dvh;
-  field-sizing: content;
-}
-
-.message .row,
-.note-list .row {
-  justify-content: flex-start;
-}
-
-.stage-box .quiet,
-.note-list .quiet {
-  min-height: 32px;
-}
-
 /* Floated, so these never add a row of space between Messages, and appearing on hover moves no text. */
 .message .actions {
   float: right;
@@ -1430,8 +1426,17 @@ dialog blockquote {
     display: none;
   }
 
-  .notes ul {
+  /* The Journal holds all of this, and the story needs the room. */
+  .story-card .zoom,
+  .story-recap {
     display: none;
+  }
+
+  .narrow-left .sheet-view,
+  .narrow-left .sheet-scroll,
+  .narrow-left .sheet-body,
+  .story-card {
+    display: contents;
   }
 
   .chips {

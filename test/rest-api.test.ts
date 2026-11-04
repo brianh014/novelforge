@@ -251,6 +251,7 @@ test.each([
   ["adding an NPC who exists", { op: "add_npc", name: "Mara", appearance: "a stranger" }],
   ["updating an NPC who does not exist", { op: "update_npc", name: "Nobody", appearance: "towering" }],
   ["knowing an NPC who does not exist", { op: "add_known_npc", name: "Nobody" }],
+  ["summing up an NPC the PC doesn't know", { op: "set_known_npc_summary", name: "Nobody", summary: "Who?" }],
   ["knowing an NPC twice", { op: "add_known_npc", name: "Mara" }],
 ])("the server refuses %s", async (_, operation) => {
   const { game, prompts } = play(
@@ -1172,7 +1173,7 @@ test("the Check result call keeps the whole prompt, including world_rules and th
   expect(prompt).toContain("Never mention dice, numbers or Checks");
 });
 
-test("Director's Notes and Model Instructions reach the Narrator as out-of-character guidance", async () => {
+test("Model Instructions reach the Narrator as out-of-character guidance, and Director's Notes don't", async () => {
   const script = scriptedTextProvider(narration("Rain."));
   game = startGame(savesDir, script.textProvider);
   await game.patch("/settings", { modelInstructions: "model-instructions-text" });
@@ -1183,7 +1184,7 @@ test("Director's Notes and Model Instructions reach the Narrator as out-of-chara
 
   const [guidance] = script.prompts[0]!;
   expect(guidance!.role).toBe("system");
-  expect(guidance!.content).toContain("Ashley has green eyes");
+  expect(guidance!.content).not.toContain("Ashley has green eyes");
   expect(guidance!.content).toContain("model-instructions-text");
 });
 
@@ -1311,6 +1312,8 @@ test("the Journal holds the recent summary, what the PC knows, known NPCs and th
     summary: "Ash reached the docks.",
     facts: ["The ferry stopped running."],
     npcs: ["Mara"],
+    npcSummaries: {},
+    recentNpcs: ["Mara"],
     portraits: [],
     fullLog: [
       { id: 1, role: "player", text: "I wave back." },
@@ -1319,11 +1322,44 @@ test("the Journal holds the recent summary, what the PC knows, known NPCs and th
   });
 });
 
+test("the Journal says who known NPCs are, and lists those in the scene first, then the latest met", async () => {
+  const { game, prompts } = play(
+    narration(
+      "They wait.",
+      { op: "add_npc", name: "Mara", appearance: "SECRET-LOOKS" },
+      { op: "add_known_npc", name: "Mara" },
+      { op: "set_known_npc_summary", name: "Mara", summary: "The ferry's pilot." },
+      { op: "add_npc", name: "Tobin", appearance: "red scarf" },
+      { op: "add_known_npc", name: "Tobin" },
+      { op: "add_npc", name: "Stranger", appearance: "hooded" },
+      { op: "add_npc", name: "Wren", appearance: "tall" },
+      { op: "add_known_npc", name: "Wren" },
+      { op: "set_scene", location: "The docks", visible_cast: ["Stranger", "Mara"] },
+    ),
+    narration("Later.", { op: "set_known_npc_summary", name: "Mara", summary: "A smuggler, it turns out." }),
+  );
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I look." });
+
+  const journal = await journalOf(game, id);
+  expect(journal).toMatchObject({ npcSummaries: { Mara: "The ferry's pilot." }, recentNpcs: ["Mara", "Wren", "Tobin"] });
+  expect(JSON.stringify(journal)).not.toContain("SECRET-LOOKS");
+  expect(JSON.stringify(journal)).not.toContain("Stranger");
+  expect(prompts[0]![0]!.content).toContain("set_known_npc_summary");
+
+  await game.post(`/saves/${id}/turns`, { input: "I ask." });
+  expect(await journalOf(game, id)).toMatchObject({ npcSummaries: { Mara: "A smuggler, it turns out." } });
+
+  await game.post(`/saves/${id}/messages/2/revert`, {});
+  expect(await journalOf(game, id)).toMatchObject({ npcSummaries: { Mara: "The ferry's pilot." } });
+});
+
 test("the Journal of a new Save is empty, and a missing Save has none", async () => {
   const { game } = play();
   const id = await game.createSave();
 
-  expect(await journalOf(game, id)).toEqual({ summary: "", facts: [], npcs: [], portraits: [], fullLog: [] });
+  expect(await journalOf(game, id)).toEqual({ summary: "", facts: [], npcs: [], npcSummaries: {}, recentNpcs: [], portraits: [], fullLog: [] });
   expect((await game.get(`/saves/${crypto.randomUUID()}/journal`)).status).toBe(404);
 });
 
@@ -1383,6 +1419,8 @@ test("after a Revert, the Journal matches the restored Snapshot", async () => {
   expect(await journalOf(game, id)).toEqual({
     summary: "first-summary",
     ...pcKnown,
+    npcSummaries: {},
+    recentNpcs: ["Mara"],
     portraits: [],
     fullLog: [
       { id: 1, role: "player", text: "One." },
@@ -1988,21 +2026,16 @@ test("the Director's Notes response holds only the Notes", async () => {
   expect(JSON.parse(body)).toEqual({ notes: ["Ashley has green eyes"] });
 });
 
-test("Director's Notes reach the Narrator on later Turns, and a removed one stops", async () => {
-  const { game, prompts } = play(narration("Rain."), narration("Snow."), narration("Hail."));
+test("Director's Notes left in a Save never reach the Narrator, now the player can't see them", async () => {
+  const { game, prompts } = play(narration("Rain."), narration("Snow."));
   const id = await game.createSave();
   await addNote(game, id, "NOTE-BEFORE-ANY-TURN");
   await game.post(`/saves/${id}/turns`, { input: "I wait." });
   await addNote(game, id, "NOTE-AFTER-A-TURN");
   await game.post(`/saves/${id}/turns`, { input: "I wait." });
-  await game.delete(`/saves/${id}/notes/0`);
-  await game.post(`/saves/${id}/turns`, { input: "I wait." });
 
-  expect(contents(prompts[0])[0]).toContain("NOTE-BEFORE-ANY-TURN");
-  expect(contents(prompts[1])[0]).toContain('["NOTE-BEFORE-ANY-TURN","NOTE-AFTER-A-TURN"]');
-  expect(contents(prompts[2])[0]).toContain('["NOTE-AFTER-A-TURN"]');
-  // A Note is out-of-character guidance, so it goes in the system prompt rather than the story.
-  expect(contents(prompts[2])[0]).not.toContain("NOTE-BEFORE-ANY-TURN");
+  expect(JSON.stringify(prompts)).not.toContain("NOTE-");
+  expect(JSON.stringify(prompts)).not.toContain("directorsNotes");
 });
 
 test("Revert restores the Director's Notes as they were at that Message", async () => {
@@ -2119,8 +2152,8 @@ test("a Director's Note changed during a Turn in flight is kept", async () => {
   expect(await notes(game, id)).toEqual({ notes: ["Green eyes"] });
 });
 
-test("a replacement sees Director's Notes changed since the Turn, and they survive it", async () => {
-  const { game, prompts } = play(narration("Rain."), narration("Snow."), narration("Hail."));
+test("Director's Notes changed since the Turn survive a replacement", async () => {
+  const { game } = play(narration("Rain."), narration("Snow."), narration("Hail."));
   const id = await game.createSave();
   await addNote(game, id, "NOTE-TO-REMOVE");
   await game.post(`/saves/${id}/turns`, { input: "I wait." });
@@ -2129,13 +2162,9 @@ test("a replacement sees Director's Notes changed since the Turn, and they survi
 
   await regenerate(game, id, 2);
 
-  expect(contents(prompts[1])[0]).toContain('["NOTE-ADDED-SINCE"]');
-  expect(contents(prompts[1])[0]).not.toContain("NOTE-TO-REMOVE");
   expect(await notes(game, id)).toEqual({ notes: ["NOTE-ADDED-SINCE"] });
 
   await game.post(`/saves/${id}/turns`, { input: "I go on." });
-
-  expect(contents(prompts[2])[0]).toContain('["NOTE-ADDED-SINCE"]');
 
   // The Turn's player Message keeps the Notes from before the change.
   await game.post(`/saves/${id}/messages/1/revert`, {});
