@@ -6,8 +6,8 @@ import { LoadGame } from "./load";
 import { getSettings } from "./api";
 import { Menu } from "./menu";
 import { Play } from "./play";
-import { applyFontSize, SettingsScreen } from "./settings";
-import { NewGame } from "./wizard";
+import { applyLook, SettingsScreen } from "./settings";
+import { NewGame, Reveal } from "./wizard";
 
 const onHashChange = (listener: () => void) => {
   window.addEventListener("hashchange", listener);
@@ -16,7 +16,8 @@ const onHashChange = (listener: () => void) => {
 
 /** Screens live in the URL hash, so a reload keeps the place and the server only ever serves `/`. */
 function App() {
-  const [, screen, id, mark] = useSyncExternalStore(onHashChange, () => location.hash).split("/");
+  const [, screen, id, mark, worldChanged] = useSyncExternalStore(onHashChange, () => location.hash).split("/");
+  if (screen === "new" && id === "ready" && mark) return <Reveal key={mark} id={mark} worldChanged={!!worldChanged} />;
   if (screen === "play" && id) return <Play key={id} id={id} worldChanged={mark === "world-changed"} />;
   if (screen === "journal" && id) return <Journal key={id} id={id} />;
   if (screen === "inventory" && id) return <Inventory key={id} id={id} />;
@@ -26,7 +27,7 @@ function App() {
   return <Menu />;
 }
 
-// If this fails the app still works, at the default size.
-getSettings().then(applyFontSize, () => {});
+// If this fails the app still works, at the default size and the system's theme.
+getSettings().then(applyLook, () => {});
 
 createRoot(document.getElementById("root")!).render(<App />);

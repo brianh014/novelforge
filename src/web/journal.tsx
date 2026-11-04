@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { getImages, getJournal, getSave, type Journal as JournalContent, type Portrait, portraitUrl, type Save, type SceneImageInfo } from "./api";
+import { readable } from "./chat-style";
 import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, SceneImage } from "./play";
+import { Zoomable } from "./zoom";
 
 function Person({ id, name, portrait }: { id: string; name: string; portrait?: Portrait }) {
   return (
     <>
-      {portrait ? <img className="portrait" loading="lazy" src={portraitUrl(id, portrait)} alt={name} /> : <span className="portrait" />}
+      {portrait ? <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={name} /> : <span className="portrait" />}
       <span>{name}</span>
     </>
   );
@@ -50,6 +52,7 @@ export function Journal({ id }: { id: string }) {
   }
   if (!save || !journal) return <Book left={null}>{null}</Book>;
   const pcPortrait = journal.portraits.find(({ npc }) => npc === null);
+  const log = readable(journal.fullLog);
 
   return (
     <Book
@@ -62,6 +65,8 @@ export function Journal({ id }: { id: string }) {
                 <Person id={id} name={save.pc.name} portrait={pcPortrait} />
               </p>
             )}
+            <h2>World Brief</h2>
+            <p>{save.worldBrief}</p>
             <h2>Recent summary</h2>
             {journal.summary ? <p>{journal.summary}</p> : <p className="muted">Nothing to look back on yet.</p>}
             <h2>What {save.pc.name} knows</h2>
@@ -89,8 +94,8 @@ export function Journal({ id }: { id: string }) {
     >
       <h2>Full Log</h2>
       <div className="full-log" tabIndex={0} role="region" aria-label="Full Log">
-        {journal.fullLog.length === 0 && <p className="muted">The page is blank.</p>}
-        {journal.fullLog.map((message) => {
+        {log.length === 0 && <p className="muted">The page is blank.</p>}
+        {log.map((message) => {
           const image = images.find(({ messageId }) => messageId === message.id);
           return (
             <div key={message.id} className={`message ${message.role}`}>

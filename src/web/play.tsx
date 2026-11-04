@@ -1,6 +1,8 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, useEffect, useRef, useState } from "react";
 import {
   addNote,
+  coverUrl,
+  decideForMe,
   duplicateFrom,
   editNote,
   getMessages,
@@ -13,6 +15,7 @@ import {
   getSettings,
   getStatus,
   type Message,
+  playOpening,
   playTurn,
   type Portrait,
   portraitUrl,
@@ -25,9 +28,12 @@ import {
   setupProblem,
   type Status,
   statusWords,
+  type TurnResult,
 } from "./api";
-import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
+import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
+import { DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
+import { Zoomable } from "./zoom";
 
 // Text from a Turn cut short by leaving the screen, to put back in the box on return.
 const unsent = new Map<string, string>();
@@ -47,7 +53,7 @@ const WRITING = "The Narrator is writing…";
 export function SceneImage({ id, image }: { id: string; image: SceneImageInfo }) {
   return (
     <figure className="plate">
-      <img loading="lazy" src={imageUrl(id, image)} alt={image.caption ? `Scene Image: ${image.caption}` : "Scene Image"} />
+      <Zoomable lazy src={imageUrl(id, image)} alt={image.caption ? `Scene Image: ${image.caption}` : "Scene Image"} />
       {image.caption && <figcaption aria-hidden="true">{image.caption}</figcaption>}
     </figure>
   );
@@ -73,6 +79,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const [chosenBeat, setChosenBeat] = useState<number>();
   const [draft, setDraft] = useState(unsent.get(id) ?? "");
   const [turn, setTurn] = useState<TurnInProgress>();
+  const [deciding, setDeciding] = useState(false);
   // The response being rewritten, by id, so the box goes if the story moves on from it.
   const [rewriting, setRewriting] = useState<number>();
   const [feedback, setFeedback] = useState("");
@@ -102,6 +109,8 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       setStatus(status);
       setNotes(notes);
       if (action) playInput(action, messages);
+      // Without a working Narrator this would only fail, and the page already says what to fix.
+      else if (messages.length === 0 && settings && !setupProblem(settings)) openStory();
     }, (failure: Error) => setLoadError(failure.message));
     checkImages();
     return () => {
@@ -127,6 +136,23 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
     unsent.delete(id);
     setDraft("");
     playInput(draft, messages);
+  }
+
+  function openStory() {
+    run({ input: "", narration: "" }, [], (show, signal) => playOpening(id, show, signal));
+  }
+
+  async function decide() {
+    if (turn || deciding || draft.trim()) return;
+    setDeciding(true);
+    setError("");
+    try {
+      setDraft(await decideForMe(id, leaving.current.signal));
+      inputBox.current?.focus();
+    } catch (failure) {
+      if (!leaving.current.signal.aborted) setError((failure as Error).message);
+    }
+    setDeciding(false);
   }
 
   function replace(input: string) {
@@ -166,21 +192,30 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   }
 
   // `before` is passed in because the load effect runs this before `messages` is set.
-  async function playInput(input: string, before: Message[], replaces?: Message) {
+  function playInput(input: string, before: Message[], replaces?: Message) {
+    return run({ input, narration: "", replaces }, before, (show, signal) =>
+      replaces ? replaceResponse(id, replaces.id, input, show, signal) : playTurn(id, input, before.at(-1)?.id ?? 0, show, signal),
+    );
+  }
+
+  async function run(
+    started: TurnInProgress,
+    before: Message[],
+    play: (show: (narration: string) => void, signal: AbortSignal) => Promise<TurnResult>,
+  ) {
+    const { replaces } = started;
     let streamed = false;
     setError("");
     setAnnouncement("");
     setRewriting(undefined);
     setChosenBeat(undefined);
-    setTurn({ input, narration: "", replaces });
+    setTurn(started);
     const show = (narration: string) => {
       streamed = true;
-      setTurn({ input, narration, replaces });
+      setTurn({ ...started, narration });
     };
     const { signal } = leaving.current;
-    const result = await (replaces
-      ? replaceResponse(id, replaces.id, input, show, signal)
-      : playTurn(id, input, before.at(-1)?.id ?? 0, show, signal));
+    const result = await play(show, signal);
     setTurn(undefined);
     if ("messages" in result) {
       setFeedback("");
@@ -215,9 +250,14 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const latest = messages.at(-1);
   const replaceable = !turn && latest?.role === "narrator" ? latest : undefined;
   const scene = images.images.at(-1);
-  const told = turn?.replaces ? messages.slice(0, -1) : messages;
+  const told = readable(turn?.replaces ? messages.slice(0, -1) : messages);
   const staged = chatStyle === "stage" && (told.length > 0 || !!turn);
   const sceneImage = (image = scene) => image && <SceneImage id={id} image={image} />;
+  const cover = save.hasCover && (
+    <figure className="plate">
+      <Zoomable src={coverUrl(id)} alt={`Cover of ${pc}'s story`} />
+    </figure>
+  );
 
   const line = (beat: Beat, key: number) => {
     const portrait = portraits.find(({ npc }) => npc === beat.speaker);
@@ -226,35 +266,39 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
 
   const controls = (message: Message) =>
     !turn && (
-      <div className="row">
+      <div className="row actions">
         {message !== latest && (
           <button
-            className="quiet revert"
+            className="icon revert"
+            title="Revert to here"
             aria-label={`Revert to this Message: ${message.text.slice(0, 40)}`}
             onClick={() => setReverting(message)}
           >
-            Revert to here
+            {RevertIcon}
           </button>
         )}
         <button
-          className="quiet revert"
+          className="icon revert"
+          title="Duplicate from here"
           aria-label={`Duplicate from this Message: ${message.text.slice(0, 40)}`}
           onClick={() => duplicateHere(message)}
         >
-          Duplicate from here
+          {DuplicateIcon}
         </button>
         {message === replaceable && (
           <>
             <button
               ref={rewriteButton}
-              className="quiet"
+              className="icon"
+              title="Rewrite"
+              aria-label="Rewrite"
               aria-expanded={rewriting === message.id}
               onClick={() => startRewrite(message)}
             >
-              Rewrite
+              {RewriteIcon}
             </button>
-            <button className="quiet" onClick={() => replace("")}>
-              Regenerate
+            <button className="icon" title="Regenerate" aria-label="Regenerate" onClick={() => replace("")}>
+              {RegenerateIcon}
             </button>
           </>
         )}
@@ -267,6 +311,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       left={
         <>
           <h1 className="title">{pc}</h1>
+          {!staged && (sceneImage() || cover)}
           <div className="condition">
             <h2>Condition</h2>
             <p className="status">{statusWords(status)}</p>
@@ -286,16 +331,11 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
               </ul>
             )}
           </div>
-          <div className="world">
-            <h2>World Brief</h2>
-            <p>{save.worldBrief}</p>
-          </div>
           <a className="quiet" href="#/">Main Menu</a>
         </>
       }
       tabs={<BookTabs id={id} current="Story" />}
     >
-      {!staged && sceneImage()}
       {staged ? (
         <StageBox
           story={story}
@@ -312,11 +352,15 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       ) : (
         <div ref={story} className={`story chat-${chatStyle}`} tabIndex={0} role="region" aria-label="Story">
           <div>
+            {worldChanged && told.length < 2 && (
+              <p className="notice">{pc} didn't fit the world as it stood, so the world has changed to fit them.</p>
+            )}
             {messages.length === 0 && !turn && (
               <>
-                {worldChanged && <p className="notice">{pc} didn't fit the world as it stood, so the world has changed to fit them.</p>}
                 <p className="muted">{save.startingHook || "The page is blank."}</p>
-                <p className="muted">What does {pc} do first?</p>
+                <button className="quiet" onClick={openStory}>
+                  Have the Narrator open the story
+                </button>
               </>
             )}
             {told.map((message) => (
@@ -325,7 +369,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
                 {controls(message)}
               </div>
             ))}
-            {turn && !turn.replaces && (
+            {turn?.input && !turn.replaces && (
               <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>
             )}
             {/* Mounted before any text arrives, or screen readers would not announce it. */}
@@ -388,10 +432,21 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
             onKeyDown={sendOnEnter}
           />
         </label>
-        {/* aria-disabled, because a disabled button would drop keyboard focus at every Send. */}
-        <button className="action" aria-disabled={!!turn || !draft.trim()}>
-          Send
-        </button>
+        <div className="compose-actions">
+          <button
+            type="button"
+            className="quiet"
+            title={draft.trim() ? "Clear the box to have the Narrator suggest something" : undefined}
+            aria-disabled={!!turn || deciding || !!draft.trim()}
+            onClick={decide}
+          >
+            {deciding ? "Deciding…" : "Decide for me"}
+          </button>
+          {/* aria-disabled, because a disabled button would drop keyboard focus at every Send. */}
+          <button className="action" aria-disabled={!!turn || !draft.trim()}>
+            Send
+          </button>
+        </div>
       </form>
       {editingNotes && (
         <NotesDialog id={id} notes={notes} onChange={setNotes} onClose={() => setEditingNotes(false)} />

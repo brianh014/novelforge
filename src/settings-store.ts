@@ -27,6 +27,7 @@ export const SettingsUpdate = z
     comfyWorkflow: z.string(),
     chatStyle: z.enum(["script", "prose", "bubbles", "stage"]),
     fontSize: z.enum(["small", "medium", "large"]),
+    theme: z.enum(["system", "light", "dark"]),
   })
   .partial();
 
@@ -53,6 +54,7 @@ const defaults = {
   comfyWorkflow: "",
   chatStyle: "prose",
   fontSize: "medium",
+  theme: "system",
 } satisfies SettingsChange;
 
 export type SettingsStore = ReturnType<typeof settingsStore>;

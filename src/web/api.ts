@@ -87,6 +87,14 @@ export const getImages = (id: string) => request<SceneImages>(`/saves/${id}/imag
 
 export const imageUrl = (id: string, { messageId }: SceneImageInfo) => `/saves/${id}/messages/${messageId}/image`;
 
+export const coverUrl = (id: string) => `/saves/${id}/cover`;
+
+/** Answers only once the cover is done. `version` makes a regenerated world's cover a new address. */
+export const worldCoverUrl = (id: string, version: number) => `/worlds/${id}/cover?v=${version}`;
+
+export const decideForMe = (id: string, signal?: AbortSignal) =>
+  request<{ text: string }>(`/saves/${id}/decide`, { ...jsonBody({}), signal }).then(({ text }) => text);
+
 export const portraitUrl = (id: string, portrait: Portrait) => `/saves/${id}/portraits/${portrait.id}`;
 
 export const getInventory = (id: string) => request<Inventory>(`/saves/${id}/inventory`);
@@ -163,6 +171,10 @@ export const playTurn = (
   show: (narration: string) => void,
   signal: AbortSignal,
 ) => streamTurn(id, "turns", { input }, input, after, "Send it again to retry.", show, signal);
+
+/** The story's first Message. A failure hands back no input, as the player wrote nothing. */
+export const playOpening = (id: string, show: (narration: string) => void, signal: AbortSignal) =>
+  streamTurn(id, "opening", {}, "", 0, "Try again.", show, signal);
 
 /** Rewrite, with feedback, or Regenerate. A replacement commits under a new id, so `messageId` works as `after` does. */
 export const replaceResponse = (

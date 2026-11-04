@@ -59,14 +59,14 @@ const postPc = (worldId: string, inventory: string[] = [], startingHook = "") =>
 
 test("the wizard's PC gets a portrait without holding up the Save", async () => {
   const script = scriptedTextProvider(generated(), sheet(), noConflict);
-  const images = scriptedImages(new Promise<Uint8Array>(() => {}));
+  const images = scriptedImages(new Promise<Uint8Array>(() => {}), new Promise<Uint8Array>(() => {}));
   game = startGame(savesDir, script.textProvider, undefined, undefined, images.imageAdapter);
   await game.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
 
   const response = await postPc(await newWorld());
 
   expect(response.status).toBe(201);
-  expect(images.payloads[0]!.prompt).toContain("Tall, one grey eye.");
+  expect(images.payloads.map(({ prompt }) => prompt).join()).toContain("Tall, one grey eye.");
   await game.delete(`/saves/${((await response.json()) as { id: string }).id}`);
 });
 
@@ -323,7 +323,7 @@ test("the player can read their own Starting Hook, to know where the story opens
   expect(await game.get(`/saves/${id}`).then((r) => r.json())).toMatchObject({ startingHook: "A body washes ashore" });
 });
 
-const emptyPc = { name: "", background: "", physicalTraits: "", skills: "", personality: "", other: "", inventory: "" };
+const emptyPc = { name: "", background: "", physicalTraits: "", skills: "", other: "", inventory: "" };
 const pickBody = (changes = {}) => ({
   theme: "Western",
   worldBrief: "A drowned city",
@@ -338,7 +338,6 @@ test("Pick for me writes only the empty PC fields, from the player's choices and
       background: "Picked.",
       physicalTraits: "T",
       skills: "S",
-      personality: "P",
       other: "O",
       inventory: "rope\ncoat",
     }),
@@ -351,7 +350,6 @@ test("Pick for me writes only the empty PC fields, from the player's choices and
     background: "Picked.",
     physicalTraits: "T",
     skills: "S",
-    personality: "P",
     other: "O",
     inventory: "rope\ncoat",
   });
@@ -366,7 +364,7 @@ test("Pick for me writes only the empty PC fields, from the player's choices and
 });
 
 test("Pick for me needs every empty field back, and can fail and be retried", async () => {
-  const whole = { background: "B", physicalTraits: "T", skills: "S", personality: "P", other: "O", inventory: "I" };
+  const whole = { background: "B", physicalTraits: "T", skills: "S", other: "O", inventory: "I" };
   const { other, ...partial } = whole;
   play(JSON.stringify(partial), JSON.stringify(partial), JSON.stringify(partial), JSON.stringify(whole));
   const pick = () => game.post("/pc/pick", pickBody({ name: "Ash" }));

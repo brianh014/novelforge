@@ -1,60 +1,65 @@
 @font-face {
-  font-family: "EB Garamond";
-  src: url("./fonts/eb-garamond-latin-400-normal.woff2") format("woff2");
+  font-family: "Libre Caslon Text";
+  src: url("./fonts/libre-caslon-text-latin-400-normal.woff2") format("woff2");
   font-display: swap;
 }
 @font-face {
-  font-family: "EB Garamond";
-  font-style: italic;
-  src: url("./fonts/eb-garamond-latin-400-italic.woff2") format("woff2");
+  font-family: "Libre Caslon Text";
+  font-weight: 700;
+  src: url("./fonts/libre-caslon-text-latin-700-normal.woff2") format("woff2");
   font-display: swap;
 }
 @font-face {
-  font-family: "IM Fell English";
-  src: url("./fonts/im-fell-english-latin-400-normal.woff2") format("woff2");
-  font-display: swap;
-}
-@font-face {
-  font-family: "IM Fell English SC";
-  src: url("./fonts/im-fell-english-sc-latin-400-normal.woff2") format("woff2");
+  font-family: "Libre Caslon Display";
+  src: url("./fonts/libre-caslon-display-latin-400-normal.woff2") format("woff2");
   font-display: swap;
 }
 
 :root {
   color-scheme: light dark;
-  --desk: light-dark(#bccbc6, #0b1215);
-  --page: light-dark(#edf2eb, #17222a);
-  --ink: light-dark(#1b2a33, #dce5e2);
-  --muted: light-dark(#536769, #93a8aa);
-  --line: light-dark(#bdcbc4, #2e3f47);
-  --accent: light-dark(#176660, #74c8b8);
-  --on-accent: light-dark(#ffffff, #0d1a1c);
-  --soft: light-dark(#dbe6de, #203039);
-  --error: light-dark(#9c3b22, #eda78f);
-  --display: "IM Fell English", "Hoefler Text", Garamond, Georgia, serif;
-  --body: "EB Garamond", Garamond, "Hoefler Text", Georgia, serif;
-  --label: "IM Fell English SC", Garamond, Georgia, serif;
-  --tab-width: 38px;
-  --reading-size: 18px;
-}
-
-:root[data-font-size="small"] {
+  --desk: light-dark(#23382c, #0d1510);
+  --page: light-dark(#eadfc5, #24221a);
+  --ink: light-dark(#25221a, #e4dcc4);
+  --muted: light-dark(#5a5340, #aca389);
+  --line: light-dark(#b4a581, #48443a);
+  --accent: light-dark(#23503e, #93c3a2);
+  --on-accent: light-dark(#f2ead6, #10190f);
+  --soft: light-dark(#dccda9, #2f2c22);
+  --error: light-dark(#8f2f1c, #eda78f);
+  --foxing: light-dark(rgb(120 80 30 / 0.12), rgb(214 150 80 / 0.06));
+  --gutter: light-dark(rgb(40 25 5 / 0.45), rgb(0 0 0 / 0.6));
+  --display: "Libre Caslon Display", "Hoefler Text", Georgia, serif;
+  --body: "Libre Caslon Text", "Hoefler Text", Georgia, serif;
+  --label: "Libre Caslon Text", Georgia, serif;
   --reading-size: 16px;
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-font-size="small"] {
+  --reading-size: 14.5px;
+}
+
 :root[data-font-size="large"] {
-  --reading-size: 21px;
+  --reading-size: 18.5px;
 }
 
 * {
   box-sizing: border-box;
+  scrollbar-color: var(--line) transparent;
 }
 
 body {
   margin: 0;
   background: var(--desk);
   color: var(--ink);
-  font: var(--reading-size)/1.45 var(--body);
+  font: var(--reading-size)/1.5 var(--body);
 }
 
 p,
@@ -87,37 +92,52 @@ a {
 .desk {
   height: 100vh;
   height: 100dvh;
-  padding: 24px calc(var(--tab-width) + 24px) 24px 24px;
+  padding: 10px;
 }
 
 .book {
   position: relative;
-  max-width: 1240px;
+  max-width: 1500px;
   height: 100%;
   margin-inline: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  background: var(--page);
-  box-shadow: 0 6px 22px rgb(10 30 30 / 0.32);
+  background: var(--page) radial-gradient(circle at 8% 14%, var(--foxing), transparent 26%)
+    no-repeat;
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.45);
 }
 
+/* The left page holds the picture, so it stays wide enough to show one whole. */
 .book.narrow-left {
-  grid-template-columns: clamp(240px, 30%, 380px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
 }
 
 .page {
   min-width: 0;
   min-height: 0;
-  padding: 26px 34px;
+  padding: 14px 22px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   overflow: auto;
 }
 
+/* The gutter: each page curves down into the spine. */
 .page.left {
-  border-right: 1px solid var(--line);
-  background-image: linear-gradient(to left, var(--soft), transparent 40px);
+  box-shadow: inset -22px 0 22px -18px var(--gutter);
+}
+
+.page.right {
+  box-shadow: inset 22px 0 22px -18px var(--gutter);
+}
+
+/* Clears the bookmarks. */
+.book:has(.tabs) .page.right {
+  padding-top: 42px;
+}
+
+.page.left[inert] {
+  opacity: 0.6;
 }
 
 .page.left > .quiet:last-child {
@@ -125,7 +145,7 @@ a {
 }
 
 .big {
-  font: 400 44px/1.1 var(--display);
+  font: 400 38px/1.1 var(--display);
   text-wrap: balance;
 }
 
@@ -139,39 +159,44 @@ a {
 }
 
 h2 {
-  font: 400 19px var(--label);
+  font: 700 15px var(--label);
   color: var(--accent);
 }
 
 .muted {
   color: var(--muted);
-  font-style: italic;
 }
 
-/* Bookmark tabs, and the ribbon they become on a phone */
+/* Bookmark ribbons, hanging from the top edge of the book */
 
 .tabs {
   position: absolute;
-  top: 34px;
-  right: calc(var(--tab-width) * -1);
-  display: grid;
-  gap: 8px;
-  width: var(--tab-width);
+  z-index: 1;
+  top: 0;
+  right: 22px;
+  display: flex;
+  gap: 3px;
 }
 
 .tabs a {
-  writing-mode: vertical-rl;
-  padding: 14px 8px;
-  border: 0;
-  background: var(--soft);
-  color: var(--ink);
-  font: 400 16px var(--label);
+  padding: 3px 10px 12px;
+  background: var(--muted);
+  color: var(--page);
+  font: 400 14px var(--label);
   text-decoration: none;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 7px), 0 100%);
 }
 
 .tabs [aria-current] {
+  padding-bottom: 18px;
   background: var(--accent);
   color: var(--on-accent);
+}
+
+/* The ribbon's clip would cut the usual ring away. */
+.tabs a:focus-visible {
+  outline-color: currentColor;
+  outline-offset: -4px;
 }
 
 /* Controls */
@@ -182,12 +207,12 @@ button {
 }
 
 .action {
-  padding: 6px 18px;
-  min-height: 40px;
+  padding: 5px 14px;
+  min-height: 36px;
   border: 0;
   background: var(--accent);
   color: var(--on-accent);
-  font: 400 18px var(--label);
+  font: 400 15px var(--label);
   cursor: pointer;
 }
 
@@ -218,7 +243,7 @@ button {
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px 20px;
+  gap: 6px 14px;
 }
 
 .menu {
@@ -227,10 +252,10 @@ button {
 }
 
 .menu a {
-  padding: 14px 0;
+  padding: 10px 0;
   border-bottom: 1px dotted var(--muted);
   color: var(--ink);
-  font: 400 28px var(--display);
+  font: 400 26px var(--display);
   text-decoration: none;
 }
 
@@ -240,7 +265,7 @@ button {
 
 .fields {
   display: grid;
-  gap: 18px;
+  gap: 10px;
   margin-block: auto;
 }
 
@@ -388,7 +413,7 @@ input {
 .fields .chips label {
   display: flex;
   align-items: center;
-  min-height: 40px;
+  min-height: 32px;
   padding: 2px 0;
   border-bottom: 1px dotted var(--muted);
   color: var(--ink);
@@ -403,7 +428,7 @@ input {
 .fields .chips label:has(:checked) {
   border-bottom-color: var(--accent);
   color: var(--accent);
-  font-style: italic;
+  font-weight: 700;
 }
 
 .chips label:has(:focus-visible) {
@@ -447,43 +472,115 @@ a.action {
   margin-inline: auto;
 }
 
-/* A Scene Image is a tipped-in plate: small enough to leave the page to the story. */
+/* A picture is tipped in whole: its height follows its shape, so nothing is ever cut off. */
 
 .plate {
   flex: none;
   margin: 0;
   display: grid;
-  gap: 4px;
+  gap: 3px;
+}
+
+.plate[hidden] {
+  display: none;
+}
+
+.zoom {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
 }
 
 .plate img {
   display: block;
   width: 100%;
-  height: clamp(120px, 28vh, 236px);
-  padding: 5px;
+  height: auto;
+  max-height: 60vh;
+  object-fit: contain;
   border: 1px solid var(--line);
-  object-fit: cover;
+  background: light-dark(#26221a, #12110c);
 }
 
 .plate figcaption {
   color: var(--muted);
-  font-size: 15px;
-  font-style: italic;
+  font-size: 13.5px;
   text-align: center;
   overflow-wrap: anywhere;
+}
+
+.plate.cover img {
+  max-height: 58vh;
+}
+
+.plate.reveal {
+  margin-block: auto;
+}
+
+.plate.reveal img {
+  max-height: 80vh;
 }
 
 .full-log .plate {
   margin-block: 6px 10px;
 }
 
-.full-log .plate img {
-  height: auto;
-  aspect-ratio: 16 / 9;
+.viewer {
+  width: min(1100px, calc(100vw - 32px));
+  padding: 10px;
+}
+
+.viewer img {
+  display: block;
+  width: 100%;
+  max-height: calc(100dvh - 110px);
+  object-fit: contain;
+}
+
+/* Fills the page where the wizard's controls were. */
+.working {
+  margin-block: auto;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+.progress {
+  width: min(320px, 80%);
+  height: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.progress::after {
+  content: "";
+  display: block;
+  width: 40%;
+  height: 100%;
+  background: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .progress::after {
+    animation: pass 1.6s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes pass {
+  from {
+    transform: translateX(-20%);
+  }
+
+  to {
+    transform: translateX(170%);
+  }
 }
 
 .message {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .message p,
@@ -506,14 +603,12 @@ a.action {
 
 .chat-script .told {
   color: var(--muted);
-  font-style: italic;
 }
 
 .chat-script .message.player p,
 .chat-bubbles .message.player p {
   padding-left: 0;
   border-left: 0;
-  font-style: normal;
 }
 
 .chat-bubbles .told {
@@ -589,9 +684,13 @@ a.action {
   overflow: hidden;
 }
 
+.stage .zoom {
+  height: 100%;
+}
+
 .stage .plate img {
   height: 100%;
-  padding: 0;
+  max-height: none;
   border: 0;
 }
 
@@ -628,10 +727,6 @@ a.action {
   color: var(--on-accent);
 }
 
-.beat.player p {
-  font-style: italic;
-}
-
 .stage-foot {
   flex: none;
   justify-content: flex-start;
@@ -646,9 +741,9 @@ a.action {
 }
 
 .message.player p {
-  padding-left: 1.2em;
+  padding-left: 0.8em;
   border-left: 2px solid var(--line);
-  font-style: italic;
+  color: var(--muted);
 }
 
 .journal {
@@ -681,6 +776,11 @@ a.action {
   align-items: center;
 }
 
+.person .zoom {
+  flex: none;
+  width: auto;
+}
+
 .portrait {
   flex: none;
   width: 52px;
@@ -704,8 +804,28 @@ a.action {
 .saves li {
   display: grid;
   gap: 4px;
-  padding-block: 12px;
+  padding-block: 8px;
   border-bottom: 1px dotted var(--muted);
+}
+
+.saves li.with-cover {
+  grid-template-columns: 74px minmax(0, 1fr);
+  column-gap: 12px;
+}
+
+.saves .with-cover > .zoom {
+  grid-row: span 5;
+  align-self: start;
+}
+
+.saves .with-cover > .zoom img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+}
+
+.saves .with-cover > :not(.zoom):not(dialog) {
+  grid-column: 2;
 }
 
 .saves .row {
@@ -759,10 +879,6 @@ a.action {
 .items button:hover,
 .items [aria-current] {
   color: var(--accent);
-}
-
-.items [aria-current] {
-  font-style: italic;
 }
 
 /* Stuck to the page's foot, so a long list can't hide the box or its Send. */
@@ -828,21 +944,55 @@ a.action {
   justify-content: flex-start;
 }
 
-.message .row .quiet,
 .stage-box .quiet,
 .note-list .quiet {
   min-height: 32px;
+}
+
+/* Floated, so these never add a row of space between Messages, and appearing on hover moves no text. */
+.message .actions {
+  float: right;
+  margin-top: 0;
+  gap: 0;
+}
+
+.story > div::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+.icon {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon:hover,
+.icon[aria-expanded="true"] {
+  color: var(--accent);
+}
+
+.icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .full-log {
   flex: 1;
   min-height: 0;
   overflow: auto;
-}
-
-.revert {
-  color: var(--muted);
-  font-size: 15px;
 }
 
 @media (hover: hover) {
@@ -858,7 +1008,6 @@ a.action {
 
 .waiting {
   color: var(--muted);
-  font-style: italic;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -895,6 +1044,18 @@ a.action {
   gap: 12px;
 }
 
+.compose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 12px;
+}
+
+a.begin {
+  align-self: flex-start;
+}
+
 .compose label {
   flex: 1;
   min-width: 0;
@@ -905,7 +1066,6 @@ a.action {
   display: block;
   max-height: 30vh;
   field-sizing: content;
-  font-style: italic;
 }
 
 dialog {
@@ -915,7 +1075,7 @@ dialog {
   border: 1px solid var(--line);
   background: var(--page);
   color: var(--ink);
-  box-shadow: 0 6px 22px rgb(10 30 30 / 0.32);
+  box-shadow: 0 6px 22px rgb(0 0 0 / 0.45);
 }
 
 dialog[open] {
@@ -924,7 +1084,7 @@ dialog[open] {
 }
 
 dialog::backdrop {
-  background: rgb(10 30 30 / 0.5);
+  background: rgb(10 8 3 / 0.7);
 }
 
 dialog blockquote {
@@ -963,8 +1123,14 @@ dialog blockquote {
     flex: 1;
   }
 
+  /* Smaller on a phone, but still whole, so the story keeps its room. */
   .plate img {
-    height: clamp(96px, 24vh, 180px);
+    max-height: 26dvh;
+  }
+
+  .plate.cover img,
+  .plate.reveal img {
+    max-height: 60dvh;
   }
 
   /* The Journal, Inventory, Load Game and Settings are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
@@ -985,24 +1151,17 @@ dialog blockquote {
     display: none;
   }
 
-  /* Clears the tabs, which are stuck to the same edge. Focus needs the room too, coming from the left page. */
-  .book:has(.items) .ask {
-    bottom: 44px;
-    scroll-margin-bottom: 44px;
-  }
-
-  .book:has(.full-log, .items, .settings) .tabs {
-    position: sticky;
-    bottom: 0;
-    margin-top: auto;
-  }
-
   .narrow-left .page.left {
     flex-flow: row wrap;
     align-items: baseline;
     justify-content: space-between;
     gap: 2px 14px;
     padding-block: 8px;
+  }
+
+  .narrow-left .plate {
+    order: 2;
+    flex-basis: 100%;
   }
 
   /* A line under the name and menu link, as the left page has no room for its heading here. */
@@ -1017,7 +1176,6 @@ dialog blockquote {
     display: none;
   }
 
-  .narrow-left .world,
   .notes ul {
     display: none;
   }
@@ -1042,30 +1200,32 @@ dialog blockquote {
     font-size: 36px;
   }
 
+  /* Ribbons stay in reach as a long page scrolls, over the top of the first page. */
   .tabs {
-    position: static;
-    width: auto;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0;
+    position: sticky;
+    order: -1;
+    align-self: flex-end;
+    height: 0;
+    margin-right: 10px;
+    right: auto;
   }
 
   .tabs a {
-    writing-mode: horizontal-tb;
-    min-height: 44px;
-    padding: 10px 0;
-    background: var(--accent);
-    color: var(--on-accent);
-    text-align: center;
+    align-self: flex-start;
+    min-height: 40px;
+    padding: 8px 8px 16px;
+    font-size: 13px;
   }
 
   .tabs [aria-current] {
-    text-decoration: underline;
-    text-underline-offset: 4px;
+    padding-bottom: 20px;
   }
 
-  /* Touching tabs share one colour, so the usual ring would vanish against the next one. */
-  .tabs a:focus-visible {
-    outline-color: var(--on-accent);
-    outline-offset: -4px;
+  .book:has(.tabs) .page.left {
+    padding-top: 48px;
+  }
+
+  .book:has(.tabs) .page.right {
+    padding-top: 16px;
   }
 }

@@ -29,6 +29,13 @@ _Avoid_: Message (when the input-and-response pair is meant)
 **Scene**:
 A continuous place and situation in the story. A Scene can have several Scene Images over time, such as when its cast changes.
 
+**Cover**:
+The book-cover art of a story, generated with its world from what the player can read, and kept in the Save through every Revert.
+_Avoid_: Title image, world image
+
+**Opening**:
+The Narrator's first Message, which brings the player up to speed before they act. It is a first Turn whose stored player Message the story never shows.
+
 **Scene Image**:
 A generated image showing the current moment of a Scene.
 

@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 
-export function Book(props: { left: ReactNode; children: ReactNode; tabs?: ReactNode; narrowLeft?: boolean }) {
+export function Book(props: { left: ReactNode; children: ReactNode; tabs?: ReactNode; narrowLeft?: boolean; lockLeft?: boolean }) {
   return (
     <main className="desk">
       <div className={props.narrowLeft ? "book narrow-left" : "book"}>
-        <section className="page left">{props.left}</section>
+        <section className="page left" inert={props.lockLeft}>{props.left}</section>
         <section className="page right">{props.children}</section>
         {props.tabs}
       </div>

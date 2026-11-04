@@ -197,7 +197,7 @@ The Journal is built only from the PC-known section of the Snapshot, which the N
 
 ### Images
 
-A Scene Image is displayed at the top of the screen above the chat (visual novel style). Previous Scene Images can be used as a reference for the new image, like maybe a character in the image changed, but we want the background to be the same.
+A Scene Image is displayed whole on the left page of the book, beside the story, and any image opens larger when clicked. In the Stage box Chat style it sits behind the story instead. Previous Scene Images can be used as a reference for the new image, like maybe a character in the image changed, but we want the background to be the same.
 
 The user may be using a paid API, so need to respect the volume of images created. Settings has a toggle to disable generating images at any time, and the game shows a running count of images generated this session. There is no hard limit.
 
@@ -241,6 +241,7 @@ Per install:
   * Model Instructions \- allows the user to add an [agents.md](http://agents.md) style instruction. Blank by default
 * UI Settings
   * Chat style \- Script, Prose (the default), Bubbles or Stage box, from the UI options report. It changes how the Story shows Messages, not the Full Log, which stays exactly as written
+  * Theme - Match this device (the default), Light or Dark
   * Font size
 
 API keys live in the install's settings file and are never written to a Save, because Saves are made to be shared.
@@ -323,7 +324,7 @@ A fake LLM provider and a controllable dice roller let Turns be tested determini
 
 ## UI/UX
 
-Clean stylized look that matches a story telling visual novel and that is responsive to screen size.
+An old book, open on a desk: aged paper, ink browns and bottle green, the story on the right page, and bookmarks hanging from the top right. It is responsive to screen size, with a dark version of the same palette.
 
 **Before any UI code is written, the agent must create an HTML report of UI options.** It shows 3 distinct visual directions, each mocking up the main game screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story. It also shows the Chat style options. The player-facing UI contains no Check elements. The mockups are throwaway, and the user can pick one direction or mix parts.
 

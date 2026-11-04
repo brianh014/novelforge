@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
 import { type ImagePipeline, movedScene, type Scene, visibleNpcs } from "./image-pipeline";
-import { assemblePrompt, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
-import type { Message, SaveStore } from "./save-store";
+import { assemblePrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
+import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, type State, StateOperation } from "./state-applier";
 
@@ -114,6 +114,7 @@ export async function playTurn(
   input: string,
   signal: AbortSignal,
   emit: TurnEvents = () => {},
+  mayCheck = true,
 ) {
   const basedOn = saves.latestMessageId(id);
   const prompt = assemblePrompt({
@@ -128,10 +129,22 @@ export async function playTurn(
     prompt,
     input,
     refusal: "The Narrator refused this message. Edit it and try again.",
-    rollCheck: (request) => resolveCheck(request, dice, nearMissMargin),
+    rollCheck: mayCheck ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
     committed: (messageId, scene) => images.sceneChanged(id, messageId, scene),
   });
+}
+
+/** The Narrator's first Message, which the player has done nothing to earn a Check in. A story already open is stale. */
+export function playOpening(
+  saves: SaveStore,
+  engine: Parameters<typeof playTurn>[1],
+  id: string,
+  signal: AbortSignal,
+  emit?: TurnEvents,
+) {
+  if (saves.latestMessageId(id) !== 0) throw new StaleTurn();
+  return playTurn(saves, engine, id, OPENING_INPUT, signal, emit, false);
 }
 
 /** Rewrite, when there is `feedback`, or Regenerate. Takes no Dice: the Turn's stored Check stands, and a Turn without one stays without. */

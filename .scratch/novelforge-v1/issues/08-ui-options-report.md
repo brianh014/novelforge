@@ -8,7 +8,7 @@
 
 - [x] Each direction mocks up the main game screen, a wizard step, the Journal and the inventory
 - [x] Each mockup is shown at desktop and phone widths
-- [ ] Mockups use real sample Turn output from the game
+- [x] Mockups use real sample Turn output from the game
 - [x] The report shows Chat style options, which the spec leaves undefined
 - [x] No mockup contains dice, difficulty or Check elements
 - [x] Mockups are throwaway and aren't carried into the app
@@ -22,3 +22,4 @@
 - Chat styles 3 and 4 need each spoken line on its own `[Name]:` line, as in the spec's example. The Narrator prompt doesn't ask for that yet, so if either ships, ticket 22 needs a prompt change.
 - `scene_changed` and `visual_description` aren't in the code yet, so the sample leaves them out. Scene Images and portraits are drawn stand-ins.
 - **Choice (2026-11-03): Direction B, Folio, for all parts (B1 to B4).** The user said "I like B the most". Chat style wasn't chosen separately, so the default is Prose, the style B1 shows. Which other Chat styles ship is still open for ticket 22.
+- **Real output, 2026-11-04.** The old book report for ticket 23 uses real Turn text, Journal state and images. Its inventory items are placeholders, as the test character owned nothing. The Direction B choice stays until the user picks from that report.

@@ -1,3 +1,4 @@
+import { OPENING_INPUT } from "../prompt-assembler";
 import type { Message, Settings } from "./api";
 
 export type ChatStyle = Settings["chatStyle"];
@@ -7,6 +8,10 @@ export type TurnInProgress = { input: string; narration: string; replaces?: Mess
 export type StageBeat = { beat: Beat; message?: Message; number: number; of: number };
 
 const SPOKEN_LINE = /^\[([^[\]]+)\]:\s*(.*)$/;
+
+/** The story as the player reads it, without the stored Message that opened it. */
+export const readable = (messages: Message[]) =>
+  messages.filter(({ id, role, text }) => !(id === messages[0]?.id && role === "player" && text === OPENING_INPUT));
 
 /** Anything that isn't a whole `[Name]:` tag, including one still streaming, is narration. */
 export function messageBeats({ role, text }: Pick<Message, "role" | "text">): Beat[] {
@@ -28,7 +33,8 @@ const numbered = (beats: Beat[], message?: Message): StageBeat[] =>
 export function stageBeats(told: Message[], turn?: TurnInProgress) {
   const beats = told.flatMap((message) => numbered(messageBeats(message), message));
   if (!turn) return beats;
-  if (!turn.replaces) beats.push(...numbered(messageBeats({ role: "player", text: turn.input })));
+  // No input means the Narrator is opening the story.
+  if (!turn.replaces && turn.input) beats.push(...numbered(messageBeats({ role: "player", text: turn.input })));
   return [...beats, ...numbered(messageBeats({ role: "narrator", text: turn.narration }))];
 }
 

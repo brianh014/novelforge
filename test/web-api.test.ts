@@ -345,7 +345,7 @@ test("the wizard's calls carry a world from Pick for me to a Save", async () => 
   const choices = { theme: "Steampunk", worldBrief, startingHook: "" };
   const { id: world, overview } = await generateWorld(choices);
   const regenerated = await regenerateWorld(world, choices);
-  const picked = await pickPc(choices, { name: "Ash", background: "B", physicalTraits: "T", skills: "", personality: "P", other: "O", inventory: "coat" });
+  const picked = await pickPc(choices, { name: "Ash", background: "B", physicalTraits: "T", skills: "", other: "O", inventory: "coat" });
   const { id, worldChanged } = await createSave({ worldId: world, worldBrief, artStyle: "Ink", startingHook: "", pc: { name: "Ash" }, inventory: ["coat"] });
 
   expect(worldBrief).toBe("A city on a whale.");

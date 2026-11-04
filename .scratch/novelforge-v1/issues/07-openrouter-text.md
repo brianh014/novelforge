@@ -14,11 +14,11 @@
 - [x] Settings and API keys are stored per install and never in a Save
 - [x] Model Instructions are included in prompts
 - [x] The model can change between Turns of a Save
-- [ ] A manual run with a real OpenRouter model plays several Turns, including a Check
+- [x] A manual run with a real OpenRouter model plays several Turns, including a Check
 
 ## Comments
 
-- **The manual run is not done, so its box stays unticked.** A key became available, but the run was stopped by a permission denial before it started. Every test uses a local fake server. The only real OpenRouter call was one `GET /models`, which confirmed the shape: 401 models, 334 listing `structured_outputs`, and `openai/gpt-4o-mini` among them. No chat request has reached OpenRouter, so strict schema acceptance, streaming and Check narration are unproven against a real model.
+- **Manual run passed (2026-11-04), see the last comment.** Before that, every test used a local fake server, and the only real OpenRouter call was one `GET /models`, which confirmed the shape: 401 models, 334 listing `structured_outputs`, and `openai/gpt-4o-mini` among them. No chat request has reached OpenRouter, so strict schema acceptance, streaming and Check narration are unproven against a real model.
 - To run it by hand from the repo root, in Git Bash. It uses `openai/gpt-4o-mini`, and `settings.json` is gitignored:
 
   ```bash
@@ -55,3 +55,5 @@
 - Result narration streams before commit, and a client that leaves commits nothing, so a player could read a bad result, disconnect and send again for a new roll. Decided by the user (2026-11-03): leave it, cheating this way doesn't matter.
 - A Text Provider call has no timeout of its own, so a hung provider waits on Bun's fetch defaults, which were not measured. With no model set, a Turn fails as retryable and only the server log says why.
 - OpenRouter may reposition mid-array system entries for some providers. The array is sent in order, and how each upstream treats it was not checked.
+- **Manual run, 2026-11-04.** The user entered the key in Settings and played one Turn in the app. A REST run on a test Save then played seven more on `deepseek/deepseek-v4.1-flash-1017` and one on `openai/gpt-4o-mini`. Every Turn ended in `event: done`. The third forced a Check (Very Hard, roll 4, failure, plain) and its narration matched the failure. No server log held `Schema mode rejected`, so strict schema mode worked on both models. The model wrote spoken lines as `[Name]:`, and status, facts, plot threads, a new NPC and a World Bible entry all updated.
+- **Narration does stream.** With a Bun client, one Turn's first event came at 4.2s and the last at 8.0s, and client times matched the server's. Upstream reads were spread across 1.0s to 7.5s. A Node client run through the context-mode sandbox showed every event at the same instant, which is that client's buffering and not the app. Setting `Accept-Encoding: identity` changed nothing, so no code changed. Browser delivery was not timed.

@@ -1,6 +1,7 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { deleteSave, duplicateSave, importSave, type ListedSave, listSaves } from "./api";
+import { coverUrl, deleteSave, duplicateSave, importSave, type ListedSave, listSaves } from "./api";
 import { Book } from "./menu";
+import { Zoomable } from "./zoom";
 
 const lastChanged = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
@@ -64,7 +65,8 @@ export function LoadGame() {
         {saves?.map((save) => {
           const name = "unreadable" in save ? "Unreadable Save" : save.pc.name;
           return (
-            <li key={save.id}>
+            <li key={save.id} className={"hasCover" in save && save.hasCover ? "with-cover" : undefined}>
+              {"hasCover" in save && save.hasCover && <Zoomable lazy src={coverUrl(save.id)} alt={`Cover of ${name}'s story`} />}
               <p className="title">{name}</p>
               {"unreadable" in save ? (
                 <p className="muted">This file can't be opened. A newer version of NovelForge may have made it.</p>

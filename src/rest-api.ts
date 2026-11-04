@@ -19,9 +19,9 @@ import {
 } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textModels } from "./text-provider";
-import { playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
+import { playOpening, playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
-import { fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World } from "./world-creation";
+import { decideForPc, fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World, type WorldChoices } from "./world-creation";
 
 const NewSaveRequest = z.object({
   worldBrief: z.string().min(1),
@@ -36,6 +36,7 @@ const WorldRequest = z.object({
   theme: z.string().trim().min(1),
   worldBrief: z.string().trim().min(1),
   startingHook: z.string().trim(),
+  artStyle: z.string().optional(),
 });
 
 const PickRequest = z.object({
@@ -142,8 +143,16 @@ export function startServer(options: {
   const images = imagePipeline(saves, { openrouter: options.imageAdapter, local }, settings);
   const engine = { ...options, images };
   // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
-  // shortcut: an abandoned world stays until the app restarts, evict them if that ever adds up.
+  // shortcut: an abandoned world and its cover stay until the app restarts, evict them if that ever adds up.
   const worlds = new Map<string, World>();
+  const covers = new Map<string, { bytes: Promise<Uint8Array<ArrayBuffer> | undefined>; stop: AbortController }>();
+
+  /** In the background, so a slow image never holds up the world, and a regenerated world's cover replaces the unfinished one. */
+  function startCover(id: string, { theme, artStyle }: WorldChoices, overview: string) {
+    covers.get(id)?.stop.abort();
+    const stop = new AbortController();
+    covers.set(id, { stop, bytes: images.drawCover({ theme, overview, artStyle }, stop.signal) as Promise<Uint8Array<ArrayBuffer> | undefined> });
+  }
 
   /** An allowlist, so a visible NPC the PC doesn't know yet stays hidden, and a Revert of that knowledge hides their portrait again. */
   const knownPortraits = (id: string) => {
@@ -174,6 +183,7 @@ export function startServer(options: {
       comfyWorkflow,
       chatStyle,
       fontSize,
+      theme,
     } = settings.read();
     return {
       textBaseUrl,
@@ -197,6 +207,7 @@ export function startServer(options: {
       workflowProblem,
       chatStyle,
       fontSize,
+      theme,
     };
   };
 
@@ -247,6 +258,9 @@ export function startServer(options: {
           const id = saves.create({ ...save, opening });
           worlds.delete(worldId);
           images.saveCreated(id);
+          // Often still drawing. The Save may be gone by the time it lands, and a story without a cover loses nothing.
+          covers.get(worldId)?.bytes.then((bytes) => bytes && saves.setCover(id, bytes)).catch(console.error);
+          covers.delete(worldId);
           return Response.json({ id, worldChanged }, { status: 201 });
         },
       },
@@ -256,7 +270,15 @@ export function startServer(options: {
           const { overview, world } = await generateWorld(options, choices, req.signal);
           const id = crypto.randomUUID();
           worlds.set(id, world);
+          startCover(id, choices, overview);
           return Response.json({ id, overview }, { status: 201 });
+        },
+      },
+      "/worlds/:id/cover": {
+        // Answers once the cover is done, so an img tag can simply wait for it.
+        GET: async (req) => {
+          const bytes = await covers.get(req.params.id)?.bytes;
+          return bytes ? imageResponse(bytes) : Response.json({ error: "This world has no cover" }, { status: 404 });
         },
       },
       "/worlds/pick": {
@@ -275,6 +297,7 @@ export function startServer(options: {
           if (!worlds.has(id)) throw new WorldNotFound();
           const { overview, world } = await generateWorld(options, choices, req.signal);
           worlds.set(id, world);
+          startCover(id, choices, overview);
           return Response.json({ overview });
         },
       },
@@ -290,8 +313,8 @@ export function startServer(options: {
       "/saves/:id": {
         GET: (req) => {
           // An allowlist, so a secret added to the Save can never reach the player by default.
-          const { worldBrief, pc, artStyle, startingHook } = saves.read(req.params.id);
-          return Response.json({ worldBrief, pc: { name: pc.name }, artStyle, startingHook });
+          const { worldBrief, pc, artStyle, startingHook, hasCover } = saves.read(req.params.id);
+          return Response.json({ worldBrief, pc: { name: pc.name }, artStyle, startingHook, hasCover });
         },
         PATCH: async (req) => {
           const { artStyle } = await parseBody(req, ArtStyleRequest);
@@ -303,6 +326,12 @@ export function startServer(options: {
           // Below 0, because the PC's portrait belongs to no Message.
           images.forget(req.params.id, -1);
           return new Response(null, { status: 204 });
+        },
+      },
+      "/saves/:id/cover": {
+        GET: (req) => {
+          const bytes = saves.cover(req.params.id);
+          return bytes ? imageResponse(bytes) : Response.json({ error: "This story has no cover" }, { status: 404 });
         },
       },
       "/saves/:id/export": {
@@ -367,6 +396,20 @@ export function startServer(options: {
         POST: async (req) => {
           const { input } = await parseBody(req, NewTurnRequest);
           return turnResponse(req, (emit) => playTurn(saves, engine, req.params.id, input, req.signal, emit));
+        },
+      },
+      "/saves/:id/opening": {
+        POST: async (req) => {
+          await parseBody(req, NoFields);
+          return turnResponse(req, (emit) => playOpening(saves, engine, req.params.id, req.signal, emit));
+        },
+      },
+      "/saves/:id/decide": {
+        POST: async (req) => {
+          await parseBody(req, NoFields);
+          const { id } = req.params;
+          const story = { save: saves.read(id), state: saves.latestState(id), messages: saves.messages(id) };
+          return Response.json({ text: await decideForPc(options, story, req.signal) });
         },
       },
       "/saves/:id/messages": {

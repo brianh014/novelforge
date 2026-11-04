@@ -5,7 +5,10 @@ import { z } from "zod";
 import { type Check, StoredCheck } from "./check-resolver";
 import { openingState, type State, StateSections } from "./state-applier";
 
-/** The PC as the player wrote them, apart from the name. Each field is optional, as Saves from before these fields have none. */
+/**
+ * The PC as the player wrote them, apart from the name. Each field is optional, as Saves from before these fields have
+ * none. New PCs have no personality, but older Saves do, and this strict shape must still accept them.
+ */
 export const PcDetails = z
   .object({
     background: z.string(),
@@ -192,8 +195,12 @@ const toVersion6 = (db: Database) =>
     "CREATE TABLE IF NOT EXISTS portraits (id INTEGER PRIMARY KEY AUTOINCREMENT, npc TEXT UNIQUE, message_id INTEGER NOT NULL, bytes BLOB NOT NULL)",
   );
 
+/** Its own table because it holds bytes, and no Message owns it, so no Revert reaches it. */
+const toVersion7 = (db: Database) =>
+  db.run("CREATE TABLE IF NOT EXISTS cover (id INTEGER PRIMARY KEY CHECK (id = 1), bytes BLOB NOT NULL)");
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -213,7 +220,7 @@ function migrate(db: Database) {
 
 const NOT_A_SAVE = "This file isn't a valid Save.";
 
-const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images", "portraits"];
+const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images", "portraits", "cover"];
 
 /** Anything in an imported file that could act while it is migrated, so it must be refused first. */
 function assertSafeToMigrate(db: Database) {
@@ -290,6 +297,7 @@ function assertValidSave(db: Database) {
     message_id: rowId,
     bytes: storedImage,
   });
+  rowsOf(db, "cover", { id: z.literal(1), bytes: storedImage });
 
   // Replacing a response needs the player Message before it. Two player Messages in a row are fine, after a Revert.
   const inOrder = messages.toSorted((a, b) => a.id - b.id);
@@ -419,8 +427,8 @@ export function saveStore(savesDir: string) {
         .filter(isSaveId);
       const saves = ids.map((id) => {
         try {
-          const { worldBrief, pc } = this.read(id);
-          return { id, worldBrief, pc: { name: pc.name }, updatedAt: statSync(pathOf(id)).mtimeMs };
+          const { worldBrief, pc, hasCover } = this.read(id);
+          return { id, worldBrief, pc: { name: pc.name }, hasCover, updatedAt: statSync(pathOf(id)).mtimeMs };
         } catch {
           return { id, unreadable: true as const, updatedAt: statSync(pathOf(id)).mtimeMs };
         }
@@ -428,7 +436,7 @@ export function saveStore(savesDir: string) {
       return saves.toSorted((a, b) => b.updatedAt - a.updatedAt);
     },
 
-    read(id: string): Save & { artStyle: string; startingHook: string } {
+    read(id: string): Save & { artStyle: string; startingHook: string; hasCover: boolean } {
       using db = open(id);
       const save = db
         .query<{ world_brief: string; pc_name: string; art_style: string; starting_hook: string; pc_details: string }, []>(
@@ -440,7 +448,19 @@ export function saveStore(savesDir: string) {
         pc: { ...(JSON.parse(save.pc_details) as PcDetails), name: save.pc_name },
         artStyle: save.art_style,
         startingHook: save.starting_hook,
+        hasCover: db.query("SELECT 1 FROM cover").get() !== null,
       };
+    },
+
+    cover(id: string) {
+      using db = open(id);
+      return db.query<{ bytes: Uint8Array<ArrayBuffer> }, []>("SELECT bytes FROM cover").get()?.bytes;
+    },
+
+    setCover(id: string, bytes: Uint8Array) {
+      if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
+      using db = open(id);
+      db.run("INSERT OR REPLACE INTO cover (id, bytes) VALUES (1, ?)", [bytes]);
     },
 
     setArtStyle(id: string, artStyle: string) {

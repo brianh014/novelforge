@@ -42,6 +42,7 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     workflowProblem: "",
     chatStyle: "prose",
     fontSize: "medium",
+    theme: "system",
   });
 });
 
@@ -70,6 +71,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     ...comfy,
     chatStyle: "prose",
     fontSize: "large",
+    theme: "dark",
   });
   const expected = {
     textBaseUrl: "http://localhost:1234/v1",
@@ -84,6 +86,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     workflowProblem: "",
     chatStyle: "prose",
     fontSize: "large",
+    theme: "dark",
   };
   expect(await response.json()).toEqual(expected);
 

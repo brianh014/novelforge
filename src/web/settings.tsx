@@ -14,8 +14,9 @@ import {
 } from "./api";
 import { Book, BookTabs } from "./menu";
 
-export const applyFontSize = ({ fontSize }: Settings) => {
+export const applyLook = ({ fontSize, theme }: Settings) => {
   document.documentElement.dataset.fontSize = fontSize;
+  document.documentElement.dataset.theme = theme;
 };
 
 function useSubmit(save: () => Promise<string>) {
@@ -436,7 +437,7 @@ function InstallSettings({ initial }: { initial: Settings }) {
     setDraft(next);
     setTextKey("");
     setImageKey("");
-    applyFontSize(next);
+    applyLook(next);
     return saved.hasTextApiKey && !next.hasTextApiKey
       ? "Saved. The text API key was cleared because the server changed."
       : "Saved.";
@@ -553,6 +554,14 @@ function InstallSettings({ initial }: { initial: Settings }) {
       )}
 
       <h2>Reading</h2>
+      <label>
+        Theme
+        <select value={draft.theme} onChange={(e) => set({ theme: e.target.value as Settings["theme"] })}>
+          <option value="system">Match this device</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
       <label>
         Chat style
         <select

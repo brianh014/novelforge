@@ -69,6 +69,7 @@ test("a generated world reaches the player only as its World Overview, and its S
     pc: { name: "Ash" },
     artStyle: "Ink wash",
     startingHook: "A body washes ashore",
+    hasCover: false,
   });
   const { worldBible, worldRules, plotThreads } = saves.latestState(id);
   expect(worldBible).toEqual([
