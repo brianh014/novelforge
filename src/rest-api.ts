@@ -389,7 +389,7 @@ export function startServer(options: {
           return Response.json({ health, injuries, conditions });
         },
       },
-      // shortcut: no screen uses these since Director's Notes left the UI, reuse or delete them once ticket 31 settles story edits.
+      // shortcut: no screen uses these since Director's Notes left the UI, kept as the user may bring them back (ticket 31).
       "/saves/:id/notes": {
         GET: (req) => Response.json({ notes: saves.latestState(req.params.id).directorsNotes }),
         POST: async (req) => {
