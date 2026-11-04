@@ -224,6 +224,9 @@ test("state operations update status and PC-known information across Turns", asy
 test.each([
   ["removing a status the PC lacks", { op: "remove_status", kind: "injuries", text: "broken leg" }],
   ["repeating a status", { op: "add_status", kind: "conditions", text: "soaked" }],
+  ["health given as a number", { op: "set_health", health: "72/100 HP" }],
+  ["an injury given with a number", { op: "add_status", kind: "injuries", text: "2 broken ribs" }],
+  ["a condition given with a number", { op: "add_status", kind: "conditions", text: "fatigue level 3" }],
   ["repeating a known fact", { op: "add_known_fact", fact: "The gate is broken" }],
   ["adding an NPC who exists", { op: "add_npc", name: "Mara", appearance: "a stranger" }],
   ["updating an NPC who does not exist", { op: "update_npc", name: "Nobody", appearance: "towering" }],
@@ -1376,4 +1379,122 @@ test("the Narrator is told the player reads the summary and known facts, and how
   expect(system).toContain("The player reads the summary and known facts in the Journal");
   expect(system).toContain("no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks");
   expect(system).toContain("through add_known_npc, using add_npc first only for an NPC not yet in the state");
+});
+
+const inventoryOf = (game: ReturnType<typeof startGame>, id: string) =>
+  game.get(`/saves/${id}/inventory`).then((r) => r.json());
+
+const statusOf = (game: ReturnType<typeof startGame>, id: string) =>
+  game.get(`/saves/${id}/status`).then((r) => r.json());
+
+test("a new Save has empty inventory and an unhurt PC, and a missing Save has neither", async () => {
+  const { game } = play();
+  const id = await game.createSave();
+
+  expect(await inventoryOf(game, id)).toEqual({ wearing: [], carrying: [] });
+  expect(await statusOf(game, id)).toEqual({ health: "unhurt", injuries: [], conditions: [] });
+  expect((await game.get(`/saves/${crypto.randomUUID()}/inventory`)).status).toBe(404);
+  expect((await game.get(`/saves/${crypto.randomUUID()}/status`)).status).toBe(404);
+});
+
+test("an action with an item is a normal Turn, and inventory and status follow it", async () => {
+  const { game, prompts } = play(
+    narration(
+      "You find a hat and a lantern, and slip on the steps.",
+      { op: "add_item", slot: "wearing", item: "hat" },
+      { op: "add_item", slot: "carrying", item: "lantern" },
+      { op: "set_health", health: "bruised" },
+      { op: "add_status", kind: "injuries", text: "sore ankle" },
+      { op: "add_status", kind: "conditions", text: "soaked" },
+    ),
+    narration("Ashley takes the hat, and you feel better.", { op: "remove_item", item: "hat" }, {
+      op: "remove_status",
+      kind: "conditions",
+      text: "soaked",
+    }),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I search the steps." });
+
+  expect(await inventoryOf(game, id)).toEqual({ wearing: ["hat"], carrying: ["lantern"] });
+  expect(await statusOf(game, id)).toEqual({ health: "bruised", injuries: ["sore ankle"], conditions: ["soaked"] });
+
+  await game.post(`/saves/${id}/turns`, { input: "hat: I give it to Ashley." });
+
+  expect(contents(prompts[1]).at(-1)).toContain("hat: I give it to Ashley.");
+  expect(await inventoryOf(game, id)).toEqual({ wearing: [], carrying: ["lantern"] });
+  expect(await statusOf(game, id)).toEqual({ health: "bruised", injuries: ["sore ankle"], conditions: [] });
+});
+
+test("after a Revert, inventory and status match the restored Snapshot", async () => {
+  const { game } = play(
+    narration(
+      "You take the lantern.",
+      { op: "add_item", slot: "carrying", item: "lantern" },
+      { op: "add_status", kind: "conditions", text: "soaked" },
+    ),
+    narration(
+      "You drop it and fall.",
+      { op: "remove_item", item: "lantern" },
+      { op: "add_item", slot: "wearing", item: "hat" },
+      { op: "set_health", health: "hurt" },
+      { op: "add_status", kind: "injuries", text: "cut forearm" },
+    ),
+  );
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "One." });
+  await game.post(`/saves/${id}/turns`, { input: "Two." });
+
+  await game.post(`/saves/${id}/messages/2/revert`, {});
+
+  const { inventory, status } = (await snapshotAt(game, id, 2)) as State;
+  expect(inventory).toEqual({ wearing: [], carrying: ["lantern"] });
+  expect(status).toEqual({ health: "unhurt", injuries: [], conditions: ["soaked"] });
+  expect(await inventoryOf(game, id)).toEqual(inventory);
+  expect(await statusOf(game, id)).toEqual(status);
+});
+
+test("inventory and status never reveal secrets or Checks", async () => {
+  const action = "MARKERXCHECKXACTION";
+  const { game } = playWithDice(
+    [17],
+    requestCheck("Very Hard", action),
+    narration(
+      "A horn sounds.",
+      { op: "add_lore_entry", title: "MARKER-LORE-TITLE", keywords: ["MARKER-KEYWORD"], content: "MARKER-LORE-TEXT" },
+      { op: "add_plot_thread", thread: "MARKER-PLOT-THREAD" },
+      { op: "add_npc", name: "MARKER-NPC", appearance: "MARKER-APPEARANCE" },
+      { op: "add_known_fact", fact: "MARKER-FACT" },
+      { op: "set_summary", summary: "MARKER-SUMMARY" },
+      { op: "add_item", slot: "carrying", item: "lantern" },
+      { op: "set_health", health: "winded" },
+    ),
+  );
+  const id = await game.createSave();
+  seed(id, { worldRules: ["MARKER-WORLD-RULE"], directorsNotes: ["MARKER-DIRECTORS-NOTE"] });
+
+  await game.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  const bodies = [
+    await game.get(`/saves/${id}/inventory`).then((r) => r.text()),
+    await game.get(`/saves/${id}/status`).then((r) => r.text()),
+  ];
+  expect(storedChecks(id)[3]).toMatchObject({ action, roll: 17 });
+  expect(bodies).toEqual([
+    JSON.stringify({ wearing: [], carrying: ["lantern"] }),
+    JSON.stringify({ health: "winded", injuries: [], conditions: [] }),
+  ]);
+});
+
+test("the Narrator is told to keep inventory realistic and to change it and status only in ways the server accepts", async () => {
+  const { game, prompts } = play(narration("Rain."));
+  const id = await game.createSave();
+
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  const [system] = contents(prompts[0]);
+  expect(system).toContain("Keep the inventory realistic for this world");
+  expect(system).toContain("remove_item only for an item the state lists");
+  expect(system).toContain("in words with no digits");
+  expect(system).toContain("remove_status only for an entry the state lists under that kind, and never add_status one it already lists");
 });

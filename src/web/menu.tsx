@@ -13,14 +13,13 @@ export function Book(props: { left: ReactNode; children: ReactNode; tabs?: React
   );
 }
 
-export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" }) {
+export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Inventory" }) {
   const here = (tab: typeof current) => (tab === current ? "page" : undefined);
   return (
     <nav className="tabs" aria-label="Book sections">
       <a href={`#/play/${id}`} aria-current={here("Story")}>Story</a>
       <a href={`#/journal/${id}`} aria-current={here("Journal")}>Journal</a>
-      {/* shortcut: Inventory does nothing yet, ticket 11 makes it a link. */}
-      <button disabled>Inventory</button>
+      <a href={`#/inventory/${id}`} aria-current={here("Inventory")}>Inventory</a>
       <a href="#/settings">Settings</a>
     </nav>
   );

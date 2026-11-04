@@ -1,6 +1,9 @@
 import type { Message, Save } from "../save-store";
+import type { State } from "../state-applier";
 
 export type { Message, Save };
+export type Inventory = State["inventory"];
+export type Status = State["status"];
 export type Settings = { textBaseUrl: string; textModel: string; hasTextApiKey: boolean };
 export type Journal = { summary: string; facts: string[]; npcs: string[]; fullLog: Message[] };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
@@ -35,6 +38,13 @@ export const getMessages = (id: string) =>
   request<{ messages: Message[] }>(`/saves/${id}/messages`).then(({ messages }) => messages);
 
 export const getJournal = (id: string) => request<Journal>(`/saves/${id}/journal`);
+
+export const getInventory = (id: string) => request<Inventory>(`/saves/${id}/inventory`);
+
+export const getStatus = (id: string) => request<Status>(`/saves/${id}/status`);
+
+export const statusWords = ({ health, injuries, conditions }: Status) =>
+  [health, ...injuries, ...conditions].join(", ");
 
 export const createSave = (save: Save) => request<{ id: string }>("/saves", jsonBody(save));
 

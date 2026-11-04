@@ -146,8 +146,7 @@ h2 {
   width: var(--tab-width);
 }
 
-.tabs a,
-.tabs button {
+.tabs a {
   writing-mode: vertical-rl;
   padding: 14px 8px;
   border: 0;
@@ -160,10 +159,6 @@ h2 {
 .tabs [aria-current] {
   background: var(--accent);
   color: var(--on-accent);
-}
-
-.tabs button:disabled {
-  color: var(--muted);
 }
 
 /* Controls */
@@ -306,6 +301,55 @@ input {
   padding-left: 1.1em;
 }
 
+.status::first-letter {
+  text-transform: uppercase;
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.items button {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px dotted var(--muted);
+  background: none;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.items button:hover,
+.items [aria-current] {
+  color: var(--accent);
+}
+
+.items [aria-current] {
+  font-style: italic;
+}
+
+/* Stuck to the page's foot, so a long list can't hide the box or its Send. */
+.ask {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: var(--soft);
+}
+
+.ask label {
+  display: grid;
+  gap: 4px;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
 .full-log {
   flex: 1;
   min-height: 0;
@@ -371,7 +415,8 @@ input {
   min-width: 0;
 }
 
-.compose textarea {
+.compose textarea,
+.ask textarea {
   display: block;
   max-height: 30vh;
   field-sizing: content;
@@ -433,29 +478,48 @@ dialog blockquote {
     flex: 1;
   }
 
-  /* The Journal is too long for two stacked panes, so it reads as one page with the tabs held in reach. */
-  .book:has(.full-log) {
+  /* The Journal and Inventory are too long for two stacked panes, so each reads as one page with the tabs held in reach. */
+  .book:has(.full-log, .items) {
     height: auto;
     min-height: 100%;
   }
 
-  .book:has(.full-log) .page,
+  .book:has(.full-log, .items) .page,
   .full-log {
     flex: none;
     overflow: visible;
   }
 
-  .book:has(.full-log) .tabs {
+  /* Clears the tabs, which are stuck to the same edge. Focus needs the room too, coming from the left page. */
+  .ask {
+    bottom: 44px;
+    scroll-margin-bottom: 44px;
+  }
+
+  .book:has(.full-log, .items) .tabs {
     position: sticky;
     bottom: 0;
     margin-top: auto;
   }
 
   .narrow-left .page.left {
-    flex-direction: row;
+    flex-flow: row wrap;
     align-items: baseline;
     justify-content: space-between;
+    gap: 2px 14px;
     padding-block: 8px;
+  }
+
+  /* A line under the name and menu link, as the left page has no room for its heading here. */
+  .condition {
+    order: 1;
+    flex-basis: 100%;
+    max-height: 4.4em;
+    overflow-y: auto;
+  }
+
+  .condition h2 {
+    display: none;
   }
 
   .narrow-left .world {
@@ -477,8 +541,7 @@ dialog blockquote {
     gap: 0;
   }
 
-  .tabs a,
-  .tabs button {
+  .tabs a {
     writing-mode: horizontal-tb;
     min-height: 44px;
     padding: 10px 0;
@@ -490,10 +553,5 @@ dialog blockquote {
   .tabs [aria-current] {
     text-decoration: underline;
     text-underline-offset: 4px;
-  }
-
-  .tabs button:disabled {
-    color: var(--on-accent);
-    opacity: 0.6;
   }
 }

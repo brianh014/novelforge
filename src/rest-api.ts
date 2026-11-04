@@ -93,6 +93,20 @@ export function startServer(options: {
           });
         },
       },
+      "/saves/:id/inventory": {
+        GET: (req) => {
+          // An allowlist, like the Journal and the status below.
+          // shortcut: items and status are Narrator free text, kept clean only by its prompt, screen them if models leak.
+          const { wearing, carrying } = saves.latestState(req.params.id).inventory;
+          return Response.json({ wearing, carrying });
+        },
+      },
+      "/saves/:id/status": {
+        GET: (req) => {
+          const { health, injuries, conditions } = saves.latestState(req.params.id).status;
+          return Response.json({ health, injuries, conditions });
+        },
+      },
       "/saves/:id/duplicate": {
         POST: async (req) => {
           const { fromMessage } = await parseBody(req, DuplicateRequest);

@@ -4,21 +4,38 @@ import {
   getMessages,
   getSave,
   getSettings,
+  getStatus,
   type Message,
   playTurn,
   previewRevert,
   revert,
   type Save,
   setupProblem,
+  type Status,
+  statusWords,
 } from "./api";
 import { Book, BookTabs } from "./menu";
 
 // Text from a Turn cut short by leaving the screen, to put back in the box on return.
 const unsent = new Map<string, string>();
+// An item's action, which the Story plays as a Turn once it has loaded, so it streams like any other.
+const itemActions = new Map<string, string>();
+
+export function playItemAction(id: string, input: string) {
+  itemActions.set(id, input);
+  location.hash = `/play/${id}`;
+}
+
+export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+  event.preventDefault();
+  event.currentTarget.form!.requestSubmit();
+}
 
 export function Play({ id }: { id: string }) {
   const [save, setSave] = useState<Save>();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [status, setStatus] = useState<Status>();
   const [setupNotice, setSetupNotice] = useState<string>();
   const [draft, setDraft] = useState(unsent.get(id) ?? "");
   const [turn, setTurn] = useState<{ input: string; narration: string }>();
@@ -30,32 +47,40 @@ export function Play({ id }: { id: string }) {
   const leaving = useRef(new AbortController());
 
   useEffect(() => {
-    Promise.all([getSave(id), getMessages(id)]).then(([save, messages]) => {
+    const action = itemActions.get(id);
+    itemActions.delete(id);
+    Promise.all([getSave(id), getMessages(id), getStatus(id)]).then(([save, messages, status]) => {
       setSave(save);
       setMessages(messages);
+      setStatus(status);
+      if (action) playInput(action, messages);
     }, (failure: Error) => setLoadError(failure.message));
     getSettings().then((settings) => setSetupNotice(setupProblem(settings)), () => {});
     return () => leaving.current.abort();
   }, [id]);
 
-  async function send(event: FormEvent) {
+  function send(event: FormEvent) {
     event.preventDefault();
     if (turn || !draft.trim()) return;
-    const input = draft;
-    let streamed = false;
     unsent.delete(id);
+    setDraft("");
+    playInput(draft, messages);
+  }
+
+  // `before` is passed in because the load effect runs this before `messages` is set.
+  async function playInput(input: string, before: Message[]) {
+    let streamed = false;
     setError("");
     setAnnouncement("");
-    setDraft("");
     setTurn({ input, narration: "" });
     const show = (narration: string) => {
       streamed = true;
       setTurn({ input, narration });
     };
-    const result = await playTurn(id, input, messages.at(-1)?.id ?? 0, show, leaving.current.signal);
+    const result = await playTurn(id, input, before.at(-1)?.id ?? 0, show, leaving.current.signal);
     setTurn(undefined);
     if ("messages" in result) {
-      setMessages([...messages, ...result.messages]);
+      setMessages([...before, ...result.messages]);
       // Streamed text was already read out by the live region, and the Message list isn't live.
       if (!streamed) setAnnouncement(result.messages.at(-1)!.text);
     } else {
@@ -65,12 +90,7 @@ export function Play({ id }: { id: string }) {
       // A stale Turn means the story moved on without this page.
       getMessages(id).then(setMessages, () => {});
     }
-  }
-
-  function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    event.currentTarget.form!.requestSubmit();
+    getStatus(id).then(setStatus, () => {});
   }
 
   if (loadError) {
@@ -81,7 +101,7 @@ export function Play({ id }: { id: string }) {
       </Book>
     );
   }
-  if (!save) return <Book left={null}>{null}</Book>;
+  if (!save || !status) return <Book left={null}>{null}</Book>;
   const pc = save.pc.name;
 
   return (
@@ -90,6 +110,10 @@ export function Play({ id }: { id: string }) {
       left={
         <>
           <h1 className="title">{pc}</h1>
+          <div className="condition">
+            <h2>Condition</h2>
+            <p className="status">{statusWords(status)}</p>
+          </div>
           <div className="world">
             <h2>World Brief</h2>
             <p>{save.worldBrief}</p>
@@ -159,6 +183,7 @@ export function Play({ id }: { id: string }) {
           onClose={() => setReverting(undefined)}
           onReverted={() => {
             setMessages(messages.filter((message) => message.id <= reverting.id));
+            getStatus(id).then(setStatus, () => {});
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.
             inputBox.current!.focus();
           }}

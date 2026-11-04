@@ -60,6 +60,10 @@ function take(list: string[], value: string) {
   return true;
 }
 
+// Status reads as words in the story, never as points or percentages.
+// shortcut: spelled-out numbers pass and only the Narrator prompt stops them, screen them if models write them.
+const hasNumber = (text: string) => /\p{N}/u.test(text);
+
 function addOnce(list: string[], value: string) {
   if (list.includes(value)) return false;
   list.push(value);
@@ -75,10 +79,11 @@ function apply(state: State, operation: StateOperation) {
     case "remove_item":
       return take(state.inventory.carrying, operation.item) || take(state.inventory.wearing, operation.item);
     case "set_health":
+      if (hasNumber(operation.health)) return false;
       state.status.health = operation.health;
       return true;
     case "add_status":
-      return addOnce(state.status[operation.kind], operation.text);
+      return !hasNumber(operation.text) && addOnce(state.status[operation.kind], operation.text);
     case "remove_status":
       return take(state.status[operation.kind], operation.text);
     case "add_npc":
