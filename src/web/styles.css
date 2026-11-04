@@ -419,7 +419,8 @@ input {
 }
 
 .chips.art {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .fields .chips label {
@@ -433,8 +434,38 @@ input {
   cursor: pointer;
 }
 
-.chips.art label {
-  font-size: 0.85em;
+.fields .chips.art label {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-height: 0;
+  padding: 0;
+  border-bottom: 0;
+  font-size: 0.8em;
+  line-height: 1.25;
+}
+
+.chips.art img,
+.no-example {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
+
+.no-example {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.chips.art label:has(:checked) img,
+.chips.art label:has(:checked) .no-example {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .fields .chips label:has(:checked) {
@@ -1201,7 +1232,7 @@ dialog blockquote {
   }
 
   .chips.art {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .fields .chips label {

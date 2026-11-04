@@ -13,7 +13,7 @@
 - [x] The cover prompt carries the title as data and asks for no other lettering
 - [x] The cover has its own negative prompt, and Scene Images and portraits keep `AVOID`
 - [ ] A real cover shows the title spelled correctly and placed well
-- [x] Load Game shows the title beside the cover, with the PC under it (L1). Checked by test only, not yet in a browser
+- [x] Load Game shows the title beside the cover, with the PC under it (L1). Checked in a real browser at desktop and 360px, including a Save with no title
 
 ## Comments
 

@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { ART_EXAMPLES } from "./art-examples";
 import { ART_STYLES } from "./art-styles";
 import {
   createSave,
@@ -68,6 +69,8 @@ function Choices(props: { legend: string; options: string[]; value: string; art?
               checked={props.value === option}
               onChange={() => props.onChange(option)}
             />
+            {props.art &&
+              (ART_EXAMPLES[option] ? <img src={ART_EXAMPLES[option]} alt="" /> : <span className="no-example" aria-hidden="true">No example</span>)}
             {option}
           </label>
         ))}
