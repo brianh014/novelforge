@@ -1,5 +1,16 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { createSave, generateWorld, getSettings, pickForMe, regenerateWorld, setupProblem, type PickField, type WorldChoices } from "./api";
+import {
+  createSave,
+  generateWorld,
+  getSettings,
+  type PcDraft,
+  pickForMe,
+  pickPc,
+  regenerateWorld,
+  setupProblem,
+  type PickField,
+  type WorldChoices,
+} from "./api";
 import { Book } from "./menu";
 
 const THEMES = [
@@ -58,7 +69,7 @@ const blank = {
   startingHook: "",
   artStyle: Object.keys(ART_STYLES)[0]!,
   ownArtStyle: "",
-  name: "",
+  pc: { name: "", background: "", physicalTraits: "", skills: "", personality: "", other: "", inventory: "" } as PcDraft,
   /** The choices that made this world, as the form can change after it was generated. */
   world: undefined as { id: string; overview: string; choices: WorldChoices } | undefined,
 };
@@ -217,15 +228,42 @@ export function NewGame({ step }: { step?: string }) {
   }
 
   if (world && step === "pc") {
+    const setPc = (field: keyof PcDraft, text: string) =>
+      setDraft((current) => ({ ...current, pc: { ...current.pc, [field]: text } }));
+
+    const fillPc = () =>
+      run("The Narrator is thinking…", async () => {
+        const picked = await pickPc(world.choices, draft.pc, signal);
+        // The boxes stay editable while this runs, and what the player typed wins.
+        setDraft((current) => {
+          const entries = Object.entries(picked) as [keyof PcDraft, string][];
+          return { ...current, pc: { ...current.pc, ...Object.fromEntries(entries.filter(([field]) => !current.pc[field].trim())) } };
+        });
+      });
+
+    const box = (field: keyof PcDraft, label: string, rows: number) => (
+      <label>
+        {label}
+        <textarea form="pc" rows={rows} value={draft.pc[field]} onChange={(e) => setPc(field, e.target.value)} />
+      </label>
+    );
+
     const begin = (event: FormEvent) => {
       event.preventDefault();
+      // `required` accepts spaces.
+      if (!draft.pc.name.trim()) return setError("Give your PC a name, or use Pick for me.");
+      const { inventory, ...pc } = draft.pc;
+      const items = inventory.split("\n").map((item) => item.trim()).filter(Boolean);
       const { worldBrief, startingHook } = world.choices;
       const artStyle =
         draft.artStyle === OWN_ART_STYLE ? draft.ownArtStyle : `${draft.artStyle}: ${ART_STYLES[draft.artStyle]}`;
-      return run("Opening the book…", async () => {
-        const { id } = await createSave({ worldId: world.id, worldBrief, startingHook, artStyle, pc: { name: draft.name } });
+      return run("The Narrator is fitting your PC into the world. This can take a minute or two.", async () => {
+        const { id, worldChanged } = await createSave(
+          { worldId: world.id, worldBrief, startingHook, artStyle, pc, inventory: items },
+          signal,
+        );
         sessionStorage.removeItem(STORAGE_KEY);
-        location.hash = `/play/${id}`;
+        location.hash = `/play/${id}${worldChanged ? "/world-changed" : ""}`;
       });
     };
     return (
@@ -233,19 +271,38 @@ export function NewGame({ step }: { step?: string }) {
         left={
           <>
             <Heading step={3} title="Of the PC" />
-            <p className="muted">Name your PC, and the story starts on the next page.</p>
+            <p className="muted">Play whomever you want. What you write is canon, and the world changes if it must.</p>
+            <div className="fields wizard">
+              <label>
+                PC name
+                <input form="pc" required value={draft.pc.name} onChange={(e) => setPc("name", e.target.value)} />
+              </label>
+              {box("background", "Background", 3)}
+              {box("physicalTraits", "Physical traits", 3)}
+              <div className="row">
+                <span className="muted">Fills only the empty boxes.</span>
+                <button
+                  type="button"
+                  className="quiet"
+                  disabled={!!busy || Object.values(draft.pc).every((text) => text.trim())}
+                  onClick={fillPc}
+                >
+                  Pick for me
+                </button>
+              </div>
+            </div>
             <a className="quiet" href="#/new/overview">Back to the World Overview</a>
           </>
         }
       >
-        <form className="fields" onSubmit={begin}>
-          <label>
-            PC name
-            <input required value={draft.name} onChange={(e) => set({ name: e.target.value })} />
-          </label>
+        <form id="pc" className="fields wizard" onSubmit={begin}>
+          {box("skills", "Skills and experience", 3)}
+          {box("personality", "Personality", 2)}
+          {box("inventory", "Starting inventory, one item per line", 4)}
+          {box("other", "Anything else", 2)}
           {feedback}
           <button className="action" disabled={!!busy}>
-            Begin
+            {error ? "Try again" : "Begin"}
           </button>
         </form>
       </Book>

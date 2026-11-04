@@ -4,9 +4,22 @@ import { basename, join } from "node:path";
 import { z } from "zod";
 import { type Check, StoredCheck } from "./check-resolver";
 import { openingState, type State, StateSections } from "./state-applier";
-import type { World } from "./world-creation";
 
-export type Save = { worldBrief: string; pc: { name: string } };
+/** The PC as the player wrote them, apart from the name. Each field is optional, as Saves from before these fields have none. */
+export const PcDetails = z
+  .object({
+    background: z.string(),
+    physicalTraits: z.string(),
+    skills: z.string(),
+    personality: z.string(),
+    other: z.string(),
+  })
+  .partial()
+  // A strict shape, because these keys are spread over the PC's name when a Save is read.
+  .strict();
+export type PcDetails = z.infer<typeof PcDetails>;
+
+export type Save = { worldBrief: string; pc: { name: string } & PcDetails };
 
 export class SaveNotFound extends Error {}
 export class MessageNotFound extends Error {}
@@ -146,8 +159,11 @@ const toVersion2 = (db: Database) => db.run("ALTER TABLE save ADD COLUMN art_sty
 /** A column for the same reason: it belongs to the Save, not to any Message. */
 const toVersion3 = (db: Database) => db.run("ALTER TABLE save ADD COLUMN starting_hook TEXT NOT NULL DEFAULT ''");
 
+/** A column for the same reason, and JSON because nothing ever queries inside it. */
+const toVersion4 = (db: Database) => db.run("ALTER TABLE save ADD COLUMN pc_details TEXT NOT NULL DEFAULT '{}'");
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -203,6 +219,7 @@ function assertValidSave(db: Database) {
     pending_notes: jsonText(StateSections.directorsNotes).nullable(),
     art_style: z.string(),
     starting_hook: z.string(),
+    pc_details: jsonText(PcDetails),
   });
   const messages = rowsOf(db, "messages", {
     id: rowId.positive(),
@@ -302,20 +319,22 @@ export function saveStore(savesDir: string) {
       pc,
       artStyle = "",
       startingHook = "",
-      world,
-    }: Save & { artStyle?: string; startingHook?: string; world?: World }) {
+      opening,
+    }: Save & { artStyle?: string; startingHook?: string; opening?: Partial<State> }) {
       const id = crypto.randomUUID();
       const unfinishedPath = `${pathOf(id)}.unfinished`;
       {
         using db = connect(unfinishedPath);
-        db.run("INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook) VALUES (1, ?, ?, ?, ?)", [
+        const { name, ...details } = pc;
+        db.run("INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details) VALUES (1, ?, ?, ?, ?, ?)", [
           worldBrief,
-          pc.name,
+          name,
           artStyle,
           startingHook,
+          JSON.stringify(details),
         ]);
         // No Message has this Snapshot yet, and the file isn't a Save until the rename below.
-        for (const [name, value] of Object.entries(world ?? {})) {
+        for (const [name, value] of Object.entries(opening ?? {})) {
           db.run(
             `UPDATE sections SET content = ? WHERE id =
              (SELECT section_id FROM snapshot_sections WHERE message_id = ${OPENING_SNAPSHOT} AND name = ?)`,
@@ -348,13 +367,13 @@ export function saveStore(savesDir: string) {
     read(id: string): Save & { artStyle: string; startingHook: string } {
       using db = open(id);
       const save = db
-        .query<{ world_brief: string; pc_name: string; art_style: string; starting_hook: string }, []>(
-          "SELECT world_brief, pc_name, art_style, starting_hook FROM save",
+        .query<{ world_brief: string; pc_name: string; art_style: string; starting_hook: string; pc_details: string }, []>(
+          "SELECT world_brief, pc_name, art_style, starting_hook, pc_details FROM save",
         )
         .get()!;
       return {
         worldBrief: save.world_brief,
-        pc: { name: save.pc_name },
+        pc: { ...(JSON.parse(save.pc_details) as PcDetails), name: save.pc_name },
         artStyle: save.art_style,
         startingHook: save.starting_hook,
       };

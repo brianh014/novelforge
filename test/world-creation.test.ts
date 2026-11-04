@@ -26,6 +26,8 @@ afterEach(async () => {
   folder.remove();
 });
 
+const fits = [JSON.stringify({ wearing: [], health: "unhurt", injuries: [], conditions: [] }), JSON.stringify({ world_update: null })];
+
 const generated = (mark = "", changes = {}) =>
   JSON.stringify({
     world_overview: `${mark}Rain never stops in Saltmere.`,
@@ -45,7 +47,7 @@ async function generate(body: object = choices) {
 }
 
 test("a generated world reaches the player only as its World Overview, and its Save holds the rest", async () => {
-  play(generated());
+  play(generated(), ...fits);
 
   const { status, body } = await generate();
   expect(status).toBe(201);
@@ -171,7 +173,7 @@ test("a refused world is reported as a refusal", async () => {
 });
 
 test("Regenerate replaces the world, shows only the new Overview, and never tells the Narrator the old one", async () => {
-  play(generated(SECRET), generated("New "));
+  play(generated(SECRET), generated("New "), ...fits);
   const { body } = await generate();
 
   const response = await game.post(`/worlds/${body.id}/regenerate`, choices);
@@ -184,7 +186,7 @@ test("Regenerate replaces the world, shows only the new Overview, and never tell
 });
 
 test("a failed Regenerate keeps the world it would have replaced", async () => {
-  play(generated(), new Error("offline"));
+  play(generated(), new Error("offline"), ...fits);
   const { body } = await generate();
 
   expect((await game.post(`/worlds/${body.id}/regenerate`, choices)).status).toBe(502);
@@ -194,7 +196,7 @@ test("a failed Regenerate keeps the world it would have replaced", async () => {
 });
 
 test("a world that is not held can't be regenerated or saved, and a Save uses one up", async () => {
-  play(generated());
+  play(generated(), ...fits);
   expect((await game.post("/worlds/nothing/regenerate", choices)).status).toBe(404);
   expect(prompts).toHaveLength(0);
   const { body } = await generate();
@@ -247,6 +249,7 @@ test("nothing the player can fetch reveals the World Bible, Plot Threads or worl
   play(
     generated(SECRET, { world_overview: "Rain never stops.", extra_notes: `${SECRET}unasked` }),
     generated(SECRET, { world_overview: "Rain falls." }),
+    ...fits,
     narration("The tide rises."),
   );
 
@@ -269,13 +272,13 @@ test("nothing the player can fetch reveals the World Bible, Plot Threads or worl
 });
 
 test("the Narrator plays a wizard Save from its world, and the world survives duplicate, export and import", async () => {
-  play(generated(), narration("You read the charges."));
+  play(generated(), ...fits, narration("You read the charges."));
   const { body } = await generate();
   const id = await saveWorld(body.id);
 
   await game.post(`/saves/${id}/turns`, { input: "I ask about the magistrates." });
 
-  const prompt = JSON.stringify(prompts[1]);
+  const prompt = JSON.stringify(prompts[3]);
   expect(prompt).toContain("Its judges drown the guilty.");
   expect(prompt).toContain("The mayor is a drowned ghost.");
   expect(prompt).toContain("Magic does not exist.");
@@ -303,7 +306,7 @@ test("a Save from before Starting Hooks gains an empty one", async () => {
   const id = await game.createSave();
   {
     using db = new Database(join(savesDir, `${id}.sqlite`));
-    db.run("ALTER TABLE save DROP COLUMN starting_hook; PRAGMA user_version = 2");
+    db.run("ALTER TABLE save DROP COLUMN starting_hook; ALTER TABLE save DROP COLUMN pc_details; PRAGMA user_version = 2");
   }
 
   expect(saveStore(savesDir).read(id).startingHook).toBe("");

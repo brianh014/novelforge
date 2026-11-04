@@ -9,6 +9,7 @@ import {
   importSave,
   listSaves,
   pickForMe,
+  pickPc,
   playTurn,
   regenerateWorld,
   replaceResponse,
@@ -336,18 +337,22 @@ const worldReply = (overview: string) =>
   });
 
 test("the wizard's calls carry a world from Pick for me to a Save", async () => {
-  const replies = [JSON.stringify({ text: "A city on a whale." }), worldReply("First."), worldReply("Second.")];
+  const sheet = JSON.stringify({ wearing: ["coat"], health: "unhurt", injuries: [], conditions: [] });
+  const replies = [JSON.stringify({ text: "A city on a whale." }), worldReply("First."), worldReply("Second."), JSON.stringify({ skills: "Sailing" }), sheet, JSON.stringify({ world_update: null })];
   start(async () => replies.shift()!);
 
   const worldBrief = await pickForMe("worldBrief", "Steampunk", "");
   const choices = { theme: "Steampunk", worldBrief, startingHook: "" };
   const { id: world, overview } = await generateWorld(choices);
   const regenerated = await regenerateWorld(world, choices);
-  const { id } = await createSave({ worldId: world, worldBrief, artStyle: "Ink", startingHook: "", pc: { name: "Ash" } });
+  const picked = await pickPc(choices, { name: "Ash", background: "B", physicalTraits: "T", skills: "", personality: "P", other: "O", inventory: "coat" });
+  const { id, worldChanged } = await createSave({ worldId: world, worldBrief, artStyle: "Ink", startingHook: "", pc: { name: "Ash" }, inventory: ["coat"] });
 
   expect(worldBrief).toBe("A city on a whale.");
   expect(overview).toBe("First.");
   expect(regenerated.overview).toBe("Second.");
+  expect(picked).toEqual({ skills: "Sailing" });
+  expect(worldChanged).toBe(false);
   expect(await getSave(id)).toMatchObject({ worldBrief, artStyle: "Ink" });
 });
 

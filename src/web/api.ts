@@ -1,10 +1,11 @@
 import type { Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State } from "../state-applier";
-import type { PickField, WorldChoices } from "../world-creation";
+import type { PcDraft, PickField, WorldChoices } from "../world-creation";
 
-export type { Message, PickField, Save, WorldChoices };
+export type { Message, PcDraft, PickField, Save, WorldChoices };
 export type ListedSave = ReturnType<SaveStore["list"]>[number];
+export type OpenSave = ReturnType<SaveStore["read"]>;
 export type Inventory = State["inventory"];
 export type Status = State["status"];
 export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKey"> & {
@@ -31,7 +32,7 @@ async function request<T>(path: string, init?: RequestInit) {
 
 export const listSaves = () => request<{ saves: ListedSave[] }>("/saves").then(({ saves }) => saves);
 
-export const getSave = (id: string) => request<ReturnType<SaveStore["read"]>>(`/saves/${id}`);
+export const getSave = (id: string) => request<OpenSave>(`/saves/${id}`);
 
 export const saveArtStyle = (id: string, artStyle: string) =>
   request<{ artStyle: string }>(`/saves/${id}`, { ...jsonBody({ artStyle }), method: "PATCH" });
@@ -91,8 +92,10 @@ export const editNote = (id: string, index: number, text: string) =>
 export const removeNote = (id: string, index: number) =>
   request<{ notes: string[] }>(`/saves/${id}/notes/${index}`, { method: "DELETE" }).then(notesOf);
 
-export const createSave = (save: Save & { worldId: string; artStyle: string; startingHook: string }) =>
-  request<{ id: string }>("/saves", jsonBody(save));
+export const createSave = (
+  save: Save & { worldId: string; artStyle: string; startingHook: string; inventory: string[] },
+  signal?: AbortSignal,
+) => request<{ id: string; worldChanged: boolean }>("/saves", { ...jsonBody(save), signal });
 
 export const generateWorld = (choices: WorldChoices, signal?: AbortSignal) =>
   request<{ id: string; overview: string }>("/worlds", { ...jsonBody(choices), signal });
@@ -102,6 +105,9 @@ export const regenerateWorld = (id: string, choices: WorldChoices, signal?: Abor
 
 export const pickForMe = (field: PickField, theme: string, worldBrief: string, signal?: AbortSignal) =>
   request<{ text: string }>("/worlds/pick", { ...jsonBody({ field, theme, worldBrief }), signal }).then(({ text }) => text);
+
+export const pickPc = (choices: WorldChoices, pc: PcDraft, signal?: AbortSignal) =>
+  request<Partial<PcDraft>>("/pc/pick", { ...jsonBody({ ...choices, pc }), signal });
 
 export const previewRevert = (id: string, messageId: number) =>
   request<{ messages: number; images: number }>(`/saves/${id}/messages/${messageId}/revert`);

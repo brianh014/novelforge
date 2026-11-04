@@ -1,14 +1,15 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
-import { InvalidSave, type Message, MessageNotFound, NoteNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
+import { InvalidSave, type Message, MessageNotFound, NoteNotFound, PcDetails, SaveNotFound, saveStore, StaleTurn } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
-import { generateWorld, pickForMe, type World } from "./world-creation";
+import { fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World } from "./world-creation";
 
 const NewSaveRequest = z.object({
   worldBrief: z.string().min(1),
-  pc: z.object({ name: z.string().min(1) }),
+  pc: PcDetails.extend({ name: z.string().trim().min(1) }),
+  inventory: z.array(z.string().trim().min(1)).default([]),
   artStyle: z.string().optional(),
   startingHook: z.string().optional(),
   worldId: z.string().optional(),
@@ -25,6 +26,8 @@ const PickRequest = z.object({
   theme: z.string().trim().min(1),
   worldBrief: z.string().trim(),
 });
+
+const PcPickRequest = WorldRequest.extend({ pc: z.record(z.enum(PC_FIELDS), z.string().trim()) });
 
 class WorldNotFound extends Error {}
 
@@ -154,13 +157,16 @@ export function startServer(options: {
       "/saves": {
         GET: () => Response.json({ saves: saves.list() }),
         POST: async (req) => {
-          const { worldId, ...save } = await parseBody(req, NewSaveRequest);
+          const { worldId, inventory, ...save } = await parseBody(req, NewSaveRequest);
           if (worldId === undefined) return Response.json({ id: saves.create(save) }, { status: 201 });
           const world = worlds.get(worldId);
           if (!world) throw new WorldNotFound();
-          const id = saves.create({ ...save, world });
+          const { opening, worldChanged } = await fitPc(options, world, save, inventory, req.signal);
+          // shortcut: held until now so a failure can retry, which lets a double submit pay for two fits, lock the world if that happens.
+          if (!worlds.has(worldId)) throw new WorldNotFound();
+          const id = saves.create({ ...save, opening });
           worlds.delete(worldId);
-          return Response.json({ id }, { status: 201 });
+          return Response.json({ id, worldChanged }, { status: 201 });
         },
       },
       "/worlds": {
@@ -177,6 +183,9 @@ export function startServer(options: {
           const pick = await parseBody(req, PickRequest);
           return Response.json({ text: await pickForMe(options, pick, req.signal) });
         },
+      },
+      "/pc/pick": {
+        POST: async (req) => Response.json(await pickPc(options, await parseBody(req, PcPickRequest), req.signal)),
       },
       "/worlds/:id/regenerate": {
         POST: async (req) => {
@@ -200,8 +209,8 @@ export function startServer(options: {
       "/saves/:id": {
         GET: (req) => {
           // An allowlist, so a secret added to the Save can never reach the player by default.
-          const { worldBrief, pc, artStyle } = saves.read(req.params.id);
-          return Response.json({ worldBrief, pc: { name: pc.name }, artStyle });
+          const { worldBrief, pc, artStyle, startingHook } = saves.read(req.params.id);
+          return Response.json({ worldBrief, pc: { name: pc.name }, artStyle, startingHook });
         },
         PATCH: async (req) => {
           const { artStyle } = await parseBody(req, ArtStyleRequest);

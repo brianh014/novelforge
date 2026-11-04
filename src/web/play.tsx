@@ -6,6 +6,7 @@ import {
   getMessages,
   getNotes,
   getSave,
+  type OpenSave,
   getSettings,
   getStatus,
   type Message,
@@ -14,7 +15,6 @@ import {
   removeNote,
   replaceResponse,
   revert,
-  type Save,
   setupProblem,
   type Status,
   statusWords,
@@ -37,8 +37,8 @@ export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
   event.currentTarget.form!.requestSubmit();
 }
 
-export function Play({ id }: { id: string }) {
-  const [save, setSave] = useState<Save>();
+export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }) {
+  const [save, setSave] = useState<OpenSave>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>();
   const [notes, setNotes] = useState<string[]>();
@@ -186,7 +186,13 @@ export function Play({ id }: { id: string }) {
     >
       <div ref={story} className="story" tabIndex={0} role="region" aria-label="Story">
         <div>
-          {messages.length === 0 && !turn && <p className="muted">The page is blank. What does {pc} do first?</p>}
+          {messages.length === 0 && !turn && (
+            <>
+              {worldChanged && <p className="notice">{pc} didn't fit the world as it stood, so the world has changed to fit them.</p>}
+              <p className="muted">{save.startingHook || "The page is blank."}</p>
+              <p className="muted">What does {pc} do first?</p>
+            </>
+          )}
           {(turn?.replaces ? messages.slice(0, -1) : messages).map((message, index) => (
             <div key={message.id} className={`message ${message.role}`}>
               <p>{message.text}</p>

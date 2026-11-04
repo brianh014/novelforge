@@ -16,8 +16,8 @@ const onHashChange = (listener: () => void) => {
 
 /** Screens live in the URL hash, so a reload keeps the place and the server only ever serves `/`. */
 function App() {
-  const [, screen, id] = useSyncExternalStore(onHashChange, () => location.hash).split("/");
-  if (screen === "play" && id) return <Play key={id} id={id} />;
+  const [, screen, id, mark] = useSyncExternalStore(onHashChange, () => location.hash).split("/");
+  if (screen === "play" && id) return <Play key={id} id={id} worldChanged={mark === "world-changed"} />;
   if (screen === "journal" && id) return <Journal key={id} id={id} />;
   if (screen === "inventory" && id) return <Inventory key={id} id={id} />;
   if (screen === "new") return <NewGame step={id} />;

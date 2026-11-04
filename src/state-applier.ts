@@ -66,7 +66,7 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("resolve_plot_thread"), thread: nonEmpty }),
   z.object({ op: z.literal("set_summary"), summary: nonEmpty }),
 ]);
-type StateOperation = z.infer<typeof StateOperation>;
+export type StateOperation = z.infer<typeof StateOperation>;
 
 const findNpc = (state: State, name: string) => state.npcs.find((npc) => npc.name === name);
 
