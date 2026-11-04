@@ -1,5 +1,4 @@
-import { type FormEvent, type ReactNode, useState } from "react";
-import { createSave } from "./api";
+import type { ReactNode } from "react";
 
 export function Book(props: { left: ReactNode; children: ReactNode; tabs?: ReactNode; narrowLeft?: boolean }) {
   return (
@@ -40,55 +39,6 @@ export function Menu() {
         <a href="#/load">Load Game</a>
         <a href="#/settings">Settings</a>
       </nav>
-    </Book>
-  );
-}
-
-export function NewGame() {
-  const [worldBrief, setWorldBrief] = useState("");
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function begin(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError("");
-    try {
-      const { id } = await createSave({ worldBrief, pc: { name } });
-      location.hash = `/play/${id}`;
-    } catch (failure) {
-      setError((failure as Error).message);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Book
-      left={
-        <>
-          <h1 className="big">New Game</h1>
-          <p className="muted">Describe a world, name your PC, and the story starts on the next page.</p>
-          <a className="quiet" href="#/">
-            Main Menu
-          </a>
-        </>
-      }
-    >
-      <form className="fields" onSubmit={begin}>
-        <label>
-          World Brief
-          <textarea required rows={5} value={worldBrief} onChange={(e) => setWorldBrief(e.target.value)} />
-        </label>
-        <label>
-          PC name
-          <input required value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        {error && <p role="alert" className="error">{error}</p>}
-        <button className="action" disabled={busy}>
-          Begin
-        </button>
-      </form>
     </Book>
   );
 }

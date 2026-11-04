@@ -4,11 +4,29 @@ import { InvalidSave, type Message, MessageNotFound, NoteNotFound, SaveNotFound,
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
+import { generateWorld, pickForMe, type World } from "./world-creation";
 
 const NewSaveRequest = z.object({
   worldBrief: z.string().min(1),
   pc: z.object({ name: z.string().min(1) }),
+  artStyle: z.string().optional(),
+  startingHook: z.string().optional(),
+  worldId: z.string().optional(),
 });
+
+const WorldRequest = z.object({
+  theme: z.string().trim().min(1),
+  worldBrief: z.string().trim().min(1),
+  startingHook: z.string().trim(),
+});
+
+const PickRequest = z.object({
+  field: z.enum(["worldBrief", "startingHook"]),
+  theme: z.string().trim().min(1),
+  worldBrief: z.string().trim(),
+});
+
+class WorldNotFound extends Error {}
 
 const NewTurnRequest = z.object({ input: z.string().min(1) });
 
@@ -41,6 +59,9 @@ function errorResponse(error: unknown) {
   if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
   if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
   if (error instanceof NoteNotFound) return Response.json({ error: "Note not found" }, { status: 404 });
+  if (error instanceof WorldNotFound) {
+    return Response.json({ error: "This world is no longer held. Go back to your choices and generate it again." }, { status: 404 });
+  }
   if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
   if (error instanceof TurnFailed) {
     console.error(error);
@@ -84,6 +105,9 @@ export function startServer(options: {
 }) {
   const saves = saveStore(options.savesDir);
   const { settings } = options;
+  // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
+  // shortcut: an abandoned world stays until the app restarts, evict them if that ever adds up.
+  const worlds = new Map<string, World>();
 
   // An allowlist, so the API key can never reach a response.
   const publicSettings = () => {
@@ -130,8 +154,38 @@ export function startServer(options: {
       "/saves": {
         GET: () => Response.json({ saves: saves.list() }),
         POST: async (req) => {
-          const id = saves.create(await parseBody(req, NewSaveRequest));
+          const { worldId, ...save } = await parseBody(req, NewSaveRequest);
+          if (worldId === undefined) return Response.json({ id: saves.create(save) }, { status: 201 });
+          const world = worlds.get(worldId);
+          if (!world) throw new WorldNotFound();
+          const id = saves.create({ ...save, world });
+          worlds.delete(worldId);
           return Response.json({ id }, { status: 201 });
+        },
+      },
+      "/worlds": {
+        POST: async (req) => {
+          const choices = await parseBody(req, WorldRequest);
+          const { overview, world } = await generateWorld(options, choices, req.signal);
+          const id = crypto.randomUUID();
+          worlds.set(id, world);
+          return Response.json({ id, overview }, { status: 201 });
+        },
+      },
+      "/worlds/pick": {
+        POST: async (req) => {
+          const pick = await parseBody(req, PickRequest);
+          return Response.json({ text: await pickForMe(options, pick, req.signal) });
+        },
+      },
+      "/worlds/:id/regenerate": {
+        POST: async (req) => {
+          const { id } = req.params;
+          const choices = await parseBody(req, WorldRequest);
+          if (!worlds.has(id)) throw new WorldNotFound();
+          const { overview, world } = await generateWorld(options, choices, req.signal);
+          worlds.set(id, world);
+          return Response.json({ overview });
         },
       },
       "/saves/import": {

@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import {
+  createSave,
   deleteSave,
   duplicateSave,
+  generateWorld,
   getSave,
   importSave,
   listSaves,
+  pickForMe,
   playTurn,
+  regenerateWorld,
   replaceResponse,
   saveArtStyle,
   saveSettings,
@@ -321,4 +325,36 @@ test("the Load Game calls duplicate, import and delete a Save", async () => {
   expect(listed.toSorted()).toEqual([copy, imported].toSorted());
   await expect(deleteSave(id)).rejects.toThrow("Save not found");
   await expect(importSave(new File(["junk"], "junk.sqlite"))).rejects.toThrow("isn't a valid Save");
+});
+
+const worldReply = (overview: string) =>
+  JSON.stringify({
+    world_overview: overview,
+    lore_entries: [{ title: "T", keywords: ["a", "b", "c"], content: "C" }],
+    world_rules: ["R"],
+    plot_threads: ["P"],
+  });
+
+test("the wizard's calls carry a world from Pick for me to a Save", async () => {
+  const replies = [JSON.stringify({ text: "A city on a whale." }), worldReply("First."), worldReply("Second.")];
+  start(async () => replies.shift()!);
+
+  const worldBrief = await pickForMe("worldBrief", "Steampunk", "");
+  const choices = { theme: "Steampunk", worldBrief, startingHook: "" };
+  const { id: world, overview } = await generateWorld(choices);
+  const regenerated = await regenerateWorld(world, choices);
+  const { id } = await createSave({ worldId: world, worldBrief, artStyle: "Ink", startingHook: "", pc: { name: "Ash" } });
+
+  expect(worldBrief).toBe("A city on a whale.");
+  expect(overview).toBe("First.");
+  expect(regenerated.overview).toBe("Second.");
+  expect(await getSave(id)).toMatchObject({ worldBrief, artStyle: "Ink" });
+});
+
+test("a failed generation reaches the wizard as an error it can show", async () => {
+  start(unreachable("offline"));
+
+  await expect(generateWorld({ theme: "Western", worldBrief: "Dust", startingHook: "" })).rejects.toThrow(
+    "The Text Provider request failed",
+  );
 });

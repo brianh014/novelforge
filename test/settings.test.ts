@@ -146,7 +146,7 @@ test("a Save from before Art Style opens with it blank and keeps its story, and 
   const path = join(folder.path, "Saves", `${id}.sqlite`);
   {
     using db = new Database(path);
-    db.run("ALTER TABLE save DROP COLUMN art_style; PRAGMA user_version = 1");
+    db.run("ALTER TABLE save DROP COLUMN art_style; ALTER TABLE save DROP COLUMN starting_hook; PRAGMA user_version = 1");
   }
   const older = await Bun.file(path).bytes();
 

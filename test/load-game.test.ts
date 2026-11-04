@@ -438,6 +438,7 @@ test("import refuses a Save cut short", async () => {
 
 const TAMPERED: [string, (db: Database) => void][] = [
   ["a Save with no Art Style column", (db) => db.run("ALTER TABLE save DROP COLUMN art_style")],
+  ["a Save with no Starting Hook column", (db) => db.run("ALTER TABLE save DROP COLUMN starting_hook")],
   ["a Save from a newer version", (db) => db.run("PRAGMA user_version = 9999")],
   ["a negative version", (db) => db.run("PRAGMA user_version = -1")],
   ["an unparsable Snapshot section", (db) => db.run("UPDATE sections SET content = '{nope'")],

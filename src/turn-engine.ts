@@ -36,24 +36,30 @@ const FinishedTurn = z.object({
 });
 const NarratorResponse = z.union([z.object({ check: CheckRequest }), FinishedTurn]);
 
-// What the Narrator is asked for. It is flat because strict schema modes refuse a union at the root, and check
-// comes first so that a streamed reply shows it is not a Check request before any narration arrives.
-const { $schema, ...responseSchema } = z.toJSONSchema(
-  z.object({
-    check: CheckRequest.nullable(),
-    narration: z.string().nullable(),
-    state_operations: z.array(StateOperation),
-  }),
-  {
+/** A schema to send to a model. Strict schema modes refuse some keywords, so those are left to validating the reply. */
+export function jsonSchemaOf(schema: z.ZodType) {
+  const { $schema, ...sendable } = z.toJSONSchema(schema, {
     io: "output",
     override: ({ jsonSchema }) => {
       delete jsonSchema.minLength;
+      delete jsonSchema.minItems;
       if (jsonSchema.oneOf) {
         jsonSchema.anyOf = jsonSchema.oneOf;
         delete jsonSchema.oneOf;
       }
     },
-  },
+  });
+  return sendable;
+}
+
+// What the Narrator is asked for. It is flat because strict schema modes refuse a union at the root, and check
+// comes first so that a streamed reply shows it is not a Check request before any narration arrives.
+const responseSchema = jsonSchemaOf(
+  z.object({
+    check: CheckRequest.nullable(),
+    narration: z.string().nullable(),
+    state_operations: z.array(StateOperation),
+  }),
 );
 
 // shortcut: a reply in another key order shows no narration until the Turn is done, loosen this only if real models do that often.
@@ -168,7 +174,7 @@ async function narrate(
       refusal,
     );
     try {
-      const response = parseReply(reply);
+      const response = parseReply(reply, NarratorResponse);
       if (response.check) {
         if (check || !rollCheck) throw new InvalidResponse();
         check = rollCheck(response.check);
@@ -208,9 +214,30 @@ async function askNarrator(
   }
 }
 
-function parseReply(reply: string) {
+/** One reply matching `schema`, with the retries and failures of a Turn. Nothing streams, as a reply may hold secrets. */
+export async function askForJson<T>(
+  textProvider: TextProvider,
+  prompt: Prompt,
+  schema: z.ZodType<T>,
+  refusal: string,
+  signal: AbortSignal,
+) {
+  const request = { schema: jsonSchemaOf(schema), onText: () => {}, signal };
+  for (let attempt = 1; ; attempt++) {
+    const reply = await askNarrator(textProvider, prompt, request, "", refusal);
+    try {
+      return parseReply(reply, schema);
+    } catch (cause) {
+      if (attempt === MAX_ATTEMPTS) {
+        throw new TurnFailed("The Narrator gave no usable response", "retryable", "", { cause });
+      }
+    }
+  }
+}
+
+function parseReply<T>(reply: string, schema: z.ZodType<T>) {
   try {
-    return NarratorResponse.parse(JSON.parse(reply));
+    return schema.parse(JSON.parse(reply));
   } catch (cause) {
     throw new InvalidResponse(undefined, { cause });
   }

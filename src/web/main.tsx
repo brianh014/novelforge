@@ -4,9 +4,10 @@ import { Inventory } from "./inventory";
 import { Journal } from "./journal";
 import { LoadGame } from "./load";
 import { getSettings } from "./api";
-import { Menu, NewGame } from "./menu";
+import { Menu } from "./menu";
 import { Play } from "./play";
 import { applyFontSize, SettingsScreen } from "./settings";
+import { NewGame } from "./wizard";
 
 const onHashChange = (listener: () => void) => {
   window.addEventListener("hashchange", listener);
@@ -19,7 +20,7 @@ function App() {
   if (screen === "play" && id) return <Play key={id} id={id} />;
   if (screen === "journal" && id) return <Journal key={id} id={id} />;
   if (screen === "inventory" && id) return <Inventory key={id} id={id} />;
-  if (screen === "new") return <NewGame />;
+  if (screen === "new") return <NewGame step={id} />;
   if (screen === "load") return <LoadGame />;
   if (screen === "settings") return <SettingsScreen id={id} />;
   return <Menu />;
