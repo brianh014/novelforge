@@ -21,6 +21,7 @@ import {
   type WorldField,
   worldCoverUrl,
 } from "./api";
+import { DecideIcon } from "./icons";
 import { Book } from "./menu";
 import { IMAGE_CHECK_MS } from "./play";
 import { Zoomable } from "./zoom";
@@ -229,8 +230,8 @@ export function NewGame({ step }: { step?: string }) {
           </button>
         )}
         {value.trim() && (
-          <button type="button" className="quiet" aria-label={`Enhance: ${label}`} disabled={!!busy} onClick={improve}>
-            Enhance
+          <button type="button" className="icon" title="Enhance" aria-label={`Enhance: ${label}`} disabled={!!busy} onClick={improve}>
+            {DecideIcon}
           </button>
         )}
       </div>
@@ -325,7 +326,7 @@ export function NewGame({ step }: { step?: string }) {
       </>,
       <form id="pc" className="fields wizard" onSubmit={begin}>
         {box("skills", "Skills and experience", 3)}
-        {box("inventory", "Inventory, one item per line", 4)}
+        {box("inventory", "Starting inventory, one item per line", 4)}
         {box("other", "Anything else", 2)}
         {feedback}
         <button className="action">{error ? "Try again" : "Begin"}</button>
@@ -355,7 +356,7 @@ export function NewGame({ step }: { step?: string }) {
             <textarea
               form="world"
               required
-              rows={4}
+              rows={3}
               value={draft.worldBrief}
               onChange={(e) => set({ worldBrief: e.target.value })}
             />

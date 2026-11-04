@@ -19,8 +19,7 @@
 
 - Raised by the user on 2026-11-04.
 - No options report: it reuses the PC step's Pick for me row and the same quiet link, so it isn't a new visual direction.
-- Enhance sits on the box's label line, as a control under a box read as belonging to the next one in ticket 27.
+- Enhance is a sparkle under its box on the right, with space between fields so it reads as that box's.
 - Undo wasn't asked for. Enhance replaces the box's value, so the browser's own undo can't bring the player's words back. It's one step, and a reload clears it.
-- The box label "Starting inventory, one item per line" became "Inventory, one item per line", as Undo overlapped it at 390px.
 - This replaces the per-box Pick for me and the hint from ticket 27. The Pick for me Title now reads the World Brief and the World Brief reads the Title, which closes the open offer.
 - Your theme, Your Art Style and the PC name have no Enhance. No real model has run Pick for me or Enhance yet.

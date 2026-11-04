@@ -258,15 +258,9 @@ button {
   gap: 6px 14px;
 }
 
-/* On the box's label line, so it can't read as belonging to the box below. */
-.enhanceable {
-  position: relative;
-}
-
+/* Held open while the box is empty, so the page doesn't jump at the first word typed. */
 .enhanceable .row {
-  position: absolute;
-  top: 0;
-  right: 0;
+  min-height: 30px;
 }
 
 .menu {
@@ -409,6 +403,7 @@ input {
 
 .fields.wizard {
   margin-block: 0;
+  gap: 18px;
 }
 
 .wizard fieldset {
