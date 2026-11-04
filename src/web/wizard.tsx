@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { ART_EXAMPLES } from "./art-examples";
 import { ART_STYLES } from "./art-styles";
 import {
@@ -22,7 +22,7 @@ import {
   worldCoverUrl,
 } from "./api";
 import { DecideIcon } from "./icons";
-import { Book } from "./menu";
+import { Book, Sheet } from "./menu";
 import { IMAGE_CHECK_MS } from "./play";
 import { Zoomable } from "./zoom";
 
@@ -36,6 +36,12 @@ const THEMES = [
   "Realistic medieval",
   "Western",
 ];
+const STEPS = [
+  { href: "#/new", name: "Of the World" },
+  { href: "#/new/overview", name: "The World Overview" },
+  { href: "#/new/pc", name: "Of the PC" },
+];
+
 const OWN_THEME = "Create your own";
 
 const OWN_ART_STYLE = "Describe your own art style";
@@ -193,19 +199,60 @@ export function NewGame({ step }: { step?: string }) {
     </>
   );
 
-  const open = (left: ReactNode, right: ReactNode) => (
-    <Book lockLeft={!!busy} left={left}>
-      {busy ? <Working message={busy} onCancel={() => running.current?.abort()} /> : right}
-    </Book>
+  const jump = (id: string) => document.getElementById(id)?.scrollIntoView();
+
+  const frame = (here: number, content: ReactNode, foot: ReactNode) => (
+    <Sheet
+      view={here}
+      lockRail={!!busy}
+      foot={
+        !busy && (
+          <>
+            {feedback}
+            <div className="row">{foot}</div>
+          </>
+        )
+      }
+      rail={
+        <>
+          <nav aria-label="Steps">
+            {STEPS.map(({ href, name }, index) => (
+              <Fragment key={name}>
+                {index === 0 || draft.world ? (
+                  <a href={href} aria-current={index === here ? "step" : undefined}>{index + 1}. {name}</a>
+                ) : (
+                  <span>{index + 1}. {name}</span>
+                )}
+                {index === 0 && here === 0 && (
+                  <>
+                    <button type="button" className="jump" onClick={() => jump("world-choices")}>World choices</button>
+                    <button type="button" className="jump" onClick={() => jump("art-style")}>Art Style</button>
+                  </>
+                )}
+              </Fragment>
+            ))}
+          </nav>
+          <p className="muted so-far">
+            <b>So far</b>
+            {[theme, draft.title.trim(), draft.artStyle === OWN_ART_STYLE ? "Your own Art Style" : draft.artStyle].filter(Boolean).map((choice) => (
+              <span key={choice}>{choice}</span>
+            ))}
+          </p>
+          <a className="quiet" href="#/">Main Menu</a>
+        </>
+      }
+    >
+      {busy ? <Working message={busy} onCancel={() => running.current?.abort()} /> : content}
+    </Sheet>
   );
 
   const pickRow = (filled: boolean, fill: () => void) => (
-    <div className="row">
+    <>
       <span className="muted">Fills only the empty boxes.</span>
       <button type="button" className="quiet" disabled={filled} onClick={fill}>
         Pick for me
       </button>
-    </div>
+    </>
   );
 
   const enhanceTools = (
@@ -249,26 +296,23 @@ export function NewGame({ step }: { step?: string }) {
         const { overview } = await regenerateWorld(world.id, world.choices, signal);
         set({ world: { ...world, overview, coverVersion: world.coverVersion + 1 } });
       });
-    return open(
+    return frame(
+      1,
       <>
         <Heading step={2} title="The World Overview" busy={!!busy} />
         <p className="muted">What your PC would know. Accept this world, or have the Narrator make another.</p>
         <CoverArt key={world.coverVersion} src={worldCoverUrl(world.id, world.coverVersion)} />
-        <a className="quiet" href="#/new">Back to your choices</a>
-      </>,
-      <>
         <div className="overview">
           <p>{world.overview}</p>
         </div>
-        {feedback}
-        <div className="row">
-          <button type="button" className="quiet" onClick={regenerate}>
-            Regenerate
-          </button>
-          <a className="action" href="#/new/pc">
-            Accept
-          </a>
-        </div>
+      </>,
+      <>
+        <button type="button" className="quiet" onClick={regenerate}>
+          Regenerate
+        </button>
+        <a className="action" href="#/new/pc">
+          Accept
+        </a>
       </>,
     );
   }
@@ -287,7 +331,7 @@ export function NewGame({ step }: { step?: string }) {
       <div className="enhanceable">
         <label>
           {label}
-          <textarea form="pc" rows={rows} value={draft.pc[field]} onChange={(e) => setPc(field, e.target.value)} />
+          <textarea rows={rows} value={draft.pc[field]} onChange={(e) => setPc(field, e.target.value)} />
         </label>
         {enhanceTools(field, label, draft.pc[field], (text) => setPc(field, text), { ...world.choices, pc: draft.pc })}
       </div>
@@ -309,35 +353,37 @@ export function NewGame({ step }: { step?: string }) {
         location.hash = `/new/ready/${id}${worldChanged ? "/world-changed" : ""}`;
       });
     };
-    return open(
-      <>
-        <Heading step={3} title="Of the PC" busy={!!busy} />
-        <p className="muted">Play whomever you want. What you write is canon, and the world changes if it must.</p>
-        <div className="fields wizard">
-          <label>
-            PC name
-            <input form="pc" required value={draft.pc.name} onChange={(e) => setPc("name", e.target.value)} />
-          </label>
-          {box("background", "Background", 3)}
-          {box("physicalTraits", "Physical traits", 3)}
-          {pickRow(Object.values(draft.pc).every((text) => text.trim()), fillPc)}
-        </div>
-        <a className="quiet" href="#/new/overview">Back to the World Overview</a>
-      </>,
+    return frame(
+      2,
       <form id="pc" className="fields wizard" onSubmit={begin}>
+        <div>
+          <Heading step={3} title="Of the PC" busy={!!busy} />
+          <p className="muted">Play whomever you want. What you write is canon, and the world changes if it must.</p>
+        </div>
+        <label>
+          PC name
+          <input required value={draft.pc.name} onChange={(e) => setPc("name", e.target.value)} />
+        </label>
+        {box("background", "Background", 3)}
+        {box("physicalTraits", "Physical traits", 3)}
         {box("skills", "Skills and experience", 3)}
         {box("inventory", "Starting inventory, one item per line", 4)}
         {box("other", "Anything else", 2)}
-        {feedback}
-        <button className="action">{error ? "Try again" : "Begin"}</button>
       </form>,
+      <>
+        {pickRow(Object.values(draft.pc).every((text) => text.trim()), fillPc)}
+        <button form="pc" className="action">{error ? "Try again" : "Begin"}</button>
+      </>,
     );
   }
 
-  return open(
-    <>
-      <Heading step={1} title="Of the World" busy={!!busy} />
-      <div className="fields wizard">
+  return frame(
+    0,
+    <form id="world" className="fields wizard" onSubmit={generate}>
+      <div id="world-choices" className="fields wizard">
+        <div>
+          <Heading step={1} title="Of the World" busy={!!busy} />
+        </div>
         <Choices
           legend="Theme"
           options={[...THEMES, OWN_THEME]}
@@ -347,26 +393,20 @@ export function NewGame({ step }: { step?: string }) {
         {draft.theme === OWN_THEME && (
           <label>
             Your theme
-            <input form="world" required value={draft.ownTheme} onChange={(e) => set({ ownTheme: e.target.value })} />
+            <input required value={draft.ownTheme} onChange={(e) => set({ ownTheme: e.target.value })} />
           </label>
         )}
         <div className="enhanceable">
           <label>
             World Brief
-            <textarea
-              form="world"
-              required
-              rows={3}
-              value={draft.worldBrief}
-              onChange={(e) => set({ worldBrief: e.target.value })}
-            />
+            <textarea required rows={3} value={draft.worldBrief} onChange={(e) => set({ worldBrief: e.target.value })} />
           </label>
           {worldTools("worldBrief", "World Brief")}
         </div>
         <div className="enhanceable">
           <label>
             Title
-            <input form="world" required maxLength={80} value={draft.title} onChange={(e) => set({ title: e.target.value })} />
+            <input required maxLength={80} value={draft.title} onChange={(e) => set({ title: e.target.value })} />
           </label>
           {worldTools("title", "Title")}
         </div>
@@ -378,43 +418,37 @@ export function NewGame({ step }: { step?: string }) {
           <div className="enhanceable">
             <label>
               What opens the story?
-              <textarea
-                form="world"
-                required
-                rows={3}
-                value={draft.startingHook}
-                onChange={(e) => set({ startingHook: e.target.value })}
-              />
+              <textarea required rows={3} value={draft.startingHook} onChange={(e) => set({ startingHook: e.target.value })} />
             </label>
             {worldTools("startingHook", "Starting Hook")}
           </div>
         ) : (
           <p className="muted">Your PC just starts in the world, with no immediate hook.</p>
         )}
-        {pickRow(!theme || [draft.worldBrief, draft.title, ...(draft.hookOn ? [draft.startingHook] : [])].every((text) => text.trim()), fillWorld)}
       </div>
-      <a className="quiet" href="#/">Main Menu</a>
-    </>,
-    <form id="world" className="fields wizard" onSubmit={generate}>
-      <Choices
-        legend="Art Style"
-        art
-        options={[...Object.keys(ART_STYLES), OWN_ART_STYLE]}
-        value={draft.artStyle}
-        onChange={(artStyle) => set({ artStyle })}
-      />
-      {draft.artStyle === OWN_ART_STYLE ? (
-        <label>
-          Your Art Style
-          <textarea required rows={3} value={draft.ownArtStyle} onChange={(e) => set({ ownArtStyle: e.target.value })} />
-        </label>
-      ) : (
-        <p className="muted">{ART_STYLES[draft.artStyle]}</p>
-      )}
-      <p className="muted">You can change this in game. It affects new images only.</p>
-      {feedback}
-      <button className="action">{error ? "Try again" : "Generate the world"}</button>
+      <div id="art-style" className="fields wizard">
+        <Choices
+          legend="Art Style"
+          art
+          options={[...Object.keys(ART_STYLES), OWN_ART_STYLE]}
+          value={draft.artStyle}
+          onChange={(artStyle) => set({ artStyle })}
+        />
+        {draft.artStyle === OWN_ART_STYLE ? (
+          <label>
+            Your Art Style
+            <textarea required rows={3} value={draft.ownArtStyle} onChange={(e) => set({ ownArtStyle: e.target.value })} />
+          </label>
+        ) : (
+          <p className="muted">{ART_STYLES[draft.artStyle]}</p>
+        )}
+        <p className="muted">You can change this in game. It affects new images only.</p>
+      </div>
     </form>,
+    <>
+      {pickRow(!theme || [draft.worldBrief, draft.title, ...(draft.hookOn ? [draft.startingHook] : [])].every((text) => text.trim()), fillWorld)}
+      <button form="world" className="action">{error ? "Try again" : "Generate the world"}</button>
+    </>,
   );
 }
 

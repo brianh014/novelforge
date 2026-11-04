@@ -211,6 +211,143 @@ h2 {
   outline-offset: -4px;
 }
 
+/* The sheet, for screens of fields */
+
+.book.sheet {
+  grid-template-columns: 256px minmax(0, 1fr);
+}
+
+.sheet-rail {
+  min-height: 0;
+  padding: 14px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+
+.sheet-rail nav {
+  display: grid;
+}
+
+.sheet-rail nav > * {
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px dotted var(--muted);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sheet-rail nav > span {
+  color: var(--muted);
+  cursor: default;
+}
+
+.sheet-rail nav [aria-current] {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.sheet-rail nav .jump {
+  padding-left: 16px;
+  font-size: 0.9em;
+}
+
+.so-far {
+  display: grid;
+  overflow-wrap: anywhere;
+  font-size: 0.9em;
+}
+
+.sheet-rail > .quiet:last-child {
+  margin-top: auto;
+}
+
+.sheet-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.sheet-scroll {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 30px 30px;
+  overflow: auto;
+}
+
+.book:has(.tabs) .sheet-scroll {
+  padding-top: 42px;
+}
+
+.sheet-body {
+  max-width: 780px;
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.sheet-body:has(> .working) {
+  align-content: center;
+}
+
+.sheet-body [hidden] {
+  display: none;
+}
+
+.sheet-body .fields {
+  margin-block: 0;
+}
+
+.sheet-body .overview {
+  overflow: visible;
+}
+
+.sheet-body .chips.art {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.sheet-body #art-style {
+  scroll-margin-top: 14px;
+}
+
+.sheet-foot {
+  padding: 10px 30px;
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+}
+
+/* Fades the fold, so the page plainly carries on. Only its button takes clicks, as the boxes under the fade must still work. */
+.more-below {
+  position: absolute;
+  right: 14px;
+  bottom: 0;
+  left: 0;
+  padding: 34px 0 6px;
+  display: grid;
+  justify-items: center;
+  background: linear-gradient(transparent, var(--page) 62%);
+  pointer-events: none;
+}
+
+.more-below button {
+  pointer-events: auto;
+}
+
 /* Controls */
 
 button {
@@ -1186,13 +1323,72 @@ dialog blockquote {
     max-height: 60dvh;
   }
 
-  /* The Journal, Inventory, Load Game and Settings are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
-  .book:has(.full-log, .items, .saves, .settings, .wizard) {
+  /* The sheet's index folds into a strip, and the column keeps its pinned foot. */
+  .sheet-rail {
+    flex: none;
+    flex-flow: row wrap;
+    align-items: center;
+    gap: 2px 14px;
+    padding: 8px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .book:has(.tabs) .sheet-rail {
+    padding-top: 48px;
+  }
+
+  .sheet-rail h1 {
+    font-size: 24px;
+  }
+
+  .sheet-rail nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 14px;
+  }
+
+  .sheet-rail nav > * {
+    padding: 2px 0;
+    border-bottom: 0;
+  }
+
+  .sheet-rail nav .jump,
+  .so-far {
+    display: none;
+  }
+
+  .sheet-rail > .quiet:last-child {
+    margin: 0;
+  }
+
+  .sheet-main {
+    flex: 1;
+  }
+
+  .sheet-scroll {
+    padding: 14px 16px 30px;
+  }
+
+  .book:has(.tabs) .sheet-scroll {
+    padding-top: 14px;
+  }
+
+  .sheet-foot {
+    padding: 8px 16px;
+  }
+
+  .sheet-body .chips.art {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* The Journal, Inventory and Load Game are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
+  .book:has(.full-log, .items, .saves) {
     height: auto;
     min-height: 100%;
   }
 
-  .book:has(.full-log, .items, .saves, .settings, .wizard) .page,
+  .book:has(.full-log, .items, .saves) .page,
   .full-log {
     flex: none;
     overflow: visible;

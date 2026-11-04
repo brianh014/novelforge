@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 export function Book(props: { left: ReactNode; children: ReactNode; tabs?: ReactNode; narrowLeft?: boolean; lockLeft?: boolean }) {
   return (
@@ -6,6 +6,59 @@ export function Book(props: { left: ReactNode; children: ReactNode; tabs?: React
       <div className={props.narrowLeft ? "book narrow-left" : "book"}>
         <section className="page left" inert={props.lockLeft}>{props.left}</section>
         <section className="page right">{props.children}</section>
+        {props.tabs}
+      </div>
+    </main>
+  );
+}
+
+/** A single sheet for screens of fields: an index down the side, then one scrolling column above a pinned `foot`. */
+export function Sheet(props: { rail: ReactNode; children: ReactNode; foot?: ReactNode; tabs?: ReactNode; lockRail?: boolean; view?: unknown }) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+
+  useEffect(() => {
+    const view = scroller.current!;
+    const check = () => setMore(view.scrollHeight - view.clientHeight - view.scrollTop > 8);
+    // Fields, pictures and whole sections change the height without any scrolling.
+    const resized = new ResizeObserver(check);
+    resized.observe(view);
+    resized.observe(view.firstElementChild!);
+    view.addEventListener("scroll", check, { passive: true });
+    return () => {
+      resized.disconnect();
+      view.removeEventListener("scroll", check);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Braces matter: scrollTo can return a promise, which React would take for a cleanup function.
+    scroller.current!.scrollTo({ top: 0, behavior: "instant" });
+  }, [props.view]);
+
+  return (
+    <main className="desk">
+      <div className="book sheet">
+        <aside className="sheet-rail" inert={props.lockRail}>{props.rail}</aside>
+        <section className="sheet-main">
+          <div className="sheet-view">
+            <div ref={scroller} className="sheet-scroll">
+              <div className="sheet-body">{props.children}</div>
+            </div>
+            {more && (
+              <div className="more-below">
+                <button
+                  type="button"
+                  className="quiet"
+                  onClick={() => scroller.current!.scrollBy({ top: scroller.current!.clientHeight * 0.8 })}
+                >
+                  <span aria-hidden="true">↓ </span>More below
+                </button>
+              </div>
+            )}
+          </div>
+          {props.foot && <div className="sheet-foot">{props.foot}</div>}
+        </section>
         {props.tabs}
       </div>
     </main>

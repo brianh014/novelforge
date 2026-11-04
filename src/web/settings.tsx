@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { WORKFLOW_EXAMPLE } from "../comfy-workflow";
 import { chosenModels } from "../graph-builder";
 import {
@@ -12,7 +13,10 @@ import {
   saveSettings,
   type Settings,
 } from "./api";
-import { Book, BookTabs } from "./menu";
+import { BookTabs, Sheet } from "./menu";
+
+const SECTIONS = ["Text", "Images", "Reading"];
+const THIS_GAME = "This game";
 
 export const applyLook = ({ fontSize, theme }: Settings) => {
   document.documentElement.dataset.fontSize = fontSize;
@@ -398,7 +402,17 @@ function ComfySettings({
   );
 }
 
-function InstallSettings({ initial }: { initial: Settings }) {
+function InstallSettings({
+  initial,
+  section,
+  onSection,
+  frame,
+}: {
+  initial: Settings;
+  section: string;
+  onSection: (section: string) => void;
+  frame: (content: ReactNode, foot?: ReactNode) => ReactNode;
+}) {
   const [saved, setSaved] = useState(initial);
   const [draft, setDraft] = useState(initial);
   // Only ever what the player types now, because the server never sends a stored key.
@@ -443,8 +457,19 @@ function InstallSettings({ initial }: { initial: Settings }) {
       : "Saved.";
   });
 
-  return (
-    <form className="fields settings" onSubmit={submit}>
+  return frame(
+    <form
+      id="settings-form"
+      className="fields settings"
+      hidden={section === THIS_GAME}
+      onSubmit={submit}
+      // A required box in a hidden section stops Save with nothing to show for it, so go there. In time for the browser to point at the box.
+      onInvalidCapture={(event) => {
+        const box = (event.target as HTMLElement).closest<HTMLElement>("[data-section]");
+        if (box) flushSync(() => onSection(box.dataset.section!));
+      }}
+    >
+      <div data-section="Text" className="fields" hidden={section !== "Text"}>
       <h2>Text</h2>
       <label>
         Text provider
@@ -511,7 +536,9 @@ function InstallSettings({ initial }: { initial: Settings }) {
         />
       </label>
       <p className="muted">Your own guidance to the Narrator, for every Save.</p>
+      </div>
 
+      <div data-section="Images" className="fields" hidden={section !== "Images"}>
       <h2>Images</h2>
       <label className="toggle">
         <input
@@ -552,7 +579,9 @@ function InstallSettings({ initial }: { initial: Settings }) {
       ) : (
         <ComfySettings draft={draft} saved={saved} set={set} />
       )}
+      </div>
 
+      <div data-section="Reading" className="fields" hidden={section !== "Reading"}>
       <h2>Reading</h2>
       <label>
         Theme
@@ -585,38 +614,62 @@ function InstallSettings({ initial }: { initial: Settings }) {
           <option value="large">Large</option>
         </select>
       </label>
-
-      {feedback}
-      <button className="action" aria-disabled={busy}>
-        Save settings
-      </button>
-    </form>
+      </div>
+    </form>,
+    section !== THIS_GAME && (
+      <>
+        {feedback}
+        <div className="row">
+          <button form="settings-form" className="action" aria-disabled={busy}>
+            Save settings
+          </button>
+        </div>
+      </>
+    ),
   );
 }
 
 export function SettingsScreen({ id }: { id?: string }) {
   const [settings, setSettings] = useState<Settings>();
   const [loadError, setLoadError] = useState("");
+  const [section, setSection] = useState(SECTIONS[0]!);
 
   useEffect(() => {
     getSettings().then(setSettings, (failure: Error) => setLoadError(failure.message));
   }, []);
 
-  return (
-    <Book
-      left={
+  const frame = (content: ReactNode, foot?: ReactNode) => (
+    <Sheet
+      view={section}
+      foot={foot}
+      tabs={id && <BookTabs id={id} current="Settings" />}
+      rail={
         <>
           <h1 className="big">Settings</h1>
-          {id ? <ArtStyle key={id} id={id} /> : <p className="muted">Open a game to change its Art Style.</p>}
+          <nav aria-label="Settings sections">
+            {[...(id ? [THIS_GAME] : []), ...SECTIONS].map((name) => (
+              <button key={name} type="button" aria-current={name === section || undefined} onClick={() => setSection(name)}>
+                {name}
+              </button>
+            ))}
+          </nav>
+          {!id && <p className="muted so-far">Open a game to change its Art Style.</p>}
           <a className="quiet" href="#/">
             Main Menu
           </a>
         </>
       }
-      tabs={id && <BookTabs id={id} current="Settings" />}
     >
       {loadError && <p role="alert" className="error">{loadError}</p>}
-      {settings && <InstallSettings initial={settings} />}
-    </Book>
+      {/* Stays mounted, so an unsaved edit survives a look at another section. */}
+      {id && (
+        <div hidden={section !== THIS_GAME}>
+          <ArtStyle key={id} id={id} />
+        </div>
+      )}
+      {content}
+    </Sheet>
   );
+
+  return settings ? <InstallSettings initial={settings} section={section} onSection={setSection} frame={frame} /> : frame(null);
 }
