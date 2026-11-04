@@ -1,11 +1,15 @@
 import type { Message, Save, SaveStore } from "../save-store";
+import type { SettingsChange } from "../settings-store";
 import type { State } from "../state-applier";
 
 export type { Message, Save };
 export type ListedSave = ReturnType<SaveStore["list"]>[number];
 export type Inventory = State["inventory"];
 export type Status = State["status"];
-export type Settings = { textBaseUrl: string; textModel: string; hasTextApiKey: boolean };
+export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKey"> & {
+  hasTextApiKey: boolean;
+  hasImageApiKey: boolean;
+};
 export type Journal = { summary: string; facts: string[]; npcs: string[]; fullLog: Message[] };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
 
@@ -26,7 +30,10 @@ async function request<T>(path: string, init?: RequestInit) {
 
 export const listSaves = () => request<{ saves: ListedSave[] }>("/saves").then(({ saves }) => saves);
 
-export const getSave = (id: string) => request<Save>(`/saves/${id}`);
+export const getSave = (id: string) => request<ReturnType<SaveStore["read"]>>(`/saves/${id}`);
+
+export const saveArtStyle = (id: string, artStyle: string) =>
+  request<{ artStyle: string }>(`/saves/${id}`, { ...jsonBody({ artStyle }), method: "PATCH" });
 
 export async function deleteSave(id: string) {
   const response = await fetch(`/saves/${id}`, { method: "DELETE" });
@@ -40,10 +47,19 @@ export const importSave = (file: File) =>
     body: file,
   });
 
+export const OPENROUTER_URL = "https://openrouter.ai/api/v1";
+
 export const getSettings = () => request<Settings>("/settings");
 
+export const saveSettings = (change: SettingsChange) =>
+  request<Settings>("/settings", { ...jsonBody(change), method: "PATCH" });
+
 /** What stops the Narrator replying, if anything. */
-export function setupProblem({ textBaseUrl, textModel, hasTextApiKey }: Settings) {
+export function setupProblem({
+  textBaseUrl,
+  textModel,
+  hasTextApiKey,
+}: Pick<Settings, "textBaseUrl" | "textModel" | "hasTextApiKey">) {
   if (!textModel) return "No text model is set.";
   // shortcut: local servers need no key, so only OpenRouter is checked, ask per server if more keyed hosts appear.
   if (!hasTextApiKey && textBaseUrl.includes("openrouter.ai")) return "No API key is set.";

@@ -25,6 +25,8 @@ function spliceNote(notes: string[], index: string, ...replacement: string[]) {
   return notes.toSpliced(position, 1, ...replacement);
 }
 
+const ArtStyleRequest = z.object({ artStyle: z.string() });
+
 const DuplicateRequest = z.object({ fromMessage: z.number().optional() });
 
 // Requiring JSON also stops other websites posting here, since a cross-site JSON POST needs a CORS preflight.
@@ -85,8 +87,30 @@ export function startServer(options: {
 
   // An allowlist, so the API key can never reach a response.
   const publicSettings = () => {
-    const { textBaseUrl, textModel, textApiKey, modelInstructions } = settings.read();
-    return { textBaseUrl, textModel, hasTextApiKey: textApiKey !== "", modelInstructions };
+    const {
+      textBaseUrl,
+      textModel,
+      textApiKey,
+      modelInstructions,
+      imageProvider,
+      imageModel,
+      imageApiKey,
+      imagesEnabled,
+      chatStyle,
+      fontSize,
+    } = settings.read();
+    return {
+      textBaseUrl,
+      textModel,
+      hasTextApiKey: textApiKey !== "",
+      modelInstructions,
+      imageProvider,
+      imageModel,
+      hasImageApiKey: imageApiKey !== "",
+      imagesEnabled,
+      chatStyle,
+      fontSize,
+    };
   };
 
   return Bun.serve({
@@ -122,8 +146,13 @@ export function startServer(options: {
       "/saves/:id": {
         GET: (req) => {
           // An allowlist, so a secret added to the Save can never reach the player by default.
-          const { worldBrief, pc } = saves.read(req.params.id);
-          return Response.json({ worldBrief, pc: { name: pc.name } });
+          const { worldBrief, pc, artStyle } = saves.read(req.params.id);
+          return Response.json({ worldBrief, pc: { name: pc.name }, artStyle });
+        },
+        PATCH: async (req) => {
+          const { artStyle } = await parseBody(req, ArtStyleRequest);
+          saves.setArtStyle(req.params.id, artStyle);
+          return Response.json({ artStyle });
         },
         DELETE: (req) => {
           saves.delete(req.params.id);

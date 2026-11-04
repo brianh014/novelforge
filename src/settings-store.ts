@@ -7,15 +7,30 @@ export const SettingsUpdate = z
     textApiKey: z.string(),
     textModel: z.string(),
     modelInstructions: z.string(),
+    imageProvider: z.enum(["openrouter", "local"]),
+    imageModel: z.string(),
+    imageApiKey: z.string(),
+    imagesEnabled: z.boolean(),
+    // shortcut: Prose is the only Chat style that works, add the others in ticket 22.
+    chatStyle: z.enum(["prose"]),
+    fontSize: z.enum(["small", "medium", "large"]),
   })
   .partial();
+
+export type SettingsChange = z.infer<typeof SettingsUpdate>;
 
 const defaults = {
   textBaseUrl: "https://openrouter.ai/api/v1",
   textApiKey: "",
   textModel: "",
   modelInstructions: "",
-};
+  imageProvider: "openrouter",
+  imageModel: "",
+  imageApiKey: "",
+  imagesEnabled: true,
+  chatStyle: "prose",
+  fontSize: "medium",
+} satisfies SettingsChange;
 
 export type SettingsStore = ReturnType<typeof settingsStore>;
 
@@ -27,7 +42,7 @@ export function settingsStore(path: string) {
   return {
     read,
 
-    update(change: z.infer<typeof SettingsUpdate>) {
+    update(change: SettingsChange) {
       const current = read();
       const next = { ...current, ...change };
       // A key must only ever reach the server it was entered for.

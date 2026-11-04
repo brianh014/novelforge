@@ -35,6 +35,15 @@
   --body: "EB Garamond", Garamond, "Hoefler Text", Georgia, serif;
   --label: "IM Fell English SC", Garamond, Georgia, serif;
   --tab-width: 38px;
+  --reading-size: 18px;
+}
+
+:root[data-font-size="small"] {
+  --reading-size: 16px;
+}
+
+:root[data-font-size="large"] {
+  --reading-size: 21px;
 }
 
 * {
@@ -45,7 +54,7 @@ body {
   margin: 0;
   background: var(--desk);
   color: var(--ink);
-  font: 18px/1.45 var(--body);
+  font: var(--reading-size)/1.45 var(--body);
 }
 
 p,
@@ -241,7 +250,20 @@ button {
   justify-self: end;
 }
 
+.fields .toggle {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
 textarea,
+select,
 input {
   width: 100%;
   padding: 4px 6px;
@@ -573,13 +595,13 @@ dialog blockquote {
     flex: 1;
   }
 
-  /* The Journal, Inventory and Load Game are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
-  .book:has(.full-log, .items, .saves) {
+  /* The Journal, Inventory, Load Game and Settings are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
+  .book:has(.full-log, .items, .saves, .settings) {
     height: auto;
     min-height: 100%;
   }
 
-  .book:has(.full-log, .items, .saves) .page,
+  .book:has(.full-log, .items, .saves, .settings) .page,
   .full-log {
     flex: none;
     overflow: visible;
@@ -591,7 +613,7 @@ dialog blockquote {
     scroll-margin-bottom: 44px;
   }
 
-  .book:has(.full-log, .items) .tabs {
+  .book:has(.full-log, .items, .settings) .tabs {
     position: sticky;
     bottom: 0;
     margin-top: auto;

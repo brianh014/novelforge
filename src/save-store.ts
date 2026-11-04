@@ -139,8 +139,11 @@ function toVersion1(db: Database) {
   sweepSections(db);
 }
 
+/** A column rather than a Snapshot section, because a Revert must not undo a choice about future images. */
+const toVersion2 = (db: Database) => db.run("ALTER TABLE save ADD COLUMN art_style TEXT NOT NULL DEFAULT ''");
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1];
+const MIGRATIONS = [toVersion1, toVersion2];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -194,6 +197,7 @@ function assertValidSave(db: Database) {
     world_brief: z.string().min(1),
     pc_name: z.string().min(1),
     pending_notes: jsonText(StateSections.directorsNotes).nullable(),
+    art_style: z.string(),
   });
   const messages = rowsOf(db, "messages", {
     id: rowId.positive(),
@@ -317,12 +321,19 @@ export function saveStore(savesDir: string) {
       return saves.toSorted((a, b) => b.updatedAt - a.updatedAt);
     },
 
-    read(id: string): Save {
+    read(id: string): Save & { artStyle: string } {
       using db = open(id);
       const save = db
-        .query<{ world_brief: string; pc_name: string }, []>("SELECT world_brief, pc_name FROM save")
+        .query<{ world_brief: string; pc_name: string; art_style: string }, []>(
+          "SELECT world_brief, pc_name, art_style FROM save",
+        )
         .get()!;
-      return { worldBrief: save.world_brief, pc: { name: save.pc_name } };
+      return { worldBrief: save.world_brief, pc: { name: save.pc_name }, artStyle: save.art_style };
+    },
+
+    setArtStyle(id: string, artStyle: string) {
+      using db = open(id);
+      db.run("UPDATE save SET art_style = ?", [artStyle]);
     },
 
     messages(id: string) {

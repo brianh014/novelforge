@@ -144,7 +144,7 @@ test("an exported Save imports as a new Save with the same story", async () => {
   expect(copy).not.toBe(id);
   expect(await listedIds()).toEqual([id, copy].sort());
   expect(await messagesOf(copy)).toEqual(await messagesOf(id));
-  expect(await game.get(`/saves/${copy}`).then((r) => r.json())).toEqual({ worldBrief: "A drowned city", pc: { name: "Ash" } });
+  expect(await game.get(`/saves/${copy}`).then((r) => r.json())).toEqual({ worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "" });
 });
 
 test("importing the same file twice gives two Saves", async () => {
@@ -437,6 +437,7 @@ test("import refuses a Save cut short", async () => {
 });
 
 const TAMPERED: [string, (db: Database) => void][] = [
+  ["a Save with no Art Style column", (db) => db.run("ALTER TABLE save DROP COLUMN art_style")],
   ["a Save from a newer version", (db) => db.run("PRAGMA user_version = 9999")],
   ["a negative version", (db) => db.run("PRAGMA user_version = -1")],
   ["an unparsable Snapshot section", (db) => db.run("UPDATE sections SET content = '{nope'")],

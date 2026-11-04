@@ -13,14 +13,14 @@ export function Book(props: { left: ReactNode; children: ReactNode; tabs?: React
   );
 }
 
-export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Inventory" }) {
+export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Inventory" | "Settings" }) {
   const here = (tab: typeof current) => (tab === current ? "page" : undefined);
   return (
     <nav className="tabs" aria-label="Book sections">
       <a href={`#/play/${id}`} aria-current={here("Story")}>Story</a>
       <a href={`#/journal/${id}`} aria-current={here("Journal")}>Journal</a>
       <a href={`#/inventory/${id}`} aria-current={here("Inventory")}>Inventory</a>
-      <a href="#/settings">Settings</a>
+      <a href={`#/settings/${id}`} aria-current={here("Settings")}>Settings</a>
     </nav>
   );
 }
@@ -89,23 +89,6 @@ export function NewGame() {
           Begin
         </button>
       </form>
-    </Book>
-  );
-}
-
-// shortcut: an empty screen behind a menu entry, ticket 14 replaces it.
-export function Placeholder({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Book left={<h1 className="big">{title}</h1>}>
-      <p>{children}</p>
-      <div className="row">
-        <button className="quiet" onClick={() => history.back()}>
-          Back
-        </button>
-        <a className="quiet" href="#/">
-          Main Menu
-        </a>
-      </div>
     </Book>
   );
 }

@@ -230,7 +230,7 @@ export function Play({ id }: { id: string }) {
       <p className="visually-hidden" aria-live="polite">{announcement}</p>
       {setupNotice && (
         <p className="notice">
-          {setupNotice} The Narrator can't reply until then. <a href="#/settings">Open Settings</a>
+          {setupNotice} The Narrator can't reply until then. <a href={`#/settings/${id}`}>Open Settings</a>
         </p>
       )}
       {error && <p role="alert" className="error">{error}</p>}

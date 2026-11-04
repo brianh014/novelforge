@@ -3,10 +3,13 @@ import { join } from "node:path";
 import {
   deleteSave,
   duplicateSave,
+  getSave,
   importSave,
   listSaves,
   playTurn,
   replaceResponse,
+  saveArtStyle,
+  saveSettings,
   setupProblem,
 } from "../src/web/api";
 import { ContentRefused, type TextProvider } from "../src/turn-engine";
@@ -214,6 +217,20 @@ test("the player is told when the Narrator has no model or key, but a local serv
   expect(setupProblem({ textBaseUrl: openRouter, textModel: "a/model", hasTextApiKey: false })).toContain("key");
   expect(setupProblem({ textBaseUrl: openRouter, textModel: "a/model", hasTextApiKey: true })).toBeUndefined();
   expect(setupProblem({ textBaseUrl: local, textModel: "a/model", hasTextApiKey: false })).toBeUndefined();
+});
+
+test("Settings and Art Style save through the API client, which reports a refusal", async () => {
+  start(reply("Unused."));
+  const id = await game.createSave();
+
+  expect(await saveSettings({ fontSize: "large", imageApiKey: "image-key" })).toMatchObject({
+    fontSize: "large",
+    hasImageApiKey: true,
+  });
+  await saveArtStyle(id, "Ink");
+
+  expect((await getSave(id)).artStyle).toBe("Ink");
+  await expect(saveSettings({ textBaseUrl: "not a url" })).rejects.toThrow("textBaseUrl");
 });
 
 const replace = async (id: string, messageId: number, feedback: string) => {

@@ -3,8 +3,10 @@ import { createRoot } from "react-dom/client";
 import { Inventory } from "./inventory";
 import { Journal } from "./journal";
 import { LoadGame } from "./load";
-import { Menu, NewGame, Placeholder } from "./menu";
+import { getSettings } from "./api";
+import { Menu, NewGame } from "./menu";
 import { Play } from "./play";
+import { applyFontSize, SettingsScreen } from "./settings";
 
 const onHashChange = (listener: () => void) => {
   window.addEventListener("hashchange", listener);
@@ -19,15 +21,11 @@ function App() {
   if (screen === "inventory" && id) return <Inventory key={id} id={id} />;
   if (screen === "new") return <NewGame />;
   if (screen === "load") return <LoadGame />;
-  if (screen === "settings") {
-    return (
-      <Placeholder title="Settings">
-        This screen isn't written yet. For now, set <code>textModel</code> and <code>textApiKey</code> in{" "}
-        <code>settings.json</code> beside the app.
-      </Placeholder>
-    );
-  }
+  if (screen === "settings") return <SettingsScreen id={id} />;
   return <Menu />;
 }
+
+// If this fails the app still works, at the default size.
+getSettings().then(applyFontSize, () => {});
 
 createRoot(document.getElementById("root")!).render(<App />);

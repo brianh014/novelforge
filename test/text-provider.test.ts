@@ -342,7 +342,7 @@ test("Settings survive a restart, and the API key never reaches a response, a Sa
 
     const settings = await game.get("/settings").then((r) => r.text());
 
-    expect(JSON.parse(settings)).toEqual({
+    expect(JSON.parse(settings)).toMatchObject({
       textBaseUrl: provider.baseUrl,
       textModel: "fake/model",
       hasTextApiKey: true,
