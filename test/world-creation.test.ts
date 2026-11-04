@@ -30,6 +30,7 @@ const fits = [JSON.stringify({ wearing: [], health: "unhurt", injuries: [], cond
 
 const generated = (mark = "", changes = {}) =>
   JSON.stringify({
+    title: "The Salt Reckoning",
     world_overview: `${mark}Rain never stops in Saltmere.`,
     lore_entries: [
       { title: `${mark}The Tide Court`, keywords: ["Tide Court", "the court", "magistrates"], content: `${mark}Its judges drown the guilty.` },
@@ -137,6 +138,8 @@ test.each([
   ["no Lore Entries", { lore_entries: [] }],
   ["no world_rules", { world_rules: [] }],
   ["no Plot Threads", { plot_threads: [] }],
+  ["no title", { title: "" }],
+  ["a title too long for a cover", { title: "x".repeat(81) }],
   ["no World Overview", { world_overview: "" }],
 ])("a reply with %s is retried", async (_name, changes) => {
   play(generated("", changes), generated());

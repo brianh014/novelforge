@@ -9,7 +9,7 @@ export type ImagePipeline = ReturnType<typeof imagePipeline>;
 type Npc = State["npcs"][number];
 export type Scene = { changed: boolean; moved: boolean; description: string; location: string; visible: Npc[] };
 type Job = { messageId: number; draw: (signal: AbortSignal) => Promise<void> };
-type Cover = { theme: string; overview: string; artStyle?: string };
+type Cover = { title: string; theme: string; overview: string; artStyle?: string };
 /**
  * At most one image draws per Save. Portraits go first, so a Scene Image can use them, and all of them wait their turn,
  * as a person is only drawn once. Of the scenes only the newest waits, so a run of quick Turns pays for two images.
@@ -18,6 +18,8 @@ type Work = { running?: Job & { controller: AbortController }; portraits: Job[];
 
 // Sent as the negative prompt, because a Scene Image must not show the player a Check's numbers or dice either.
 const AVOID = "text, captions, letters, numbers, dice";
+// Not AVOID, as a cover shows its title.
+const COVER_AVOID = "captions, author names, taglines, dice";
 
 const castOf = ({ scene }: State) => JSON.stringify(scene.visibleCast.toSorted());
 
@@ -140,13 +142,13 @@ export function imagePipeline(
      * A story's cover, for a world that has no Save yet. Its prompt holds only what the player reads, as nothing here
      * knows the World Bible. A failure leaves the story without a cover, which nothing depends on.
      */
-    async drawCover({ theme, overview, artStyle = "" }: Cover, signal: AbortSignal) {
+    async drawCover({ title, theme, overview, artStyle = "" }: Cover, signal: AbortSignal) {
       if (!ready()) return undefined;
       try {
         const bytes = await adapter(
           {
-            prompt: `Cover art for a novel, one striking image of its world's mood and subject, not a moment from the story.\nTheme: ${theme}\nThe world: ${overview}`,
-            negative_prompt: AVOID,
+            prompt: `The front cover of a novel, one striking image of its world's mood and subject, not a moment from the story. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly, and it must be the only lettering on the cover: ${JSON.stringify(title)}\nTheme: ${theme}\nThe world: ${overview}`,
+            negative_prompt: COVER_AVOID,
             aspect_ratio: "2:3",
             reference_images: [],
             style_preset: artStyle,

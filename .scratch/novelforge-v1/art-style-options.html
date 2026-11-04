@@ -1,0 +1,259 @@
+<title>NovelForge Art Style Picker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Display&family=Libre+Caslon+Text:wght@400;700&display=swap">
+<style>
+/* Layout: the same neutral light box as the dark paper report, with each option's mock at the app's real page widths. The report stays one look in every theme; the paper inside the mocks has its own switch. */
+:root {
+  color-scheme: dark;
+  --table: #1a1a1b;
+  --table-2: #252526;
+  --text: #e6e6e4;
+  --dim: #a9a9a6;
+  --rule: #3c3c3e;
+  --mark: #e6c37a;
+  --display: "Libre Caslon Display", Georgia, serif;
+  --body: "Libre Caslon Text", Georgia, serif;
+}
+body { background: var(--table); color: var(--text); font: 16px/1.5 var(--body); }
+.wrap { max-width: 1060px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 26px 52px; display: grid; gap: 40px; }
+h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 400; text-wrap: balance; }
+h1 { font-size: clamp(32px, 6vw, 48px); line-height: 1.08; }
+h2 { font-size: 28px; }
+h3 { font-size: 20px; }
+p { margin: 0; }
+.prose { display: grid; gap: 8px; max-width: 72ch; }
+.dim { color: var(--dim); }
+.mark { color: var(--mark); }
+section { display: grid; gap: 14px; min-width: 0; }
+
+.switch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.switch button { font: inherit; color: var(--text); background: var(--table-2); border: 1px solid var(--rule); padding: 6px 14px; min-height: 40px; cursor: pointer; }
+.switch button[aria-pressed="true"] { border-color: var(--mark); color: var(--mark); }
+button:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+
+.pair { display: grid; grid-template-columns: minmax(0, 640px) minmax(0, 360px); gap: 20px; align-items: start; }
+.frame { display: grid; gap: 6px; min-width: 0; }
+.frame > span { color: var(--dim); font-size: 14px; }
+
+/* The paper, with the app's own tokens. */
+.paper {
+  --page: #2b2b29; --ink: #e8e4d8; --muted: #b5b2a6; --line: #55544e; --accent: #b9c7a8; --on-accent: #16180f; --soft: #3a3a37;
+  position: relative; display: flex; flex-direction: column; gap: 8px; padding: 14px 22px; overflow: hidden;
+  background: var(--page); color: var(--ink); font-size: 16px; min-width: 0;
+}
+[data-paper="light"] .paper { --page: #eadfc5; --ink: #25221a; --muted: #5a5340; --line: #b4a581; --accent: #23503e; --on-accent: #f2ead6; --soft: #dccda9; }
+.paper .legend { font-weight: 700; }
+.paper .muted { color: var(--muted); font-size: 14.5px; }
+.paper .go { align-self: flex-start; font: inherit; padding: 6px 16px; min-height: 40px; border: 0; background: var(--accent); color: var(--on-accent); }
+.pic { display: block; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); background: var(--soft); }
+.pic svg { display: block; width: 100%; height: 100%; }
+.pic.none { display: grid; place-items: center; color: var(--muted); font-size: 13px; padding: 6px; text-align: center; border-style: dashed; }
+.pick { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 3px; align-content: start; min-width: 0; color: var(--ink); font-size: 12.5px; line-height: 1.25; overflow-wrap: anywhere; }
+.pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pick[aria-pressed="true"] { color: var(--accent); font-weight: 700; }
+.pick[aria-pressed="true"] .pic { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.thumbs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 10px; }
+.phone .thumbs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.names { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.phone .names { grid-template-columns: minmax(0, 1fr); }
+.names .pick { display: flex; align-items: center; min-height: 32px; padding: 2px 0; border-bottom: 1px dotted var(--muted); font-size: 13.6px; }
+.phone .names .pick { min-height: 44px; }
+.names .pick[aria-pressed="true"] { border-bottom-color: var(--accent); }
+.big { max-height: 240px; }
+.phone .big { max-height: none; }
+.chosen { display: grid; grid-template-columns: 45% minmax(0, 1fr); gap: 12px; align-items: start; }
+.phone .chosen { grid-template-columns: minmax(0, 1fr); }
+.chosen b { display: block; color: var(--accent); }
+.see { font: inherit; font-size: 14.5px; min-height: 40px; margin-top: 6px; padding: 4px 12px; color: var(--ink); background: none; border: 1px solid var(--line); cursor: pointer; }
+.sheet { position: absolute; inset: 0; z-index: 2; display: grid; align-content: start; gap: 10px; padding: 14px 22px; overflow: auto; background: var(--page); }
+.sheet .thumbs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.phone .sheet .thumbs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sheet .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+.note { display: grid; gap: 4px; max-width: 72ch; }
+
+.covers { display: flex; flex-wrap: wrap; gap: 24px; align-items: end; }
+.covers figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+.covers figcaption { color: var(--dim); font-size: 14px; }
+.cover-art { display: block; aspect-ratio: 2 / 3; border: 1px solid #55544e; }
+.cover-art svg { display: block; width: 100%; height: 100%; }
+.saves { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 16px; }
+.saves .row { display: grid; gap: 6px; min-width: 0; align-content: start; }
+.save { display: grid; column-gap: 12px; align-items: start; }
+.save b { display: block; font-weight: 700; }
+.save .sm { color: var(--muted); font-size: 14.5px; }
+
+.choices { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: q; }
+.choices li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 2px 8px; padding-block: 10px; border-top: 1px solid var(--rule); counter-increment: q; }
+.choices li::before { content: counter(q); color: var(--mark); font: 22px/1.2 var(--display); }
+.choices li > * { grid-column: 2; min-width: 0; }
+
+@media (max-width: 1040px) {
+  .pair { grid-template-columns: minmax(0, 1fr); }
+  .frame.phone { max-width: 360px; }
+}
+@media (max-width: 480px) {
+  .thumbs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .paper { padding: 12px 14px; }
+}
+</style>
+
+<div class="wrap" id="root" data-paper="dark">
+  <header class="prose">
+    <h1>NovelForge Art Style Picker</h1>
+    <p>Three ways to show an example of each Art Style on step 1 of world creation, then what a title baked into the cover means for each place the cover appears.</p>
+    <p class="mark">The pictures here are stand-ins I drew in code, with colours borrowed from each style. No image has been generated yet. They show layout only, so judge the layout and how much room a thumbnail gets, never the art.</p>
+    <p class="dim">Every mock works: pick a style in any of them and all three follow. The mocks are the right page of step 1 at 640px, the width on a 1366px screen, and a 360px phone. The list and descriptions are the real ones.</p>
+  </header>
+
+  <div class="switch" role="group" aria-label="Paper shown in the mocks">
+    <button type="button" data-paper-set="dark">Charcoal paper</button>
+    <button type="button" data-paper-set="light">Parchment</button>
+  </div>
+
+  <section>
+    <h2>A. Thumbnail grid <span class="mark">(my pick)</span></h2>
+    <p class="note">Each style in the list becomes a small picture with its name under it. You can compare all 16 at once with no extra click. It is the smallest change, and the images can be the smallest, but each one is only about 140px wide on desktop and fine detail won't show. The grid is taller than today's list, so short screens scroll the page.</p>
+    <div class="pair"><div class="frame"><span>Desktop</span><div class="paper" data-mock="a"></div></div><div class="frame phone"><span>Phone</span><div class="paper" data-mock="a"></div></div></div>
+  </section>
+
+  <section>
+    <h2>B. List with one large preview</h2>
+    <p class="note">Today's list stays as it is, and one large picture above it shows the selected style. This is the best view of a single style, but you see one at a time, so comparing means clicking through. On a phone the list is 17 rows long and the preview scrolls away, so picking a low row hides what it changed.</p>
+    <div class="pair"><div class="frame"><span>Desktop</span><div class="paper" data-mock="b"></div></div><div class="frame phone"><span>Phone</span><div class="paper" data-mock="b"></div></div></div>
+  </section>
+
+  <section>
+    <h2>C. Chosen style with a full sheet of plates</h2>
+    <p class="note">The page stays calm and shows only the chosen style. A button opens a sheet of larger plates covering the page, like the list of plates in an old book. It keeps step 1 short and gives the thumbnails more room, but every change of style costs an extra click, and the choice no longer sits beside the rest of the form.</p>
+    <div class="pair"><div class="frame"><span>Desktop</span><div class="paper" data-mock="c"></div></div><div class="frame phone"><span>Phone</span><div class="paper" data-mock="c"></div></div></div>
+  </section>
+
+  <section>
+    <h2>The titled cover</h2>
+    <p class="note">The title will be painted into the picture by the image model, so these stand-ins show size only. The real lettering depends on the model, and spelling is the main risk. The first real cover will show how well it copes. A title reads well at the size on step 2, and barely at the 74px of Load Game.</p>
+    <div class="covers">
+      <figure><div class="cover-art" data-cover style="width:min(240px, 100%)"></div><figcaption>Step 2 and the left page (shown at 240px)</figcaption></figure>
+      <figure><div class="cover-art" data-cover style="width:110px"></div><figcaption>110px</figcaption></figure>
+      <figure><div class="cover-art" data-cover style="width:74px"></div><figcaption>74px, today</figcaption></figure>
+    </div>
+    <h3>Load Game row</h3>
+    <div class="saves">
+      <div class="row"><span class="dim"><b class="mark">L1.</b> Keep 74px, add the title as text beside it <span class="mark">(my pick)</span></span>
+        <div class="paper"><div class="save" style="grid-template-columns:74px minmax(0,1fr)"><div class="cover-art" data-cover></div><div><b>The Salt Reckoning</b><div class="sm">Bryon<br>Turn 42, yesterday</div></div></div></div>
+        <span class="dim">Always readable. Needs the title stored in the Save: one migration and one column. Older Saves show what they show today.</span></div>
+      <div class="row"><span class="dim"><b class="mark">L2.</b> Grow the cover to 110px</span>
+        <div class="paper"><div class="save" style="grid-template-columns:110px minmax(0,1fr)"><div class="cover-art" data-cover></div><div><b>Bryon</b><div class="sm">Turn 42, yesterday</div></div></div></div>
+        <span class="dim">No migration, as the title lives only in the picture. Rows get taller, and a misspelled title stays that way.</span></div>
+      <div class="row"><span class="dim"><b class="mark">L3.</b> Leave Load Game alone</span>
+        <div class="paper"><div class="save" style="grid-template-columns:74px minmax(0,1fr)"><div class="cover-art" data-cover></div><div><b>Bryon</b><div class="sm">Turn 42, yesterday</div></div></div></div>
+        <span class="dim">No work and no migration. The title can't be read here without clicking to enlarge.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Choices to make</h2>
+    <ol class="choices">
+      <li><b>Picker layout: A, B or C, or a mix.</b><span class="dim">I suggest A. Size per option: about 320px wide images for A, about 25–40 KB each, so 0.6 MB in total. B and C want about 640px, roughly 1.5 MB. These sizes are estimates until real images exist.</span></li>
+      <li><b>Static or live examples.</b><span class="dim">I suggest static: generated once and bundled, so players pay nothing. Live would charge every player for 16 images.</span></li>
+      <li><b>Sample subject, the same in all 16.</b><span class="dim">I suggest (a): a lone traveller on a hilltop road at dusk, looking toward a distant town, as the stand-ins show. It has a figure, a landscape and light, and fits any theme. Others: (b) a head-and-shoulders portrait of a hooded traveller, which suits anime and comic styles but says less about light and space. (c) a half-open door in an old wall with light behind it, which is striking but has no figure.</span></li>
+      <li><b>Load Game row: L1, L2 or L3.</b><span class="dim">I suggest L1.</span></li>
+      <li><b>Go-ahead for the paid images, and how to run them.</b><span class="dim">3 test images first, in contrasting styles, then 16 once you like the tests: 19 paid images plus any retries, on google/gemini-nano-banana-2.1. Your key stays out of my hands if I write a one-off script and you run it yourself with the <code>!</code> prefix. The other way is a dev-only route in the running app. I suggest the script. Shrinking would use headless Chrome, so no new dependency.</span></li>
+    </ol>
+  </section>
+</div>
+
+<script>
+const STYLES = [
+  ["Cinematic Photorealism", "Ultra-detailed photorealistic style capturing hyper-accurate physics, micro-surface textures, natural volumetric light dispersion, realistic lens depth of field, and true-to-life subsurface scattering, indistinguishable from high-resolution digital cinema footage.", ["#d98a55", "#ffd9a0", "#6b5a5e", "#2f3a2c", "#141414"]],
+  ["Modern Digital Painting & Concept Art", "Clean, high-definition digital realism combining smooth blended gradients, rich volumetric atmosphere, dynamic lighting, and expressive digital brushwork—balancing sharp edge control with polished character and environment art rendering.", ["#5c7fa8", "#f6d39a", "#4a5f7d", "#26384a", "#0f1720"]],
+  ["Graphic Novel & Comic Illustration", "Bold graphic aesthetic defined by clean ink linework, stylized cell-shading, dynamic speed lines, sharp silhouettes, and saturated flat tones with optional Ben-Day halftone dot patterns.", ["#f0b429", "#fff3c4", "#d64545", "#1f2933", "#000000", "ink"]],
+  ["Cybertech & Retro-Futuristic Neon", "High-contrast, rain-slicked sci-fi aesthetic blending 1980s low-life street aesthetics with glowing neon-cyan and magenta palettes, hard-edged cyberware detail, dark atmospheric chiaroscuro, and wireframe perspective grids.", ["#14082b", "#ff2fa8", "#19e6e6", "#1a0f38", "#ff2fa8"]],
+  ["Traditional Impasto Oil Painting", "Richly textured painterly realism featuring visible expressive brushstrokes, dynamic palette knife work, deep glazes, physical impasto texture, and dramatic chiaroscuro lighting across vibrant, wet-on-wet blended pigments.", ["#7a4a24", "#f0c060", "#4c3320", "#2a2015", "#120c06"]],
+  ["Luminous Fluid Watercolor", "Soft semi-translucent aesthetic characterized by delicate watery washes, soft-edge color bleeding, visible paper grain texture, expressive paint splatters, and vibrant pigment pooling along fine hand-drawn ink contours.", ["#cfe3ea", "#f8c9b5", "#a9c6c2", "#7fa98f", "#3c4a52"]],
+  ["Impressionism, Post-Impressionism & Expressionism", "Vibrant, light-focused style featuring rapid broken brushstrokes, unblended pure pigments, raw jagged linework, and non-naturalistic, emotionally intense color choices with visible motion.", ["#3d62b8", "#f4c430", "#e0703a", "#2c7a4b", "#1c1c3a"]],
+  ["Medieval Romanesque & Gothic Manuscript", "Flat two-dimensional composition with bold ink outlines, stylized expressive figures, luminous gilded leafing, geometric drapery folds, and hierarchical scaling set against saturated primary pigments and intricate architectural border ornamentation.", ["#c9a227", "#f5e6a8", "#1f4e9c", "#a32020", "#1a1208", "ink"]],
+  ["Japanese Ukiyo-e Woodblock", "Traditional Edo-period aesthetic defined by flat graphic compositions, strong black ink outlines, rhythmic wave and cloud motifs, subtle paper grain, and layered block-printed pigment washes.", ["#e9d8b4", "#c8452f", "#3f6a8a", "#274b5f", "#16222b", "ink"]],
+  ["Art Nouveau Decorative Illustration", "Ornate turn-of-the-century aesthetic featuring sweeping organic curves, flowing stylized hair and drapery, flat-toned figures, and intricate floral frame borders inspired by Alphonse Mucha.", ["#e6d3a3", "#d8a24a", "#8fa06a", "#5b6b45", "#3a2f22", "ink"]],
+  ["Retro Sci-Fi Pulp Illustration", "High-contrast 1970s and 80s book-cover art featuring bold gouache and airbrush gradients, vivid speculative color palettes, dramatic heroic staging, painterly space hardware, and atmospheric cosmic dust.", ["#2b1a5e", "#ff8a3d", "#a13a8c", "#1c1140", "#0b0820"]],
+  ["Architectural Blueprint & Technical Drafting", "Precision monochrome drafting style featuring crisp white or cyan vector linework on a dark background, grid overlays, detailed cross-sections, schematic callouts, and clean geometric typography.", ["#123a6b", "#123a6b", "#123a6b", "#123a6b", "#cfe6ff", "plan"]],
+  ["Surrealism & Dream Logic", "Mind-bending realism blending precise, dreamlike detail with impossible juxtaposition, melting forms, hyper-smooth gradients, and unsettling atmospheric lighting inspired by Salvador Dalí and René Magritte.", ["#8fb8d6", "#f2e3c4", "#d6a98a", "#b58560", "#2c2433"]],
+  ["Cubism & Geometric Abstraction", "Deconstructed perspective breaking subjects into sharp faceted geometric planes, overlapping angular shapes, and muted monochromatic tone palettes.", ["#a89a84", "#d6cbb5", "#7d7263", "#5b5246", "#2f2a24", "ink"]],
+  ["Art Deco & Streamline Moderne", "Symmetrical luxury aesthetic featuring sharp geometric line work, metallic gold/bronze accents, sleek aerodynamic curves, high-contrast black-and-gold tones, and sunburst motifs.", ["#0f0f12", "#d4af37", "#8a6f25", "#1b1b20", "#d4af37"]],
+  ["Modern Anime & Manga Illustration", "Polished Japanese graphic art style featuring sharp ink contour lines, vibrant cell-shading, expressive eye dynamics, clean hair clumps, and dramatic action-line perspective.", ["#ff9a76", "#ffe08a", "#7a6fb0", "#3f3a78", "#1a1838", "ink"]],
+];
+const OWN = "Describe your own art style";
+const state = { style: STYLES[0][0], open: new Set() };
+
+/** The stand-in: the same traveller and town in every style, in that style's colours. */
+function scene([sky, sun, far, near, figure, mode], w = 320, h = 180, title = "") {
+  const lined = mode === "plan" ? ` fill="none" stroke="${figure}" stroke-width="1"` : mode === "ink" ? ` stroke="#000" stroke-width="1.6"` : "";
+  const fillOf = (c) => lined.includes('fill="none"') ? "" : ` fill="${c}"`;
+  const grid = mode === "plan" ? Array.from({ length: 16 }, (_, i) => `<path d="M${i * 22} 0V${h}" stroke="${figure}" stroke-opacity=".2"/><path d="M0 ${i * 22}H${w}" stroke="${figure}" stroke-opacity=".2"/>`).join("") : "";
+  const y = h - 180;
+  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="${w}" height="${h}" fill="${sky}"/>${grid}
+    <g transform="translate(${(w - 320) / 2} ${y})">
+    <circle cx="228" cy="62" r="24"${fillOf(sun)}${lined}/>
+    <path d="M150 112v-16h10v8h8v-20h10v14h10v-8h12v14h10v-10h10v18z"${fillOf(far)}${lined}/>
+    <path d="M-40 180V130C40 96 120 104 190 124S300 118 360 104V180z"${fillOf(near)}${lined}/>
+    <path d="M92 108v16M92 102a5 5 0 1 0 .1 0M85 112h14" stroke="${figure}" stroke-width="4" fill="${figure}"/></g>
+    ${title ? `<text x="${w / 2}" y="${h * 0.16}" text-anchor="middle" font-family="Libre Caslon Display, Georgia, serif" font-size="${w * 0.1}" fill="${sun}">${title[0]}</text><text x="${w / 2}" y="${h * 0.16 + w * 0.12}" text-anchor="middle" font-family="Libre Caslon Display, Georgia, serif" font-size="${w * 0.1}" fill="${sun}">${title[1]}</text>` : ""}</svg>`;
+}
+
+const esc = (s) => s.replaceAll("&", "&amp;");
+const cell = (name, palette, mock) => `<button type="button" class="pick" data-style="${esc(name)}" data-in="${mock}" aria-pressed="${state.style === name}">${palette ? `<span class="pic">${scene(palette)}</span>` : `<span class="pic none">No example</span>`}<span>${esc(name)}</span></button>`;
+const nameRow = (name, mock) => `<button type="button" class="pick" data-style="${esc(name)}" data-in="${mock}" aria-pressed="${state.style === name}">${esc(name)}</button>`;
+const chosen = () => STYLES.find(([name]) => name === state.style);
+const big = (cls = "") => { const s = chosen(); return s ? `<span class="pic ${cls}">${scene(s[2])}</span>` : `<span class="pic none ${cls}">Your own style has no example</span>`; };
+const describe = () => { const s = chosen(); return s ? `<p class="muted">${s[1]}</p>` : `<p class="muted">Your Art Style: a box for your description sits here, as it does today.</p>`; };
+const foot = `<p class="muted">You can change this in game. It affects new images only.</p><button type="button" class="go" tabindex="-1">Generate the world</button>`;
+
+const views = {
+  a: (id) => `<div class="legend">Art Style</div><div class="thumbs">${STYLES.map(([n, , p]) => cell(n, p, id)).join("")}${cell(OWN, null, id)}</div>${describe()}${foot}`,
+  b: (id) => `<div class="legend">Art Style</div>${big("big")}<div class="names">${STYLES.map(([n]) => nameRow(n, id)).join("")}${nameRow(OWN, id)}</div>${describe()}${foot}`,
+  c: (id) => `<div class="legend">Art Style</div><div class="chosen">${big()}<div><b>${esc(state.style)}</b><button type="button" class="see" data-sheet="${id}">See all the styles</button></div></div>${describe()}${foot}${state.open.has(id) ? `<div class="sheet"><div class="head"><span class="legend">List of plates</span><button type="button" class="see" data-sheet="${id}">Close</button></div><div class="thumbs">${STYLES.map(([n, , p]) => cell(n, p, id)).join("")}${cell(OWN, null, id)}</div></div>` : ""}`,
+};
+
+const mocks = [...document.querySelectorAll("[data-mock]")];
+mocks.forEach((el, i) => { el.dataset.id = `${el.dataset.mock}${i}`; });
+
+function draw(focus) {
+  for (const el of mocks) {
+    el.innerHTML = views[el.dataset.mock](el.dataset.id);
+    // The open sheet needs room, so the mock keeps at least its height.
+    el.style.minHeight = state.open.has(el.dataset.id) ? "560px" : "";
+  }
+  if (focus) document.querySelector(focus)?.focus();
+}
+
+function paper(value) {
+  document.getElementById("root").dataset.paper = value;
+  for (const b of document.querySelectorAll("[data-paper-set]")) b.setAttribute("aria-pressed", String(b.dataset.paperSet === value));
+}
+
+document.addEventListener("click", ({ target }) => {
+  const pick = target.closest("[data-style]");
+  if (pick) {
+    state.style = pick.dataset.style;
+    const inside = pick.dataset.in;
+    const wasOpen = state.open.delete(inside);
+    draw(wasOpen ? `[data-sheet="${inside}"]` : `[data-in="${inside}"][aria-pressed="true"]`);
+    return;
+  }
+  const sheet = target.closest("[data-sheet]");
+  if (sheet) {
+    const id = sheet.dataset.sheet;
+    state.open.has(id) ? state.open.delete(id) : state.open.add(id);
+    draw(`[data-sheet="${id}"]`);
+    return;
+  }
+  const set = target.closest("[data-paper-set]");
+  if (set) paper(set.dataset.paperSet);
+});
+
+for (const el of document.querySelectorAll("[data-cover]")) el.innerHTML = scene(STYLES[1][2], 200, 300, ["The Salt", "Reckoning"]);
+paper("dark");
+draw();
+</script>

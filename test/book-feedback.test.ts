@@ -22,6 +22,7 @@ afterEach(async () => {
 
 const SECRET = "ZQX-SECRET";
 const generated = JSON.stringify({
+  title: "The Salt Reckoning",
   world_overview: "Rain never stops in Saltmere.",
   lore_entries: [{ title: "Magic", keywords: ["magic", "spell", "sorcery"], content: `${SECRET} magic is real.` }],
   world_rules: [`${SECRET} rule.`],
@@ -66,7 +67,9 @@ test("a new world's cover is portrait book art from what the player reads, in th
   expect(cover!.aspect_ratio).toBe("2:3");
   expect(cover!.style_preset).toBe("Ink wash");
   expect(cover!.prompt).toContain("Rain never stops in Saltmere.");
-  expect(cover!.negative_prompt).toContain("text");
+  expect(cover!.prompt).toContain(JSON.stringify("The Salt Reckoning"));
+  expect(cover!.negative_prompt).not.toContain("text");
+  expect(cover!.negative_prompt).toContain("author");
   expect(JSON.stringify(cover)).not.toContain(SECRET);
 });
 

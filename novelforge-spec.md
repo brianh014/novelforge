@@ -72,7 +72,7 @@ Once details are entered, the Narrator generates a detailed World Bible that is 
 
 The World Bible is a set of Lore Entries. Each has a title, keywords and self-contained content. The Narrator should give each entry several keywords so that paraphrases still activate it.
 
-Generation also produces a short, spoiler-free World Overview covering what the PC would plausibly know. The player can accept it or regenerate the world before creating the PC.
+Generation also produces a short, spoiler-free title, lettered into the Cover, and a World Overview covering what the PC would plausibly know. The player can accept it or regenerate the world before creating the PC.
 
 ### Create a character
 

@@ -27,6 +27,7 @@ afterEach(async () => {
 
 const generated = (mark = "") =>
   JSON.stringify({
+    title: "The Salt Reckoning",
     world_overview: "Rain never stops in Saltmere.",
     lore_entries: [
       { title: "Magic", keywords: ["magic", "spell", "sorcery"], content: `${mark}Magic is a myth.` },

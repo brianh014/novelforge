@@ -30,7 +30,7 @@ _Avoid_: Message (when the input-and-response pair is meant)
 A continuous place and situation in the story. A Scene can have several Scene Images over time, such as when its cast changes.
 
 **Cover**:
-The book-cover art of a story, generated with its world from what the player can read, and kept in the Save through every Revert.
+The book-cover art of a story, with its title lettered into the picture, generated with its world from what the player can read, and kept in the Save through every Revert.
 _Avoid_: Title image, world image
 
 **Opening**:

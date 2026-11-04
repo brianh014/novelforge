@@ -148,10 +148,10 @@ export function startServer(options: {
   const covers = new Map<string, { bytes: Promise<Uint8Array<ArrayBuffer> | undefined>; stop: AbortController }>();
 
   /** In the background, so a slow image never holds up the world, and a regenerated world's cover replaces the unfinished one. */
-  function startCover(id: string, { theme, artStyle }: WorldChoices, overview: string) {
+  function startCover(id: string, { theme, artStyle }: WorldChoices, title: string, overview: string) {
     covers.get(id)?.stop.abort();
     const stop = new AbortController();
-    covers.set(id, { stop, bytes: images.drawCover({ theme, overview, artStyle }, stop.signal) as Promise<Uint8Array<ArrayBuffer> | undefined> });
+    covers.set(id, { stop, bytes: images.drawCover({ title, theme, overview, artStyle }, stop.signal) as Promise<Uint8Array<ArrayBuffer> | undefined> });
   }
 
   /** An allowlist, so a visible NPC the PC doesn't know yet stays hidden, and a Revert of that knowledge hides their portrait again. */
@@ -267,10 +267,10 @@ export function startServer(options: {
       "/worlds": {
         POST: async (req) => {
           const choices = await parseBody(req, WorldRequest);
-          const { overview, world } = await generateWorld(options, choices, req.signal);
+          const { title, overview, world } = await generateWorld(options, choices, req.signal);
           const id = crypto.randomUUID();
           worlds.set(id, world);
-          startCover(id, choices, overview);
+          startCover(id, choices, title, overview);
           return Response.json({ id, overview }, { status: 201 });
         },
       },
@@ -295,9 +295,9 @@ export function startServer(options: {
           const { id } = req.params;
           const choices = await parseBody(req, WorldRequest);
           if (!worlds.has(id)) throw new WorldNotFound();
-          const { overview, world } = await generateWorld(options, choices, req.signal);
+          const { title, overview, world } = await generateWorld(options, choices, req.signal);
           worlds.set(id, world);
-          startCover(id, choices, overview);
+          startCover(id, choices, title, overview);
           return Response.json({ overview });
         },
       },

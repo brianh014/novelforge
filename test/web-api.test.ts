@@ -330,6 +330,7 @@ test("the Load Game calls duplicate, import and delete a Save", async () => {
 
 const worldReply = (overview: string) =>
   JSON.stringify({
+    title: "The Salt Reckoning",
     world_overview: overview,
     lore_entries: [{ title: "T", keywords: ["a", "b", "c"], content: "C" }],
     world_rules: ["R"],
