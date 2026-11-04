@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
-import { type Message, MessageNotFound, NoteNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
+import { InvalidSave, type Message, MessageNotFound, NoteNotFound, SaveNotFound, saveStore, StaleTurn } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
@@ -35,6 +35,7 @@ async function parseBody<T>(req: Request, schema: z.ZodType<T>) {
 
 function errorResponse(error: unknown) {
   if (error instanceof z.ZodError) return Response.json({ error: z.prettifyError(error) }, { status: 400 });
+  if (error instanceof InvalidSave) return Response.json({ error: error.message }, { status: 422 });
   if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
   if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
   if (error instanceof NoteNotFound) return Response.json({ error: "Note not found" }, { status: 404 });
@@ -103,9 +104,19 @@ export function startServer(options: {
         },
       },
       "/saves": {
+        GET: () => Response.json({ saves: saves.list() }),
         POST: async (req) => {
           const id = saves.create(await parseBody(req, NewSaveRequest));
           return Response.json({ id }, { status: 201 });
+        },
+      },
+      "/saves/import": {
+        POST: async (req) => {
+          // A type no form can send, so other websites need a CORS preflight to post here, like the JSON routes.
+          if (req.headers.get("content-type") !== "application/octet-stream") {
+            return Response.json({ error: "A Save must be sent as application/octet-stream" }, { status: 415 });
+          }
+          return Response.json({ id: saves.import(new Uint8Array(await req.arrayBuffer())) }, { status: 201 });
         },
       },
       "/saves/:id": {
@@ -114,6 +125,19 @@ export function startServer(options: {
           const { worldBrief, pc } = saves.read(req.params.id);
           return Response.json({ worldBrief, pc: { name: pc.name } });
         },
+        DELETE: (req) => {
+          saves.delete(req.params.id);
+          return new Response(null, { status: 204 });
+        },
+      },
+      "/saves/:id/export": {
+        GET: (req) =>
+          new Response(saves.export(req.params.id), {
+            headers: {
+              "Content-Type": "application/vnd.sqlite3",
+              "Content-Disposition": `attachment; filename="novelforge-save-${req.params.id}.sqlite"`,
+            },
+          }),
       },
       "/saves/:id/journal": {
         GET: (req) => {

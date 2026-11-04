@@ -93,7 +93,7 @@ export function NewGame() {
   );
 }
 
-// shortcut: an empty screen behind a menu entry, tickets 13 and 14 replace it.
+// shortcut: an empty screen behind a menu entry, ticket 14 replaces it.
 export function Placeholder({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Book left={<h1 className="big">{title}</h1>}>

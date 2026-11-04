@@ -24,3 +24,9 @@ export function resolveCheck(request: z.infer<typeof CheckRequest>, dice: Dice, 
 }
 
 export type Check = ReturnType<typeof resolveCheck>;
+
+export const StoredCheck = CheckRequest.extend({
+  roll: z.number(),
+  outcome: z.string(),
+  degree: z.string(),
+}) satisfies z.ZodType<Check>;

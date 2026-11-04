@@ -26,6 +26,23 @@ export const openingState: State = {
   directorsNotes: [],
 };
 
+const stringList = z.array(z.string());
+
+/** What each Snapshot section must hold, for a Save that comes from outside the game. */
+export const StateSections = {
+  inventory: z.object({ wearing: stringList, carrying: stringList }),
+  status: z.object({ health: z.string(), injuries: stringList, conditions: stringList }),
+  npcs: z.array(z.object({ name: z.string(), appearance: z.string() })),
+  pcKnown: z.object({ facts: stringList, npcs: stringList }),
+  worldBible: z.array(
+    z.object({ title: z.string(), keywords: stringList, content: z.string(), alwaysOn: z.boolean() }),
+  ),
+  worldRules: stringList,
+  plotThreads: stringList,
+  summary: z.string(),
+  directorsNotes: stringList,
+} satisfies { [Section in keyof State]: z.ZodType<State[Section]> };
+
 const nonEmpty = z.string().min(1);
 const statusKind = z.enum(["injuries", "conditions"]);
 

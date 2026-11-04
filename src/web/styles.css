@@ -194,7 +194,8 @@ button {
   cursor: pointer;
 }
 
-.quiet:disabled {
+.quiet:disabled,
+.quiet[aria-disabled="true"] {
   color: var(--muted);
   cursor: default;
 }
@@ -299,6 +300,49 @@ input {
 .journal ul {
   margin: 0;
   padding-left: 1.1em;
+}
+
+.import {
+  align-self: flex-start;
+}
+
+.saves {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.saves li {
+  display: grid;
+  gap: 4px;
+  padding-block: 12px;
+  border-bottom: 1px dotted var(--muted);
+}
+
+.saves .row {
+  justify-content: flex-start;
+}
+
+.saves .action,
+.saves .quiet {
+  display: inline-flex;
+  align-items: center;
+}
+
+.saves .action {
+  text-decoration: none;
+}
+
+.saves .quiet {
+  min-height: 44px;
+}
+
+.brief {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .status::first-letter {
@@ -529,13 +573,13 @@ dialog blockquote {
     flex: 1;
   }
 
-  /* The Journal and Inventory are too long for two stacked panes, so each reads as one page with the tabs held in reach. */
-  .book:has(.full-log, .items) {
+  /* The Journal, Inventory and Load Game are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
+  .book:has(.full-log, .items, .saves) {
     height: auto;
     min-height: 100%;
   }
 
-  .book:has(.full-log, .items) .page,
+  .book:has(.full-log, .items, .saves) .page,
   .full-log {
     flex: none;
     overflow: visible;

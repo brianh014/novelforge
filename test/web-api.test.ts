@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
-import { playTurn, replaceResponse, setupProblem } from "../src/web/api";
+import {
+  deleteSave,
+  duplicateSave,
+  importSave,
+  listSaves,
+  playTurn,
+  replaceResponse,
+  setupProblem,
+} from "../src/web/api";
 import { ContentRefused, type TextProvider } from "../src/turn-engine";
 import { narration, startGame, tempFolder } from "./support";
 
@@ -281,4 +289,19 @@ test("a replacement whose stream drops with nothing committed says so, and keeps
     error: "The connection dropped and this wasn't saved. Try again.",
     input: "Make it snow.",
   });
+});
+
+test("the Load Game calls duplicate, import and delete a Save", async () => {
+  start(reply("Unused."));
+  const id = await game.createSave();
+  const bytes = await game.get(`/saves/${id}/export`).then((r) => r.bytes());
+
+  const { id: copy } = await duplicateSave(id);
+  const { id: imported } = await importSave(new File([bytes], "ash.sqlite"));
+  await deleteSave(id);
+
+  const listed = (await listSaves()).map((save) => save.id);
+  expect(listed.toSorted()).toEqual([copy, imported].toSorted());
+  await expect(deleteSave(id)).rejects.toThrow("Save not found");
+  await expect(importSave(new File(["junk"], "junk.sqlite"))).rejects.toThrow("isn't a valid Save");
 });

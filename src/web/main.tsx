@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { Inventory } from "./inventory";
 import { Journal } from "./journal";
+import { LoadGame } from "./load";
 import { Menu, NewGame, Placeholder } from "./menu";
 import { Play } from "./play";
 
@@ -17,7 +18,7 @@ function App() {
   if (screen === "journal" && id) return <Journal key={id} id={id} />;
   if (screen === "inventory" && id) return <Inventory key={id} id={id} />;
   if (screen === "new") return <NewGame />;
-  if (screen === "load") return <Placeholder title="Load Game">Saved games aren't listed here yet.</Placeholder>;
+  if (screen === "load") return <LoadGame />;
   if (screen === "settings") {
     return (
       <Placeholder title="Settings">

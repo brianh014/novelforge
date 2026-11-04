@@ -1,7 +1,8 @@
-import type { Message, Save } from "../save-store";
+import type { Message, Save, SaveStore } from "../save-store";
 import type { State } from "../state-applier";
 
 export type { Message, Save };
+export type ListedSave = ReturnType<SaveStore["list"]>[number];
 export type Inventory = State["inventory"];
 export type Status = State["status"];
 export type Settings = { textBaseUrl: string; textModel: string; hasTextApiKey: boolean };
@@ -23,7 +24,21 @@ async function request<T>(path: string, init?: RequestInit) {
   return (await response.json()) as T;
 }
 
+export const listSaves = () => request<{ saves: ListedSave[] }>("/saves").then(({ saves }) => saves);
+
 export const getSave = (id: string) => request<Save>(`/saves/${id}`);
+
+export async function deleteSave(id: string) {
+  const response = await fetch(`/saves/${id}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await errorMessage(response));
+}
+
+export const importSave = (file: File) =>
+  request<{ id: string }>("/saves/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: file,
+  });
 
 export const getSettings = () => request<Settings>("/settings");
 
@@ -66,6 +81,8 @@ export const previewRevert = (id: string, messageId: number) =>
 
 export const revert = (id: string, messageId: number) =>
   request<object>(`/saves/${id}/messages/${messageId}/revert`, jsonBody({}));
+
+export const duplicateSave = (id: string) => request<{ id: string }>(`/saves/${id}/duplicate`, jsonBody({}));
 
 export const duplicateFrom = (id: string, fromMessage: number) =>
   request<{ id: string }>(`/saves/${id}/duplicate`, jsonBody({ fromMessage }));
