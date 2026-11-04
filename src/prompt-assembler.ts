@@ -15,7 +15,7 @@ const toPrompt = ({ role, text }: Message): Prompt[number] =>
   role === "player"
     ? { role: "user", content: inCharacter(text) }
     : // The same key order as a new reply, because the Narrator copies what it sees and streaming needs check first.
-      { role: "assistant", content: JSON.stringify({ check: null, narration: text, state_operations: [] }) };
+      { role: "assistant", content: JSON.stringify({ check: null, narration: text, state_operations: [], scene_changed: false, visual_description: "" }) };
 
 /** Goes by the Narrator's replies, because a Revert can leave a player Message that nothing answered. */
 function firstTurnInstruction(startingHook: string, messages: Message[]) {
@@ -62,6 +62,8 @@ Older Messages leave this prompt, so keep a short summary of the story through s
 Record what the PC learns through add_known_fact, and each NPC the PC comes to know of through add_known_npc, using add_npc first only for an NPC not yet in the state. Never repeat a known fact or NPC. The player reads the summary and known facts in the Journal, so write them as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
 The player reads the inventory and status too, so write them as the PC would, with no Lore Entry or Plot Thread secrets. Keep the inventory realistic for this world: add only what the PC could really wear or carry there, and narrate anything too heavy or bulky being left behind instead of adding it. Use remove_item only for an item the state lists, and to move an item between wearing and carrying use remove_item and then add_item. Describe health, injuries and conditions in words with no digits, never as points or percentages. Use remove_status only for an entry the state lists under that kind, and never add_status one it already lists.
 The Lore Entries and Plot Threads are secret. Let them shape the story and reveal them only through play. When play goes somewhere they do not cover, add a Lore Entry with several keywords so that paraphrases still activate it. Resolve a Plot Thread once play has exhausted it, and add a new one when none remain.
+Keep the scene in the state current. Whenever the PC reaches a new location or the NPCs they can see change, use set_scene with a short name for the location, repeated exactly while they stay there, and visible_cast listing the NPCs in view by their names in the state, using add_npc first for a new one. The player reads the location as a caption, so write it as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
+In a finished Turn, set visual_description to what the PC can see right now, concretely enough to paint: the place, the light and each visible person's looks, with no names, no writing, and nothing the PC can't see. Set scene_changed to true only when the picture should be redrawn, such as on the first Turn or a clear change of place, time or what is happening. Images can cost the player money, so leave it false for anything smaller.
 Lore Entries: ${JSON.stringify(activeEntries.map(({ title, content }) => ({ title, content })))}
 Plot Threads: ${JSON.stringify(plotThreads)}
 Summary of the story so far: ${summary}

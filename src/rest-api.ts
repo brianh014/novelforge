@@ -1,6 +1,19 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
-import { InvalidSave, type Message, MessageNotFound, NoteNotFound, PcDetails, SaveNotFound, saveStore, StaleTurn } from "./save-store";
+import type { ImageAdapter } from "./image-adapter";
+import { imagePipeline } from "./image-pipeline";
+import {
+  imageType,
+  InvalidSave,
+  MAX_IMPORT_BYTES,
+  type Message,
+  MessageNotFound,
+  NoteNotFound,
+  PcDetails,
+  SaveNotFound,
+  saveStore,
+  StaleTurn,
+} from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
@@ -101,6 +114,7 @@ async function turnResponse(req: Request, run: (emit?: TurnEvents) => Promise<Me
 export function startServer(options: {
   savesDir: string;
   textProvider: TextProvider;
+  imageAdapter: ImageAdapter;
   dice: Dice;
   nearMissMargin: number;
   settings: SettingsStore;
@@ -108,6 +122,8 @@ export function startServer(options: {
 }) {
   const saves = saveStore(options.savesDir);
   const { settings } = options;
+  const images = imagePipeline(saves, options.imageAdapter, settings);
+  const engine = { ...options, images };
   // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
   // shortcut: an abandoned world stays until the app restarts, evict them if that ever adds up.
   const worlds = new Map<string, World>();
@@ -145,6 +161,8 @@ export function startServer(options: {
     port: options.port,
     // A Turn can stay silent past Bun's default, which would drop the client while the Turn went on to commit.
     idleTimeout: 0,
+    // Bun's default of 128 MiB is less than a Save with images. It answers 413 itself past this, before any route runs.
+    maxRequestBodySize: MAX_IMPORT_BYTES + 1,
     routes: {
       "/": spa,
       "/settings": {
@@ -219,6 +237,7 @@ export function startServer(options: {
         },
         DELETE: (req) => {
           saves.delete(req.params.id);
+          images.forget(req.params.id, 0);
           return new Response(null, { status: 204 });
         },
       },
@@ -282,11 +301,28 @@ export function startServer(options: {
       "/saves/:id/turns": {
         POST: async (req) => {
           const { input } = await parseBody(req, NewTurnRequest);
-          return turnResponse(req, (emit) => playTurn(saves, options, req.params.id, input, req.signal, emit));
+          return turnResponse(req, (emit) => playTurn(saves, engine, req.params.id, input, req.signal, emit));
         },
       },
       "/saves/:id/messages": {
         GET: (req) => Response.json({ messages: saves.messages(req.params.id) }),
+      },
+      "/saves/:id/images": {
+        // An allowlist, so what the image model was told can never reach the player.
+        // shortcut: the caption is Narrator free text, kept clean only by its prompt, screen it if models leak.
+        GET: (req) => Response.json({ images: saves.sceneImages(req.params.id), ...images.status(req.params.id) }),
+      },
+      "/saves/:id/messages/:messageId/image": {
+        GET: (req) => {
+          const bytes = saves.sceneImage(req.params.id, Number(req.params.messageId));
+          // The type comes from the bytes, and a file put in the Saves folder by hand is never checked, so nothing here can run as a page.
+          return new Response(bytes, {
+            headers: {
+              "Content-Type": imageType(bytes) ?? "application/octet-stream",
+              "X-Content-Type-Options": "nosniff",
+            },
+          });
+        },
       },
       "/saves/:id/messages/:messageId/snapshot": {
         GET: (req) => {
@@ -300,7 +336,7 @@ export function startServer(options: {
           const { feedback } = await parseBody(req, RewriteRequest);
           const { id, messageId } = req.params;
           return turnResponse(req, (emit) =>
-            replaceResponse(saves, options, id, Number(messageId), feedback, req.signal, emit),
+            replaceResponse(saves, engine, id, Number(messageId), feedback, req.signal, emit),
           );
         },
       },
@@ -309,7 +345,7 @@ export function startServer(options: {
           await parseBody(req, NoFields);
           const { id, messageId } = req.params;
           return turnResponse(req, (emit) =>
-            replaceResponse(saves, options, id, Number(messageId), undefined, req.signal, emit),
+            replaceResponse(saves, engine, id, Number(messageId), undefined, req.signal, emit),
           );
         },
       },
@@ -317,7 +353,9 @@ export function startServer(options: {
         GET: (req) => Response.json(saves.revertPreview(req.params.id, Number(req.params.messageId))),
         POST: async (req) => {
           await parseBody(req, NoFields);
-          return Response.json(saves.revert(req.params.id, Number(req.params.messageId)));
+          const deleted = saves.revert(req.params.id, Number(req.params.messageId));
+          images.forget(req.params.id, Number(req.params.messageId));
+          return Response.json(deleted);
         },
       },
     },

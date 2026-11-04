@@ -6,6 +6,7 @@ export type State = {
   inventory: { wearing: string[]; carrying: string[] };
   status: { health: string; injuries: string[]; conditions: string[] };
   npcs: { name: string; appearance: string }[];
+  scene: { location: string; visibleCast: string[] };
   pcKnown: { facts: string[]; npcs: string[] };
   worldBible: LoreEntry[];
   worldRules: string[];
@@ -18,6 +19,7 @@ export const openingState: State = {
   inventory: { wearing: [], carrying: [] },
   status: { health: "unhurt", injuries: [], conditions: [] },
   npcs: [],
+  scene: { location: "", visibleCast: [] },
   pcKnown: { facts: [], npcs: [] },
   worldBible: [],
   worldRules: [],
@@ -33,6 +35,7 @@ export const StateSections = {
   inventory: z.object({ wearing: stringList, carrying: stringList }),
   status: z.object({ health: z.string(), injuries: stringList, conditions: stringList }),
   npcs: z.array(z.object({ name: z.string(), appearance: z.string() })),
+  scene: z.object({ location: z.string(), visibleCast: stringList }),
   pcKnown: z.object({ facts: stringList, npcs: stringList }),
   worldBible: z.array(
     z.object({ title: z.string(), keywords: stringList, content: z.string(), alwaysOn: z.boolean() }),
@@ -54,6 +57,7 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("remove_status"), kind: statusKind, text: nonEmpty }),
   z.object({ op: z.literal("add_npc"), name: nonEmpty, appearance: nonEmpty }),
   z.object({ op: z.literal("update_npc"), name: nonEmpty, appearance: nonEmpty }),
+  z.object({ op: z.literal("set_scene"), location: nonEmpty, visible_cast: z.array(nonEmpty) }),
   z.object({ op: z.literal("add_known_fact"), fact: nonEmpty }),
   z.object({ op: z.literal("add_known_npc"), name: nonEmpty }),
   z.object({
@@ -111,6 +115,12 @@ function apply(state: State, operation: StateOperation) {
       const npc = findNpc(state, operation.name);
       if (!npc) return false;
       npc.appearance = operation.appearance;
+      return true;
+    }
+    case "set_scene": {
+      // The cast only steers images, so a name the state lacks is left out rather than failing the Turn.
+      const visibleCast = [...new Set(operation.visible_cast)].filter((name) => findNpc(state, name));
+      state.scene = { location: operation.location, visibleCast };
       return true;
     }
     case "add_known_fact":

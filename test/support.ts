@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Dice } from "../src/check-resolver";
+import type { ImageAdapter, ImagePayload } from "../src/image-adapter";
 import { startServer } from "../src/rest-api";
 import type { Prompt } from "../src/prompt-assembler";
 import { settingsStore } from "../src/settings-store";
@@ -20,6 +21,39 @@ export function scriptedTextProvider(...replies: (string | Error)[]) {
     return reply;
   };
   return { textProvider, prompts };
+}
+
+/** A real one-pixel PNG. */
+export const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** The same picture with a trailing byte, to tell one image from another. */
+export const png = (mark: number) => Uint8Array.of(...PNG, mark);
+
+/**
+ * Answers each image request with the next entry, throwing Errors, and records every payload. A promise stays in
+ * flight until it settles or the request is aborted, like a slow image model.
+ */
+export function scriptedImages(...replies: (Uint8Array | Error | Promise<Uint8Array>)[]) {
+  const payloads: ImagePayload[] = [];
+  const aborted: number[] = [];
+  const imageAdapter: ImageAdapter = async (payload, signal) => {
+    const request = payloads.push(payload);
+    const reply = await Promise.race([
+      replies.shift() ?? new Error("Image script exhausted"),
+      new Promise<Error>((resolve) =>
+        signal.addEventListener("abort", () => {
+          aborted.push(request);
+          resolve(new Error("aborted"));
+        }),
+      ),
+    ]);
+    if (reply instanceof Error) throw reply;
+    return reply;
+  };
+  return { imageAdapter, payloads, aborted };
 }
 
 /** Rolls each entry in turn. Rolling past the script fails the request, so an extra roll cannot pass unnoticed. */
@@ -47,9 +81,10 @@ export function startGame(
   textProvider: TextProvider,
   dice = scriptedDice(),
   nearMissMargin = 2,
+  imageAdapter = scriptedImages().imageAdapter,
 ) {
   const settings = settingsStore(join(dirname(savesDir), "settings.json"));
-  const start = () => startServer({ savesDir, settings, textProvider, dice, nearMissMargin, port: 0 });
+  const start = () => startServer({ savesDir, settings, textProvider, imageAdapter, dice, nearMissMargin, port: 0 });
   let server = start();
   const post = (path: string, body: unknown) => postJson(new URL(path, server.url), body);
   return {

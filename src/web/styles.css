@@ -368,6 +368,41 @@ a.action {
   margin-inline: auto;
 }
 
+/* A Scene Image is a tipped-in plate: small enough to leave the page to the story. */
+
+.plate {
+  flex: none;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.plate img {
+  display: block;
+  width: 100%;
+  height: clamp(120px, 28vh, 236px);
+  padding: 5px;
+  border: 1px solid var(--line);
+  object-fit: cover;
+}
+
+.plate figcaption {
+  color: var(--muted);
+  font-size: 15px;
+  font-style: italic;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.full-log .plate {
+  margin-block: 6px 10px;
+}
+
+.full-log .plate img {
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
 .message {
   margin-bottom: 12px;
 }
@@ -668,6 +703,10 @@ dialog blockquote {
 
   .page.right {
     flex: 1;
+  }
+
+  .plate img {
+    height: clamp(96px, 24vh, 180px);
   }
 
   /* The Journal, Inventory, Load Game and Settings are too long for two stacked panes, so each reads as one page with any tabs held in reach. */

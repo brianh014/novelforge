@@ -13,6 +13,8 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   hasImageApiKey: boolean;
 };
 export type Journal = { summary: string; facts: string[]; npcs: string[]; fullLog: Message[] };
+export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];
+export type SceneImages = { images: SceneImageInfo[]; pending: boolean; session: number };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
 
 const jsonBody = (body: object): RequestInit => ({
@@ -71,6 +73,10 @@ export const getMessages = (id: string) =>
   request<{ messages: Message[] }>(`/saves/${id}/messages`).then(({ messages }) => messages);
 
 export const getJournal = (id: string) => request<Journal>(`/saves/${id}/journal`);
+
+export const getImages = (id: string) => request<SceneImages>(`/saves/${id}/images`);
+
+export const imageUrl = (id: string, { messageId }: SceneImageInfo) => `/saves/${id}/messages/${messageId}/image`;
 
 export const getInventory = (id: string) => request<Inventory>(`/saves/${id}/inventory`);
 

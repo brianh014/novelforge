@@ -436,6 +436,16 @@ test("import refuses a Save cut short", async () => {
   await expectRefused(bytes.slice(0, bytes.length - 4096));
 });
 
+const PNG_SQL = "x'89504e470d0a1a0a00'";
+
+/** Adds a Turn and a Scene Image on `messageId`. */
+const withImage = (messageId: number, bytesSql: string) => (db: Database) => {
+  db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello'), ('narrator', 'Hi')");
+  db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections WHERE message_id = 0");
+  db.run("INSERT INTO snapshot_sections SELECT 2, name, section_id FROM snapshot_sections WHERE message_id = 0");
+  db.run(`INSERT INTO scene_images (message_id, caption, bytes) VALUES (${messageId}, 'A pier', ${bytesSql})`);
+};
+
 const TAMPERED: [string, (db: Database) => void][] = [
   ["a Save with no Art Style column", (db) => db.run("ALTER TABLE save DROP COLUMN art_style")],
   ["a Save with no Starting Hook column", (db) => db.run("ALTER TABLE save DROP COLUMN starting_hook")],
@@ -460,6 +470,19 @@ const TAMPERED: [string, (db: Database) => void][] = [
   ["a Narrator Message with no player Message before it", (db) => {
     db.run("INSERT INTO messages (role, text) VALUES ('narrator', 'Hi')");
     db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections");
+  }],
+  ["no Scene Image table", (db) => db.run("DROP TABLE scene_images")],
+  ["an extra Scene Image column", (db) => db.run("ALTER TABLE scene_images ADD COLUMN extra TEXT")],
+  ["a Scene Image that is really HTML", withImage(2, "x'3c21646f63747970652068746d6c3e'")],
+  ["a Scene Image that is really SVG", withImage(2, "cast('<svg xmlns=\"http://www.w3.org/2000/svg\"/>' AS BLOB)")],
+  ["a Scene Image cut short of its signature", withImage(2, "x'89504e47'")],
+  ["a Scene Image stored as text", withImage(2, "'not bytes'")],
+  ["a Scene Image too large to be one", withImage(2, "x'89504e470d0a1a0a' || zeroblob(33 * 1024 * 1024)")],
+  ["a Scene Image for no Message", withImage(9, PNG_SQL)],
+  ["a Scene Image on a player Message", withImage(1, PNG_SQL)],
+  ["a caption that isn't text", (db) => {
+    withImage(2, PNG_SQL)(db);
+    db.run("UPDATE scene_images SET caption = x'00ff'");
   }],
   ["malformed pending Notes", (db) => db.run("UPDATE save SET pending_notes = '[1]'")],
   ["a world brief that isn't text", (db) => db.run("UPDATE save SET world_brief = x'00ff'")],

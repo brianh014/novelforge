@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
+import { openRouterImages } from "./image-adapter";
 import { startServer } from "./rest-api";
 import { settingsStore } from "./settings-store";
 import { textProvider } from "./text-provider";
@@ -15,6 +16,7 @@ const server = startServer({
   savesDir: join(appDir, "Saves"),
   settings,
   textProvider: textProvider(settings),
+  imageAdapter: openRouterImages(settings, "https://openrouter.ai/api/v1"),
   dice: () => randomInt(1, 21),
   nearMissMargin: z.coerce.number().int().min(0).parse(process.env.NEAR_MISS_MARGIN ?? 2),
   port: Number(process.env.PORT ?? 4600),

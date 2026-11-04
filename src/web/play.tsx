@@ -5,7 +5,9 @@ import {
   editNote,
   getMessages,
   getNotes,
+  getImages,
   getSave,
+  imageUrl,
   type OpenSave,
   getSettings,
   getStatus,
@@ -15,6 +17,8 @@ import {
   removeNote,
   replaceResponse,
   revert,
+  type SceneImageInfo,
+  type SceneImages,
   setupProblem,
   type Status,
   statusWords,
@@ -31,6 +35,18 @@ export function playItemAction(id: string, input: string) {
   location.hash = `/play/${id}`;
 }
 
+// Often enough to feel prompt, as an image takes many seconds anyway.
+const IMAGE_CHECK_MS = 2000;
+
+export function SceneImage({ id, image }: { id: string; image: SceneImageInfo }) {
+  return (
+    <figure className="plate">
+      <img loading="lazy" src={imageUrl(id, image)} alt={image.caption ? `Scene Image: ${image.caption}` : "Scene Image"} />
+      {image.caption && <figcaption aria-hidden="true">{image.caption}</figcaption>}
+    </figure>
+  );
+}
+
 export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
   if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
   event.preventDefault();
@@ -42,6 +58,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>();
   const [notes, setNotes] = useState<string[]>();
+  const [images, setImages] = useState<SceneImages>({ images: [], pending: false, session: 0 });
   const [editingNotes, setEditingNotes] = useState(false);
   const [setupNotice, setSetupNotice] = useState<string>();
   const [draft, setDraft] = useState(unsent.get(id) ?? "");
@@ -57,6 +74,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const story = useRef<HTMLDivElement>(null);
   const rewriteButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(new AbortController());
+  const imageCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     const action = itemActions.get(id);
@@ -69,8 +87,21 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       if (action) playInput(action, messages);
     }, (failure: Error) => setLoadError(failure.message));
     getSettings().then((settings) => setSetupNotice(setupProblem(settings)), () => {});
-    return () => leaving.current.abort();
+    checkImages();
+    return () => {
+      leaving.current.abort();
+      clearTimeout(imageCheck.current);
+    };
   }, [id]);
+
+  // Images draw in the background, so the page looks for them apart from the Turn, for as long as any are on the way.
+  function checkImages() {
+    clearTimeout(imageCheck.current);
+    getImages(id).then((next) => {
+      setImages(next);
+      if (next.pending && !leaving.current.signal.aborted) imageCheck.current = setTimeout(checkImages, IMAGE_CHECK_MS);
+    }, () => {});
+  }
 
   function send(event: FormEvent) {
     event.preventDefault();
@@ -136,6 +167,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       getMessages(id).then(setMessages, () => {});
     }
     getStatus(id).then(setStatus, () => {});
+    checkImages();
   }
 
   if (loadError) {
@@ -150,6 +182,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const pc = save.pc.name;
   const latest = messages.at(-1);
   const replaceable = !turn && latest?.role === "narrator" ? latest : undefined;
+  const scene = images.images.at(-1);
 
   return (
     <Book
@@ -160,6 +193,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
           <div className="condition">
             <h2>Condition</h2>
             <p className="status">{statusWords(status)}</p>
+            <p className="muted">{plural(images.session, "image")} this session</p>
           </div>
           <div className="notes">
             <h2>
@@ -184,6 +218,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       }
       tabs={<BookTabs id={id} current="Story" />}
     >
+      {scene && <SceneImage id={id} image={scene} />}
       <div ref={story} className="story" tabIndex={0} role="region" aria-label="Story">
         <div>
           {messages.length === 0 && !turn && (
@@ -292,6 +327,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
             setMessages(messages.filter((message) => message.id <= reverting.id));
             getStatus(id).then(setStatus, () => {});
             getNotes(id).then(setNotes, () => {});
+            checkImages();
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.
             inputBox.current!.focus();
           }}

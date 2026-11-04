@@ -115,8 +115,10 @@ function countAfter(db: Database, messageId: number) {
   const { messages } = db
     .query<{ messages: number }, [number]>("SELECT count(*) AS messages FROM messages WHERE id > ?")
     .get(messageId)!;
-  // shortcut: Saves hold no images yet, count and delete them here in ticket 17.
-  return { messages, images: 0 };
+  const { images } = db
+    .query<{ images: number }, [number]>("SELECT count(*) AS images FROM scene_images WHERE message_id > ?")
+    .get(messageId)!;
+  return { messages, images };
 }
 
 // Sweeping by what is still linked keeps every section a remaining Message shares.
@@ -126,6 +128,7 @@ const sweepSections = (db: Database) =>
 function deleteAfter(db: Database, messageId: number) {
   db.run("DELETE FROM messages WHERE id > ?", [messageId]);
   db.run("DELETE FROM snapshot_sections WHERE message_id > ?", [messageId]);
+  db.run("DELETE FROM scene_images WHERE message_id > ?", [messageId]);
   sweepSections(db);
   clearPendingNotes(db);
 }
@@ -133,13 +136,9 @@ function deleteAfter(db: Database, messageId: number) {
 const hasColumn = (db: Database, table: string, column: string) =>
   db.query("SELECT 1 FROM pragma_table_info(?) WHERE name = ?").get(table, column) !== null;
 
-/** Version 0 is an empty file or any Save from before versions existed, so this checks for each change in turn. */
-function toVersion1(db: Database) {
-  db.run(SCHEMA);
-  if (!hasColumn(db, "messages", "hidden_check")) db.run("ALTER TABLE messages ADD COLUMN hidden_check TEXT");
-  if (!hasColumn(db, "save", "pending_notes")) db.run("ALTER TABLE save ADD COLUMN pending_notes TEXT");
-  // The one change ever made to a stored Snapshot: it gets the sections it lacks, at the values they would have held
-  // anyway, because nothing could write to them yet. All of them share one row per section.
+// The only kind of change ever made to a stored Snapshot: it gets the sections it lacks, at the values they would have held
+// anyway, because nothing could write to them yet. All of them share one row per section.
+function addMissingSections(db: Database) {
   for (const [name, value] of Object.entries(openingState)) {
     const { id } = db
       .query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id")
@@ -153,6 +152,14 @@ function toVersion1(db: Database) {
   sweepSections(db);
 }
 
+/** Version 0 is an empty file or any Save from before versions existed, so this checks for each change in turn. */
+function toVersion1(db: Database) {
+  db.run(SCHEMA);
+  if (!hasColumn(db, "messages", "hidden_check")) db.run("ALTER TABLE messages ADD COLUMN hidden_check TEXT");
+  if (!hasColumn(db, "save", "pending_notes")) db.run("ALTER TABLE save ADD COLUMN pending_notes TEXT");
+  addMissingSections(db);
+}
+
 /** A column rather than a Snapshot section, because a Revert must not undo a choice about future images. */
 const toVersion2 = (db: Database) => db.run("ALTER TABLE save ADD COLUMN art_style TEXT NOT NULL DEFAULT ''");
 
@@ -162,8 +169,16 @@ const toVersion3 = (db: Database) => db.run("ALTER TABLE save ADD COLUMN startin
 /** A column for the same reason, and JSON because nothing ever queries inside it. */
 const toVersion4 = (db: Database) => db.run("ALTER TABLE save ADD COLUMN pc_details TEXT NOT NULL DEFAULT '{}'");
 
+/** Images are kept apart from Snapshots, which hold no bytes, and keyed by their Message because Message ids are never reused. */
+function toVersion5(db: Database) {
+  db.run(
+    "CREATE TABLE IF NOT EXISTS scene_images (message_id INTEGER PRIMARY KEY, caption TEXT NOT NULL, bytes BLOB NOT NULL)",
+  );
+  addMissingSections(db);
+}
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -183,7 +198,7 @@ function migrate(db: Database) {
 
 const NOT_A_SAVE = "This file isn't a valid Save.";
 
-const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections"];
+const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images"];
 
 /** Anything in an imported file that could act while it is migrated, so it must be refused first. */
 function assertSafeToMigrate(db: Database) {
@@ -202,6 +217,22 @@ function assertSafeToMigrate(db: Database) {
 const jsonText = <T>(schema: z.ZodType<T>) => z.string().transform((text) => JSON.parse(text) as unknown).pipe(schema);
 
 const rowId = z.number().int().nonnegative();
+
+// Far past any model's output at the sizes asked for, but a Save from outside can claim anything.
+const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
+
+const startsWith = (bytes: Uint8Array, signature: number[], offset = 0) =>
+  signature.every((byte, index) => bytes[offset + index] === byte);
+
+/** The type of an image the game can show, read from the bytes themselves. Everything else, SVG and HTML above all, is undefined. */
+export function imageType(bytes: Uint8Array) {
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return undefined;
+  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
+  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
+  // "RIFF", a four-byte size, then "WEBP".
+  if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes, [0x57, 0x45, 0x42, 0x50], 8)) return "image/webp";
+  return undefined;
+}
 
 /** The rows of a table that must have exactly the columns of `shape`, even if it has no rows to show them. */
 function rowsOf<T extends z.ZodRawShape>(db: Database, table: string, shape: T) {
@@ -231,6 +262,11 @@ function assertValidSave(db: Database) {
     rowsOf(db, "sections", { id: rowId, content: z.string() }).map((section) => [section.id, section.content]),
   );
   const links = rowsOf(db, "snapshot_sections", { message_id: rowId, name: z.string(), section_id: rowId });
+  const images = rowsOf(db, "scene_images", {
+    message_id: rowId,
+    caption: z.string(),
+    bytes: z.instanceof(Uint8Array).refine((bytes) => imageType(bytes) !== undefined),
+  });
 
   // Replacing a response needs the player Message before it. Two player Messages in a row are fine, after a Revert.
   const inOrder = messages.toSorted((a, b) => a.id - b.id);
@@ -250,7 +286,9 @@ function assertValidSave(db: Database) {
     parsed.add(`${name}/${section_id}`);
   }
   const complete = linked.size === links.length && links.length === snapshots.size * schemas.size;
-  if (save.length !== 1 || !answered || !complete) throw new InvalidSave(NOT_A_SAVE);
+  const narrators = new Set(messages.filter(({ role }) => role === "narrator").map(({ id }) => id));
+  const imagesPlaced = images.every(({ message_id }) => narrators.has(message_id));
+  if (save.length !== 1 || !answered || !complete || !imagesPlaced) throw new InvalidSave(NOT_A_SAVE);
 }
 
 /** Fills a new Save with a file's rows, so its table definitions, id sequence and spare pages stay behind. */
@@ -283,8 +321,8 @@ function latestTurn(db: Database, messageId: number) {
   return { narrator: narrator!, player: player!, state: { ...toState(sectionsAt(db, player!.id)), directorsNotes } };
 }
 
-// shortcut: Saves hold only text so far, raise this for Scene Images in ticket 17, keeping it under Bun's 128 MiB body limit or setting that too.
-export const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
+// shortcut: room for a few hundred Scene Images, and import holds several copies in memory, so a longer game can export but not import until import streams.
+export const MAX_IMPORT_BYTES = 512 * 1024 * 1024;
 
 export function saveStore(savesDir: string) {
   mkdirSync(savesDir, { recursive: true });
@@ -392,6 +430,48 @@ export function saveStore(savesDir: string) {
     latestMessageId(id: string) {
       using db = open(id);
       return latestMessage(db);
+    },
+
+    /** Without the bytes, so a page can list every image cheaply. */
+    sceneImages(id: string) {
+      using db = open(id);
+      return db
+        .query<{ messageId: number; caption: string }, []>(
+          "SELECT message_id AS messageId, caption FROM scene_images ORDER BY message_id",
+        )
+        .all();
+    },
+
+    sceneImage(id: string, messageId: number) {
+      using db = open(id);
+      const image = db
+        .query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM scene_images WHERE message_id = ?")
+        .get(messageId);
+      if (!image) throw new MessageNotFound();
+      return image.bytes;
+    },
+
+    /** The latest image before `messageId`, to carry its background into the next one. */
+    previousSceneImage(id: string, messageId: number) {
+      using db = open(id);
+      const image = db
+        .query<{ bytes: Uint8Array }, [number]>(
+          "SELECT bytes FROM scene_images WHERE message_id < ? ORDER BY message_id DESC LIMIT 1",
+        )
+        .get(messageId);
+      const mediaType = image && imageType(image.bytes);
+      return mediaType && { bytes: image!.bytes, mediaType };
+    },
+
+    /** Stores nothing if the Message has gone, so a generation can't outlive a Revert or a replaced response. */
+    addSceneImage(id: string, messageId: number, caption: string, bytes: Uint8Array) {
+      if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
+      using db = open(id);
+      db.run("INSERT INTO scene_images (message_id, caption, bytes) SELECT id, ?, ? FROM messages WHERE id = ?", [
+        caption,
+        bytes,
+        messageId,
+      ]);
     },
 
     latestState(id: string) {

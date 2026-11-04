@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
-import { getJournal, getSave, type Journal as JournalContent, type Save } from "./api";
+import { getImages, getJournal, getSave, type Journal as JournalContent, type Save, type SceneImageInfo } from "./api";
 import { Book, BookTabs } from "./menu";
+import { SceneImage } from "./play";
 
 export function Journal({ id }: { id: string }) {
   const [save, setSave] = useState<Save>();
   const [journal, setJournal] = useState<JournalContent>();
+  const [images, setImages] = useState<SceneImageInfo[]>([]);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    Promise.all([getSave(id), getJournal(id)]).then(([save, journal]) => {
+    Promise.all([getSave(id), getJournal(id), getImages(id)]).then(([save, journal, { images }]) => {
       setSave(save);
       setJournal(journal);
+      setImages(images);
     }, (failure: Error) => setLoadError(failure.message));
   }, [id]);
 
@@ -52,11 +55,15 @@ export function Journal({ id }: { id: string }) {
       <h2>Full Log</h2>
       <div className="full-log" tabIndex={0} role="region" aria-label="Full Log">
         {journal.fullLog.length === 0 && <p className="muted">The page is blank.</p>}
-        {journal.fullLog.map((message) => (
-          <div key={message.id} className={`message ${message.role}`}>
-            <p>{message.text}</p>
-          </div>
-        ))}
+        {journal.fullLog.map((message) => {
+          const image = images.find(({ messageId }) => messageId === message.id);
+          return (
+            <div key={message.id} className={`message ${message.role}`}>
+              {image && <SceneImage id={id} image={image} />}
+              <p>{message.text}</p>
+            </div>
+          );
+        })}
       </div>
     </Book>
   );

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
+import { type ImagePipeline, movedScene, type Scene } from "./image-pipeline";
 import { assemblePrompt, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import type { Message, SaveStore } from "./save-store";
 import type { SettingsStore } from "./settings-store";
@@ -31,6 +32,8 @@ export class TurnFailed extends Error {
 const FinishedTurn = z.object({
   narration: z.string().min(1),
   state_operations: z.array(StateOperation).default([]),
+  scene_changed: z.boolean().nullish(),
+  visual_description: z.string().nullish(),
   // Without this, narration beside an invalid difficulty would pass as a finished Turn and dodge the Check.
   check: z.null().optional(),
 });
@@ -59,6 +62,8 @@ const responseSchema = jsonSchemaOf(
     check: CheckRequest.nullable(),
     narration: z.string().nullable(),
     state_operations: z.array(StateOperation),
+    scene_changed: z.boolean().nullable(),
+    visual_description: z.string().nullable(),
   }),
 );
 
@@ -85,6 +90,8 @@ type Narrated = {
   /** Left out when no new roll is allowed, which makes a Check request an invalid reply. */
   rollCheck?: (request: z.infer<typeof CheckRequest>) => Check;
   commit: (narration: string, check: Check | undefined, advance: (state: State) => State) => Message[];
+  /** Runs once the Turn is committed, so image work is never part of its transaction. */
+  committed: (messageId: number, scene: Scene) => void;
 };
 
 export async function playTurn(
@@ -94,7 +101,8 @@ export async function playTurn(
     dice,
     nearMissMargin,
     settings,
-  }: { textProvider: TextProvider; dice: Dice; nearMissMargin: number; settings: SettingsStore },
+    images,
+  }: { textProvider: TextProvider; dice: Dice; nearMissMargin: number; settings: SettingsStore; images: ImagePipeline },
   id: string,
   input: string,
   signal: AbortSignal,
@@ -115,13 +123,14 @@ export async function playTurn(
     refusal: "The Narrator refused this message. Edit it and try again.",
     rollCheck: (request) => resolveCheck(request, dice, nearMissMargin),
     commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
+    committed: (messageId, scene) => images.sceneChanged(id, messageId, scene),
   });
 }
 
 /** Rewrite, when there is `feedback`, or Regenerate. Takes no Dice: the Turn's stored Check stands, and a Turn without one stays without. */
 export async function replaceResponse(
   saves: SaveStore,
-  { textProvider, settings }: { textProvider: TextProvider; settings: SettingsStore },
+  { textProvider, settings, images }: { textProvider: TextProvider; settings: SettingsStore; images: ImagePipeline },
   id: string,
   messageId: number,
   feedback: string | undefined,
@@ -143,6 +152,10 @@ export async function replaceResponse(
     refusal: "The Narrator refused this, so the response stays as it was.",
     check,
     commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
+    committed: (replacement, scene) => {
+      images.forget(id, messageId - 1);
+      images.sceneChanged(id, replacement, scene);
+    },
   });
 }
 
@@ -150,7 +163,7 @@ async function narrate(
   textProvider: TextProvider,
   signal: AbortSignal,
   emit: TurnEvents,
-  { prompt, input, refusal, check: storedCheck, rollCheck, commit }: Narrated,
+  { prompt, input, refusal, check: storedCheck, rollCheck, commit, committed }: Narrated,
 ) {
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check = storedCheck;
@@ -181,13 +194,19 @@ async function narrate(
         attempt = 0; // The result call gets its own retries.
         continue;
       }
-      const { narration, state_operations } = response;
-      return commit(narration, check, (state) => {
+      const { narration, state_operations, scene_changed, visual_description } = response;
+      let moved = false;
+      let location = "";
+      const messages = commit(narration, check, (state) => {
         const { next, refused } = applyOperations(state, state_operations);
         // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
         if (refused.length > 0) throw new InvalidResponse(undefined, { cause: refused });
+        moved = movedScene(state, next);
+        location = next.scene.location;
         return next;
       });
+      committed(messages.at(-1)!.id, { changed: moved || !!scene_changed, description: visual_description || location, location });
+      return messages;
     } catch (cause) {
       if (!(cause instanceof InvalidResponse)) throw cause;
       if (attempt === MAX_ATTEMPTS) {
