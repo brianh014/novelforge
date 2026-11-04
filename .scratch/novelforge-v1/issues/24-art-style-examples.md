@@ -8,7 +8,7 @@
 
 ## Criteria
 
-- [x] The user chose layout A, static examples, subject (a) and meta/muse-image for these images, run with `scripts/draw-style-examples.ts`
+- [x] The user chose layout A and static examples. After Muse Image tests with a hilltop traveller, they chose the Settings model (google/gemini-nano-banana-2.1) and a hooded portrait, run with `scripts/draw-style-examples.ts`
 - [ ] 3 test images approved before the other images are paid for
 - [ ] All 16 examples inspected for stray lettering, dice and numbers
 - [ ] Images shrunk and bundled in the compiled executable, with no new dependency

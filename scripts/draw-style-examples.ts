@@ -1,4 +1,4 @@
-// One-off: draws the Art Style examples that the wizard bundles, on the model named here, not the one in Settings.
+// One-off: draws the Art Style examples that the wizard bundles, on the image model in Settings.
 // Run it yourself, from the project folder, so that the API key stays with you:
 //   bun run scripts/draw-style-examples.ts <output folder> [style number...]
 // A style whose file already exists is skipped, so a rerun only pays for what is missing. Delete a file to redraw it.
@@ -8,10 +8,8 @@ import { openRouterImages } from "../src/image-adapter";
 import { settingsStore } from "../src/settings-store";
 import { ART_STYLES } from "../src/web/art-styles";
 
-const MODEL = "meta/muse-image";
-// Muse Image takes no aspect_ratio setting, so the shape has to be asked for in words.
 const SUBJECT =
-  "A wide 16:9 landscape image. A lone traveller stands on a hilltop road at dusk, seen from behind, looking toward a distant town. The figure is small in the frame.";
+  "Head and shoulders portrait of a hooded traveller looking back over one shoulder, with a plain, softly lit background. The face is clearly visible and centred in the frame, with space around the hood.";
 const AVOID = "text, captions, letters, numbers, signatures, watermarks, dice";
 
 const [out, ...numbers] = process.argv.slice(2);
@@ -19,7 +17,7 @@ if (!out) throw new Error("Give an output folder");
 mkdirSync(out, { recursive: true });
 
 const settings = settingsStore("settings.json");
-const draw = openRouterImages({ ...settings, read: () => ({ ...settings.read(), imageModel: MODEL }) }, "https://openrouter.ai/api/v1");
+const draw = openRouterImages(settings, "https://openrouter.ai/api/v1");
 
 const styles = Object.entries(ART_STYLES);
 const wanted = numbers.length > 0 ? numbers.map((number) => Number(number) - 1) : styles.keys().toArray();
