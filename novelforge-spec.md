@@ -329,7 +329,7 @@ A fake LLM provider and a controllable dice roller let Turns be tested determini
 
 An old book, open on a desk: aged paper, ink browns and bottle green, the story on the right page, and bookmarks hanging from the top right. It is responsive to screen size. The dark theme is the same book on charcoal laid paper.
 
-World creation and Settings use the Index Sheet layout from the layout options report: one sheet with a side index and a pinned bottom bar, plus a More below prompt whenever a page runs past the fold. Settings shows one section at a time. Everything else stays a two-page book.
+World creation and Settings use the Index Sheet layout from the layout options report: one sheet with a side index and a pinned bottom bar, plus a down arrow whenever a page runs past the fold. Settings shows one section at a time. Everything else stays a two-page book.
 
 **Before any UI code is written, the agent must create an HTML report of UI options.** It shows 3 distinct visual directions, each mocking up the main game screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story. It also shows the Chat style options. The player-facing UI contains no Check elements. The mockups are throwaway, and the user can pick one direction or mix parts.
 

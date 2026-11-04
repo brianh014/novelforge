@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { DownIcon } from "./icons";
 
 export function Book(props: { left: ReactNode; children: ReactNode; tabs?: ReactNode; narrowLeft?: boolean; lockLeft?: boolean }) {
   return (
@@ -49,10 +50,12 @@ export function Sheet(props: { rail: ReactNode; children: ReactNode; foot?: Reac
               <div className="more-below">
                 <button
                   type="button"
-                  className="quiet"
+                  className="icon"
+                  title="More below"
+                  aria-label="More below"
                   onClick={() => scroller.current!.scrollBy({ top: scroller.current!.clientHeight * 0.8 })}
                 >
-                  <span aria-hidden="true">↓ </span>More below
+                  {DownIcon}
                 </button>
               </div>
             )}

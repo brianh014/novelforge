@@ -345,6 +345,7 @@ h2 {
 }
 
 .more-below button {
+  color: var(--accent);
   pointer-events: auto;
 }
 

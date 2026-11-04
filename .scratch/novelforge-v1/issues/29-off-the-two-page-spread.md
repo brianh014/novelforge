@@ -9,7 +9,7 @@
 ## Criteria
 
 - [x] Index Sheet is built for all three world creation steps and Settings, in both themes and at phone width
-- [x] When a page runs past the fold, More below shows and scrolls down. It goes away at the bottom, and shows again if the page grows
+- [x] When a page runs past the fold, a down arrow shows and scrolls down. It goes away at the bottom, and shows again if the page grows
 - [x] Errors and the Saved notice stay in the pinned bar, so they can't be missed below the fold
 - [x] Settings shows one section at a time. Unsaved edits survive a switch, and Save goes to a required box in a hidden section
 
