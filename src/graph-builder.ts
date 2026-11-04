@@ -28,6 +28,10 @@ export const chosenModels = (choices: GraphChoices) =>
     ? [choices.comfyDiffusionModel, choices.comfyTextEncoder, choices.comfyVae]
     : [choices.comfyCheckpoint];
 
+/** Whether Local has what it needs to draw. A workflow brings its own models. */
+export const localIsSetUp = (choices: GraphChoices & Pick<Settings, "comfyMode" | "comfyWorkflow">) =>
+  choices.comfyMode === "advanced" ? choices.comfyWorkflow !== "" : chosenModels(choices).every(Boolean);
+
 /** The references a family can use, in the payload's order of priority. */
 export function usableReferences({ comfyFamily }: GraphChoices, references: ImagePayload["reference_images"]) {
   return comfyFamily === "flux2"
@@ -36,7 +40,7 @@ export function usableReferences({ comfyFamily }: GraphChoices, references: Imag
 }
 
 /** The same area as the square at any aspect ratio, in multiples of 16, which suits every family's latent. */
-function dimensions(aspectRatio: string, square: number) {
+export function dimensions(aspectRatio: string, square: number) {
   const [wide = 1, tall = 1] = aspectRatio.split(":").map(Number);
   const snapped = (side: number) => Math.round(side / 16) * 16;
   return { width: snapped(square * Math.sqrt(wide / tall)), height: snapped(square * Math.sqrt(tall / wide)) };

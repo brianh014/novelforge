@@ -37,6 +37,9 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     comfyTextEncoder: "",
     comfyVae: "",
     comfyLoras: [],
+    comfyMode: "simple",
+    comfyWorkflow: "",
+    workflowProblem: "",
     chatStyle: "prose",
     fontSize: "medium",
   });
@@ -52,6 +55,8 @@ test("every setting survives a restart, and no key comes back", async () => {
     comfyTextEncoder: "mistral.safetensors",
     comfyVae: "vae.safetensors",
     comfyLoras: [{ name: "ink.safetensors", strength: 0.7, triggerWords: "inkstyle" }],
+    comfyMode: "advanced",
+    comfyWorkflow: JSON.stringify({ "1": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}" } } }),
   };
   const response = await change({
     textBaseUrl: "http://localhost:1234/v1",
@@ -76,6 +81,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     hasImageApiKey: true,
     imagesEnabled: false,
     ...comfy,
+    workflowProblem: "",
     chatStyle: "prose",
     fontSize: "large",
   };

@@ -22,6 +22,9 @@ export const SettingsUpdate = z
     comfyTextEncoder: z.string(),
     comfyVae: z.string(),
     comfyLoras: z.array(Lora),
+    comfyMode: z.enum(["simple", "advanced"]),
+    // Kept as the player's text and checked when saved, because a bad one here must not stop every read of Settings.
+    comfyWorkflow: z.string(),
     // shortcut: Prose is the only Chat style that works, add the others in ticket 22.
     chatStyle: z.enum(["prose"]),
     fontSize: z.enum(["small", "medium", "large"]),
@@ -47,6 +50,8 @@ const defaults = {
   comfyTextEncoder: "",
   comfyVae: "",
   comfyLoras: [] as z.infer<typeof Lora>[],
+  comfyMode: "simple",
+  comfyWorkflow: "",
   chatStyle: "prose",
   fontSize: "medium",
 } satisfies SettingsChange;

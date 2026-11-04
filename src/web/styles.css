@@ -315,6 +315,43 @@ input {
   grid-column: 1 / -1;
 }
 
+.workflow,
+.workflow-guide code,
+.workflow-guide pre {
+  font-family: ui-monospace, Consolas, Menlo, monospace;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.workflow {
+  resize: vertical;
+}
+
+.workflow-guide {
+  min-width: 0;
+}
+
+.workflow-guide summary {
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.workflow-guide p {
+  margin: 8px 0;
+}
+
+.workflow-guide dd {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+.workflow-guide pre {
+  margin: 0;
+  padding: 8px;
+  background: var(--soft);
+  white-space: pre-wrap;
+}
+
 /* The wizard */
 
 .fields.wizard {

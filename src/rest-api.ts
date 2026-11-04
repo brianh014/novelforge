@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
+import { InvalidWorkflow, parseWorkflow } from "./comfy-workflow";
 import { comfyImages, comfyModels } from "./comfyui";
 import type { ImageAdapter } from "./image-adapter";
 import { imagePipeline } from "./image-pipeline";
@@ -74,7 +75,9 @@ async function parseBody<T>(req: Request, schema: z.ZodType<T>) {
 
 function errorResponse(error: unknown) {
   if (error instanceof z.ZodError) return Response.json({ error: z.prettifyError(error) }, { status: 400 });
-  if (error instanceof InvalidSave) return Response.json({ error: error.message }, { status: 422 });
+  if (error instanceof InvalidSave || error instanceof InvalidWorkflow) {
+    return Response.json({ error: error.message }, { status: 422 });
+  }
   if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
   if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
   if (error instanceof PortraitNotFound) return Response.json({ error: "Portrait not found" }, { status: 404 });
@@ -132,7 +135,11 @@ export function startServer(options: {
 }) {
   const saves = saveStore(options.savesDir);
   const { settings } = options;
-  const images = imagePipeline(saves, { openrouter: options.imageAdapter, local: comfyImages(settings) }, settings);
+  // Held here, not in Settings, as it's only how the last job went. It's safe to show, unlike the log.
+  // shortcut: a restart clears it and an open Settings screen doesn't update, poll or store it if players miss failures.
+  let workflowProblem = "";
+  const local = comfyImages(settings, undefined, (problem) => (workflowProblem = problem));
+  const images = imagePipeline(saves, { openrouter: options.imageAdapter, local }, settings);
   const engine = { ...options, images };
   // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
   // shortcut: an abandoned world stays until the app restarts, evict them if that ever adds up.
@@ -163,6 +170,8 @@ export function startServer(options: {
       comfyTextEncoder,
       comfyVae,
       comfyLoras,
+      comfyMode,
+      comfyWorkflow,
       chatStyle,
       fontSize,
     } = settings.read();
@@ -183,6 +192,9 @@ export function startServer(options: {
       comfyTextEncoder,
       comfyVae,
       comfyLoras,
+      comfyMode,
+      comfyWorkflow,
+      workflowProblem,
       chatStyle,
       fontSize,
     };
@@ -200,7 +212,13 @@ export function startServer(options: {
       "/settings": {
         GET: () => Response.json(publicSettings()),
         PATCH: async (req) => {
-          settings.update(await parseBody(req, SettingsUpdate));
+          const change = await parseBody(req, SettingsUpdate);
+          const current = settings.read();
+          const next = { ...current, ...change };
+          // Only a workflow in use, as Settings hides the box otherwise, and the player couldn't see what to fix.
+          if (next.imageProvider === "local" && next.comfyMode === "advanced") parseWorkflow(next.comfyWorkflow);
+          settings.update(change);
+          if (next.comfyWorkflow !== current.comfyWorkflow) workflowProblem = "";
           return Response.json(publicSettings());
         },
       },

@@ -1,4 +1,4 @@
-import { chosenModels } from "./graph-builder";
+import { localIsSetUp } from "./graph-builder";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
 import { OPENING_SNAPSHOT, type Save, SaveNotFound, type SaveStore } from "./save-store";
 import type { SettingsStore } from "./settings-store";
@@ -53,7 +53,7 @@ export function imagePipeline(
     const current = settings.read();
     // An unfinished setup is silent too, as there is no image to report failing.
     const setUp =
-      current.imageProvider === "local" ? chosenModels(current).every(Boolean) : current.imageModel && current.imageApiKey;
+      current.imageProvider === "local" ? localIsSetUp(current) : current.imageModel && current.imageApiKey;
     return current.imagesEnabled && setUp;
   }
 

@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { WORKFLOW_EXAMPLE } from "../comfy-workflow";
 import { chosenModels } from "../graph-builder";
 import {
   type ComfyModels,
@@ -99,6 +100,80 @@ function ModelSelect({
   );
 }
 
+function WorkflowGuide() {
+  return (
+    <details className="workflow-guide">
+      <summary>Placeholders and an example</summary>
+      <p>
+        Build the workflow in ComfyUI, use Export (API), and paste that file here. Then put these in its input values. A
+        placeholder can be a whole value or sit inside longer text. Any you leave out are simply not used, but{" "}
+        <code>{"{{prompt}}"}</code> is required.
+      </p>
+      <dl>
+        <dt>
+          <code>{"{{prompt}}"}</code>
+        </dt>
+        <dd>What the image shows. Art Style isn't included, so add it too if you want it.</dd>
+        <dt>
+          <code>{"{{negative_prompt}}"}</code>
+        </dt>
+        <dd>What to avoid.</dd>
+        <dt>
+          <code>{"{{art_style}}"}</code>
+        </dt>
+        <dd>This Save's Art Style.</dd>
+        <dt>
+          <code>{"{{aspect_ratio}}"}</code>, <code>{"{{width}}"}</code>, <code>{"{{height}}"}</code>
+        </dt>
+        <dd>
+          The shape, such as 16:9, and a size of about one megapixel in multiples of 16. For SD 1.5, type your own size
+          instead.
+        </dd>
+        <dt>
+          <code>{"{{seed}}"}</code>
+        </dt>
+        <dd>A new random number for each image.</dd>
+        <dt>
+          <code>{"{{npc_1}}"}</code>, <code>{"{{npc_2}}"}</code> and on
+        </dt>
+        <dd>
+          Portraits of visible NPCs, for a <code>LoadImage</code> node. Number 1 is the first visible NPC who has a portrait,
+          not a set person, and the slot changes as the cast does.
+        </dd>
+        <dt>
+          <code>{"{{previous_scene}}"}</code>, <code>{"{{pc}}"}</code>
+        </dt>
+        <dd>The previous Scene Image and the PC's portrait.</dd>
+        <dt>
+          <code>{"{{reference_1}}"}</code>, <code>{"{{reference_2}}"}</code> and on
+        </dt>
+        <dd>Every reference in order of priority: NPCs, then the previous Scene Image, then the PC.</dd>
+        <dt>
+          <code>{"{{has_npc_1}}"}</code>, <code>{"{{has_previous_scene}}"}</code>, <code>{"{{has_reference_1}}"}</code> and so
+          on
+        </dt>
+        <dd>1 if that reference exists for this image, otherwise 0. Use one as an IPAdapter weight to turn its slot off.</dd>
+      </dl>
+      <p>
+        Portraits and first Scenes have no references, so a slot with no image gets a small grey one and the workflow still
+        runs. Give each slot a <code>has_</code> switch, or the grey will show. An img2img workflow can't turn off that way,
+        so it starts those images from grey. References beyond your slots aren't sent.
+      </p>
+      <p>
+        NovelForge keeps one image: a <code>SaveImage</code> if there is one, otherwise a <code>PreviewImage</code>, from
+        the highest numbered node of that kind. An id like 12:3 from a subgraph counts as higher than any plain number.{" "}
+        <code>SaveImage</code> also leaves a copy in ComfyUI's output folder.
+      </p>
+      <p>
+        Your workflow brings its own models and LoRAs, so the LoRA list and trigger words here aren't used. For a per-NPC
+        LoRA, use a <code>has_</code> switch as a LoRA node's strength. It turns on for whoever fills that slot, so it
+        suits one recurring NPC, not several with their own LoRAs.
+      </p>
+      <pre>{WORKFLOW_EXAMPLE}</pre>
+    </details>
+  );
+}
+
 function ComfySettings({
   draft,
   saved,
@@ -126,13 +201,14 @@ function ComfySettings({
   }, [saved, refreshes]);
 
   const addressSaved = draft.comfyUrl === saved.comfyUrl;
+  const advanced = draft.comfyMode === "advanced";
   const flux2 = draft.comfyFamily === "flux2";
   const loras = models?.loras ?? [];
   const setLora = (index: number, change: Partial<Settings["comfyLoras"][number]>) =>
     set({ comfyLoras: draft.comfyLoras.map((lora, i) => (i === index ? { ...lora, ...change } : lora)) });
 
   const installed = models ? [...models.checkpoints, ...models.diffusionModels, ...models.textEncoders, ...models.vaes, ...loras] : [];
-  const chosen = [...chosenModels(draft), ...draft.comfyLoras.map(({ name }) => name)];
+  const chosen = advanced ? [] : [...chosenModels(draft), ...draft.comfyLoras.map(({ name }) => name)];
   const missing = models?.reachable ? chosen.filter((name) => name && !installed.includes(name)) : [];
 
   return (
@@ -148,119 +224,145 @@ function ComfySettings({
         />
       </label>
       <label>
-        Model family
-        <select
-          value={draft.comfyFamily}
-          onChange={(e) => set({ comfyFamily: e.target.value as Settings["comfyFamily"] })}
-        >
-          <option value="sd">SD 1.5/SDXL</option>
-          <option value="flux2">FLUX.2</option>
+        ComfyUI mode
+        <select value={draft.comfyMode} onChange={(e) => set({ comfyMode: e.target.value as Settings["comfyMode"] })}>
+          <option value="simple">Simple Mode</option>
+          <option value="advanced">Advanced workflow</option>
         </select>
       </label>
-      {flux2 ? (
+      {advanced ? (
         <>
-          <ModelSelect
-            label="Diffusion model"
-            value={draft.comfyDiffusionModel}
-            list={models?.diffusionModels ?? []}
-            onChange={(comfyDiffusionModel) => set({ comfyDiffusionModel })}
-          />
-          <ModelSelect
-            label="Text encoder"
-            value={draft.comfyTextEncoder}
-            list={models?.textEncoders ?? []}
-            onChange={(comfyTextEncoder) => set({ comfyTextEncoder })}
-          />
-          <ModelSelect
-            label="VAE"
-            value={draft.comfyVae}
-            list={models?.vaes ?? []}
-            onChange={(comfyVae) => set({ comfyVae })}
-          />
+          <label>
+            Workflow JSON (API format)
+            <textarea
+              className="workflow"
+              rows={12}
+              spellCheck={false}
+              value={draft.comfyWorkflow}
+              onChange={(e) => set({ comfyWorkflow: e.target.value })}
+            />
+          </label>
+          {saved.workflowProblem && <p className="notice">The last image failed. {saved.workflowProblem}</p>}
+          <WorkflowGuide />
         </>
       ) : (
         <>
-          <ModelSelect
-            label="Checkpoint"
-            value={draft.comfyCheckpoint}
-            list={models?.checkpoints ?? []}
-            onChange={(comfyCheckpoint) => set({ comfyCheckpoint })}
-          />
           <label>
-            Checkpoint type
+            Model family
             <select
-              value={draft.comfySdBase}
-              onChange={(e) => set({ comfySdBase: e.target.value as Settings["comfySdBase"] })}
+              value={draft.comfyFamily}
+              onChange={(e) => set({ comfyFamily: e.target.value as Settings["comfyFamily"] })}
             >
-              <option value="sdxl">SDXL</option>
-              <option value="sd15">SD 1.5</option>
+              <option value="sd">SD 1.5/SDXL</option>
+              <option value="flux2">FLUX.2</option>
             </select>
           </label>
-        </>
-      )}
-      <fieldset>
-        <legend>LoRAs</legend>
-        {draft.comfyLoras.map((lora, index) => (
-          <div className="lora" key={index}>
-            <ModelSelect
-              label={`LoRA ${index + 1}`}
-              value={lora.name}
-              list={loras}
-              onChange={(name) => setLora(index, { name })}
-            />
-            <label>
-              Strength
-              {/* Uncontrolled, so the box can be empty while the player types. The key shows the right value after a removal. */}
-              <input
-                key={`${index} ${lora.name}`}
-                aria-label={`LoRA ${index + 1} strength`}
-                type="number"
-                required
-                step="0.05"
-                min="-100"
-                max="100"
-                defaultValue={lora.strength}
-                onChange={(e) => {
-                  if (!Number.isNaN(e.target.valueAsNumber)) setLora(index, { strength: e.target.valueAsNumber });
-                }}
+          {flux2 ? (
+            <>
+              <ModelSelect
+                label="Diffusion model"
+                value={draft.comfyDiffusionModel}
+                list={models?.diffusionModels ?? []}
+                onChange={(comfyDiffusionModel) => set({ comfyDiffusionModel })}
               />
-            </label>
-            <label>
-              Trigger words (optional)
-              <input
-                aria-label={`LoRA ${index + 1} trigger words (optional)`}
-                value={lora.triggerWords}
-                onChange={(e) => setLora(index, { triggerWords: e.target.value })}
+              <ModelSelect
+                label="Text encoder"
+                value={draft.comfyTextEncoder}
+                list={models?.textEncoders ?? []}
+                onChange={(comfyTextEncoder) => set({ comfyTextEncoder })}
               />
-            </label>
+              <ModelSelect
+                label="VAE"
+                value={draft.comfyVae}
+                list={models?.vaes ?? []}
+                onChange={(comfyVae) => set({ comfyVae })}
+              />
+            </>
+          ) : (
+            <>
+              <ModelSelect
+                label="Checkpoint"
+                value={draft.comfyCheckpoint}
+                list={models?.checkpoints ?? []}
+                onChange={(comfyCheckpoint) => set({ comfyCheckpoint })}
+              />
+              <label>
+                Checkpoint type
+                <select
+                  value={draft.comfySdBase}
+                  onChange={(e) => set({ comfySdBase: e.target.value as Settings["comfySdBase"] })}
+                >
+                  <option value="sdxl">SDXL</option>
+                  <option value="sd15">SD 1.5</option>
+                </select>
+              </label>
+            </>
+          )}
+          <fieldset>
+            <legend>LoRAs</legend>
+            {draft.comfyLoras.map((lora, index) => (
+              <div className="lora" key={index}>
+                <ModelSelect
+                  label={`LoRA ${index + 1}`}
+                  value={lora.name}
+                  list={loras}
+                  onChange={(name) => setLora(index, { name })}
+                />
+                <label>
+                  Strength
+                  {/* Uncontrolled, so the box can be empty while the player types. The key shows the right value after a removal. */}
+                  <input
+                    key={`${index} ${lora.name}`}
+                    aria-label={`LoRA ${index + 1} strength`}
+                    type="number"
+                    required
+                    step="0.05"
+                    min="-100"
+                    max="100"
+                    defaultValue={lora.strength}
+                    onChange={(e) => {
+                      if (!Number.isNaN(e.target.valueAsNumber)) setLora(index, { strength: e.target.valueAsNumber });
+                    }}
+                  />
+                </label>
+                <label>
+                  Trigger words (optional)
+                  <input
+                    aria-label={`LoRA ${index + 1} trigger words (optional)`}
+                    value={lora.triggerWords}
+                    onChange={(e) => setLora(index, { triggerWords: e.target.value })}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="quiet"
+                  aria-label={`Remove LoRA ${index + 1}`}
+                  onClick={() => {
+                    set({ comfyLoras: draft.comfyLoras.filter((_, i) => i !== index) });
+                    // This button may be about to go, which would drop keyboard focus to the top of the page.
+                    addLora.current?.focus();
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
             <button
+              ref={addLora}
               type="button"
               className="quiet"
-              aria-label={`Remove LoRA ${index + 1}`}
+              aria-disabled={loras.length === 0}
               onClick={() => {
-                set({ comfyLoras: draft.comfyLoras.filter((_, i) => i !== index) });
-                // This button may be about to go, which would drop keyboard focus to the top of the page.
-                addLora.current?.focus();
+                if (loras.length > 0) {
+                  set({ comfyLoras: [...draft.comfyLoras, { name: loras[0]!, strength: 1, triggerWords: "" }] });
+                }
               }}
             >
-              Remove
+              Add LoRA
             </button>
-          </div>
-        ))}
-        <button
-          ref={addLora}
-          type="button"
-          className="quiet"
-          aria-disabled={loras.length === 0}
-          onClick={() => {
-            if (loras.length > 0) {
-              set({ comfyLoras: [...draft.comfyLoras, { name: loras[0]!, strength: 1, triggerWords: "" }] });
-            }
-          }}
-        >
-          Add LoRA
-        </button>
-      </fieldset>
+          </fieldset>
+        </>
+      )}
       <button
         type="button"
         className="quiet"
@@ -269,7 +371,7 @@ function ComfySettings({
           if (models && addressSaved) setRefreshes(refreshes + 1);
         }}
       >
-        Refresh lists
+        {advanced ? "Check connection" : "Refresh lists"}
       </button>
       <p role="status" className="muted">
         {!addressSaved
@@ -277,19 +379,21 @@ function ComfySettings({
           : !models
             ? "Asking ComfyUI what's installed."
             : models.reachable
-              ? models.loras.length === 0 && "No LoRAs installed."
+              ? !advanced && models.loras.length === 0 && "No LoRAs installed."
               : "ComfyUI can't be reached at this address. Check that it's running, then refresh."}
       </p>
       {addressSaved && missing.length > 0 && (
         <p className="notice">Not installed in ComfyUI: {missing.join(", ")}. Choose another or add the file, then refresh.</p>
       )}
-      {addressSaved && flux2 && models?.reachable && !models.hasFlux2 && (
+      {addressSaved && !advanced && flux2 && models?.reachable && !models.hasFlux2 && (
         <p className="notice">This ComfyUI doesn't have FLUX.2's nodes yet. Update it to use this family.</p>
       )}
       <p className="muted">
-        {flux2
-          ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev, so a Klein model may need an Advanced workflow."
-          : "Uses the previous Scene Image as a reference. NPC references need FLUX.2 or an Advanced workflow."}
+        {advanced
+          ? "Your workflow decides which references it uses, and which models and LoRAs."
+          : flux2
+            ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev, so a Klein model may need an Advanced workflow."
+            : "Uses the previous Scene Image as a reference. NPC references need FLUX.2 or an Advanced workflow."}
       </p>
     </>
   );
@@ -323,7 +427,7 @@ function InstallSettings({ initial }: { initial: Settings }) {
   const keyHint = (stored: boolean) => (stored ? "Saved. Type a new key to replace it." : "None saved");
 
   const { busy, submit, feedback } = useSubmit(async () => {
-    const { hasTextApiKey, hasImageApiKey, ...change } = draft;
+    const { hasTextApiKey, hasImageApiKey, workflowProblem, ...change } = draft;
     const next = await saveSettings({
       ...change,
       ...(textKey.trim() && { textApiKey: textKey.trim() }),

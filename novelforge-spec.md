@@ -298,6 +298,25 @@ If a setup can't use NPC references, the image still generates and Settings show
 
 **Advanced** lets the user provide their own workflow JSON, which is also how IPAdapter is used.
 
+The player pastes a workflow from ComfyUI's Export (API) into Settings. It's per-install, so no Save carries it, and it goes only to the player's own ComfyUI. Settings refuses one that isn't valid JSON, is in ComfyUI's UI format, uses an unknown placeholder or lacks `{{prompt}}`, and lists every placeholder with a working example.
+
+| Placeholder | Value |
+|---|---|
+| `{{prompt}}` (required), `{{negative_prompt}}`, `{{art_style}}`, `{{aspect_ratio}}` | The image payload's text. `{{prompt}}` doesn't include the Art Style |
+| `{{width}}`, `{{height}}` | About one megapixel at the aspect ratio, in multiples of 16 |
+| `{{seed}}` | A new random number per image |
+| `{{npc_1}}`, `{{npc_2}}`, ... | Portraits of visible NPCs who have one, in Scene order, so a number is a position and not a set person |
+| `{{previous_scene}}`, `{{pc}}` | The previous Scene Image and the PC's portrait |
+| `{{reference_1}}`, `{{reference_2}}`, ... | Every reference in priority order: NPCs, previous Scene, PC |
+| `{{has_npc_1}}`, `{{has_previous_scene}}`, `{{has_reference_1}}`, ... | 1 if that reference exists for this image, otherwise 0 |
+
+* A placeholder that is a whole input value keeps its type, and one inside longer text joins it. Values are filled into the parsed JSON, in `inputs` only, so story text can't alter the graph.
+* Only the image payload reaches a workflow, never the World Bible, Plot Threads or Checks.
+* References beyond the workflow's slots aren't sent. Portraits and first Scenes have no references, so a slot with no image gets a blank grey one and the job still runs. A `{{has_...}}` switch used as a weight or strength turns that slot off. An img2img workflow can't turn off that way, so it starts those images from grey.
+* The image kept is the highest numbered node's `SaveImage`, or `PreviewImage` if there's none. An id like `12:3` from a subgraph counts as higher than any plain number. Saved copies also stay in ComfyUI's output folder. A job that fails keeps no image, even if an earlier node finished one.
+* The Simple Mode model choices, LoRA list and trigger words are ignored. A workflow brings its own, and a per-NPC LoRA is a LoRA node with a `{{has_npc_1}}` strength. That turns on for whoever fills the slot, as a workflow never gets NPC names, so it suits one recurring NPC, not several with their own LoRAs.
+* A failed job leaves the Turn alone, and Settings shows the node and error type of the last failure. ComfyUI's full text stays in the server log, as it can repeat the prompt.
+
 ## Testing
 
 A fake LLM provider and a controllable dice roller let Turns be tested deterministically. Checks are tested through the REST API by scripting the dice and asserting what the Narrator receives, and tests confirm no player-facing response reveals them.

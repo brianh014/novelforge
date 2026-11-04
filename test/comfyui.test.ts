@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
+import { WORKFLOW_EXAMPLE } from "../src/comfy-workflow";
 import { comfyImages } from "../src/comfyui";
 import type { Graph } from "../src/graph-builder";
 import { settingsStore } from "../src/settings-store";
@@ -348,4 +349,281 @@ test("a server that goes silent mid-job is given up on", async () => {
   comfy.control.silent = true;
 
   await expect(draw).rejects.toThrow("stopped responding");
+});
+
+const INSTALLED_EXAMPLE = WORKFLOW_EXAMPLE.replace("your_model.safetensors", "dream_xl.safetensors");
+const advancedSetup = (comfyWorkflow = INSTALLED_EXAMPLE) => ({
+  imageProvider: "local",
+  comfyUrl: comfy.url,
+  comfyMode: "advanced",
+  comfyWorkflow,
+});
+const settingsNow = () => game!.get("/settings").then((r) => r.json()) as Promise<Record<string, unknown>>;
+const graphWith = (nodes: object) => JSON.stringify({ "1": { class_type: "Text", inputs: { text: "{{prompt}}" } }, ...nodes });
+
+test("an Advanced workflow draws a Scene Image into the Save, and it counts", async () => {
+  const running = play(newScene());
+  await running.patch("/settings", { ...advancedSetup(), comfyLoras: [{ name: "ink.safetensors", strength: 1, triggerWords: "inkstyle" }] });
+  const id = await running.createSave();
+
+  await playTurn(id);
+
+  expect(await settled(id)).toEqual({ images: [{ messageId: 2, caption: "The street" }], pending: false, session: 1 });
+  const graph = comfy.jobs.prompts.at(-1)!;
+  expect(nodes(graph, "CLIPTextEncode")[0]!.inputs.text).toEndWith("A flooded street");
+  expect(nodes(graph, "CLIPTextEncode")[1]!.inputs.text).toBe("text, captions, letters, numbers, dice");
+  expect(nodes(graph, "EmptyLatentImage")[0]!.inputs).toMatchObject({ width: 1360, height: 768 });
+  expect(nodes(graph, "KSampler")[0]!.inputs.seed).toBeNumber();
+  // The Simple Mode LoRA list and trigger words are the workflow's business here.
+  expect(nodes(graph, "LoraLoader")).toEqual([]);
+  expect(JSON.stringify(graph)).not.toContain("inkstyle");
+});
+
+test("Simple Mode ignores a stored workflow", async () => {
+  const running = play(newScene(), newScene("Two", "Two"));
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  await playTurn(id);
+  await settled(id);
+  expect(nodes(comfy.jobs.prompts.at(-1)!, "CheckpointLoaderSimple")[0]!.inputs.ckpt_name).toBe("dream_xl.safetensors");
+
+  await running.patch("/settings", { comfyMode: "simple", comfyCheckpoint: "dream_15.safetensors" });
+  await playTurn(id);
+  await settled(id);
+
+  expect(nodes(comfy.jobs.prompts.at(-1)!, "CheckpointLoaderSimple")[0]!.inputs.ckpt_name).toBe("dream_15.safetensors");
+});
+
+test("references reach a workflow by role, with a blank in an empty slot", async () => {
+  const workflow = graphWith({
+    "2": { class_type: "LoadImage", inputs: { image: "{{previous_scene}}" } },
+    "3": { class_type: "LoadImage", inputs: { image: "{{npc_1}}" } },
+    "4": { class_type: "Weight", inputs: { scene: "{{has_previous_scene}}", npc: "{{has_npc_1}}" } },
+    "5": { class_type: "PreviewImage", inputs: {} },
+  });
+  const running = play(newScene("One", "One"), newScene("Two", "Two"));
+  await running.patch("/settings", advancedSetup(workflow));
+  const id = await running.createSave();
+  comfy.control.image = png(1);
+  await playTurn(id);
+  await settled(id);
+  comfy.jobs.uploads.splice(0);
+
+  await playTurn(id);
+  await settled(id);
+
+  const graph = comfy.jobs.prompts.at(-1)!;
+  expect(graph["4"]!.inputs).toEqual({ scene: 1, npc: 0 });
+  const previous = comfy.jobs.uploads.find(({ bytes }) => bytes.at(-1) === 1)!;
+  const blank = comfy.jobs.uploads.find((upload) => upload !== previous)!;
+  expect(graph["2"]!.inputs.image).toBe(`novelforge/${previous.name} [temp]`);
+  expect(graph["3"]!.inputs.image).toBe(`novelforge/${blank.name} [temp]`);
+  expect(blank).toMatchObject({ subfolder: "novelforge", type: "temp" });
+});
+
+test.each([
+  ["a saved image beats a later preview", { "3": "SaveImage", "9": "PreviewImage" }, 3],
+  ["the highest numbered saved image wins, as a number", { "9": "SaveImage", "10": "SaveImage", "2": "PreviewImage" }, 10],
+])("%s", async (_name, outputs, picked) => {
+  const workflow = graphWith(Object.fromEntries(Object.entries(outputs).map(([id, class_type]) => [id, { class_type, inputs: {} }])));
+  const running = play(newScene());
+  await running.patch("/settings", advancedSetup(workflow));
+  const id = await running.createSave();
+
+  await playTurn(id);
+  await settled(id);
+
+  expect(await (await running.get(`/saves/${id}/messages/2/image`)).bytes()).toEqual(png(picked));
+});
+
+test.each([
+  ["broken JSON", "{", "isn't valid JSON"],
+  ["the UI format", JSON.stringify({ nodes: [], links: [] }), "Export (API)"],
+  ["an unknown placeholder", graphWith({ "2": { class_type: "Text", inputs: { text: "{{mood}}" } } }), "{{mood}}"],
+  ["nothing", "", "Paste a workflow"],
+])("Settings refuses %s, says why and keeps what was saved", async (_name, workflow, reason) => {
+  const running = play();
+  await running.patch("/settings", advancedSetup());
+
+  const refused = await running.patch("/settings", { comfyWorkflow: workflow, fontSize: "large" });
+
+  expect(refused.status).toBe(422);
+  expect(((await refused.json()) as { error: string }).error).toContain(reason);
+  expect(await settingsNow()).toMatchObject({ comfyWorkflow: INSTALLED_EXAMPLE, fontSize: "medium" });
+});
+
+test("a half-written workflow doesn't stop other settings while it isn't in use", async () => {
+  const running = play();
+
+  for (const change of [{ comfyWorkflow: "{", imageProvider: "local" }, { comfyMode: "advanced", imageProvider: "openrouter" }]) {
+    expect((await running.patch("/settings", change)).status).toBe(200);
+  }
+  expect((await running.patch("/settings", { imageProvider: "local" })).status).toBe(422);
+});
+
+test("a stored workflow that no longer parses leaves the Turn standing and says why in Settings", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene());
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  settingsStore(join(folder.path, "settings.json")).update({ comfyWorkflow: "{" });
+
+  expect((await playTurn(id)).status).toBe(201);
+
+  expect(await settled(id)).toEqual({ images: [], pending: false, session: 0 });
+  expect(comfy.requests.filter(({ path }) => path === "/prompt")).toEqual([]);
+  expect((await settingsNow()).workflowProblem).toContain("isn't valid JSON");
+  logged.mockRestore();
+});
+
+test("Advanced with no workflow stored is an unfinished setup: no call and no noise", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene());
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  await settled(id);
+  settingsStore(join(folder.path, "settings.json")).update({ comfyWorkflow: "" });
+  comfy.requests.splice(0);
+
+  expect((await playTurn(id)).status).toBe(201);
+
+  expect(await settled(id)).toEqual({ images: [], pending: false, session: 0 });
+  expect(comfy.requests).toEqual([]);
+  expect(logged).not.toHaveBeenCalled();
+  logged.mockRestore();
+});
+
+test("a job ComfyUI refuses shows the node in Settings, and never the prompt", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene("A secret door"));
+  const workflow = WORKFLOW_EXAMPLE.replace('"ckpt_name": "your_model.safetensors"', '"ckpt_name": "gone.safetensors", "echo": "{{prompt}}"');
+  await running.patch("/settings", advancedSetup(workflow));
+  const id = await running.createSave();
+
+  expect((await playTurn(id)).status).toBe(201);
+  await settled(id);
+
+  const { workflowProblem } = await settingsNow();
+  expect(workflowProblem).toContain("value_not_in_list");
+  expect(workflowProblem).toContain("node 1 (CheckpointLoaderSimple)");
+  expect(workflowProblem).not.toContain("secret door");
+  expect(String(logged.mock.calls.at(-1)?.[0]?.cause)).toContain("secret door");
+  logged.mockRestore();
+});
+
+test("a custom node that isn't installed is named in Settings", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene());
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  await settled(id);
+  comfy.control.uninstalled = ["KSampler"];
+
+  await playTurn(id);
+  await settled(id);
+
+  expect((await settingsNow()).workflowProblem).toBe("ComfyUI refused the job: missing_node_type (KSampler)");
+  logged.mockRestore();
+});
+
+test("a job that fails shows the node in Settings, and never ComfyUI's text", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene("A secret door"));
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  await settled(id);
+  comfy.control.historyError = true;
+  comfy.control.failure.exception_message = "bad prompt: A secret door";
+
+  await playTurn(id);
+  await settled(id);
+
+  const { workflowProblem } = await settingsNow();
+  expect(workflowProblem).toContain("node 5 (KSampler)");
+  expect(workflowProblem).toContain("OutOfMemoryError");
+  expect(workflowProblem).not.toContain("secret door");
+  logged.mockRestore();
+});
+
+test("a preview from before a failure isn't kept as the image", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene());
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  await settled(id);
+  comfy.control.historyError = true;
+
+  await playTurn(id);
+
+  expect(await settled(id)).toEqual({ images: [], pending: false, session: 0 });
+  logged.mockRestore();
+});
+
+test("a job stopped in ComfyUI says so", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene());
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  await settled(id);
+  comfy.control.historyError = true;
+  comfy.control.failureKind = "execution_interrupted";
+
+  await playTurn(id);
+  await settled(id);
+
+  expect((await settingsNow()).workflowProblem).toContain("stopped");
+  logged.mockRestore();
+});
+
+test("a job with no image output says so", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene());
+  await running.patch("/settings", advancedSetup(graphWith({})));
+  const id = await running.createSave();
+
+  await playTurn(id);
+  await settled(id);
+
+  expect((await settingsNow()).workflowProblem).toContain("SaveImage or PreviewImage");
+  logged.mockRestore();
+});
+
+test("the problem clears with the next image, and with a changed workflow", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const running = play(newScene("One", "One"), newScene("Two", "Two"), newScene("Three", "Three"));
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  comfy.control.historyError = true;
+  await playTurn(id);
+  await settled(id);
+  expect((await settingsNow()).workflowProblem).not.toBe("");
+
+  comfy.control.historyError = false;
+  await playTurn(id);
+  await settled(id);
+  expect((await settingsNow()).workflowProblem).toBe("");
+
+  comfy.control.historyError = true;
+  await playTurn(id);
+  await settled(id);
+  expect((await settingsNow()).workflowProblem).not.toBe("");
+  await running.patch("/settings", { comfyWorkflow: `${INSTALLED_EXAMPLE} ` });
+  expect((await settingsNow()).workflowProblem).toBe("");
+  logged.mockRestore();
+});
+
+test("a job stopped by a Revert isn't a problem with the workflow", async () => {
+  const running = play(newScene());
+  await running.patch("/settings", advancedSetup());
+  const id = await running.createSave();
+  comfy.control.hold = true;
+  await playTurn(id);
+  await until(() => comfy.jobs.running.length === 1);
+
+  await running.post(`/saves/${id}/messages/1/revert`, {});
+
+  await until(() => comfy.jobs.interrupted.length === 1);
+  comfy.finish();
+  await settled(id);
+  expect((await settingsNow()).workflowProblem).toBe("");
 });

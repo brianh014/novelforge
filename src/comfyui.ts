@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { fillWorkflow } from "./comfy-workflow";
 import { buildGraph, usableReferences } from "./graph-builder";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
 import { imageType } from "./save-store";
@@ -16,7 +17,11 @@ const CANCEL_MS = 5 * 1000;
 
 type HistoryEntry = {
   outputs?: Record<string, { images?: { filename: string; subfolder: string; type: string }[] }>;
-  status?: unknown;
+  status?: { status_str?: string; messages?: [string, { node_id?: string; node_type?: string; exception_type?: string }][] };
+};
+type Refusal = {
+  error?: { type?: string; extra_info?: { class_type?: string } };
+  node_errors?: Record<string, { errors?: { type?: string }[]; class_type?: string }>;
 };
 type Queue = { queue_running?: unknown[]; queue_pending?: unknown[] };
 type Inputs = Record<string, unknown>;
@@ -65,7 +70,7 @@ export async function comfyModels(settings: SettingsStore, signal: AbortSignal) 
 }
 
 /** Named by its content, so jobs can't collide. ComfyUI clears its temp folder on start, so these don't pile up. */
-async function upload(url: string, { bytes, mediaType }: ImagePayload["reference_images"][number], signal: AbortSignal) {
+async function upload(url: string, { bytes, mediaType }: { bytes: Uint8Array; mediaType: string }, signal: AbortSignal) {
   const form = new FormData();
   const name = `${createHash("sha256").update(bytes).digest("hex")}.${mediaType.split("/")[1]}`;
   form.set("image", new File([bytes as Uint8Array<ArrayBuffer>], name, { type: mediaType }));
@@ -88,8 +93,39 @@ async function cancel(url: string, job: string) {
   if (listed(queue_running, job)) await post("/interrupt", { prompt_id: job });
 }
 
-/** The ComfyUI Image Adapter in Simple Mode, using the Settings at the time of each call. It never sends a key. */
-export function comfyImages(settings: SettingsStore, { pollMs, silenceMs } = LIMITS): ImageAdapter {
+/** Node and error names only, as ComfyUI's own text can repeat the prompt. */
+function refusal(status: number, body: string) {
+  let reply: Refusal = {};
+  try {
+    reply = JSON.parse(body) as Refusal;
+  } catch {
+    // Not ComfyUI's JSON, so the status is all there is.
+  }
+  const [id, node] = Object.entries(reply.node_errors ?? {})[0] ?? [];
+  if (node) return `ComfyUI refused the job: ${node.errors?.[0]?.type} at node ${id} (${node.class_type})`;
+  const missing = reply.error?.extra_info?.class_type;
+  return `ComfyUI refused the job: ${reply.error?.type ?? status}${missing ? ` (${missing})` : ""}`;
+}
+
+/** Likewise, as an exception's text can repeat the prompt. */
+function jobFailure({ messages, status_str }: NonNullable<HistoryEntry["status"]>) {
+  const [, failure] = messages?.find(([kind]) => kind === "execution_error") ?? [];
+  if (failure) return `ComfyUI's job failed at node ${failure.node_id} (${failure.node_type}): ${failure.exception_type}`;
+  return status_str === "error"
+    ? "The job was stopped in ComfyUI before it finished"
+    : "The job finished without an image, so check the workflow ends in a SaveImage or PreviewImage node";
+}
+
+/**
+ * The ComfyUI Image Adapter, using the Settings at the time of each call. It never sends a key. `report` tells of each
+ * Advanced job, with "" for a good one. Every message here is safe to show the player: ComfyUI's own words stay in `cause`,
+ * for the log.
+ */
+export function comfyImages(
+  settings: SettingsStore,
+  { pollMs, silenceMs } = LIMITS,
+  report: (problem: string) => void = () => {},
+): ImageAdapter {
   async function finished(url: string, job: string, signal: AbortSignal) {
     let heard = Date.now();
     const answer = async <T>(path: string) => {
@@ -118,32 +154,44 @@ export function comfyImages(settings: SettingsStore, { pollMs, silenceMs } = LIM
     }
   }
 
-  return async ({ reference_images, ...payload }, signal) => {
+  return async (payload, signal) => {
     const choices = settings.read();
+    const advanced = choices.comfyMode === "advanced";
     const url = baseUrl(settings);
     let job = crypto.randomUUID() as string;
     const limited = AbortSignal.any([signal, AbortSignal.timeout(silenceMs)]);
 
     try {
-      const references = await Promise.all(
-        usableReferences(choices, reference_images).map((reference) => upload(url, reference, limited)),
-      );
       const seed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-      const graph = buildGraph(choices, { ...payload, references, seed });
+      const store = (image: { bytes: Uint8Array; mediaType: string }) => upload(url, image, limited);
+      const graph = advanced
+        ? await fillWorkflow(choices.comfyWorkflow, payload, seed, store)
+        : buildGraph(choices, {
+            ...payload,
+            references: await Promise.all(usableReferences(choices, payload.reference_images).map(store)),
+            seed,
+          });
       // Not abortable, as a job dropped mid-request could still be queued after the cancel, with nothing to stop it.
       const submitted = await ask(url, "/prompt", AbortSignal.timeout(silenceMs), {
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({ prompt: graph, prompt_id: job }),
       });
-      if (!submitted.ok) throw new Error(`ComfyUI refused the graph: ${submitted.status} ${await submitted.text()}`);
+      if (!submitted.ok) {
+        const body = await submitted.text();
+        throw new Error(refusal(submitted.status, body), { cause: new Error(body) });
+      }
       // Sending an id means a job is known before /prompt answers, but the one the server reports is the real one.
       job = ((await submitted.json()) as { prompt_id?: string }).prompt_id ?? job;
       signal.throwIfAborted();
 
       const { outputs, status } = await finished(url, job, signal);
-      const image = Object.values(outputs ?? {}).flatMap(({ images }) => images ?? [])[0];
-      if (!image) throw new Error(`ComfyUI's job failed: ${JSON.stringify(status)}`);
+      // Integer keys iterate in numeric order, so the last is the highest numbered node.
+      // shortcut: a subgraph id like 12:3 counts as past every integer, compare ids properly if that picks the wrong image.
+      const images = Object.values(outputs ?? {}).flatMap(({ images }) => images ?? []);
+      const image = images.findLast(({ type }) => type === "output") ?? images.at(-1);
+      // A failed job still lists what its earlier nodes finished, which may be only a preview of a step.
+      if (!image || status?.status_str === "error") throw new Error(jobFailure(status ?? {}), { cause: new Error(JSON.stringify(status)) });
 
       const { filename, subfolder, type } = image;
       const view = new URLSearchParams({ filename, subfolder, type });
@@ -152,10 +200,12 @@ export function comfyImages(settings: SettingsStore, { pollMs, silenceMs } = LIM
       // Checked here too, so something that isn't an image doesn't count towards the session's total.
       if (!response.ok || !imageType(bytes)) throw new Error("ComfyUI returned something that isn't a PNG, JPEG or WebP");
       signal.throwIfAborted();
+      if (advanced) report("");
       return bytes;
     } catch (error) {
       // Not awaited, so a server that has gone quiet doesn't also hold up the Save's next image.
       void cancel(url, job).catch(() => {});
+      if (advanced && !signal.aborted) report((error as Error).message);
       throw error;
     }
   };

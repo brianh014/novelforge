@@ -12,6 +12,7 @@ export type Status = State["status"];
 export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKey"> & {
   hasTextApiKey: boolean;
   hasImageApiKey: boolean;
+  workflowProblem: string;
 };
 export type Journal = { summary: string; facts: string[]; npcs: string[]; portraits: Portrait[]; fullLog: Message[] };
 /** A null `npc` is the PC. */

@@ -1,5 +1,5 @@
 import type { Graph } from "../src/graph-builder";
-import { PNG } from "./support";
+import { PNG, png } from "./support";
 
 type Job = { id: string; graph: Graph };
 type Upload = { name: string; subfolder: string; type: string; bytes: Uint8Array };
@@ -45,18 +45,32 @@ export function fakeComfyUI() {
     ownIds: false,
     /** How long /prompt takes to answer, with the job queued only at the end. */
     promptDelayMs: 0,
+    /** Node classes this server doesn't have, such as a custom node that isn't installed. */
+    uninstalled: [] as string[],
+    failureKind: "execution_error",
+    /** What a failing job reports. */
+    failure: { node_id: "5", node_type: "KSampler", exception_type: "OutOfMemoryError", exception_message: "out of memory" },
   };
+
+  /** Each preview and saved image, with saved ones in ComfyUI's output folder. */
+  const outputsOf = (graph: Graph) =>
+    Object.fromEntries(
+      Object.entries(graph).flatMap(([id, { class_type }]) => {
+        if (class_type === "PreviewImage") return [[id, { images: [{ filename: "out.png", subfolder: "", type: "temp" }] }]];
+        if (class_type === "SaveImage") return [[id, { images: [{ filename: `saved-${id}.png`, subfolder: "", type: "output" }] }]];
+        return [];
+      }),
+    );
 
   const finished = (job: Job) => {
     jobs.done.set(job.id, {
       prompt: [0, job.id, job.graph],
-      outputs: control.historyError
-        ? {}
-        : { [String(Object.keys(job.graph).length)]: { images: [{ filename: "out.png", subfolder: "", type: "temp" }] } },
+      // A failed job keeps what its earlier nodes finished.
+      outputs: outputsOf(job.graph),
       status: {
         status_str: control.historyError ? "error" : "success",
         completed: !control.historyError,
-        messages: control.historyError ? [["execution_error", { exception_message: "out of memory" }]] : [],
+        messages: control.historyError ? [[control.failureKind, control.failure]] : [],
       },
     });
   };
@@ -107,10 +121,17 @@ export function fakeComfyUI() {
           const id = control.ownIds ? crypto.randomUUID() : sent;
           jobs.prompts.push(graph);
           await Bun.sleep(control.promptDelayMs);
+          const absent = Object.values(graph).find(({ class_type }) => control.uninstalled.includes(class_type));
+          if (absent) {
+            const { class_type } = absent;
+            const error = { type: "missing_node_type", message: `Node '${class_type}' not found`, extra_info: { class_type } };
+            return Response.json({ error, node_errors: {} }, { status: 400 });
+          }
           const wrong = notInList(graph);
           if (wrong) {
             const error = { type: "prompt_outputs_failed_validation", message: "Prompt outputs failed validation" };
-            const node_errors = { [wrong[0]]: { errors: [{ type: "value_not_in_list" }] } };
+            const [id, { class_type, inputs }] = wrong;
+            const node_errors = { [id]: { errors: [{ type: "value_not_in_list", details: JSON.stringify(inputs) }], class_type } };
             return Response.json({ error, node_errors }, { status: 400 });
           }
           const job = { id, graph };
@@ -144,6 +165,8 @@ export function fakeComfyUI() {
       },
       "/view": (req) => {
         const { filename, type } = Object.fromEntries(new URL(req.url).searchParams);
+        const saved = /^saved-(\d+)\.png$/.exec(filename ?? "");
+        if (saved && type === "output") return new Response(png(Number(saved[1])));
         return filename === "out.png" && type === "temp" ? new Response(control.image) : new Response(null, { status: 404 });
       },
     },
