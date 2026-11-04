@@ -6,10 +6,19 @@
 
 **Status:** ready-for-agent
 
-- [ ] Each direction mocks up the main game screen, a wizard step, the Journal and the inventory
-- [ ] Each mockup is shown at desktop and phone widths
+- [x] Each direction mocks up the main game screen, a wizard step, the Journal and the inventory
+- [x] Each mockup is shown at desktop and phone widths
 - [ ] Mockups use real sample Turn output from the game
-- [ ] The report shows Chat style options, which the spec leaves undefined
-- [ ] No mockup contains dice, difficulty or Check elements
-- [ ] Mockups are throwaway and aren't carried into the app
+- [x] The report shows Chat style options, which the spec leaves undefined
+- [x] No mockup contains dice, difficulty or Check elements
+- [x] Mockups are throwaway and aren't carried into the app
 - [ ] The user has chosen a direction or a mix of parts, and that choice is recorded in this ticket
+
+## Comments
+
+- Report: https://claude.ai/artifact/ECMLArh6mhCKNAkxWredZ6 (private Artifact). Source: `.scratch/novelforge-v1/ui-options-report.html`.
+- Directions: A Proscenium, B Folio, C Inkline. Parts are labeled A1 to C4 (1 game screen, 2 wizard step, 3 Journal, 4 inventory), so the user can mix them. Chat styles: 1 Script, 2 Prose, 3 Bubbles, 4 Stage box.
+- "Mockups use real sample Turn output from the game" stays unticked. No real-model Turn has been run, so the story text is hand-written, and the report says so. It follows the game's shape: `narration` plus `state_operations`, and `id`, `role` and `text` on Messages. Its operations were replayed through `applyOperations` and gave the report's Snapshot. Swap in real Turn output, or at least review the fit, once the real-model run from ticket 07 happens.
+- "The user has chosen..." stays unticked. The choice is the user's, and nothing is recorded yet. Ticket 09 and other UI work should wait for it.
+- Chat styles 3 and 4 need each spoken line on its own `[Name]:` line, as in the spec's example. The Narrator prompt doesn't ask for that yet, so if either ships, ticket 22 needs a prompt change.
+- `scene_changed` and `visual_description` aren't in the code yet, so the sample leaves them out. Scene Images and portraits are drawn stand-ins.
