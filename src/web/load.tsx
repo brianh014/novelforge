@@ -1,6 +1,6 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { coverUrl, deleteSave, duplicateSave, importSave, type ListedSave, listSaves } from "./api";
-import { Book } from "./menu";
+import { Sheet } from "./menu";
 import { Zoomable } from "./zoom";
 
 const lastChanged = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -41,21 +41,27 @@ export function LoadGame() {
   }
 
   return (
-    <Book
-      left={
+    <Sheet
+      rail={
         <>
           <h1 className="big" ref={heading} tabIndex={-1}>Load Game</h1>
-          <p className="muted">Pick up a story, branch it, or carry it to another machine.</p>
-          <button className="action import" aria-disabled={busy} onClick={() => busy || fileInput.current!.click()}>
-            Import a Save
-          </button>
-          <input ref={fileInput} type="file" accept=".sqlite" hidden onChange={importChosen} />
+          <p className="muted so-far">Pick up a story, branch it, or carry it to another machine.</p>
           <a className="quiet" href="#/">Main Menu</a>
         </>
       }
+      foot={
+        <>
+          <div role="status">{notice && <p className="notice">{notice}</p>}</div>
+          {error && <p role="alert" className="error">{error}</p>}
+          <div className="row">
+            <button className="action" aria-disabled={busy} onClick={() => busy || fileInput.current!.click()}>
+              Import a Save
+            </button>
+            <input ref={fileInput} type="file" accept=".sqlite" hidden onChange={importChosen} />
+          </div>
+        </>
+      }
     >
-      <div role="status">{notice && <p className="notice">{notice}</p>}</div>
-      {error && <p role="alert" className="error">{error}</p>}
       {saves?.length === 0 && (
         <p className="muted">
           No Saves yet. <a href="#/new">Start a New Game</a>.
@@ -119,7 +125,7 @@ export function LoadGame() {
           }}
         />
       )}
-    </Book>
+    </Sheet>
   );
 }
 

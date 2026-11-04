@@ -977,9 +977,6 @@ a.action {
   object-fit: cover;
 }
 
-.import {
-  align-self: flex-start;
-}
 
 .saves {
   margin: 0;
@@ -1383,13 +1380,13 @@ dialog blockquote {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  /* The Journal, Inventory and Load Game are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
-  .book:has(.full-log, .items, .saves) {
+  /* The Journal and Inventory are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
+  .book:has(.full-log, .items) {
     height: auto;
     min-height: 100%;
   }
 
-  .book:has(.full-log, .items, .saves) .page,
+  .book:has(.full-log, .items) .page,
   .full-log {
     flex: none;
     overflow: visible;
