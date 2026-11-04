@@ -9,7 +9,7 @@ import { settingsStore } from "../src/settings-store";
 import { ART_STYLES } from "../src/web/art-styles";
 
 const SUBJECT =
-  "Head and shoulders portrait of a hooded traveller looking back over one shoulder, with a plain, softly lit background. The face is clearly visible and centred in the frame, with space around the hood.";
+  "Waist-up portrait of a hooded traveller looking back over one shoulder, with the face clearly visible. The figure fills only the left third of the frame. The rest of the frame is a wide, detailed view of the place behind them: an old road winding through open hills toward a distant town under a dramatic sky.";
 const AVOID = "text, captions, letters, numbers, signatures, watermarks, dice";
 
 const [out, ...numbers] = process.argv.slice(2);
