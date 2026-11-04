@@ -310,7 +310,11 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       narrowLeft
       left={
         <>
-          <h1 className="title">{pc}</h1>
+          {/* A Save from before titles has only its PC. */}
+          <div className="story-title">
+            <h1 className="title">{save.title || pc}</h1>
+            {save.title && <p className="muted">{pc}</p>}
+          </div>
           {!staged && (sceneImage() || cover)}
           <div className="condition">
             <h2>Condition</h2>

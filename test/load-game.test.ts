@@ -144,7 +144,7 @@ test("an exported Save imports as a new Save with the same story", async () => {
   expect(copy).not.toBe(id);
   expect(await listedIds()).toEqual([id, copy].sort());
   expect(await messagesOf(copy)).toEqual(await messagesOf(id));
-  expect(await game.get(`/saves/${copy}`).then((r) => r.json())).toEqual({ worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "", startingHook: "", hasCover: false });
+  expect(await game.get(`/saves/${copy}`).then((r) => r.json())).toEqual({ title: "", worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "", startingHook: "", hasCover: false });
 });
 
 test("importing the same file twice gives two Saves", async () => {

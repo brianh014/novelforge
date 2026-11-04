@@ -328,8 +328,8 @@ export function startServer(options: {
       "/saves/:id": {
         GET: (req) => {
           // An allowlist, so a secret added to the Save can never reach the player by default.
-          const { worldBrief, pc, artStyle, startingHook, hasCover } = saves.read(req.params.id);
-          return Response.json({ worldBrief, pc: { name: pc.name }, artStyle, startingHook, hasCover });
+          const { title, worldBrief, pc, artStyle, startingHook, hasCover } = saves.read(req.params.id);
+          return Response.json({ title, worldBrief, pc: { name: pc.name }, artStyle, startingHook, hasCover });
         },
         PATCH: async (req) => {
           const { artStyle } = await parseBody(req, ArtStyleRequest);
