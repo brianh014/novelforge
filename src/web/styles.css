@@ -267,6 +267,12 @@ h2 {
   margin-top: auto;
 }
 
+.sheet-rail .zoom img {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line);
+}
+
 .sheet-main {
   min-width: 0;
   min-height: 0;
@@ -1358,6 +1364,10 @@ dialog blockquote {
     margin: 0;
   }
 
+  .sheet-rail .zoom {
+    display: none;
+  }
+
   .sheet-main {
     flex: 1;
   }
@@ -1383,13 +1393,13 @@ dialog blockquote {
     column-gap: 12px;
   }
 
-  /* The Journal and Inventory are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
-  .book:has(.full-log, .items) {
+  /* The Journal is too long for two stacked panes, so it reads as one page with the tabs held in reach. */
+  .book:has(.full-log) {
     height: auto;
     min-height: 100%;
   }
 
-  .book:has(.full-log, .items) .page,
+  .book:has(.full-log) .page,
   .full-log {
     flex: none;
     overflow: visible;

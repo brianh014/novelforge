@@ -13,7 +13,7 @@
 - [x] Director's Notes are gone from the Story screen and the Narrator's prompt. Ticket 31 rethinks them
 - [x] NPCs have a short summary of who they are, written by the Narrator as the PC understands them, on the Story screen and in the Journal
 - [ ] A real model writes NPC summaries
-- [ ] Inventory: the user's answer on moving both lists to the right page, with a large portrait on the left
+- [x] Inventory uses the Index Sheet, like Settings and world creation, with the PC's portrait, name and Condition in the index and both lists in the column. The item box sits in the pinned bar
 
 ## Comments
 
