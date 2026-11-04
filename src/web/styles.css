@@ -18,16 +18,16 @@
 :root {
   color-scheme: light dark;
   --desk: light-dark(#23382c, #0d1510);
-  --page: light-dark(#eadfc5, #24221a);
-  --ink: light-dark(#25221a, #e4dcc4);
-  --muted: light-dark(#5a5340, #aca389);
-  --line: light-dark(#b4a581, #48443a);
+  --page: light-dark(#eadfc5, #33291c);
+  --ink: light-dark(#25221a, #eadfc5);
+  --muted: light-dark(#5a5340, #bcae90);
+  --line: light-dark(#b4a581, #63533c);
   --accent: light-dark(#23503e, #93c3a2);
   --on-accent: light-dark(#f2ead6, #10190f);
-  --soft: light-dark(#dccda9, #2f2c22);
+  --soft: light-dark(#dccda9, #43362a);
   --error: light-dark(#8f2f1c, #eda78f);
-  --foxing: light-dark(rgb(120 80 30 / 0.12), rgb(214 150 80 / 0.06));
-  --gutter: light-dark(rgb(40 25 5 / 0.45), rgb(0 0 0 / 0.6));
+  --foxing: light-dark(rgb(120 80 30 / 0.12), rgb(0 0 0 / 0.2));
+  --gutter: light-dark(rgb(40 25 5 / 0.45), rgb(0 0 0 / 0.7));
   --display: "Libre Caslon Display", "Hoefler Text", Georgia, serif;
   --body: "Libre Caslon Text", "Hoefler Text", Georgia, serif;
   --label: "Libre Caslon Text", Georgia, serif;
@@ -102,8 +102,14 @@ a {
   margin-inline: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  background: var(--page) radial-gradient(circle at 8% 14%, var(--foxing), transparent 26%)
-    no-repeat;
+  /* Fibres, then age spots, then the stock itself. The grain is drawn as noise so it costs no image file. */
+  background-color: var(--page);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9 .4' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23f)' opacity='.55'/%3E%3C/svg%3E"),
+    radial-gradient(circle at 8% 14%, var(--foxing), transparent 26%),
+    radial-gradient(circle at 92% 82%, var(--foxing), transparent 30%),
+    radial-gradient(circle at 58% 38%, var(--foxing), transparent 18%);
+  background-blend-mode: soft-light, normal, normal, normal;
   box-shadow: 0 6px 22px rgb(0 0 0 / 0.45);
 }
 
