@@ -67,7 +67,8 @@ export function LoadGame() {
           return (
             <li key={save.id} className={"hasCover" in save && save.hasCover ? "with-cover" : undefined}>
               {"hasCover" in save && save.hasCover && <Zoomable lazy src={coverUrl(save.id)} alt={`Cover of ${name}'s story`} />}
-              <p className="title">{name}</p>
+              <p className="title">{("title" in save && save.title) || name}</p>
+              {"title" in save && save.title && <p className="muted">{name}</p>}
               {"unreadable" in save ? (
                 <p className="muted">This file can't be opened. A newer version of NovelForge may have made it.</p>
               ) : (

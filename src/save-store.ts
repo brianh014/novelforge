@@ -199,8 +199,13 @@ const toVersion6 = (db: Database) =>
 const toVersion7 = (db: Database) =>
   db.run("CREATE TABLE IF NOT EXISTS cover (id INTEGER PRIMARY KEY CHECK (id = 1), bytes BLOB NOT NULL)");
 
+/** Empty for a Save from before titles, whose list row shows its PC. */
+const toVersion8 = (db: Database) => {
+  if (!hasColumn(db, "save", "title")) db.run("ALTER TABLE save ADD COLUMN title TEXT NOT NULL DEFAULT ''");
+};
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -275,6 +280,7 @@ function assertValidSave(db: Database) {
     art_style: z.string(),
     starting_hook: z.string(),
     pc_details: jsonText(PcDetails),
+    title: z.string(),
   });
   const messages = rowsOf(db, "messages", {
     id: rowId.positive(),
@@ -391,19 +397,21 @@ export function saveStore(savesDir: string) {
       pc,
       artStyle = "",
       startingHook = "",
+      title = "",
       opening,
-    }: Save & { artStyle?: string; startingHook?: string; opening?: Partial<State> }) {
+    }: Save & { artStyle?: string; startingHook?: string; title?: string; opening?: Partial<State> }) {
       const id = crypto.randomUUID();
       const unfinishedPath = `${pathOf(id)}.unfinished`;
       {
         using db = connect(unfinishedPath);
         const { name, ...details } = pc;
-        db.run("INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details) VALUES (1, ?, ?, ?, ?, ?)", [
+        db.run("INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details, title) VALUES (1, ?, ?, ?, ?, ?, ?)", [
           worldBrief,
           name,
           artStyle,
           startingHook,
           JSON.stringify(details),
+          title,
         ]);
         // No Message has this Snapshot yet, and the file isn't a Save until the rename below.
         for (const [name, value] of Object.entries(opening ?? {})) {
@@ -427,8 +435,8 @@ export function saveStore(savesDir: string) {
         .filter(isSaveId);
       const saves = ids.map((id) => {
         try {
-          const { worldBrief, pc, hasCover } = this.read(id);
-          return { id, worldBrief, pc: { name: pc.name }, hasCover, updatedAt: statSync(pathOf(id)).mtimeMs };
+          const { worldBrief, pc, hasCover, title } = this.read(id);
+          return { id, title, worldBrief, pc: { name: pc.name }, hasCover, updatedAt: statSync(pathOf(id)).mtimeMs };
         } catch {
           return { id, unreadable: true as const, updatedAt: statSync(pathOf(id)).mtimeMs };
         }
@@ -436,11 +444,11 @@ export function saveStore(savesDir: string) {
       return saves.toSorted((a, b) => b.updatedAt - a.updatedAt);
     },
 
-    read(id: string): Save & { artStyle: string; startingHook: string; hasCover: boolean } {
+    read(id: string): Save & { artStyle: string; startingHook: string; title: string; hasCover: boolean } {
       using db = open(id);
       const save = db
-        .query<{ world_brief: string; pc_name: string; art_style: string; starting_hook: string; pc_details: string }, []>(
-          "SELECT world_brief, pc_name, art_style, starting_hook, pc_details FROM save",
+        .query<{ world_brief: string; pc_name: string; art_style: string; starting_hook: string; pc_details: string; title: string }, []>(
+          "SELECT world_brief, pc_name, art_style, starting_hook, pc_details, title FROM save",
         )
         .get()!;
       return {
@@ -448,6 +456,7 @@ export function saveStore(savesDir: string) {
         pc: { ...(JSON.parse(save.pc_details) as PcDetails), name: save.pc_name },
         artStyle: save.art_style,
         startingHook: save.starting_hook,
+        title: save.title,
         hasCover: db.query("SELECT 1 FROM cover").get() !== null,
       };
     },

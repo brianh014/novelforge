@@ -2,13 +2,13 @@
 
 **What to build:** Step 1 of world creation shows an example image of each Art Style, using the same subject in all 16, so the player can see what they are choosing.
 
-**Blocked by:** the user's choices in the options report, https://claude.ai/artifact/U121F1qM7ye9DcvJHyB4h5 (source: `art-style-options.html`)
+**Blocked by:** the user running the image script, as the key stays with them
 
-**Status:** needs-info
+**Status:** ready-for-agent
 
 ## Criteria
 
-- [ ] The user has chosen a picker layout, static or live examples, a sample subject and how the paid images get run
+- [x] The user chose layout A, static examples, subject (a) and meta/muse-image for these images, run with `scripts/draw-style-examples.ts`
 - [ ] 3 test images approved before the other images are paid for
 - [ ] All 16 examples inspected for stray lettering, dice and numbers
 - [ ] Images shrunk and bundled in the compiled executable, with no new dependency

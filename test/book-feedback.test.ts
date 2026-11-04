@@ -213,3 +213,12 @@ test("a Save from before the personality field went keeps it, and a new PC can't
   expect((await game.post("/pc/pick", { ...choices, pc })).status).toBe(200);
   expect(JSON.stringify(script.prompts[0])).not.toContain("personality");
 });
+
+test("a world's title goes with it into its Save and the Load Game list", async () => {
+  await withImages([generated, sheet, noConflict], png(1));
+
+  const id = await begin(await newWorld());
+
+  const { saves } = (await (await game.get("/saves")).json()) as { saves: { id: string; title: string }[] };
+  expect(saves.find((save) => save.id === id)?.title).toBe("The Salt Reckoning");
+});

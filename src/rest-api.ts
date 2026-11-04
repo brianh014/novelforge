@@ -144,7 +144,7 @@ export function startServer(options: {
   const engine = { ...options, images };
   // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
   // shortcut: an abandoned world and its cover stay until the app restarts, evict them if that ever adds up.
-  const worlds = new Map<string, World>();
+  const worlds = new Map<string, World & { title: string }>();
   const covers = new Map<string, { bytes: Promise<Uint8Array<ArrayBuffer> | undefined>; stop: AbortController }>();
 
   /** In the background, so a slow image never holds up the world, and a regenerated world's cover replaces the unfinished one. */
@@ -255,7 +255,7 @@ export function startServer(options: {
           const { opening, worldChanged } = await fitPc(options, world, save, inventory, req.signal);
           // shortcut: held until now so a failure can retry, which lets a double submit pay for two fits, lock the world if that happens.
           if (!worlds.has(worldId)) throw new WorldNotFound();
-          const id = saves.create({ ...save, opening });
+          const id = saves.create({ ...save, opening, title: world.title });
           worlds.delete(worldId);
           images.saveCreated(id);
           // Often still drawing. The Save may be gone by the time it lands, and a story without a cover loses nothing.
@@ -269,7 +269,7 @@ export function startServer(options: {
           const choices = await parseBody(req, WorldRequest);
           const { title, overview, world } = await generateWorld(options, choices, req.signal);
           const id = crypto.randomUUID();
-          worlds.set(id, world);
+          worlds.set(id, { ...world, title });
           startCover(id, choices, title, overview);
           return Response.json({ id, overview }, { status: 201 });
         },
@@ -296,7 +296,7 @@ export function startServer(options: {
           const choices = await parseBody(req, WorldRequest);
           if (!worlds.has(id)) throw new WorldNotFound();
           const { title, overview, world } = await generateWorld(options, choices, req.signal);
-          worlds.set(id, world);
+          worlds.set(id, { ...world, title });
           startCover(id, choices, title, overview);
           return Response.json({ overview });
         },
