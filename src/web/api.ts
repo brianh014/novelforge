@@ -60,6 +60,8 @@ export const getSettings = () => request<Settings>("/settings");
 export const saveSettings = (change: SettingsChange) =>
   request<Settings>("/settings", { ...jsonBody(change), method: "PATCH" });
 
+export const getTextModels = () => request<{ models: string[] }>("/settings/text-models").then(({ models }) => models);
+
 /** What stops the Narrator replying, if anything. */
 export function setupProblem({
   textBaseUrl,

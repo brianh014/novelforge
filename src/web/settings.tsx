@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { getSave, getSettings, OPENROUTER_URL, saveArtStyle, saveSettings, type Settings } from "./api";
+import { getSave, getSettings, getTextModels, OPENROUTER_URL, saveArtStyle, saveSettings, type Settings } from "./api";
 import { Book, BookTabs } from "./menu";
 
 export const applyFontSize = ({ fontSize }: Settings) => {
@@ -72,6 +72,21 @@ function InstallSettings({ initial }: { initial: Settings }) {
   const set = (change: Partial<Settings>) => setDraft({ ...draft, ...change });
 
   const local = draft.textBaseUrl !== OPENROUTER_URL;
+  const addressSaved = draft.textBaseUrl === saved.textBaseUrl;
+  // Not all servers list their models, so those keep the text box.
+  const [models, setModels] = useState<string[]>();
+
+  useEffect(() => {
+    setModels(undefined);
+    if (saved.textBaseUrl === OPENROUTER_URL) return;
+    let current = true;
+    const show = (list: string[]) => current && setModels(list);
+    getTextModels().then(show, () => show([]));
+    return () => {
+      current = false;
+    };
+  }, [saved]);
+
   const losesKey = saved.hasTextApiKey && draft.textBaseUrl !== saved.textBaseUrl && !textKey.trim();
   const keyHint = (stored: boolean) => (stored ? "Saved. Type a new key to replace it." : "None saved");
 
@@ -120,10 +135,24 @@ function InstallSettings({ initial }: { initial: Settings }) {
       )}
       <label>
         Text model
-        <input value={draft.textModel} onChange={(e) => set({ textModel: e.target.value })} />
+        {local && addressSaved && models?.length ? (
+          <select value={draft.textModel} onChange={(e) => set({ textModel: e.target.value })}>
+            {!draft.textModel && <option value="">Choose a model</option>}
+            {/* A saved model the server doesn't list stays as it is until the player changes it. */}
+            {[...new Set([draft.textModel, ...models])].filter(Boolean).map((model) => (
+              <option key={model}>{model}</option>
+            ))}
+          </select>
+        ) : (
+          <input value={draft.textModel} onChange={(e) => set({ textModel: e.target.value })} />
+        )}
       </label>
+      {local && !addressSaved && <p className="muted">Save the address to choose from this server's models.</p>}
+      {local && addressSaved && models?.length === 0 && (
+        <p className="muted">No models listed. Check that the server is running, or type the model's name.</p>
+      )}
       <label>
-        Text API key
+        {local ? "Text API key (most local servers need none)" : "Text API key"}
         <input
           type="password"
           autoComplete="new-password"

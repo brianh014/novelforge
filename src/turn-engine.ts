@@ -15,6 +15,8 @@ export type TextProvider = (
 export type TurnEvents = (event: "narration" | "restart", data: object) => void;
 
 export class ContentRefused extends Error {}
+/** A failure whose message is fit to show the player. Any provider detail is in its cause, for the server log. */
+export class TextProviderFailed extends Error {}
 class InvalidResponse extends Error {}
 
 /** The Turn wrote nothing. `input` is the player's text, so they can edit it or send it again. */
@@ -67,12 +69,17 @@ const responseSchema = jsonSchemaOf(
   }),
 );
 
-// shortcut: a reply in another key order shows no narration until the Turn is done, loosen this only if real models do that often.
-const NARRATION_START = /^\s*\{\s*"check"\s*:\s*null\s*,\s*"narration"\s*:\s*"/;
+// shortcut: a reply in another key order or after prose shows no narration until the Turn is done, loosen this only if real models do that often.
+const NARRATION_START = /^\s*(?:```(?:json)?\s*)?\{\s*"check"\s*:\s*null\s*,\s*"narration"\s*:\s*"/;
 const COMPLETE_JSON_CHARACTERS = /^(?:[^"\\\x00-\x1f]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*/;
 
+// A model's thoughts can hold stray JSON, or a draft that differs from its reply. A chat template may supply the
+// opening tag, and a reply can be cut off before the closing one.
+const withoutThinking = (reply: string) => reply.replace(/^[\s\S]*<\/think>/, "").replace(/<think>[\s\S]*$/, "");
+
 /** The narration in a partial reply, empty until the reply has shown it is not a Check request. */
-function narrationSoFar(reply: string) {
+function narrationSoFar(partial: string) {
+  const reply = withoutThinking(partial);
   const start = reply.match(NARRATION_START);
   if (!start) return "";
   return JSON.parse(`"${reply.slice(start[0].length).match(COMPLETE_JSON_CHARACTERS)![0]}"`) as string;
@@ -237,7 +244,8 @@ async function askNarrator(
     if (cause instanceof ContentRefused) {
       throw new TurnFailed(refusal, "refused", input, { cause });
     }
-    throw new TurnFailed("The Text Provider request failed", "retryable", input, { cause });
+    const message = cause instanceof TextProviderFailed ? cause.message : "The Text Provider request failed";
+    throw new TurnFailed(message, "retryable", input, { cause });
   }
 }
 
@@ -263,8 +271,10 @@ export async function askForJson<T>(
 }
 
 function parseReply<T>(reply: string, schema: z.ZodType<T>) {
+  // shortcut: this takes a code fence or prose around the JSON, but braces in that prose fail validation and retry, parse balanced braces if real models do that.
+  const text = withoutThinking(reply);
   try {
-    return schema.parse(JSON.parse(reply));
+    return schema.parse(JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)));
   } catch (cause) {
     throw new InvalidResponse(undefined, { cause });
   }

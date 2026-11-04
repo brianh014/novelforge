@@ -16,6 +16,7 @@ import {
   StaleTurn,
 } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
+import { textModels } from "./text-provider";
 import { playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
 import { fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World } from "./world-creation";
@@ -185,6 +186,10 @@ export function startServer(options: {
           settings.update(await parseBody(req, SettingsUpdate));
           return Response.json(publicSettings());
         },
+      },
+      // Only ever the saved server, so a key can't reach an address that is still being typed.
+      "/settings/text-models": {
+        GET: async (req) => Response.json({ models: await textModels(settings, req.signal) }),
       },
       "/saves": {
         GET: () => Response.json({ saves: saves.list() }),

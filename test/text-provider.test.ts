@@ -214,7 +214,7 @@ test("a provider error mid-stream fails the Turn as retryable, and its detail st
 
   expect(events.at(-1)).toEqual({
     event: "error",
-    data: { status: 502, error: "The Text Provider request failed", failure: "retryable", input: "I wade forward." },
+    data: { status: 502, error: expect.stringContaining("returned an error"), failure: "retryable", input: "I wade forward." },
   });
   expect(await storedMessages(id)).toEqual([]);
 });
