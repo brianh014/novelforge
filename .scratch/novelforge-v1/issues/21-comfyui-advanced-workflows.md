@@ -1,6 +1,6 @@
 # 21: ComfyUI Advanced workflows
 
-**What to build:** An advanced player can supply their own ComfyUI workflow, which is how IPAdapter and per-NPC LoRAs are used.
+**What to build:** An advanced player can supply their own ComfyUI workflow, which is how IPAdapter is used.
 
 **Blocked by:** 20
 
@@ -42,3 +42,4 @@
 - The placeholder docs are in Settings, in a closed section under the box, with the example from `WORKFLOW_EXAMPLE`, which a test checks parses. `novelforge-spec.md` has the same contract under Advanced. There's no README to put it in.
 - The Settings screen was checked in headless Chrome against the compiled executable and the fake ComfyUI, at 390 and 1280 wide in light and dark, with a 300 node workflow of over 400 KB and the guide open: no horizontal scroll, and nothing past the viewport. Broken JSON, the UI format, an unknown placeholder and an empty box each showed their own error and stored nothing. A valid workflow saved, a PC portrait reached the Save through it, a failed job showed in Settings, and the guide opens by keyboard. That run found a real bug the tests couldn't: a `Buffer` at module load blanked the whole app, as the browser loads `comfy-workflow.ts` for the example.
 - "Advanced workflow" isn't in `GLOSSARY.md`, like the ComfyUI terms noted in ticket 20.
+- **User decision (2026-11-04):** LoRAs are meant for all images, not specific NPCs. Per-NPC LoRAs aren't a v1 feature, so the guidance for them was removed from Settings and the spec. Character LoRAs could be supported later through Advanced workflows, which would mean giving workflows NPC names.

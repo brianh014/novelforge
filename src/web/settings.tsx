@@ -165,9 +165,7 @@ function WorkflowGuide() {
         <code>SaveImage</code> also leaves a copy in ComfyUI's output folder.
       </p>
       <p>
-        Your workflow brings its own models and LoRAs, so the LoRA list and trigger words here aren't used. For a per-NPC
-        LoRA, use a <code>has_</code> switch as a LoRA node's strength. It turns on for whoever fills that slot, so it
-        suits one recurring NPC, not several with their own LoRAs.
+        Your workflow brings its own models and LoRAs, so the LoRA list and trigger words here aren't used.
       </p>
       <pre>{WORKFLOW_EXAMPLE}</pre>
     </details>

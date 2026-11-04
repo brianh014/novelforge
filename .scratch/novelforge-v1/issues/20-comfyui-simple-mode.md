@@ -44,3 +44,4 @@
 - The `comfyui-skill-public` skill holds only its `SKILL.md`, as its reference files are missing, so FLUX.2 and API facts came straight from ComfyUI's source, its templates and docs.comfy.org.
 - The Settings screen was checked in headless Chrome against the compiled executable and a fake ComfyUI, at 390 and 1280 wide in light and dark, for both families, with very long model names: no horizontal scroll. Adding a LoRA works by keyboard, removing one keeps focus, Refresh shows a new model, a missing model is named, and an image reached the Save and showed in play.
 - "Graph Builder", "Simple Mode", "LoRA" and "Image Adapter" aren't in `GLOSSARY.md`, so they need entries. The Settings text mentions an Advanced workflow, as the spec's example does, ahead of ticket 21.
+- **User decision (2026-11-04):** keep the Checkpoint type setting (SDXL or SD 1.5), though the spec doesn't list it.

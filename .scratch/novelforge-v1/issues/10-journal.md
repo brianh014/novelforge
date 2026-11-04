@@ -17,3 +17,4 @@
 
 - No images exist yet, so the Full Log shows text only. Ticket 17 adds Scene Images to it, and ticket 18 adds portraits to the NPC section.
 - The route allowlists what it sends, but the summary is not in the PC-known section: it is Narrator free text, as are the known facts. Only the prompt keeps secrets and Checks out of them, so a model that disobeys could still show one. The marker test proves the route, not the model.
+- **User decision (2026-11-04):** keep the summary and known facts in the Journal, with the prompt as their only guard. Check this on the real-model run.

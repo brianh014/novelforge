@@ -287,7 +287,7 @@ ComfyUI is the only Local image backend in v1, and the user runs it themselves.
 
 **Simple Mode** is the default, and the user never sees a workflow. They enter the ComfyUI address, choose a model family, and pick their model from a dropdown listing what ComfyUI has installed. They can add as many LoRAs as they like, each with a strength and optional trigger words that are added to prompts automatically. NovelForge builds the graph. Model files must be in ComfyUI's model folders, and a refresh button updates the lists.
 
-The LoRA list applies to every image. Per-NPC LoRAs need an Advanced workflow.
+The LoRA list applies to every image. Character LoRAs aren't in v1, and could be supported later through Advanced workflows.
 
 | Family | Model selection | Reference images in Simple Mode |
 |---|---|---|
@@ -314,7 +314,7 @@ The player pastes a workflow from ComfyUI's Export (API) into Settings. It's per
 * Only the image payload reaches a workflow, never the World Bible, Plot Threads or Checks.
 * References beyond the workflow's slots aren't sent. Portraits and first Scenes have no references, so a slot with no image gets a blank grey one and the job still runs. A `{{has_...}}` switch used as a weight or strength turns that slot off. An img2img workflow can't turn off that way, so it starts those images from grey.
 * The image kept is the highest numbered node's `SaveImage`, or `PreviewImage` if there's none. An id like `12:3` from a subgraph counts as higher than any plain number. Saved copies also stay in ComfyUI's output folder. A job that fails keeps no image, even if an earlier node finished one.
-* The Simple Mode model choices, LoRA list and trigger words are ignored. A workflow brings its own, and a per-NPC LoRA is a LoRA node with a `{{has_npc_1}}` strength. That turns on for whoever fills the slot, as a workflow never gets NPC names, so it suits one recurring NPC, not several with their own LoRAs.
+* The Simple Mode model choices, LoRA list and trigger words are ignored. A workflow brings its own.
 * A failed job leaves the Turn alone, and Settings shows the node and error type of the last failure. ComfyUI's full text stays in the server log, as it can repeat the prompt.
 
 ## Testing

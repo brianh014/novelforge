@@ -41,3 +41,4 @@
 - `MAX_IMPORT_BYTES` is 512 MiB, about 250 images at 2 MiB each. A longer game can export but not import, as the `shortcut:` there says. `maxRequestBodySize` is set to match.
 - Ticket 18: `state.scene.visibleCast` holds the NPCs in view, by name, for portraits and references. Add roles to `ImagePayload["reference_images"]`, where the first references survive trimming, so the order is the priority. Portraits need their own Revert count and delete in `countAfter` and `deleteAfter`, and `session++` in the pipeline is the count they share.
 - Ticket 20: the `imageProvider !== "openrouter"` check in `draw` is what keeps Local silent. Replace it with choosing an adapter, and pick the key check per provider. `style_preset` and `negative_prompt` are in the payload for ComfyUI to use properly.
+- **User decision (2026-11-04):** keep coalescing, so scenes passed over while an image is drawing get no image.

@@ -21,3 +21,4 @@
 - A PC with no description at all gets no portrait, as there is nothing to draw from.
 - The Journal doesn't poll. A portrait that finishes while it is open shows the next time it opens.
 - Portraits went through the real adapter against a local fake image server, like ticket 17. The real-model run is still left for the user.
+- **User decision (2026-11-04):** keep drawing a missing portrait the next time the Scene moves, including after failed generations and on Saves from before portraits.

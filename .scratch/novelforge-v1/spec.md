@@ -121,7 +121,7 @@ Scene Images appear above the chat, visual novel style. The Journal, inventory a
 78. As a local image user, I want to add multiple LoRAs with strengths and trigger words, so that I can shape the look easily.
 79. As a local image user, I want a refresh button, so that models I've just added appear.
 80. As a local image user, I want to see what references my setup supports, so that I understand any limits.
-81. As an advanced user, I want to provide my own ComfyUI workflow, so that I can use IPAdapter or per-NPC LoRAs.
+81. As an advanced user, I want to provide my own ComfyUI workflow, so that I can use IPAdapter.
 82. As a player, I want Model Instructions, so that I can guide the Narrator across all my games.
 83. As a player, I want to change models mid-game, so that I'm not locked in.
 84. As a player, I want font size and Chat style settings, so that reading is comfortable.
