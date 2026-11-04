@@ -2,9 +2,9 @@ import type { comfyModels } from "../comfyui";
 import type { Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State } from "../state-applier";
-import type { PcDraft, PickField, WorldChoices } from "../world-creation";
+import type { EnhanceField, PcDraft, WorldChoices, WorldField } from "../world-creation";
 
-export type { Message, PcDraft, PickField, Save, WorldChoices };
+export type { EnhanceField, Message, PcDraft, Save, WorldChoices, WorldField };
 export type ListedSave = ReturnType<SaveStore["list"]>[number];
 export type OpenSave = ReturnType<SaveStore["read"]>;
 export type Inventory = State["inventory"];
@@ -128,8 +128,16 @@ export const generateWorld = (choices: WorldChoices, signal?: AbortSignal) =>
 export const regenerateWorld = (id: string, choices: WorldChoices, signal?: AbortSignal) =>
   request<{ overview: string }>(`/worlds/${id}/regenerate`, { ...jsonBody(choices), signal });
 
-export const pickForMe = (field: PickField, theme: string, worldBrief: string, signal?: AbortSignal) =>
-  request<{ text: string }>("/worlds/pick", { ...jsonBody({ field, theme, worldBrief }), signal }).then(({ text }) => text);
+/** Writes the empty boxes of `world`. Leave out a box that shouldn't be written. */
+export const pickForMe = (theme: string, world: Partial<Record<WorldField, string>>, signal?: AbortSignal) =>
+  request<Partial<Record<WorldField, string>>>("/worlds/pick", { ...jsonBody({ theme, ...world }), signal });
+
+export const enhance = (
+  field: EnhanceField,
+  text: string,
+  choices: Omit<WorldChoices, "artStyle"> & { pc?: PcDraft },
+  signal?: AbortSignal,
+) => request<{ text: string }>("/enhance", { ...jsonBody({ ...choices, field, text }), signal }).then(({ text }) => text);
 
 export const pickPc = (choices: WorldChoices, pc: PcDraft, signal?: AbortSignal) =>
   request<Partial<PcDraft>>("/pc/pick", { ...jsonBody({ ...choices, pc }), signal });

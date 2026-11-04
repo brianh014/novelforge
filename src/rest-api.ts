@@ -21,7 +21,7 @@ import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textModels } from "./text-provider";
 import { playOpening, playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
-import { decideForPc, fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World, type WorldChoices } from "./world-creation";
+import { decideForPc, ENHANCE_FIELDS, enhance, fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World, type WorldChoices } from "./world-creation";
 
 const NewSaveRequest = z.object({
   worldBrief: z.string().min(1),
@@ -41,12 +41,26 @@ const WorldRequest = z.object({
 });
 
 const PickRequest = z.object({
-  field: z.enum(["title", "worldBrief", "startingHook"]),
   theme: z.string().trim().min(1),
+  title: z.string().trim().max(80),
   worldBrief: z.string().trim(),
+  startingHook: z.string().trim().optional(),
 });
 
-const PcPickRequest = WorldRequest.extend({ pc: z.record(z.enum(PC_FIELDS), z.string().trim()) });
+const PcBoxes = z.record(z.enum(PC_FIELDS), z.string().trim());
+
+const PcPickRequest = WorldRequest.extend({ pc: PcBoxes });
+
+// The other boxes may still be empty: Enhance needs only its own.
+const EnhanceRequest = z.object({
+  field: z.enum(ENHANCE_FIELDS),
+  text: z.string().trim().min(1),
+  theme: z.string().trim(),
+  title: z.string().trim(),
+  worldBrief: z.string().trim(),
+  startingHook: z.string().trim(),
+  pc: PcBoxes.optional(),
+});
 
 class WorldNotFound extends Error {}
 
@@ -283,10 +297,10 @@ export function startServer(options: {
         },
       },
       "/worlds/pick": {
-        POST: async (req) => {
-          const pick = await parseBody(req, PickRequest);
-          return Response.json({ text: await pickForMe(options, pick, req.signal) });
-        },
+        POST: async (req) => Response.json(await pickForMe(options, await parseBody(req, PickRequest), req.signal)),
+      },
+      "/enhance": {
+        POST: async (req) => Response.json({ text: await enhance(options, await parseBody(req, EnhanceRequest), req.signal) }),
       },
       "/pc/pick": {
         POST: async (req) => Response.json(await pickPc(options, await parseBody(req, PcPickRequest), req.signal)),

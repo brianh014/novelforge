@@ -25,11 +25,13 @@ The first step in a new game is creating the world, the player selects from list
   * Realistic medieval  
   * Western  
   * Create your own  
-* World Brief \- free form field to describe the world. “Pick for me” will generate random world based on theme  
-* Title - free form field for the story's title, lettered into the Cover. “Pick for me” will generate one based on theme and World Brief  
+* World Brief \- free form field to describe the world  
+* Title - free form field for the story's title, lettered into the Cover  
 * Toggle for Starting Hook  
-  * Yes \- the player specifies a Starting Hook at the beginning of the game, or a pick for me button for a generated one based on theme and World Brief  
+  * Yes \- the player specifies a Starting Hook at the beginning of the game  
   * No \- The PC just starts in the world with no immediate hook, more sandbox style start  
+* One “Pick for me” button that will use the theme and any provided info to generate the empty fields above  
+* An “Enhance” button on each of those fields, which rewrites what the player wrote into something richer, for a player with a general idea. Undo brings back their words  
 * Art style \- the style to be used for all image generation in this Save (can be changed in game, affects new images only)  
   * **Cinematic Photorealism**  
     * Ultra-detailed photorealistic style capturing hyper-accurate physics, micro-surface textures, natural volumetric light dispersion, realistic lens depth of field, and true-to-life subsurface scattering, indistinguishable from high-resolution digital cinema footage.  
@@ -87,7 +89,7 @@ The player can play whomever they want. Whatever the player writes during charac
 * Any other fields needed to fully describe the PC
 
 An image of the PC will be generated based on the descriptions.
-“Pick for me” button that will use any provided info to generate empty fields
+“Pick for me” button that will use any provided info to generate empty fields. Each field except the name also has “Enhance”, as in world creation
 
 ## The game loop
 

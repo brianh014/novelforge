@@ -156,11 +156,11 @@ test("a reply cut off mid-thought is never taken for a finished Turn", async () 
 });
 
 test("wizard calls accept wrapped JSON too", async () => {
-  playLocal([[delta('Sure!\n```json\n{"text":"A city of canals"}\n```')]]);
+  playLocal([[delta('Sure!\n```json\n{"worldBrief":"A city of canals"}\n```')]]);
 
-  const response = await game.post("/worlds/pick", { field: "worldBrief", theme: "Steampunk", worldBrief: "" });
+  const response = await game.post("/worlds/pick", { theme: "Steampunk", title: "Canals", worldBrief: "" });
 
-  expect(await response.json()).toEqual({ text: "A city of canals" });
+  expect(await response.json()).toEqual({ worldBrief: "A city of canals" });
 });
 
 test("a listing with unusual fields doesn't stop a Turn", async () => {
@@ -188,14 +188,14 @@ test("a refused connection fails a Turn as retryable, keeps the player's text an
 
 test("a refused connection gives a wizard call the same message, and it works once the server is up", async () => {
   startAt(await closedAddress());
-  const pick = () => game.post("/worlds/pick", { field: "worldBrief", theme: "Steampunk", worldBrief: "" });
+  const pick = () => game.post("/worlds/pick", { theme: "Steampunk", title: "Canals", worldBrief: "" });
 
   const failed = await pick();
 
   expect(failed.status).toBe(502);
   expect(await failed.json()).toEqual({ error: expect.stringMatching(UNREACHABLE), failure: "retryable", input: "" });
 
-  provider = fakeOpenAi([[delta('{"text":"A city of canals"}')]]);
+  provider = fakeOpenAi([[delta('{"worldBrief":"A city of canals"}')]]);
   settings.update({ textBaseUrl: provider.baseUrl });
   expect((await pick()).status).toBe(200);
 });

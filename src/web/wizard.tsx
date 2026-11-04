@@ -3,6 +3,8 @@ import { ART_EXAMPLES } from "./art-examples";
 import { ART_STYLES } from "./art-styles";
 import {
   createSave,
+  type EnhanceField,
+  enhance,
   generateWorld,
   getImages,
   getJournal,
@@ -15,8 +17,8 @@ import {
   portraitUrl,
   regenerateWorld,
   setupProblem,
-  type PickField,
   type WorldChoices,
+  type WorldField,
   worldCoverUrl,
 } from "./api";
 import { Book } from "./menu";
@@ -36,8 +38,6 @@ const THEMES = [
 const OWN_THEME = "Create your own";
 
 const OWN_ART_STYLE = "Describe your own art style";
-
-const PICK_NAMES: Record<PickField, string> = { title: "Title", worldBrief: "World Brief", startingHook: "Starting Hook" };
 
 const blank = {
   theme: THEMES[0]!,
@@ -129,6 +129,8 @@ export function NewGame({ step }: { step?: string }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [setupNotice, setSetupNotice] = useState<string>();
+  /** What each box held before Enhance, as replacing a box's value leaves nothing for the browser's own undo. */
+  const [enhanced, setEnhanced] = useState<Partial<Record<EnhanceField, { was: string; now: string }>>>({});
   const set = (change: Partial<typeof blank>) => setDraft((current) => ({ ...current, ...change }));
   const running = useRef<AbortController>(undefined);
 
@@ -158,14 +160,17 @@ export function NewGame({ step }: { step?: string }) {
     setBusy("");
   }
 
-  const pick = (field: PickField) =>
+  const worldChoices = { title: draft.title, theme, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "" };
+
+  const fillWorld = () =>
     run("The Narrator is thinking…", async (signal) => {
-      set({ [field]: await pickForMe(field, theme, draft.worldBrief, signal) });
+      const { title, worldBrief, startingHook } = draft;
+      set(await pickForMe(theme, { title, worldBrief, ...(draft.hookOn && { startingHook }) }, signal));
     });
 
   function generate(event: FormEvent) {
     event.preventDefault();
-    const choices = { title: draft.title, theme, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "", artStyle };
+    const choices = { ...worldChoices, artStyle };
     // `required` accepts spaces, and a Starting Hook of spaces would quietly become a sandbox start.
     if (!theme || !draft.worldBrief.trim() || !draft.title.trim() || (draft.hookOn && !draft.startingHook.trim())) {
       return setError("Fill in each box with some words, use Pick for me, or turn the Starting Hook off.");
@@ -193,23 +198,47 @@ export function NewGame({ step }: { step?: string }) {
     </Book>
   );
 
-  const pickButton = (field: PickField) => (
+  const pickRow = (filled: boolean, fill: () => void) => (
     <div className="row">
-      {draft[field] ? (
-        <span className="muted">Clear the {PICK_NAMES[field]} to pick again.</span>
-      ) : (
-        <button
-          type="button"
-          className="quiet"
-          disabled={!!busy || !theme}
-          aria-label={`Pick for me: ${PICK_NAMES[field]}`}
-          onClick={() => pick(field)}
-        >
-          Pick for me
-        </button>
-      )}
+      <span className="muted">Fills only the empty boxes.</span>
+      <button type="button" className="quiet" disabled={filled} onClick={fill}>
+        Pick for me
+      </button>
     </div>
   );
+
+  const enhanceTools = (
+    field: EnhanceField,
+    label: string,
+    value: string,
+    write: (text: string) => void,
+    choices: Parameters<typeof enhance>[2],
+  ) => {
+    const before = enhanced[field];
+    const improve = () =>
+      run("The Narrator is thinking…", async (signal) => {
+        const now = await enhance(field, value, choices, signal);
+        setEnhanced((current) => ({ ...current, [field]: { was: value, now } }));
+        write(now);
+      });
+    return (
+      <div className="row">
+        {before?.now === value && (
+          <button type="button" className="quiet" aria-label={`Undo Enhance: ${label}`} onClick={() => write(before.was)}>
+            Undo
+          </button>
+        )}
+        {value.trim() && (
+          <button type="button" className="quiet" aria-label={`Enhance: ${label}`} disabled={!!busy} onClick={improve}>
+            Enhance
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const worldTools = (field: WorldField, label: string) =>
+    enhanceTools(field, label, draft[field], (text) => set({ [field]: text }), worldChoices);
 
   const { world } = draft;
 
@@ -253,11 +282,14 @@ export function NewGame({ step }: { step?: string }) {
         setDraft((current) => ({ ...current, pc: { ...current.pc, ...picked } }));
       });
 
-    const box = (field: keyof PcDraft, label: string, rows: number) => (
-      <label>
-        {label}
-        <textarea form="pc" rows={rows} value={draft.pc[field]} onChange={(e) => setPc(field, e.target.value)} />
-      </label>
+    const box = (field: Exclude<keyof PcDraft, "name">, label: string, rows: number) => (
+      <div className="enhanceable">
+        <label>
+          {label}
+          <textarea form="pc" rows={rows} value={draft.pc[field]} onChange={(e) => setPc(field, e.target.value)} />
+        </label>
+        {enhanceTools(field, label, draft.pc[field], (text) => setPc(field, text), { ...world.choices, pc: draft.pc })}
+      </div>
     );
 
     const begin = (event: FormEvent) => {
@@ -287,23 +319,13 @@ export function NewGame({ step }: { step?: string }) {
           </label>
           {box("background", "Background", 3)}
           {box("physicalTraits", "Physical traits", 3)}
-          <div className="row">
-            <span className="muted">Fills only the empty boxes.</span>
-            <button
-              type="button"
-              className="quiet"
-              disabled={Object.values(draft.pc).every((text) => text.trim())}
-              onClick={fillPc}
-            >
-              Pick for me
-            </button>
-          </div>
+          {pickRow(Object.values(draft.pc).every((text) => text.trim()), fillPc)}
         </div>
         <a className="quiet" href="#/new/overview">Back to the World Overview</a>
       </>,
       <form id="pc" className="fields wizard" onSubmit={begin}>
         {box("skills", "Skills and experience", 3)}
-        {box("inventory", "Starting inventory, one item per line", 4)}
+        {box("inventory", "Inventory, one item per line", 4)}
         {box("other", "Anything else", 2)}
         {feedback}
         <button className="action">{error ? "Try again" : "Begin"}</button>
@@ -327,7 +349,7 @@ export function NewGame({ step }: { step?: string }) {
             <input form="world" required value={draft.ownTheme} onChange={(e) => set({ ownTheme: e.target.value })} />
           </label>
         )}
-        <div>
+        <div className="enhanceable">
           <label>
             World Brief
             <textarea
@@ -338,21 +360,21 @@ export function NewGame({ step }: { step?: string }) {
               onChange={(e) => set({ worldBrief: e.target.value })}
             />
           </label>
-          {pickButton("worldBrief")}
+          {worldTools("worldBrief", "World Brief")}
         </div>
-        <div>
+        <div className="enhanceable">
           <label>
             Title
             <input form="world" required maxLength={80} value={draft.title} onChange={(e) => set({ title: e.target.value })} />
           </label>
-          {pickButton("title")}
+          {worldTools("title", "Title")}
         </div>
         <label className="toggle">
           <input type="checkbox" checked={draft.hookOn} onChange={(e) => set({ hookOn: e.target.checked })} />
           Starting Hook
         </label>
         {draft.hookOn ? (
-          <div>
+          <div className="enhanceable">
             <label>
               What opens the story?
               <textarea
@@ -363,11 +385,12 @@ export function NewGame({ step }: { step?: string }) {
                 onChange={(e) => set({ startingHook: e.target.value })}
               />
             </label>
-            {pickButton("startingHook")}
+            {worldTools("startingHook", "Starting Hook")}
           </div>
         ) : (
           <p className="muted">Your PC just starts in the world, with no immediate hook.</p>
         )}
+        {pickRow(!theme || [draft.worldBrief, draft.title, ...(draft.hookOn ? [draft.startingHook] : [])].every((text) => text.trim()), fillWorld)}
       </div>
       <a className="quiet" href="#/">Main Menu</a>
     </>,

@@ -8,11 +8,15 @@ import { askForJson, jsonSchemaOf, type TextProvider } from "./turn-engine";
 export type World = Pick<State, "worldBible" | "worldRules" | "plotThreads">;
 /** `artStyle` only paints the cover, so it never reaches the Narrator. */
 export type WorldChoices = { title: string; theme: string; worldBrief: string; startingHook: string; artStyle?: string };
-export type PickField = keyof typeof PICKS;
 // No personality, as the player shows that by how they play.
 export const PC_FIELDS = ["name", "background", "physicalTraits", "skills", "other", "inventory"] as const;
+export const WORLD_FIELDS = ["title", "worldBrief", "startingHook"] as const;
+/** The boxes Enhance can rewrite. */
+export const ENHANCE_FIELDS = [...WORLD_FIELDS, "background", "physicalTraits", "skills", "other", "inventory"] as const;
 /** The PC as the wizard's boxes hold them, with `inventory` as one item per line. */
 export type PcDraft = Record<(typeof PC_FIELDS)[number], string>;
+export type WorldField = (typeof WORLD_FIELDS)[number];
+export type EnhanceField = (typeof ENHANCE_FIELDS)[number];
 
 type Context = { textProvider: TextProvider; settings: SettingsStore };
 
@@ -32,7 +36,8 @@ const WorldReply = z.object({
 
 const PickReply = z.object({ text });
 // Short, as it is painted onto the cover.
-const TitleReply = z.object({ text: text.max(80) });
+const title = text.max(80);
+const TitleReply = z.object({ text: title });
 
 type OpeningStatus = { health: string; injuries: string[]; conditions: string[] };
 
@@ -91,27 +96,56 @@ ${modelInstructions(context)}`,
   playerChoices({ title, theme, world_brief: worldBrief, starting_hook: startingHook }),
 ];
 
-const PICKS = {
-  title: "a title for the story, painted on its cover: two to five evocative words, fitting the theme and any world_brief",
-  worldBrief: "a World Brief: two to four sentences describing a fresh, specific world for the theme",
-  startingHook: "a Starting Hook: one or two sentences of opening situation for the PC, fitting the theme and any world_brief",
+const ABOUT: Record<EnhanceField, string> = {
+  title: "a title for the story, painted on its cover: two to five evocative words",
+  worldBrief: "a World Brief: two to four sentences describing a fresh, specific world",
+  startingHook: "a Starting Hook: one or two sentences of opening situation for the PC",
+  background: "the PC's background",
+  physicalTraits: "the PC's physical traits",
+  skills: "what the PC is good at and can do, as free text with no numbers",
+  other: "anything else that describes the PC, such as their age, habits or fears",
+  inventory: "what the PC wears and carries, one item per line",
 };
 
-/** Text the player sees and can edit, so it comes from their choices alone and holds no secrets. */
+/**
+ * The empty fields of `world`, the only ones in the reply. A field left out, like the Starting Hook when it's off, stays unwritten.
+ * Text the player sees and can edit, so it comes from their choices alone and holds no secrets.
+ */
 export async function pickForMe(
   context: Context,
-  { field, theme, worldBrief }: { field: PickField; theme: string; worldBrief: string },
+  { theme, ...world }: { theme: string } & Partial<Record<WorldField, string>>,
+  signal: AbortSignal,
+) {
+  const empty = WORLD_FIELDS.filter((field) => world[field] === "");
+  const reply = z.object(Object.fromEntries(empty.map((field) => [field, field === "title" ? title : text])));
+  const prompt: Prompt = [
+    {
+      role: "system",
+      content: `You are the Narrator of a story, helping a player set up its world. ${CHOICES_ARE_DATA}
+Write what's missing, fitting the theme and agreeing with everything the player already wrote. Reply only with JSON matching this schema, which holds only the empty fields: ${JSON.stringify(jsonSchemaOf(reply))}
+${empty.map((field) => `${field} is ${ABOUT[field]}.`).join(" ")}
+${modelInstructions(context)}`,
+    },
+    playerChoices({ theme, ...world }),
+  ];
+  return askForJson(context.textProvider, prompt, reply, REFUSAL, signal);
+}
+
+/** Rewrites one box from what the player wrote. Like `pickForMe`, it knows only the player's choices. */
+export async function enhance(
+  context: Context,
+  { field, text: idea, ...choices }: { field: EnhanceField; text: string; theme: string; title: string; worldBrief: string; startingHook: string; pc?: PcDraft },
   signal: AbortSignal,
 ) {
   const reply = field === "title" ? TitleReply : PickReply;
   const prompt: Prompt = [
     {
       role: "system",
-      content: `You are the Narrator of a story, helping a player set up its world. ${CHOICES_ARE_DATA}
-Write ${PICKS[field]}. Reply only with JSON matching this schema: ${JSON.stringify(jsonSchemaOf(reply))}
+      content: `You are the Narrator of a story, helping a player who has a general idea. ${CHOICES_ARE_DATA}
+idea is the player's own draft of ${ABOUT[field]}. Rewrite it to be richer, more specific and better written. Keep every fact and intention in it, and add only what fits their idea and their other choices. Reply only with JSON matching this schema: ${JSON.stringify(jsonSchemaOf(reply))}
 ${modelInstructions(context)}`,
     },
-    playerChoices({ theme, world_brief: worldBrief }),
+    playerChoices({ idea, ...choices }),
   ];
   return (await askForJson(context.textProvider, prompt, reply, REFUSAL, signal)).text;
 }
