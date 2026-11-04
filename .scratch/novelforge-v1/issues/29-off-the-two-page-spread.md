@@ -11,7 +11,7 @@
 - [x] Index Sheet is built for all three world creation steps and Settings, in both themes and at phone width
 - [x] When a page runs past the fold, a down arrow shows and scrolls down. It goes away at the bottom, and shows again if the page grows
 - [x] Errors and the Saved notice stay in the pinned bar, so they can't be missed below the fold
-- [x] Load Game uses the sheet, with Import a Save and its notices in the pinned bar
+- [x] Load Game uses the sheet, with Import a Save and its notices in the pinned bar, and its covers are 200px wide, or 110px on a phone
 - [x] Settings shows one section at a time. Unsaved edits survive a switch, and Save goes to a required box in a hidden section
 
 ## Comments

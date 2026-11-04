@@ -977,7 +977,6 @@ a.action {
   object-fit: cover;
 }
 
-
 .saves {
   margin: 0;
   padding: 0;
@@ -993,8 +992,10 @@ a.action {
 }
 
 .saves li.with-cover {
-  grid-template-columns: 74px minmax(0, 1fr);
-  column-gap: 12px;
+  grid-template-columns: 200px minmax(0, 1fr);
+  /* The last row takes up the cover's spare height, so the text stays together. */
+  grid-template-rows: repeat(4, auto) 1fr;
+  column-gap: 18px;
 }
 
 .saves .with-cover > .zoom {
@@ -1013,6 +1014,7 @@ a.action {
 }
 
 .saves .row {
+  align-self: start;
   justify-content: flex-start;
 }
 
@@ -1378,6 +1380,11 @@ dialog blockquote {
 
   .sheet-body .chips.art {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .saves li.with-cover {
+    grid-template-columns: 110px minmax(0, 1fr);
+    column-gap: 12px;
   }
 
   /* The Journal and Inventory are too long for two stacked panes, so each reads as one page with any tabs held in reach. */
