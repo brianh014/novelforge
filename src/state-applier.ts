@@ -129,10 +129,14 @@ function apply(state: State, operation: StateOperation) {
       state.scene = { location: operation.location, visibleCast };
       return true;
     }
+    // A repeat is already true, so it costs nothing, and refusing one would throw away a whole response.
     case "add_known_fact":
-      return addOnce(state.pcKnown.facts, operation.fact);
+      addOnce(state.pcKnown.facts, operation.fact);
+      return true;
     case "add_known_npc":
-      return findNpc(state, operation.name) !== undefined && addOnce(state.pcKnown.npcs, operation.name);
+      if (!findNpc(state, operation.name)) return false;
+      addOnce(state.pcKnown.npcs, operation.name);
+      return true;
     case "set_known_npc_summary":
       if (!state.pcKnown.npcs.includes(operation.name)) return false;
       state.pcKnown.summaries = { ...state.pcKnown.summaries, [operation.name]: operation.summary };

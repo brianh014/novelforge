@@ -247,12 +247,10 @@ test.each([
   ["health given as a number", { op: "set_health", health: "72/100 HP" }],
   ["an injury given with a number", { op: "add_status", kind: "injuries", text: "2 broken ribs" }],
   ["a condition given with a number", { op: "add_status", kind: "conditions", text: "fatigue level 3" }],
-  ["repeating a known fact", { op: "add_known_fact", fact: "The gate is broken" }],
   ["adding an NPC who exists", { op: "add_npc", name: "Mara", appearance: "a stranger" }],
   ["updating an NPC who does not exist", { op: "update_npc", name: "Nobody", appearance: "towering" }],
   ["knowing an NPC who does not exist", { op: "add_known_npc", name: "Nobody" }],
   ["summing up an NPC the PC doesn't know", { op: "set_known_npc_summary", name: "Nobody", summary: "Who?" }],
-  ["knowing an NPC twice", { op: "add_known_npc", name: "Mara" }],
 ])("the server refuses %s", async (_, operation) => {
   const { app, prompts } = play(
     narration(
@@ -275,6 +273,20 @@ test.each([
   expect(JSON.stringify(prompts[4])).toContain("grey coat");
   expect(JSON.stringify(prompts[4])).not.toContain("a stranger");
   expect(JSON.stringify(prompts[4])).not.toContain("towering");
+});
+
+test("repeating a known fact or NPC is harmless, so the response stands with no retry", async () => {
+  const { app, prompts } = play(
+    narration("Setup.", { op: "add_known_fact", fact: "The gate is broken" }, { op: "add_npc", name: "Mara", appearance: "grey coat" }, { op: "add_known_npc", name: "Mara" }),
+    narration("Again.", { op: "add_known_fact", fact: "The gate is broken" }, { op: "add_known_npc", name: "Mara" }, { op: "add_known_fact", fact: "Bees sing" }),
+  );
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "One." });
+
+  expect((await app.post(`/saves/${id}/turns`, { input: "Two." })).status).toBe(201);
+
+  expect(prompts).toHaveLength(2);
+  expect(await snapshotAt(app, id, 4)).toMatchObject({ pcKnown: { facts: ["The gate is broken", "Bees sing"], npcs: ["Mara"] } });
 });
 
 test("a Narrator can update an NPC, and the next Turn's prompt carries the state", async () => {

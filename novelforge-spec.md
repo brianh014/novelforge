@@ -153,7 +153,7 @@ Lore Entry activation:
 
 System prompt must explicitly instruct the Narrator: *"Evaluate player action against `world_rules`. If an action violates world constraints, describe the failure in-character rather than fulfilling it."*
 
-**State authority:** The Narrator proposes discrete state operations, such as add item, remove item and set condition. The server validates and applies them, and refuses operations it can disprove, such as removing an item the PC doesn't have. The Narrator judges plausibility. It must not rewrite the whole state.
+**State authority:** The Narrator proposes discrete state operations, such as add item, remove item and set condition. The server validates and applies them, and refuses operations it can disprove, such as removing an item the PC doesn't have. A repeated known fact or NPC is simply ignored, as it is already true. The Narrator judges plausibility. It must not rewrite the whole state.
 
 ### Checks
 
