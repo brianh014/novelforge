@@ -80,7 +80,7 @@ Once details are entered, the Narrator generates a detailed World Bible that is 
 
 The World Bible is a set of Lore Entries. Each has a title, keywords and self-contained content. The Narrator should give each entry several keywords so that paraphrases still activate it.
 
-Generation also produces a World Overview covering what the PC would plausibly know. The player can accept it or regenerate the world before creating the PC.
+Generation also produces a World Overview covering what the PC would plausibly know. The player can accept it or regenerate the world before creating the PC. Clicking the Cover there opens its Image Prompt, to Redraw only the Cover, and a Cover that failed to draw shows its prompt so it can be tried again. Regenerating the world discards an edited Cover prompt. The Ready page offers the same for the Cover and the PC's portrait.
 
 ### Create a character
 
@@ -211,7 +211,13 @@ The user may be using a paid API, so need to respect the volume of images create
 
 Images generate in the background, so a Turn never waits for one.
 
-An NPC portrait is generated the first time that NPC appears in a Scene, not when they are merely mentioned. Each NPC stores appearance text for image prompts. Portraits are displayed in the Journal and used as reference images for Scene Images where the model supports it.
+**Gallery and Redraw:** The book's Gallery tab, between Journal and Inventory, shows the Cover, the PC's portrait, portraits of NPCs the PC knows, and the Scene Images in story order. Clicking one opens it larger with its Image Prompt, which is the main text it was drawn from. Images from before this feature show that their prompt wasn't kept, and the player can write one.
+
+Redraw draws that image again from the same or an edited prompt, using the Save's current Art Style, the current model and Resolution, and the image's original shape, negative prompt and kinds of reference images. It takes one click, and the dialog notes that it may cost money. A finished Redraw replaces the image at once, with no undo or history, and changes nothing else: a redrawn portrait is used for future Scene Images, but the NPC's stored appearance stays, and the Narrator never sees the edit. A failed Redraw keeps the old image and prompt, says why in the dialog, and marks the thumbnail until the next Redraw of that image or an app restart.
+
+Redraws wait in the Save's image queue and are never dropped for a newer Scene Image. Each image has one Redraw at a time, and the button is disabled with an empty prompt or while images are off. A Revert or replaced Turn that removes an image stops its Redraw, and a replaced Turn draws a fresh Scene Image, which loses any Redraw of the old one. Duplicates and exports include Image Prompts.
+
+An NPC portrait is generated once, the first time that NPC appears in a Scene or the PC comes to know them, even if they aren't in view, such as someone seen in a photo. An NPC who is only in the state gets none. Anyone missed is drawn when the Scene next moves. Each NPC stores appearance text for image prompts. Portraits are displayed in the Journal and used as reference images for Scene Images where the model supports it.
 
 **Explicit Image Triggering:** The Narrator's structured output includes a boolean `scene_changed` flag and a `visual_description` string. A Scene Image is generated only when `scene_changed` is true or the server sees the location or visible cast change. There is no text comparison of descriptions.
 
@@ -339,7 +345,7 @@ A fake LLM provider and a controllable dice roller let Turns be tested determini
 
 An old book, open on a desk: aged paper, ink browns and bottle green, the story on the right page, and bookmarks hanging from the top right. It is responsive to screen size. The dark theme is the same book on charcoal laid paper.
 
-World creation, Settings, Load Game and Inventory use the Index Sheet layout from the layout options report: one sheet with a side index, a column that fills the rest of the sheet, and a pinned bottom bar, plus a down arrow whenever a page runs past the fold. Settings shows one section at a time. The Ready page, from its options report, runs down one scrolling page: the cover, the title and World Brief, then the PC's portrait, with Open the book pinned at the bottom. Everything else stays a two-page book.
+World creation, Settings, Load Game, Inventory and the Gallery use the Index Sheet layout from the layout options report: one sheet with a side index, a column that fills the rest of the sheet, and a pinned bottom bar, plus a down arrow whenever a page runs past the fold. Settings shows one section at a time. The Ready page, from its options report, runs down one scrolling page: the cover, the title and World Brief, then the PC's portrait, with Open the book pinned at the bottom. Everything else stays a two-page book.
 
 **An HTML report of UI options is only made when the user asks for one, for a large visual change.** Other UI changes are built directly. The first report showed 3 distinct visual directions, each mocking up the main game screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story, plus the Chat style options. The mockups are throwaway, and the user can pick one direction or mix parts. The player-facing UI contains no Check elements.
 

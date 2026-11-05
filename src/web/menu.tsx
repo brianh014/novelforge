@@ -76,12 +76,13 @@ export function Sheet(props: { rail: ReactNode; children: ReactNode; foot?: Reac
   );
 }
 
-export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Inventory" | "Settings" }) {
+export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Gallery" | "Inventory" | "Settings" }) {
   const here = (tab: typeof current) => (tab === current ? "page" : undefined);
   return (
     <nav className="tabs" aria-label="Book sections">
       <a href={`#/play/${id}`} aria-current={here("Story")}>Story</a>
       <a href={`#/journal/${id}`} aria-current={here("Journal")}>Journal</a>
+      <a href={`#/gallery/${id}`} aria-current={here("Gallery")}>Gallery</a>
       <a href={`#/inventory/${id}`} aria-current={here("Inventory")}>Inventory</a>
       <a href={`#/settings/${id}`} aria-current={here("Settings")}>Settings</a>
     </nav>

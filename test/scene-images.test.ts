@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ImageAdapter } from "../src/image-adapter";
 import { PNG, png, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
 
-type Images = { images: { messageId: number; caption: string }[]; pending: boolean; session: number };
+type Images = { images: { messageId: number; caption: string, redraws: 0 }[]; pending: boolean; session: number };
 
 let folder: ReturnType<typeof tempFolder>;
 let game: ReturnType<typeof startGame>;
@@ -65,7 +65,7 @@ test("a Turn that changes the scene gets a Scene Image in its Save, served as an
   await playTurn(id);
 
   expect(await settled(id)).toEqual({
-    images: [{ messageId: 2, caption: "The drowned street" }],
+    images: [{ messageId: 2, caption: "The drowned street", redraws: 0 }],
     pending: false,
     session: 1,
   });
@@ -146,7 +146,7 @@ test("a visible cast name the state lacks is left out, and the Turn stands on it
   await settled(id);
   await playTurn(id);
 
-  expect((await settled(id)).images).toEqual([{ messageId: 2, caption: "The ferry" }]);
+  expect((await settled(id)).images).toEqual([{ messageId: 2, caption: "The ferry", redraws: 0 }]);
   expect(script.prompts).toHaveLength(2);
 });
 
@@ -330,7 +330,7 @@ test("Revert counts and deletes the images after its Message, and keeps those be
   expect(await game.get(`/saves/${id}/messages/2/revert`).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 0 });
   expect(await game.post(`/saves/${id}/messages/2/revert`, {}).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 0 });
 
-  expect((await imagesOf(id)).images).toEqual([{ messageId: 2, caption: "One" }]);
+  expect((await imagesOf(id)).images).toEqual([{ messageId: 2, caption: "One", redraws: 0 }]);
   expect((await game.get(`/saves/${id}/messages/4/image`)).status).toBe(404);
 });
 
@@ -509,7 +509,7 @@ test("a Save from before images opens at the new version, with an empty scene in
   await playTurn(id);
 
   // The empty scene is the state before the change, so the old Save gets its first image as a real change.
-  expect((await settled(id)).images).toEqual([{ messageId: 4, caption: "The drowned street" }]);
+  expect((await settled(id)).images).toEqual([{ messageId: 4, caption: "The drowned street", redraws: 0 }]);
 });
 
 test("a Duplicate from here keeps the images up to that Message", async () => {
@@ -523,6 +523,6 @@ test("a Duplicate from here keeps the images up to that Message", async () => {
 
   const { id: copy } = (await game.post(`/saves/${id}/duplicate`, { fromMessage: 2 }).then((r) => r.json())) as { id: string };
 
-  expect((await imagesOf(copy)).images).toEqual([{ messageId: 2, caption: "One" }]);
+  expect((await imagesOf(copy)).images).toEqual([{ messageId: 2, caption: "One", redraws: 0 }]);
   expect(await imageBytes(copy, 2)).toEqual(png(1));
 });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
-import { type ImagePipeline, movedScene, type Scene, visibleNpcs } from "./image-pipeline";
+import { type ImagePipeline, movedScene, portraitsDue, type Scene, visibleNpcs } from "./image-pipeline";
 import { assemblePrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
@@ -218,6 +218,7 @@ async function narrate(
       let moved = false;
       let location = "";
       let visible: Scene["visible"] = [];
+      let portraits: Scene["portraits"] = [];
       const messages = commit(narration, check, (state) => {
         const { next, refused } = applyOperations(state, state_operations);
         // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
@@ -225,6 +226,7 @@ async function narrate(
         moved = movedScene(state, next);
         location = next.scene.location;
         visible = visibleNpcs(next);
+        portraits = portraitsDue(state, next);
         return next;
       });
       committed(messages.at(-1)!.id, {
@@ -233,6 +235,7 @@ async function narrate(
         description: visual_description || location,
         location,
         visible,
+        portraits,
       });
       return messages;
     } catch (cause) {

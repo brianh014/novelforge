@@ -253,7 +253,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const sceneImage = (image = scene) => image && <SceneImage id={id} image={image} />;
   const cover = save.hasCover && (
     <figure className="plate">
-      <Zoomable src={coverUrl(id)} alt={`Cover of ${pc}'s story`} />
+      <Zoomable src={coverUrl(id, save.coverRedraws)} alt={`Cover of ${pc}'s story`} />
     </figure>
   );
 

@@ -2,31 +2,31 @@ import { type FormEvent, Fragment, type ReactNode, useEffect, useRef, useState }
 import { ART_EXAMPLES } from "./art-examples";
 import { ART_STYLES } from "./art-styles";
 import {
-  coverUrl,
   createSave,
   type EnhanceField,
   enhance,
+  type Gallery,
   generateWorld,
-  getImages,
-  getJournal,
+  getGallery,
   getSave,
+  getWorldCover,
   type OpenSave,
   getSettings,
   type PcDraft,
   pickForMe,
   pickPc,
-  type Portrait,
-  portraitUrl,
+  redrawWorldCover,
   regenerateWorld,
   setupProblem,
   type WorldChoices,
+  type WorldCover,
   type WorldField,
   worldCoverUrl,
 } from "./api";
 import { DecideIcon } from "./icons";
 import { Fold, Sheet } from "./menu";
 import { IMAGE_CHECK_MS } from "./play";
-import { Zoomable } from "./zoom";
+import { PromptBox, RedrawableImage, Zoomable } from "./zoom";
 
 /** Each description is shown to the player and sent to the Narrator with the theme's name. */
 const THEMES: Record<string, string> = {
@@ -65,7 +65,7 @@ const blank = {
   ownArtStyle: "",
   pc: { name: "", background: "", physicalTraits: "", skills: "", other: "", inventory: "" } as PcDraft,
   /** The choices that made this world, as the form can change after it was generated. */
-  world: undefined as { id: string; overview: string; choices: WorldChoices; coverVersion: number } | undefined,
+  world: undefined as { id: string; overview: string; choices: WorldChoices; coverVersion: number; coverRedraws: number } | undefined,
 };
 
 const STORAGE_KEY = "novelforge-new-game";
@@ -97,16 +97,51 @@ function Choices(props: { legend: string; options: string[]; value: string; art?
   );
 }
 
-/** The story's cover, which is still being painted when this step opens, and never comes if images are off or it fails. */
-function CoverArt({ src }: { src: string }) {
-  const [state, setState] = useState<"painting" | "done" | "none">("painting");
-  if (state === "none") return null;
+/** The story's cover, which is still being painted when this step opens, and never comes if images are off. A failed one offers its prompt to try again. */
+function CoverArt({ worldId, src, redraws, onRedrawn }: { worldId: string; src: string; redraws: number; onRedrawn: () => void }) {
+  const [cover, setCover] = useState<WorldCover>();
+  const [redrawing, setRedrawing] = useState(false);
+  const [failure, setFailure] = useState("");
+
+  useEffect(() => {
+    let leaving = false;
+    getWorldCover(worldId).then(
+      (details) => {
+        if (leaving) return;
+        setCover(details);
+        setFailure(details.failure);
+      },
+      () => !leaving && setCover({ prompt: "", hasCover: false, failure: "", canRedraw: false }),
+    );
+    return () => {
+      leaving = true;
+    };
+  }, [worldId, redraws]);
+
+  if (!cover) return <p className="waiting">The cover is being painted…</p>;
+
+  const redraw = (prompt: string) => {
+    setRedrawing(true);
+    setFailure("");
+    redrawWorldCover(worldId, prompt).then(onRedrawn, (error: Error) => setFailure(error.message)).finally(() => setRedrawing(false));
+  };
+  const box = <PromptBox prompt={cover.prompt} redrawing={redrawing} failure={failure} canRedraw={cover.canRedraw} onRedraw={redraw} />;
+
+  if (!cover.hasCover) {
+    return failure || redrawing ? (
+      <>
+        <p className="muted">The cover couldn't be painted. You can try again, or carry on without one.</p>
+        {box}
+      </>
+    ) : null;
+  }
   return (
     <>
-      {state === "painting" && <p className="waiting">The cover is being painted…</p>}
-      <figure className="plate cover" hidden={state !== "done"}>
-        <Zoomable src={src} alt="The cover of your story" onLoad={() => setState("done")} onError={() => setState("none")} />
+      <figure className="plate cover">
+        <Zoomable src={src} alt="The cover of your story">{box}</Zoomable>
       </figure>
+      {redrawing && <p className="waiting">Redrawing the cover…</p>}
+      {failure && <p className="error">Redraw failed. Open the cover to see why.</p>}
     </>
   );
 }
@@ -193,7 +228,7 @@ export function NewGame({ step }: { step?: string }) {
       return setError("Fill in each box with some words, use Pick for me, or turn the Starting Hook off.");
     }
     return run("The Narrator is building the world. This can take a few minutes.", async (signal) => {
-      set({ world: { ...(await generateWorld(choices, signal)), choices, coverVersion: 0 } });
+      set({ world: { ...(await generateWorld(choices, signal)), choices, coverVersion: 0, coverRedraws: 0 } });
       location.hash = "/new/overview";
     });
   }
@@ -306,12 +341,23 @@ export function NewGame({ step }: { step?: string }) {
         const { overview } = await regenerateWorld(world.id, world.choices, signal);
         set({ world: { ...world, overview, coverVersion: world.coverVersion + 1 } });
       });
+    // The player may have Accepted by the time a Redraw ends, so this goes by what the draft holds then.
+    const coverRedrawn = () =>
+      setDraft((current) =>
+        current.world?.id === world.id ? { ...current, world: { ...current.world, coverRedraws: current.world.coverRedraws + 1 } } : current,
+      );
     return frame(
       1,
       <>
         <Heading step={2} title="The World Overview" busy={!!busy} />
         <p className="muted">What your PC would know. Accept this world, or have the Narrator make another.</p>
-        <CoverArt key={world.coverVersion} src={worldCoverUrl(world.id, world.coverVersion)} />
+        <CoverArt
+          key={world.coverVersion}
+          worldId={world.id}
+          src={worldCoverUrl(world.id, world.coverVersion, world.coverRedraws)}
+          redraws={world.coverRedraws}
+          onRedrawn={coverRedrawn}
+        />
         <div className="overview">
           <p>{world.overview}</p>
         </div>
@@ -466,24 +512,21 @@ export function NewGame({ step }: { step?: string }) {
 /** The finished PC, whose portrait starts drawing as the Save is made. */
 export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean }) {
   const [save, setSave] = useState<OpenSave>();
-  const [portrait, setPortrait] = useState<Portrait>();
+  const [gallery, setGallery] = useState<Gallery>();
+  const [redraws, setRedraws] = useState(0);
   const [drawing, setDrawing] = useState(true);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     let leaving = false;
-    // shortcut: read again only while the portrait paints, so a cover that lands after it needs a reload, track the cover if that shows up.
+    // shortcut: read again only while something paints, so a cover that lands after that needs a reload, track the cover if that shows up.
     const look = () =>
-      getImages(id).then(async ({ pending }) => {
+      getGallery(id).then((gallery) => {
         if (leaving) return;
         getSave(id).then(setSave, () => {});
-        if (pending) {
-          timer = setTimeout(look, IMAGE_CHECK_MS);
-          return;
-        }
-        const { portraits } = await getJournal(id);
-        setPortrait(portraits.find(({ npc }) => npc === null));
-        setDrawing(false);
+        setGallery(gallery);
+        if (gallery.pending) timer = setTimeout(look, IMAGE_CHECK_MS);
+        else setDrawing(false);
       }, () => setDrawing(false));
     getSave(id).then(setSave, () => {});
     look();
@@ -491,9 +534,16 @@ export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean
       leaving = true;
       clearTimeout(timer);
     };
-  }, [id]);
+  }, [id, redraws]);
 
   const name = save?.pc.name ?? "";
+  const cover = gallery?.images.find(({ kind }) => kind === "cover");
+  const portrait = gallery?.images.find(({ kind, label }) => kind === "portrait" && label === name);
+  const redrawable = (image: NonNullable<typeof cover>, alt: string) => (
+    <figure className="plate reveal">
+      <RedrawableImage id={id} image={image} alt={alt} canRedraw={gallery!.canRedraw} onRedrawn={() => setRedraws((count) => count + 1)} />
+    </figure>
+  );
 
   return (
     <main className="desk">
@@ -501,19 +551,10 @@ export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean
         <section className="sheet-main">
           <Fold>
             <div className="presented">
-              {save?.hasCover && (
-                <figure className="plate reveal">
-                  <Zoomable src={coverUrl(id)} alt={`Cover of ${save.title || name}`} />
-                </figure>
-              )}
+              {cover && redrawable(cover, `Cover of ${save?.title || name}`)}
               <h1 className="big">{save?.title || name}</h1>
               <p>{save?.worldBrief}</p>
-              {portrait && (
-                <figure className="plate reveal">
-                  <Zoomable src={portraitUrl(id, portrait)} alt={`Portrait of ${name}`} />
-                  <figcaption>{name}</figcaption>
-                </figure>
-              )}
+              {portrait && redrawable(portrait, `Portrait of ${name}`)}
             </div>
           </Fold>
           <div className="sheet-foot">

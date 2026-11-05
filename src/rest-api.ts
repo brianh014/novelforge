@@ -5,7 +5,7 @@ import { comfyImages, comfyModels, randomSeed } from "./comfyui";
 import { chosenModels, drawSteps, localIsSetUp } from "./graph-builder";
 import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
-import { imagePipeline } from "./image-pipeline";
+import { coverPrompt, imagePipeline, shownFailure } from "./image-pipeline";
 import {
   imageType,
   InvalidSave,
@@ -66,13 +66,20 @@ const EnhanceRequest = z.object({
 
 class WorldNotFound extends Error {}
 
+const IMAGES_OFF = "Images are turned off or not set up in Settings.";
+
+/** A failure falls back on the cover before it, whose prompt stands too. */
+type DrawnCover = { prompt: string; bytes?: Uint8Array<ArrayBuffer>; failure?: string };
+
 const NewTurnRequest = z.object({ input: z.string().min(1) });
 
 const NoFields = z.object({});
 
 const RewriteRequest = z.object({ feedback: z.string().trim().min(1) });
 
-const TestRequest = z.object({ prompt: z.string().trim().min(1) });
+const PromptRequest = z.object({ prompt: z.string().trim().min(1) });
+
+const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene"]), ref: z.number().int().nonnegative() });
 
 const NoteRequest = z.object({ text: z.string().trim().min(1) });
 
@@ -164,19 +171,40 @@ export function startServer(options: {
   // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
   // shortcut: an abandoned world and its cover stay until the app restarts, evict them if that ever adds up.
   const worlds = new Map<string, World & { title: string }>();
-  const covers = new Map<string, { bytes: Promise<Uint8Array<ArrayBuffer> | undefined>; stop: AbortController }>();
+  const covers = new Map<string, { drawn: Promise<DrawnCover>; artStyle: string; stop: AbortController }>();
 
-  /** In the background, so a slow image never holds up the world, and a regenerated world's cover replaces the unfinished one. */
-  function startCover(id: string, { title, theme, artStyle }: WorldChoices, overview: string) {
+  /** Replaces any unfinished cover, and never rejects: a failure falls back on `before`, so a failed Redraw leaves the old cover. */
+  function drawCover(id: string, prompt: string, artStyle: string, before: DrawnCover | Promise<DrawnCover>) {
     covers.get(id)?.stop.abort();
     const stop = new AbortController();
-    covers.set(id, { stop, bytes: images.drawCover({ title, theme, overview, artStyle }, stop.signal) as Promise<Uint8Array<ArrayBuffer> | undefined> });
+    const drawn = images.drawCover(prompt, artStyle, stop.signal).then(
+      (bytes): DrawnCover => ({ prompt, bytes: bytes as Uint8Array<ArrayBuffer> | undefined }),
+      async (error: unknown): Promise<DrawnCover> => {
+        if (stop.signal.aborted) return before;
+        console.error(error);
+        return { ...(await before), failure: shownFailure(error) };
+      },
+    );
+    covers.set(id, { drawn, artStyle, stop });
+    return drawn;
+  }
+
+  /** In the background, so a slow image never holds up the world, and a regenerated world's cover replaces the unfinished one. */
+  function startCover(id: string, { title, theme, artStyle = "" }: WorldChoices, overview: string) {
+    const prompt = coverPrompt({ title, theme, overview });
+    drawCover(id, prompt, artStyle, { prompt });
   }
 
   /** An allowlist, so a visible NPC the PC doesn't know yet stays hidden, and a Revert of that knowledge hides their portrait again. */
   const knownPortraits = (id: string) => {
     const known = saves.latestState(id).pcKnown.npcs;
     return saves.portraits(id).filter(({ npc }) => npc === null || known.includes(npc));
+  };
+
+  /** Every image the player may see or Redraw, by the same allowlist. */
+  const visibleImages = (id: string) => {
+    const known = saves.latestState(id).pcKnown.npcs;
+    return saves.gallery(id).filter(({ npc }) => npc === null || known.includes(npc));
   };
 
   // An allowlist, so the API key can never reach a response.
@@ -261,7 +289,7 @@ export function startServer(options: {
       // The prompt and Model Instructions alone, with no schema, so a failure points at the model and not at the game.
       "/settings/text-test": {
         POST: async (req) => {
-          const { prompt } = await parseBody(req, TestRequest);
+          const { prompt } = await parseBody(req, PromptRequest);
           const started = performance.now();
           const elapsed = () => (performance.now() - started) / 1000;
           let firstSeconds: number | undefined;
@@ -293,7 +321,7 @@ export function startServer(options: {
       // Draws straight to the client, so a test image reaches no Save and no session count.
       "/settings/comfy-test": {
         POST: async (req) => {
-          const { prompt } = await parseBody(req, TestRequest);
+          const { prompt } = await parseBody(req, PromptRequest);
           const choices = settings.read();
           if (!localIsSetUp(choices)) return Response.json({ error: "Choose your models and save first." }, { status: 422 });
           try {
@@ -333,7 +361,7 @@ export function startServer(options: {
           worlds.delete(worldId);
           images.saveCreated(id);
           // Often still drawing. The Save may be gone by the time it lands, and a story without a cover loses nothing.
-          covers.get(worldId)?.bytes.then((bytes) => bytes && saves.setCover(id, bytes)).catch(console.error);
+          covers.get(worldId)?.drawn.then(({ bytes, prompt }) => bytes && saves.setCover(id, bytes, prompt)).catch(console.error);
           covers.delete(worldId);
           return Response.json({ id, worldChanged }, { status: 201 });
         },
@@ -351,8 +379,27 @@ export function startServer(options: {
       "/worlds/:id/cover": {
         // Answers once the cover is done, so an img tag can simply wait for it.
         GET: async (req) => {
-          const bytes = await covers.get(req.params.id)?.bytes;
+          const bytes = (await covers.get(req.params.id)?.drawn)?.bytes;
           return bytes ? imageResponse(bytes) : Response.json({ error: "This world has no cover" }, { status: 404 });
+        },
+        // Answers when the Redraw is done, and the Accept that may come first takes whichever cover wins.
+        POST: async (req) => {
+          const { id } = req.params;
+          const { prompt } = await parseBody(req, PromptRequest);
+          const cover = covers.get(id);
+          if (!cover) throw new WorldNotFound();
+          if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
+          const { failure } = await drawCover(id, prompt, cover.artStyle, cover.drawn);
+          return Response.json(failure ? { error: failure } : {}, { status: failure ? 502 : 200 });
+        },
+      },
+      "/worlds/:id/cover/details": {
+        // Answers once the cover is done, like the image.
+        GET: async (req) => {
+          const cover = await covers.get(req.params.id)?.drawn;
+          if (!cover) throw new WorldNotFound();
+          const { prompt, bytes, failure = "" } = cover;
+          return Response.json({ prompt, hasCover: bytes !== undefined, failure, canRedraw: images.ready() });
         },
       },
       "/worlds/pick": {
@@ -387,8 +434,8 @@ export function startServer(options: {
       "/saves/:id": {
         GET: (req) => {
           // An allowlist, so a secret added to the Save can never reach the player by default.
-          const { title, worldBrief, pc, artStyle, startingHook, hasCover } = saves.read(req.params.id);
-          return Response.json({ title, worldBrief, pc: { name: pc.name }, artStyle, startingHook, hasCover });
+          const { title, worldBrief, pc, artStyle, startingHook, hasCover, coverRedraws } = saves.read(req.params.id);
+          return Response.json({ title, worldBrief, pc: { name: pc.name }, artStyle, startingHook, hasCover, coverRedraws });
         },
         PATCH: async (req) => {
           const { artStyle } = await parseBody(req, ArtStyleRequest);
@@ -494,9 +541,39 @@ export function startServer(options: {
         GET: (req) => Response.json({ messages: saves.messages(req.params.id) }),
       },
       "/saves/:id/images": {
-        // An allowlist, so what the image model was told can never reach the player.
         // shortcut: the caption is Narrator free text, kept clean only by its prompt, screen it if models leak.
         GET: (req) => Response.json({ images: saves.sceneImages(req.params.id), ...images.status(req.params.id) }),
+      },
+      "/saves/:id/gallery": {
+        // An allowlist of fields too, so nothing added to an image reaches the player by default.
+        // shortcut: a Scene Image's prompt is Narrator free text, kept clean only by its instructions, screen it if models leak.
+        GET: (req) => {
+          const { id } = req.params;
+          const { pc } = saves.read(id);
+          const label = ({ kind, npc, caption }: ReturnType<typeof visibleImages>[number]) =>
+            kind === "cover" ? "Cover" : kind === "portrait" ? (npc ?? pc.name) : caption;
+          return Response.json({
+            images: visibleImages(id).map((image) => {
+              const { kind, ref, prompt, redraws } = image;
+              return { kind, ref, label: label(image), prompt, redraws, ...images.redrawState(id, image) };
+            }),
+            pending: images.status(id).pending,
+            canRedraw: images.ready(),
+          });
+        },
+      },
+      "/saves/:id/gallery/redraw": {
+        POST: async (req) => {
+          const { id } = req.params;
+          const { prompt, kind, ref } = await parseBody(req, RedrawRequest);
+          const image = visibleImages(id).find((candidate) => candidate.kind === kind && candidate.ref === ref);
+          if (!image) return Response.json({ error: "Image not found" }, { status: 404 });
+          if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
+          if (!images.redraw(id, { kind, ref }, image.messageId, prompt)) {
+            return Response.json({ error: "This image is already being redrawn." }, { status: 409 });
+          }
+          return Response.json({}, { status: 202 });
+        },
       },
       "/saves/:id/messages/:messageId/image": {
         GET: (req) => imageResponse(saves.sceneImage(req.params.id, Number(req.params.messageId))),

@@ -1277,7 +1277,7 @@ test("a Save reports its World Brief and PC, and an unknown Save is not found", 
   const found = await game.get(`/saves/${id}`);
   const missing = await game.get(`/saves/${crypto.randomUUID()}`);
 
-  expect(await found.json()).toEqual({ title: "", worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "", startingHook: "", hasCover: false });
+  expect(await found.json()).toEqual({ title: "", worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "", startingHook: "", hasCover: false, coverRedraws: 0 });
   expect(missing.status).toBe(404);
 });
 

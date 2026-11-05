@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getImages, getJournal, getSave, type Journal as JournalContent, type Portrait, portraitUrl, type Save, type SceneImageInfo } from "./api";
+import { getImages, getJournal, getSave, type Journal as JournalContent, type Save, type SceneImageInfo } from "./api";
 import { readable } from "./chat-style";
 import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, SceneImage } from "./play";

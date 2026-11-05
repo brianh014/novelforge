@@ -7,7 +7,7 @@ import { settingsStore } from "../src/settings-store";
 import { fakeComfyUI } from "./fake-comfyui";
 import { PNG, png, scriptedTextProvider, startGame, tempFolder } from "./support";
 
-type Images = { images: { messageId: number; caption: string }[]; pending: boolean; session: number };
+type Images = { images: { messageId: number; caption: string, redraws: 0 }[]; pending: boolean; session: number };
 
 let folder: ReturnType<typeof tempFolder>;
 let game: ReturnType<typeof startGame> | undefined;
@@ -138,7 +138,7 @@ test("SD draws a Scene Image into the Save without a key, and it counts", async 
   await playTurn(id);
 
   expect(await settled(id)).toEqual({
-    images: [{ messageId: 2, caption: "The street" }],
+    images: [{ messageId: 2, caption: "The street", redraws: 0 }],
     pending: false,
     session: 1,
   });
@@ -368,7 +368,7 @@ test("an Advanced workflow draws a Scene Image into the Save, and it counts", as
 
   await playTurn(id);
 
-  expect(await settled(id)).toEqual({ images: [{ messageId: 2, caption: "The street" }], pending: false, session: 1 });
+  expect(await settled(id)).toEqual({ images: [{ messageId: 2, caption: "The street", redraws: 0 }], pending: false, session: 1 });
   const graph = comfy.jobs.prompts.at(-1)!;
   expect(nodes(graph, "CLIPTextEncode")[0]!.inputs.text).toEndWith("A flooded street");
   expect(nodes(graph, "CLIPTextEncode")[1]!.inputs.text).toBe("text, captions, letters, numbers, dice");

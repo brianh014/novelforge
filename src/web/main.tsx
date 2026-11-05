@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
+import { Gallery } from "./gallery";
 import { Inventory } from "./inventory";
 import { Journal } from "./journal";
 import { LoadGame } from "./load";
@@ -20,6 +21,7 @@ function App() {
   if (screen === "new" && id === "ready" && mark) return <Reveal key={mark} id={mark} worldChanged={!!worldChanged} />;
   if (screen === "play" && id) return <Play key={id} id={id} worldChanged={mark === "world-changed"} />;
   if (screen === "journal" && id) return <Journal key={id} id={id} />;
+  if (screen === "gallery" && id) return <Gallery key={id} id={id} />;
   if (screen === "inventory" && id) return <Inventory key={id} id={id} />;
   if (screen === "new") return <NewGame step={id} />;
   if (screen === "load") return <LoadGame />;

@@ -61,6 +61,11 @@ const SCHEMA = `
 // Message ids start at 1, so this Snapshot holds the state before the first Message.
 export const OPENING_SNAPSHOT = 0;
 
+/** One image of a Save: `ref` is the Cover's row, a portrait's id, or a Scene Image's Message. */
+export type ImageTarget = { kind: "cover" | "portrait" | "scene"; ref: number };
+
+const REDRAWABLE = { cover: ["cover", "id"], portrait: ["portraits", "id"], scene: ["scene_images", "message_id"] } as const;
+
 type SectionRow = { name: string; id: number; content: string };
 
 const sectionsAt = (db: Database, messageId: number) =>
@@ -186,7 +191,7 @@ function toVersion5(db: Database) {
 }
 
 /**
- * One row per person, by the Message of their first appearance, so a Revert past it takes the portrait too, and one
+ * One row per person, by the Message of their first appearance or of the Turn that asked, so a Revert past it takes the portrait too, and one
  * that leaves it standing costs no second image. The PC has a null `npc` and message 0, which no Revert reaches. Ids are what the client sees, as a name is no use in a URL, and are never reused
  * so that a browser can't show a Reverted portrait for a new one.
  */
@@ -204,8 +209,17 @@ const toVersion8 = (db: Database) => {
   if (!hasColumn(db, "save", "title")) db.run("ALTER TABLE save ADD COLUMN title TEXT NOT NULL DEFAULT ''");
 };
 
+/** Null for an image from before this, whose prompt was never kept. `redraws` gives a redrawn image a new address, so no browser keeps showing the old one. */
+function toVersion9(db: Database) {
+  for (const table of ["scene_images", "portraits", "cover"]) {
+    if (hasColumn(db, table, "prompt")) continue;
+    db.run(`ALTER TABLE ${table} ADD COLUMN prompt TEXT`);
+    db.run(`ALTER TABLE ${table} ADD COLUMN redraws INTEGER NOT NULL DEFAULT 0`);
+  }
+}
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -262,6 +276,7 @@ export function imageType(bytes: Uint8Array) {
 }
 
 const storedImage = z.instanceof(Uint8Array).refine((bytes) => imageType(bytes) !== undefined);
+const redrawable = { prompt: z.string().nullable(), redraws: z.number().int().nonnegative() };
 
 /** The rows of a table that must have exactly the columns of `shape`, even if it has no rows to show them. */
 function rowsOf<T extends z.ZodRawShape>(db: Database, table: string, shape: T) {
@@ -296,14 +311,16 @@ function assertValidSave(db: Database) {
     message_id: rowId,
     caption: z.string(),
     bytes: storedImage,
+    ...redrawable,
   });
   const portraits = rowsOf(db, "portraits", {
     id: rowId.positive(),
     npc: z.string().nullable(),
     message_id: rowId,
     bytes: storedImage,
+    ...redrawable,
   });
-  rowsOf(db, "cover", { id: z.literal(1), bytes: storedImage });
+  rowsOf(db, "cover", { id: z.literal(1), bytes: storedImage, ...redrawable });
 
   // Replacing a response needs the player Message before it. Two player Messages in a row are fine, after a Revert.
   const inOrder = messages.toSorted((a, b) => a.id - b.id);
@@ -435,8 +452,8 @@ export function saveStore(savesDir: string) {
         .filter(isSaveId);
       const saves = ids.map((id) => {
         try {
-          const { worldBrief, pc, hasCover, title } = this.read(id);
-          return { id, title, worldBrief, pc: { name: pc.name }, hasCover, updatedAt: statSync(pathOf(id)).mtimeMs };
+          const { worldBrief, pc, hasCover, coverRedraws, title } = this.read(id);
+          return { id, title, worldBrief, pc: { name: pc.name }, hasCover, coverRedraws, updatedAt: statSync(pathOf(id)).mtimeMs };
         } catch {
           return { id, unreadable: true as const, updatedAt: statSync(pathOf(id)).mtimeMs };
         }
@@ -444,7 +461,7 @@ export function saveStore(savesDir: string) {
       return saves.toSorted((a, b) => b.updatedAt - a.updatedAt);
     },
 
-    read(id: string): Save & { artStyle: string; startingHook: string; title: string; hasCover: boolean } {
+    read(id: string): Save & { artStyle: string; startingHook: string; title: string; hasCover: boolean; coverRedraws: number } {
       using db = open(id);
       const save = db
         .query<{ world_brief: string; pc_name: string; art_style: string; starting_hook: string; pc_details: string; title: string }, []>(
@@ -458,6 +475,7 @@ export function saveStore(savesDir: string) {
         startingHook: save.starting_hook,
         title: save.title,
         hasCover: db.query("SELECT 1 FROM cover").get() !== null,
+        coverRedraws: db.query<{ redraws: number }, []>("SELECT redraws FROM cover").get()?.redraws ?? 0,
       };
     },
 
@@ -466,10 +484,10 @@ export function saveStore(savesDir: string) {
       return db.query<{ bytes: Uint8Array<ArrayBuffer> }, []>("SELECT bytes FROM cover").get()?.bytes;
     },
 
-    setCover(id: string, bytes: Uint8Array) {
+    setCover(id: string, bytes: Uint8Array, prompt: string | null = null) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       using db = open(id);
-      db.run("INSERT OR REPLACE INTO cover (id, bytes) VALUES (1, ?)", [bytes]);
+      db.run("INSERT OR REPLACE INTO cover (id, bytes, prompt) VALUES (1, ?, ?)", [bytes, prompt]);
     },
 
     setArtStyle(id: string, artStyle: string) {
@@ -491,10 +509,31 @@ export function saveStore(savesDir: string) {
     sceneImages(id: string) {
       using db = open(id);
       return db
-        .query<{ messageId: number; caption: string }, []>(
-          "SELECT message_id AS messageId, caption FROM scene_images ORDER BY message_id",
+        .query<{ messageId: number; caption: string; redraws: number }, []>(
+          "SELECT message_id AS messageId, caption, redraws FROM scene_images ORDER BY message_id",
         )
         .all();
+    },
+
+    /** Every image without its bytes, in Gallery order, including those of NPCs the player must not see yet. */
+    gallery(id: string) {
+      using db = open(id);
+      return db
+        .query<ImageTarget & { npc: string | null; messageId: number; caption: string; prompt: string | null; redraws: number }, []>(
+          `SELECT 'cover' AS kind, id AS ref, NULL AS npc, 0 AS messageId, '' AS caption, prompt, redraws, 0 AS place FROM cover
+           UNION ALL SELECT 'portrait', id, npc, message_id, '', prompt, redraws, npc IS NOT NULL FROM portraits
+           UNION ALL SELECT 'scene', message_id, NULL, message_id, caption, prompt, redraws, 2 FROM scene_images
+           ORDER BY place, ref`,
+        )
+        .all();
+    },
+
+    /** Changes nothing if the image has gone, like `addSceneImage`. */
+    replaceImage(id: string, { kind, ref }: ImageTarget, prompt: string, bytes: Uint8Array) {
+      if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
+      const [table, key] = REDRAWABLE[kind];
+      using db = open(id);
+      db.run(`UPDATE ${table} SET bytes = ?, prompt = ?, redraws = redraws + 1 WHERE ${key} = ?`, [bytes, prompt, ref]);
     },
 
     sceneImage(id: string, messageId: number) {
@@ -519,12 +558,13 @@ export function saveStore(savesDir: string) {
     },
 
     /** Stores nothing if the Message has gone, so a generation can't outlive a Revert or a replaced response. */
-    addSceneImage(id: string, messageId: number, caption: string, bytes: Uint8Array) {
+    addSceneImage(id: string, messageId: number, caption: string, bytes: Uint8Array, prompt: string | null = null) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       using db = open(id);
-      db.run("INSERT INTO scene_images (message_id, caption, bytes) SELECT id, ?, ? FROM messages WHERE id = ?", [
+      db.run("INSERT INTO scene_images (message_id, caption, bytes, prompt) SELECT id, ?, ?, ? FROM messages WHERE id = ?", [
         caption,
         bytes,
+        prompt,
         messageId,
       ]);
     },
@@ -532,7 +572,7 @@ export function saveStore(savesDir: string) {
     /** Every portrait without its bytes, including those of NPCs the player must not see yet. */
     portraits(id: string) {
       using db = open(id);
-      return db.query<{ id: number; npc: string | null }, []>("SELECT id, npc FROM portraits ORDER BY id").all();
+      return db.query<{ id: number; npc: string | null; redraws: number }, []>("SELECT id, npc, redraws FROM portraits ORDER BY id").all();
     },
 
     portrait(id: string, portraitId: number) {
@@ -552,21 +592,21 @@ export function saveStore(savesDir: string) {
       return mediaType ? { bytes: portrait!.bytes, mediaType } : undefined;
     },
 
-    /** Stores nothing if the Message that asked has gone, like `addSceneImage`. An NPC's goes by their first appearance. */
-    addPortrait(id: string, messageId: number, npc: string | null, bytes: Uint8Array) {
+    /** Stores nothing if the Message that asked has gone, like `addSceneImage`. An NPC's goes by their first appearance, or by that Message if they have been in no Scene. */
+    addPortrait(id: string, messageId: number, npc: string | null, bytes: Uint8Array, prompt: string | null = null) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       using db = open(id);
       if (npc === null) {
-        db.run(`INSERT INTO portraits (message_id, bytes) VALUES (${OPENING_SNAPSHOT}, ?)`, [bytes]);
+        db.run(`INSERT INTO portraits (message_id, bytes, prompt) VALUES (${OPENING_SNAPSHOT}, ?, ?)`, [bytes, prompt]);
         return;
       }
       db.run(
-        `INSERT INTO portraits (npc, message_id, bytes)
-         SELECT ?1, min(message_id), ?3 FROM snapshot_sections
+        `INSERT INTO portraits (npc, message_id, bytes, prompt)
+         SELECT ?1, coalesce(min(message_id), ?2), ?3, ?4 FROM snapshot_sections
          JOIN sections ON sections.id = section_id, json_each(content, '$.visibleCast') AS cast_member
          WHERE name = 'scene' AND cast_member.value = ?1 AND EXISTS (SELECT 1 FROM messages WHERE id = ?2)
-         HAVING count(*) > 0`,
-        [npc, messageId, bytes],
+         HAVING EXISTS (SELECT 1 FROM messages WHERE id = ?2)`,
+        [npc, messageId, bytes, prompt],
       );
     },
 

@@ -1,5 +1,5 @@
 import type { comfyModels } from "../comfyui";
-import type { Message, Save, SaveStore } from "../save-store";
+import type { ImageTarget, Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State } from "../state-applier";
 import type { EnhanceField, PcDraft, WorldChoices, WorldField } from "../world-creation";
@@ -19,6 +19,9 @@ export type Journal = { summary: string; facts: string[]; npcs: string[]; npcSum
 export type Portrait = ReturnType<SaveStore["portraits"]>[number];
 export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];
 export type SceneImages = { images: SceneImageInfo[]; pending: boolean; session: number };
+export type GalleryImage = ImageTarget & { label: string; prompt: string | null; redraws: number; redrawing: boolean; failure: string };
+export type Gallery = { images: GalleryImage[]; pending: boolean; canRedraw: boolean };
+export type WorldCover = { prompt: string; hasCover: boolean; failure: string; canRedraw: boolean };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
 
 const jsonBody = (body: object): RequestInit => ({
@@ -105,17 +108,34 @@ export const getJournal = (id: string) => request<Journal>(`/saves/${id}/journal
 
 export const getImages = (id: string) => request<SceneImages>(`/saves/${id}/images`);
 
-export const imageUrl = (id: string, { messageId }: SceneImageInfo) => `/saves/${id}/messages/${messageId}/image`;
+export const imageUrl = (id: string, { messageId, redraws }: Pick<SceneImageInfo, "messageId" | "redraws">) =>
+  `/saves/${id}/messages/${messageId}/image?v=${redraws}`;
 
-export const coverUrl = (id: string) => `/saves/${id}/cover`;
+export const coverUrl = (id: string, redraws: number) => `/saves/${id}/cover?v=${redraws}`;
 
-/** Answers only once the cover is done. `version` makes a regenerated world's cover a new address. */
-export const worldCoverUrl = (id: string, version: number) => `/worlds/${id}/cover?v=${version}`;
+/** Answers only once the cover is done. The version and `redraws` make a regenerated or redrawn cover a new address. */
+export const worldCoverUrl = (id: string, version: number, redraws: number) => `/worlds/${id}/cover?v=${version}.${redraws}`;
+
+export const getGallery = (id: string) => request<Gallery>(`/saves/${id}/gallery`);
+
+export const galleryUrl = (id: string, { kind, ref, redraws }: GalleryImage) => {
+  if (kind === "cover") return coverUrl(id, redraws);
+  return kind === "portrait" ? portraitUrl(id, { id: ref, redraws }) : imageUrl(id, { messageId: ref, redraws });
+};
+
+export const redrawImage = (id: string, { kind, ref }: GalleryImage, prompt: string) =>
+  request<object>(`/saves/${id}/gallery/redraw`, jsonBody({ kind, ref, prompt }));
+
+/** Answers only once the cover is done, like its image. */
+export const getWorldCover = (id: string) => request<WorldCover>(`/worlds/${id}/cover/details`);
+
+export const redrawWorldCover = (id: string, prompt: string) => request<object>(`/worlds/${id}/cover`, jsonBody({ prompt }));
 
 export const decideForMe = (id: string, signal?: AbortSignal) =>
   request<{ text: string }>(`/saves/${id}/decide`, { ...jsonBody({}), signal }).then(({ text }) => text);
 
-export const portraitUrl = (id: string, portrait: Portrait) => `/saves/${id}/portraits/${portrait.id}`;
+export const portraitUrl = (id: string, { id: portraitId, redraws }: Pick<Portrait, "id" | "redraws">) =>
+  `/saves/${id}/portraits/${portraitId}?v=${redraws}`;
 
 export const getInventory = (id: string) => request<Inventory>(`/saves/${id}/inventory`);
 

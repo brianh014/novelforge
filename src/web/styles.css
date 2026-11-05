@@ -818,6 +818,49 @@ a.action {
   object-fit: contain;
 }
 
+/* The prompt shares the dialog with its image. */
+.viewer:has(.prompt-box) img {
+  max-height: 55dvh;
+}
+
+.prompt-box {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.prompt-box p {
+  margin: 0;
+}
+
+.prompt-box textarea {
+  width: 100%;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.gallery .zoom {
+  width: 100%;
+}
+
+.gallery img:not(dialog img) {
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  object-fit: cover;
+}
+
+.gallery span {
+  display: block;
+  font-size: 0.8em;
+}
+
 /* Fills the page where the wizard's controls were. */
 .working {
   margin-block: auto;

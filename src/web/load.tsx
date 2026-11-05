@@ -72,7 +72,7 @@ export function LoadGame() {
           const name = "unreadable" in save ? "Unreadable Save" : save.pc.name;
           return (
             <li key={save.id} className={"hasCover" in save && save.hasCover ? "with-cover" : undefined}>
-              {"hasCover" in save && save.hasCover && <Zoomable lazy src={coverUrl(save.id)} alt={`Cover of ${name}'s story`} />}
+              {"hasCover" in save && save.hasCover && <Zoomable lazy src={coverUrl(save.id, save.coverRedraws)} alt={`Cover of ${name}'s story`} />}
               <p className="title">{("title" in save && save.title) || name}</p>
               {"title" in save && save.title && <p className="muted">{name}</p>}
               {"unreadable" in save ? (

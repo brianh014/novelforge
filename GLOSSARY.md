@@ -39,6 +39,14 @@ The Narrator's first Message, which brings the player up to speed before they ac
 **Scene Image**:
 A generated image showing the current moment of a Scene.
 
+**Image Prompt**:
+The main text an image was drawn from, which the player can read and change. Art Style and other drawing choices are not part of it.
+_Avoid_: Visual description (that is only the Narrator's part of a Scene Image's prompt)
+
+**Redraw**:
+Drawing one existing image again from its Image Prompt, replacing that image and changing nothing else in the story.
+_Avoid_: Regenerate (that redoes a Turn or a whole world)
+
 **Check**:
 A hidden test of a risky PC action against a difficulty the Narrator sets before the outcome is known. The player never sees a Check.
 _Avoid_: Roll, skill check, saving throw
@@ -102,6 +110,9 @@ _Avoid_: Save (a Snapshot is not a player-facing save)
 **Journal**:
 The player-facing record of only what the PC knows or has encountered.
 _Avoid_: Log (the Full Log is one section of the Journal)
+
+**Gallery**:
+The part of the book holding every image the player may see: the Cover, the portraits of the PC and known NPCs, and the Scene Images.
 
 **Revert**:
 Returning to an earlier Message and permanently deleting everything after it.
