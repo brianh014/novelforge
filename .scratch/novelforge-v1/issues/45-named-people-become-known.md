@@ -2,7 +2,7 @@
 
 **What to build:** Someone named in the story gets a Journal entry and a portrait, whether or not the Narrator remembered the operations for it.
 
-**Status:** ready-for-human
+**Status:** done
 
 - [x] A person named in `people` but never added joins the state, is known and gets a portrait
 - [x] A person already drawn but never made known appears, with no second drawing
@@ -19,3 +19,4 @@
 - The fix is a required `people` field in the reply, applied before `state_operations`. The Save heals with no migration, but only for someone named again.
 - **Agent's default, not yet confirmed:** anyone named counts, even someone only mentioned, so each new name costs one image. This also makes known anyone named before the PC could know them, as the player has read the name anyway.
 - Not run against the real model, which may charge.
+- **User sign-off (2026-11-05):** closed on the user's word. Any unticked box stays unticked, as that check wasn't recorded as run.

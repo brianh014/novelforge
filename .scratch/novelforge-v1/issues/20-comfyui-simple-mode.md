@@ -4,7 +4,7 @@
 
 **Blocked by:** 17
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A player can enter the ComfyUI address and choose a family: SD 1.5/SDXL or FLUX.2
 - [x] SD 1.5/SDXL offers a checkpoint dropdown from what's installed
@@ -46,3 +46,4 @@
 - "Graph Builder", "Simple Mode", "LoRA" and "Image Adapter" aren't in `GLOSSARY.md`, so they need entries. The Settings text mentions an Advanced workflow, as the spec's example does, ahead of ticket 21.
 - **First real run (2026-11-04), box still unticked.** `comfyModels` and `comfyImages` ran from a script against the user's ComfyUI, which SwarmUI starts on `http://127.0.0.1:7821`, on an RTX 3080 with 10 GB. No Save, game or Settings screen was involved. At 16:9 with no LoRA: SDXL (`sd_xl_base_1.0`) drew in 14s, and img2img from that image in 11s kept the scene. FLUX.2 with Klein 9B (`flux-2-klein-9b`, `qwen_3_8b`, `flux2-vae`) drew in 51s, and with one reference in 66s it kept the scene closely. Those images looked right by eye. A cancel 6 seconds into a FLUX.2 job threw AbortError and left ComfyUI's queue empty. FLUX.2 Dev isn't installed, so that template only ran with Klein, at Dev's 20 steps. Steps 4, 6 and 7 of the manual run above, in a real game, are still to do, as are LoRAs. Klein 9B then moved to 8 steps at the user's word, which took a new image from 51s to 19s. The reference and cancel runs were at 20 steps.
 - **User decision (2026-11-04):** keep the Checkpoint type setting (SDXL or SD 1.5), though the spec doesn't list it.
+- **User sign-off (2026-11-05):** the user has been drawing a story's images through the app with their own ComfyUI. Saved settings are FLUX.2 with `flux-2-klein-9b`. SD 1.5/SDXL has only run from a script (SDXL), so the each-family box stays unticked.

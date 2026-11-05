@@ -1,10 +1,27 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { DownIcon } from "./icons";
 
-export function Book(props: { left: ReactNode; children: ReactNode; tabs?: ReactNode; narrowLeft?: boolean; lockLeft?: boolean }) {
+const LEFT_FOLDED = "novelforge-left-folded";
+
+/** One reader's choice, so it stays in their browser and out of the Save. Blocked storage only forgets it. */
+export function leftFolded() {
+  try {
+    return localStorage.getItem(LEFT_FOLDED) === "yes";
+  } catch {
+    return false;
+  }
+}
+
+export function rememberLeftFolded(folded: boolean) {
+  try {
+    localStorage.setItem(LEFT_FOLDED, folded ? "yes" : "no");
+  } catch {}
+}
+
+export function Book(props: { left: ReactNode; children: ReactNode; tabs?: ReactNode; narrowLeft?: boolean; leftFolded?: boolean; lockLeft?: boolean }) {
   return (
     <main className="desk">
-      <div className={props.narrowLeft ? "book narrow-left" : "book"}>
+      <div className={`book${props.narrowLeft ? " narrow-left" : ""}${props.leftFolded ? " left-folded" : ""}`}>
         <section className="page left" inert={props.lockLeft}>{props.left}</section>
         <section className="page right">{props.children}</section>
         {props.tabs}

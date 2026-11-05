@@ -2,7 +2,7 @@
 
 **What to build:** The player can switch to another app while a slow Turn runs. The Turn finishes and saves, and the page shows it on their return.
 
-**Status:** ready-for-human
+**Status:** done
 
 - [x] A client that leaves doesn't stop the Turn, which is saved
 - [x] The server holds a running Turn's text so far, and its input, and what it replaces
@@ -22,3 +22,4 @@
 Reverses the rule from ticket 47's time that a client leaving ends the Turn. A Turn the player never returns to still costs its model call. There's no Stop button, and a stuck reply ends at the Text Provider's 10-minute silence limit.
 
 A server restart ends a running Turn unsaved, and the page then says the connection dropped, with the player's text handed back if the page still held it.
+- **User sign-off (2026-11-05):** closed on the user's word. Any unticked box stays unticked, as that check wasn't recorded as run.

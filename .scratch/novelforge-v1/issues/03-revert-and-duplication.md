@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The API reports how many Messages and images a Revert would delete, before it happens (images are always 0 until ticket 17)
 - [x] Revert restores the target Message's Snapshot and makes no provider call
@@ -14,3 +14,6 @@
 - [x] Duplicating a Save creates an independent Save
 - [x] Duplicating from a Message creates a Save that ends at that Message
 - [x] Duplicates contain no API keys (Saves hold no keys, ticket 14 adds the test)
+
+## Comments
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

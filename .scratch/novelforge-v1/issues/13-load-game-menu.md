@@ -4,7 +4,7 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The menu lists Saves and can load one
 - [x] A player can duplicate a Save
@@ -27,3 +27,4 @@
 - A migration on a Save left in WAL mode switches its journal before the migration transaction. If that migration then failed, the data would be whole but the file's bytes would differ. The game never writes WAL, so this is left as it is.
 - “Duplicate from here” is still only offered in the Revert confirmation, as ticket 09 noted. This ticket doesn't ask for more.
 - Checked in headless Chrome against the compiled executable and a local fake OpenAI-compatible server, at 390 and 1280 wide in light and dark: list, load (including an old-format Save), duplicate and delete by keyboard, Escape keeping a Save, focus after delete, a real download for export, and import of that file and of junk. No horizontal scroll and no page exceptions.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

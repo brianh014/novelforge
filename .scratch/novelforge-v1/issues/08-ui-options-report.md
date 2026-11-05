@@ -4,7 +4,7 @@
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Each direction mocks up the main game screen, a wizard step, the Journal and the inventory
 - [x] Each mockup is shown at desktop and phone widths
@@ -23,3 +23,4 @@
 - `scene_changed` and `visual_description` aren't in the code yet, so the sample leaves them out. Scene Images and portraits are drawn stand-ins.
 - **Choice (2026-11-03): Direction B, Folio, for all parts (B1 to B4).** The user said "I like B the most". Chat style wasn't chosen separately, so the default is Prose, the style B1 shows. Which other Chat styles ship is still open for ticket 22.
 - **Real output, 2026-11-04.** The old book report for ticket 23 uses real Turn text, Journal state and images. Its inventory items are placeholders, as the test character owned nothing. The Direction B choice stays until the user picks from that report.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

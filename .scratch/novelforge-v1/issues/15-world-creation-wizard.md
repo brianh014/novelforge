@@ -4,7 +4,7 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The wizard offers every theme in the spec, plus a custom theme
 - [x] A player can write a World Brief or use “Pick for me”
@@ -27,3 +27,4 @@
 - “Pick for me” works only on an empty box, so it can't replace what the player wrote. The result is shown and can be edited.
 - The wizard's choices are kept in `sessionStorage`, so a reload or a trip to Settings keeps them. Leaving the wizard during a generation cancels it.
 - The ticket and spec say “regenerate” the world, but `GLOSSARY.md` defines Regenerate only for a Narrator response. The glossary is unchanged, so that entry needs widening or a new term.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

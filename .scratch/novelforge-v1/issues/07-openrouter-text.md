@@ -4,7 +4,7 @@
 
 **Blocked by:** 04, 05, 06
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The Text Provider is one OpenAI-compatible client with a configurable base URL
 - [x] A content refusal from the model is raised as `ContentRefused`, which ticket 04 reports to the player
@@ -57,3 +57,4 @@
 - OpenRouter may reposition mid-array system entries for some providers. The array is sent in order, and how each upstream treats it was not checked.
 - **Manual run, 2026-11-04.** The user entered the key in Settings and played one Turn in the app. A REST run on a test Save then played seven more on `deepseek/deepseek-v4.1-flash-1017` and one on `openai/gpt-4o-mini`. Every Turn ended in `event: done`. The third forced a Check (Very Hard, roll 4, failure, plain) and its narration matched the failure. No server log held `Schema mode rejected`, so strict schema mode worked on both models. The model wrote spoken lines as `[Name]:`, and status, facts, plot threads, a new NPC and a World Bible entry all updated.
 - **Narration does stream.** With a Bun client, one Turn's first event came at 4.2s and the last at 8.0s, and client times matched the server's. Upstream reads were spread across 1.0s to 7.5s. A Node client run through the context-mode sandbox showed every event at the same instant, which is that client's buffering and not the app. Setting `Accept-Encoding: identity` changed nothing, so no code changed. Browser delivery was not timed.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

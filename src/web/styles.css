@@ -359,12 +359,118 @@ h2 {
   display: contents;
 }
 
-.inline-image {
+.icon.story-toggle {
   display: none;
 }
 
-.icon.story-toggle {
-  display: none;
+/* With the picture out of sight, each sits folded in the story where it happened. */
+.inline-image {
+  display: block;
+  margin-block: 6px;
+  color: var(--muted);
+  font: 400 14px var(--label);
+}
+
+.inline-image summary {
+  cursor: pointer;
+  min-height: 32px;
+  align-content: center;
+}
+
+.inline-image .portrait {
+  width: 120px;
+  height: 120px;
+}
+
+.narrow-left .page.left {
+  position: relative;
+}
+
+.icon.left-toggle {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 1;
+}
+
+.left-toggle svg {
+  transform: rotate(90deg);
+}
+
+@media (width > 760px) {
+  .book:not(.left-folded) .inline-image {
+    display: none;
+  }
+
+  .story-title {
+    padding-right: 30px;
+  }
+
+  /* Folded, a wide screen reads like a phone: a strip for the title, with the story in one column under it. */
+  .book.narrow-left.left-folded {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .left-folded .page.left {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+    /* Clears the bookmarks. */
+    padding-block: 8px;
+    padding-right: 400px;
+    border-bottom: 1px solid var(--line);
+    box-shadow: none;
+  }
+
+  .left-folded .page.left > .quiet:last-child {
+    margin: 0 0 0 auto;
+  }
+
+  .icon.left-toggle {
+    flex: none;
+  }
+
+  .left-folded .icon.left-toggle {
+    position: static;
+  }
+
+  .left-folded .left-toggle svg {
+    transform: rotate(-90deg);
+  }
+
+  .left-folded .sheet-view,
+  .left-folded .sheet-scroll,
+  .left-folded .sheet-body {
+    display: contents;
+  }
+
+  .left-folded .story-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 12px;
+    min-width: 0;
+    padding-right: 0;
+  }
+
+  .left-folded .title {
+    font-size: 24px;
+  }
+
+  /* The Journal and Inventory hold all of this, and a row in the story stands in for the picture. */
+  .left-folded .story-top,
+  .left-folded .story-card,
+  .left-folded .story-recap {
+    display: none;
+  }
+
+  /* A full-width line would be too long to read. */
+  .book:has(.tabs).left-folded .page.right {
+    padding-top: 14px;
+    padding-inline: max(22px, calc(50% - 26em));
+    box-shadow: none;
+  }
 }
 
 .page .sheet-scroll,
@@ -1547,30 +1653,16 @@ dialog blockquote {
     display: none;
   }
 
-  /* Pictures are out of sight here, so each sits folded in the story where it happened. */
-  .inline-image {
-    display: block;
-    margin-block: 6px;
-    color: var(--muted);
-    font: 400 14px var(--label);
-  }
-
-  .inline-image summary {
-    cursor: pointer;
-    min-height: 32px;
-    align-content: center;
-  }
-
-  .inline-image .portrait {
-    width: 120px;
-    height: 120px;
-  }
-
   .icon.story-toggle {
     display: grid;
     width: 44px;
     height: 44px;
     margin-left: auto;
+  }
+
+  /* Already a strip here. */
+  .icon.left-toggle {
+    display: none;
   }
 
   .story-toggle[aria-expanded="true"] svg {

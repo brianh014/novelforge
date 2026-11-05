@@ -4,7 +4,7 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A player can set text and image models and providers, including splitting them
 - [x] A player can enter API keys, and the API never returns them in full
@@ -23,3 +23,4 @@
 - The image key is separate from the text key, because a text server change clears the text key and text can be Local while images use OpenRouter. A player using OpenRouter for both enters the key twice.
 - A stored key can be replaced but not removed from Settings. Nobody asked for that, so it's left out.
 - Art Style and the per-install settings have separate Save buttons, because they are stored apart.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

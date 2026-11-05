@@ -2,7 +2,7 @@
 
 **What to build:** When a Turn goes wrong, the player can clear the error and the server log shows what happened, without repeating the story. A garbled reply retries by itself.
 
-**Status:** ready-for-human
+**Status:** done
 
 - [x] A line in the reply's stream that isn't JSON retries, like any invalid reply
 - [x] A stream that stays broken fails as retryable after three tries
@@ -19,3 +19,4 @@
 ## Comments
 
 The failed Turn that started this logged one error and no `A Turn failed:` line, which only happens when the client has already left. So it was a dropped connection, such as a phone locking or a page reload, and not a bad reply. The retry here doesn't cover that case: the server still stops a Turn when its client goes. Keeping a Turn running without its client is a separate change.
+- **User sign-off (2026-11-05):** closed on the user's word. Any unticked box stays unticked, as that check wasn't recorded as run.

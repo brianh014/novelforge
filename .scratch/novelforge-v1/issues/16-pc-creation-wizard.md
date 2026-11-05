@@ -4,7 +4,7 @@
 
 **Blocked by:** 15
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A player can enter name, background, physical traits, skills, starting inventory and other descriptive fields
 - [x] “Pick for me” fills only empty fields
@@ -21,3 +21,4 @@
 - PC fields other than the name live in the `pc_details` JSON column. `saves.read(id).pc` holds them for portraits in ticket 18. `GET /saves/:id` still sends only the name.
 - The first Turn is still a player input and a Narrator response. The Starting Hook or sandbox instruction goes in the prompt until the Narrator has answered once, and the blank page shows the Starting Hook.
 - Later Turns still receive the player's original World Brief, so the prompt says the PC and `world_rules` win over it.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

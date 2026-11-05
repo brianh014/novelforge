@@ -4,7 +4,7 @@
 
 **Blocked by:** 08
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The SPA is served from the single executable, and the UI follows the recorded direction
 - [x] The SPA uses React with TypeScript, built by Bun and styled with plain CSS design tokens, with no Tailwind, component library, state library or client-side router library
@@ -25,3 +25,4 @@
 - The Journal and Inventory bookmark tabs are inert until tickets 10 and 11. The left page holds only the PC name and World Brief, so status and notes go there.
 - Leaving mid-Turn aborts it. Its text comes back in the box on return, but not after a page reload.
 - “Duplicate from here” is only offered in the Revert confirmation, as this ticket asks, so it can't be reached from the latest Message. The spec says “on any Message”, and ticket 13 or a later one can add that.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

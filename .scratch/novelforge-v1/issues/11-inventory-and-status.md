@@ -4,7 +4,7 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Inventory is shown as two lists: wearing and carrying
 - [x] Clicking an item opens an input asking what the PC does with it
@@ -20,3 +20,4 @@
 - `remove_item` takes from carrying first, so with the same name in both lists it can remove the wrong one. That operation is unchanged here.
 - An item's action reaches the chat as `item: text`, so the Narrator knows which item "it" means. The Turn path takes only text.
 - Leaving a Turn cut short, then sending an item action that also fails, replaces the restored text in the box with the action.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

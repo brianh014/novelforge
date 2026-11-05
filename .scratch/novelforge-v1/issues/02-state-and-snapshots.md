@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A finished Turn's state operations update inventory, status, NPCs and PC-known information
 - [x] Operations the server can disprove, such as removing an item the PC lacks, are refused
@@ -13,3 +13,6 @@
 - [x] Every Message has a Snapshot that can be loaded whole
 - [x] Unchanged Snapshot sections are stored once and shared, without callers seeing this
 - [x] Snapshots are never changed after being written
+
+## Comments
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

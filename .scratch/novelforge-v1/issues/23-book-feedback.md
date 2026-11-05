@@ -4,7 +4,7 @@
 
 **Blocked by:** none, the user chose Direction B
 
-**Status:** ready-for-agent
+**Status:** done
 
 ## Look
 
@@ -47,3 +47,4 @@
 - In the real opening the Narrator wrote lines for the PC, such as `[Test Mercy]:`, and mixed past and present tense. Prompt-only, and left for the player to judge.
 - Not looked at: the Script, Bubbles and Stage box styles in the new palette, and bubble faces don't open the viewer. A cover that lands after the Story opens shows on the next load.
 - **Dark theme, 2026-11-04.** The user found the first dark paper wrong and chose C, Charcoal laid paper, from https://claude.ai/artifact/FsrEgmyYingzWGmwKNzKLJ (private Artifact, source `.scratch/novelforge-v1/dark-paper-styles.html`). It keeps the app's shared grain rather than the report's slightly softer one. The light theme keeps its parchment and age spots.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

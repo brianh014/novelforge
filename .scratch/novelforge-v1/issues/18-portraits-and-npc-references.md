@@ -4,7 +4,7 @@
 
 **Blocked by:** 10, 16, 17
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A PC portrait is generated from the character description
 - [x] An NPC portrait is generated the first time they appear in a Scene, not when merely mentioned
@@ -22,3 +22,4 @@
 - The Journal doesn't poll. A portrait that finishes while it is open shows the next time it opens.
 - Portraits went through the real adapter against a local fake image server, like ticket 17. The real-model run is still left for the user.
 - **User decision (2026-11-04):** keep drawing a missing portrait the next time the Scene moves, including after failed generations and on Saves from before portraits.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

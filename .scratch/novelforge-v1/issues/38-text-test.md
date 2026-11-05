@@ -2,7 +2,7 @@
 
 **What to build:** A player can check their text setup from Settings, by typing a prompt and seeing the reply, without playing a Turn.
 
-**Status:** ready-for-human
+**Status:** done
 
 - [x] A prompt box and Test button sit at the bottom of the Text settings
 - [x] The reply shows below them with its time, time to the first word, approximate length and speed, and the model
@@ -17,3 +17,4 @@
 - Lengths are the app's own estimate of four characters to a token, so token counts and speed are approximate.
 - **User decision (2026-11-04):** the Settings label for Model Instructions is now "Pre-History / System Prompt / Main Prompt". The code, the prompts and `GLOSSARY.md` keep the name Model Instructions.
 - A real OpenRouter test costs money, so the agent used a fake local server.
+- **User sign-off (2026-11-05):** closed on the user's word. Any unticked box stays unticked, as that check wasn't recorded as run.

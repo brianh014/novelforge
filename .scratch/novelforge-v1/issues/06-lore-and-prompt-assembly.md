@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Each prompt is assembled only from the Snapshot, active Lore Entries, rolling summary, Director's Notes, Model Instructions and recent Messages
 - [x] Player text is clearly delimited as in-character data
@@ -21,3 +21,4 @@
 - Always-on Lore Entries, Plot Threads and `world_rules` are never dropped, so a large enough set can exceed the token budget. They spend it first, and keyword-activated entries fill what remains.
 - Keywords match whole words, so `vault` does not activate on "vaults". Always-on content is not scanned during recursion.
 - `worldRules`, always-on entries and `directorsNotes` have no production writer yet (tickets 15 and 12). Tests seed them through the Save Store until those routes exist.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

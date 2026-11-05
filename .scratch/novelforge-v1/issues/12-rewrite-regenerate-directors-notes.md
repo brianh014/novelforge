@@ -4,7 +4,7 @@
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Rewrite regenerates the latest Narrator response using the player's feedback
 - [x] Regenerate replaces the latest Narrator response without feedback
@@ -27,3 +27,4 @@
 - Routes: `POST /saves/:id/messages/:messageId/rewrite` (`{ feedback }`) and `/regenerate` (`{}`), both following the Turn's JSON or stream contract with `messages` holding only the new Narrator Message. `GET`/`POST /saves/:id/notes` and `PATCH`/`DELETE /saves/:id/notes/:index`, which return `{ notes }`.
 - `replaceTurn` deletes through `deleteAfter`, so ticket 17's image deletion there will cover a replaced response too.
 - Checked in headless Chrome against the compiled executable and a local fake OpenAI-compatible server, at 1280, 390 and 320 wide in light and dark: Regenerate and Rewrite by keyboard, streaming, failures leaving the response, and adding, editing and removing Notes, then a Revert restoring them. No horizontal scroll, no requests off localhost, and the only console error was the existing missing favicon.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

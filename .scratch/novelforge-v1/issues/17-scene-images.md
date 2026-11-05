@@ -4,7 +4,7 @@
 
 **Blocked by:** 14
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A Scene Image is requested when `scene_changed` is true, or when the location or visible cast changes
 - [x] Descriptions aren't compared as text
@@ -43,3 +43,4 @@
 - Ticket 20: the `imageProvider !== "openrouter"` check in `draw` is what keeps Local silent. Replace it with choosing an adapter, and pick the key check per provider. `style_preset` and `negative_prompt` are in the payload for ComfyUI to use properly.
 - **User decision (2026-11-04):** keep coalescing, so scenes passed over while an image is drawing get no image.
 - **Manual run, 2026-11-04, `google/gemini-nano-banana-2.1`.** The user's Save stored a Scene Image and a PC portrait. The test Save from ticket 07 stored three Scene Images over eight Turns and a portrait of the NPC Odren Pike, and the first image (1376x768) matched the narration and her description. Two of the three share a caption and location, so one may be an extra paid image: its cause was not checked. Reference passing between scenes and PC likeness across images were not judged. The UI crops Scene Images, which ticket 23 fixes.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

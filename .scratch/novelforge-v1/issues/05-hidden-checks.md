@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The Narrator's response can be either a finished Turn or a Check request
 - [x] Safe actions use one call, and Checks use two
@@ -16,3 +16,6 @@
 - [x] The roll is stored with the Turn
 - [x] Player text claiming a roll has no effect on the result
 - [x] Tests with unique markers prove no player-facing response reveals a Check, roll or difficulty
+
+## Comments
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

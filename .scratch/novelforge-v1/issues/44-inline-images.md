@@ -8,7 +8,7 @@
 - [x] An NPC's portrait does too, under their first appearance
 - [x] Rows start folded, and open in place
 - [x] A row landing after a response doesn't move the player's words
-- [x] Nothing shows on desktop
+- [x] Nothing shows on desktop, unless the left page is folded (ticket 49)
 
 ## Comments
 

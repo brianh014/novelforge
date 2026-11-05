@@ -4,7 +4,7 @@
 
 **Blocked by:** 10, 11, 12, 13, 18
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] The Chat style options from the UI report work and persist
 - [x] Every screen matches the recorded UI direction
@@ -30,3 +30,4 @@
 - **Keyboard:** every screen walked by Tab at 1280 and 390, in all four Chat styles, with zero issues: every stop reached, ring shown, in view and unclipped. The Notes, Revert and Delete dialogs start and stay focused inside, Escape closes them, and focus returns to the opener. `.waiting` is the only animation, and it is off under reduced motion.
 - **No-Check rule:** a case-insensitive grep of `src/web` and the error strings, and a DOM check of text, labels, alt text, placeholders and values at each step and in all 252 states. "Check" as a plain verb is gone from Settings and from Text Provider and ComfyUI errors. "Checkpoint" stays in Settings, as it is ComfyUI's term for a model.
 - Spot-checked by eye in screenshots, not all 252. The images in those runs were flat colours from the fake ComfyUI, so Stage box over a busy real image is unseen, though its box is opaque.
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

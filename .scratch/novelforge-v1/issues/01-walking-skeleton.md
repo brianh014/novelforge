@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] A `.gitattributes` keeps line endings consistent
 - [x] The app compiles to a single executable that starts the server on localhost only
@@ -14,3 +14,6 @@
 - [x] Messages survive a server restart
 - [x] The SQLite file uses a rollback journal with full sync, and a Turn is one transaction
 - [x] Tests start the real server and use real Saves in a temp folder, with a scripted, recording Text Provider
+
+## Comments
+- **User sign-off (2026-11-05):** every criterion was already ticked, so the status was only out of date.

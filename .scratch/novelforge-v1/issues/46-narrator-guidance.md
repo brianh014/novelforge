@@ -2,7 +2,7 @@
 
 **What to build:** The Narrator leaves the PC's choices to the player, keeps the summary current, and brings idle Plot Threads into play.
 
-**Status:** ready-for-human
+**Status:** done
 
 - [x] The prompt's last instruction keeps the PC's choices and speech to the player, and thoughts private
 - [x] Each finished Turn's `summary` replaces the story's
@@ -18,3 +18,4 @@
 - The whole summary is written each Turn, which adds up to about 300 words of output to every Turn.
 - Older replies in the prompt leave `summary` out, to save tokens, so a late instruction asks for every field.
 - Threads get a turn by the clock, as which have shown isn't tracked, so one already in play can be nudged too, and a nudge can be ignored.
+- **User sign-off (2026-11-05):** closed on the user's word. Any unticked box stays unticked, as that check wasn't recorded as run.

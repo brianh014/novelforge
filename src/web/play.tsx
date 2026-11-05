@@ -32,7 +32,7 @@ import {
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { DecideIcon, DownIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
-import { Book, BookTabs, Fold, MoreBelow } from "./menu";
+import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
 
@@ -71,7 +71,7 @@ export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
  * read at the player's pace. Blank room under the text lets a short Turn reach the top, and shrinks as text takes its
  * place, so nothing moves. The story's reversed layout means a scrollTop of 0 is the bottom.
  */
-function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, latestId: number | undefined, inlineCount: number) {
+function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, latestId: number | undefined, inlineCount: number, folded: boolean) {
   const [more, setMore] = useState(false);
   const room = useRef<HTMLDivElement>(null);
   const following = useRef(false);
@@ -132,7 +132,7 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
     }
     if (!turn) following.current = false;
     checkMore();
-  }, [turn, latestId, inlineCount]);
+  }, [turn, latestId, inlineCount, folded]);
 
   const refit = () => {
     if (latestId === heldOn.current) fitRoom(story.current!);
@@ -144,6 +144,7 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
 export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }) {
   const [save, setSave] = useState<OpenSave>();
   const [topOpen, setTopOpen] = useState(false);
+  const [folded, setFolded] = useState(leftFolded);
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>();
   const [images, setImages] = useState<SceneImages>({ images: [], pending: false, session: 0 });
@@ -165,7 +166,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const inputBox = useRef<HTMLTextAreaElement>(null);
   const story = useRef<HTMLDivElement>(null);
   const inlineCount = images.images.length + (journal?.portraits.length ?? 0);
-  const { more, room, onScroll, refit } = useTurnScroll(story, turn, messages.at(-1)?.id, inlineCount);
+  const { more, room, onScroll, refit } = useTurnScroll(story, turn, messages.at(-1)?.id, inlineCount, folded);
   const rewriteButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(new AbortController());
   const unwatchTurn = useRef(() => {});
@@ -363,7 +364,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
 
   const picture = !staged && (sceneImage() || cover);
 
-  /** Folded in the story under the response they came with, for a phone, which has no room for them beside it. */
+  /** Folded in the story under the response they came with, for when the left page is out of sight. */
   const inlineImages = (message: Message) => {
     const image = images.images.find(({ messageId }) => messageId === message.id);
     return (
@@ -436,8 +437,22 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   return (
     <Book
       narrowLeft
+      leftFolded={folded}
       left={
         <>
+          <button
+            type="button"
+            className="icon left-toggle"
+            title={folded ? "Open the left page" : "Fold the left page away"}
+            aria-label="Left page"
+            aria-expanded={!folded}
+            onClick={() => {
+              setFolded(!folded);
+              rememberLeftFolded(!folded);
+            }}
+          >
+            {DownIcon}
+          </button>
           <Fold>
             {/* A Save from before titles has only its PC. */}
             <div className="story-title">
