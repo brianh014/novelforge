@@ -8,7 +8,7 @@ import { getSettings } from "./api";
 import { Menu } from "./menu";
 import { Play } from "./play";
 import { applyLook, SettingsScreen } from "./settings";
-import { NewGame, Reveal } from "./wizard";
+import { NewGame } from "./wizard";
 
 const onHashChange = (listener: () => void) => {
   window.addEventListener("hashchange", listener);
@@ -17,9 +17,8 @@ const onHashChange = (listener: () => void) => {
 
 /** Screens live in the URL hash, so a reload keeps the place and the server only ever serves `/`. */
 function App() {
-  const [, screen, id, mark, worldChanged] = useSyncExternalStore(onHashChange, () => location.hash).split("/");
-  if (screen === "new" && id === "ready" && mark) return <Reveal key={mark} id={mark} worldChanged={!!worldChanged} />;
-  if (screen === "play" && id) return <Play key={id} id={id} worldChanged={mark === "world-changed"} />;
+  const [, screen, id] = useSyncExternalStore(onHashChange, () => location.hash).split("/");
+  if (screen === "play" && id) return <Play key={id} id={id} />;
   if (screen === "journal" && id) return <Journal key={id} id={id} />;
   if (screen === "gallery" && id) return <Gallery key={id} id={id} />;
   if (screen === "inventory" && id) return <Inventory key={id} id={id} />;

@@ -903,30 +903,16 @@ a.action {
   max-height: 58vh;
 }
 
-/* Reads down the page as cover, title and brief, then the PC. */
-.book.ready {
-  grid-template-columns: minmax(0, 1fr);
+.drawn-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
 }
 
-.presented {
-  display: grid;
-  justify-items: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.presented p {
-  max-width: 40em;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.plate.reveal {
-  width: min(100%, 480px);
-}
-
-.plate.reveal img {
-  max-height: none;
+.drawn-pair > div {
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .full-log .plate {

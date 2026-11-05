@@ -28,8 +28,7 @@ const generated = JSON.stringify({
   plot_threads: [`${SECRET} the mayor is a ghost.`],
 });
 const sheet = JSON.stringify({ wearing: [], health: "unhurt", injuries: [], conditions: [] });
-const noConflict = JSON.stringify({ world_update: null });
-const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "", artStyle: "Ink wash" };
+const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "", artStyle: "Ink wash", pc: { name: "Ash" } };
 
 async function withImages(replies: (string | Error)[], ...images: Parameters<typeof scriptedImages>) {
   const script = scriptedTextProvider(...replies);
@@ -42,7 +41,7 @@ async function withImages(replies: (string | Error)[], ...images: Parameters<typ
 const newWorld = async () => ((await (await game.post("/worlds", choices)).json()) as { id: string }).id;
 
 const begin = async (worldId: string) => {
-  const response = await game.post("/saves", { worldId, worldBrief: "A drowned city", startingHook: "", pc: { name: "Ash" }, inventory: [] });
+  const response = await game.post(`/worlds/${worldId}/begin`, { artStyle: choices.artStyle });
   return ((await response.json()) as { id: string }).id;
 };
 
@@ -55,7 +54,7 @@ const coverIsStored = async (id: string) => {
 };
 
 test("a new world's cover is portrait book art from what the player reads, in their Art Style, with no secrets", async () => {
-  const { payloads } = await withImages([generated], png(1));
+  const { payloads } = await withImages([sheet, generated], png(1));
 
   const world = await newWorld();
   const response = await game.get(`/worlds/${world}/cover`);
@@ -74,7 +73,7 @@ test("a new world's cover is portrait book art from what the player reads, in th
 
 test("the cover goes with the world into its Save, even if it finishes after the Save is made", async () => {
   const { promise: painted, resolve: finish } = Promise.withResolvers<Uint8Array>();
-  await withImages([generated, sheet, noConflict], painted, png(2));
+  await withImages([sheet, generated], painted, png(2));
 
   const id = await begin(await newWorld());
   expect((await game.get(`/saves/${id}/cover`)).status).toBe(404);
@@ -85,7 +84,7 @@ test("the cover goes with the world into its Save, even if it finishes after the
 });
 
 test("a Revert leaves the cover, and a duplicate and an exported Save keep it", async () => {
-  await withImages([generated, sheet, noConflict, narration("One."), narration("Two.")], png(1), png(2));
+  await withImages([sheet, generated, narration("One."), narration("Two.")], png(1), png(2));
   const id = await begin(await newWorld());
   expect(await coverIsStored(id)).toBe(true);
   await game.post(`/saves/${id}/turns`, { input: "A" });
@@ -100,7 +99,7 @@ test("a Revert leaves the cover, and a duplicate and an exported Save keep it", 
 });
 
 test("an imported Save whose cover isn't an image is refused", async () => {
-  await withImages([generated, sheet, noConflict], png(1), png(2));
+  await withImages([sheet, generated], png(1), png(2));
   const id = await begin(await newWorld());
   expect(await coverIsStored(id)).toBe(true);
   const db = Database.deserialize(new Uint8Array(await (await game.get(`/saves/${id}/export`)).arrayBuffer()));
@@ -109,20 +108,8 @@ test("an imported Save whose cover isn't an image is refused", async () => {
   expect(() => saveStore(savesDir).import(db.serialize())).toThrow("isn't a valid Save");
 });
 
-test("regenerating a world replaces its cover and stops the unfinished one", async () => {
-  const { aborted, payloads } = await withImages([generated, generated], new Promise<Uint8Array>(() => {}), png(2));
-  const world = await newWorld();
-
-  await game.post(`/worlds/${world}/regenerate`, choices);
-
-  expect(payloads).toHaveLength(2);
-  expect(payloads[1]!.prompt).toContain(JSON.stringify(choices.title));
-  expect(aborted).toEqual([1]);
-  expect(new Uint8Array(await (await game.get(`/worlds/${world}/cover`)).arrayBuffer())).toEqual(png(2));
-});
-
 test("a failed cover or images being off leaves a world and its Save with no cover", async () => {
-  const { payloads } = await withImages([generated, generated], new Error("image model down"));
+  const { payloads } = await withImages([sheet, generated, sheet, generated], new Error("image model down"));
 
   const failed = await newWorld();
   expect((await game.get(`/worlds/${failed}/cover`)).status).toBe(404);
@@ -176,7 +163,7 @@ test("the opening can be Regenerated like any response, and a player's words are
 });
 
 test("Decide for me writes the PC's next move from what the player can read, and plays nothing", async () => {
-  const script = scriptedTextProvider(generated, sheet, noConflict, narration("A boat drifts near."), JSON.stringify({ text: "I hail the boat." }));
+  const script = scriptedTextProvider(sheet, generated, narration("A boat drifts near."), JSON.stringify({ text: "I hail the boat." }));
   game = startGame(savesDir, script.textProvider);
   const world = await newWorld();
   const id = await begin(world);
@@ -203,19 +190,19 @@ test("the theme is a stored setting that follows the device until the player pic
 });
 
 test("a Save from before the personality field went keeps it, and a new PC can't ask for one", async () => {
-  const script = scriptedTextProvider(JSON.stringify({ name: "Ash", background: "B", physicalTraits: "T", skills: "S", other: "O", inventory: "I" }));
+  const script = scriptedTextProvider(JSON.stringify({ startingHook: "H", name: "Ash", background: "B", physicalTraits: "T", skills: "S", other: "O", inventory: "I" }));
   game = startGame(savesDir, script.textProvider);
   const created = await game.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", personality: "Dry." } });
   const { id } = (await created.json()) as { id: string };
   expect(saveStore(savesDir).read(id).pc.personality).toBe("Dry.");
 
   const pc = { name: "", background: "", physicalTraits: "", skills: "", other: "", inventory: "" };
-  expect((await game.post("/pc/pick", { ...choices, pc })).status).toBe(200);
+  expect((await game.post("/worlds/pick", { ...choices, pc })).status).toBe(200);
   expect(JSON.stringify(script.prompts[0])).not.toContain("personality");
 });
 
 test("a world's title goes with it into its Save and the Load Game list", async () => {
-  await withImages([generated, sheet, noConflict], png(1));
+  await withImages([sheet, generated], png(1));
 
   const id = await begin(await newWorld());
 

@@ -30,7 +30,7 @@ _Avoid_: Message (when the input-and-response pair is meant)
 A continuous place and situation in the story. A Scene can have several Scene Images over time, such as when its cast changes.
 
 **Cover**:
-The book-cover art of a story, with its title lettered into the picture, generated with its world from what the player can read, and kept in the Save through every Revert.
+The book-cover art of a story, with its title lettered into the picture, drawn from what the player can read: the Title, theme and World Brief if the player draws it while creating the game, otherwise the World Overview. It is kept in the Save through every Revert.
 _Avoid_: Title image, world image
 
 **Opening**:
@@ -58,7 +58,7 @@ _Avoid_: Roll, skill check, saving throw
 ### World
 
 **World Brief**:
-The player's wizard input that seeds the World Bible.
+The player's input on the new game form that seeds the World Bible.
 _Avoid_: World details
 
 **World Bible**:
@@ -88,7 +88,7 @@ Regenerating the latest Narrator response using the player's feedback.
 _Avoid_: Edit
 
 **Regenerate**:
-Replacing the latest Narrator response without feedback.
+Replacing the latest Narrator response without feedback, or a world before play begins, which keeps the PC and every image already drawn.
 _Avoid_: Retry, swipe
 
 **Director's Note** (retired from play, see ticket 31):

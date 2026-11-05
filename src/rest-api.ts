@@ -5,7 +5,7 @@ import { comfyImages, comfyModels, randomSeed } from "./comfyui";
 import { chosenModels, drawSteps, localIsSetUp } from "./graph-builder";
 import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
-import { coverPrompt, imagePipeline, shownFailure } from "./image-pipeline";
+import { coverPrompt, type EarlyImage, type ImageKind, imagePipeline, shownFailure } from "./image-pipeline";
 import {
   imageType,
   InvalidSave,
@@ -24,15 +24,15 @@ import { textModels } from "./text-provider";
 import { type BegunTurn, liveTurns, TurnRunning } from "./live-turns";
 import { ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
-import { decideForPc, ENHANCE_FIELDS, enhance, fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World, type WorldChoices } from "./world-creation";
+import { decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type World, type WorldChoices, type WorldPc } from "./world-creation";
+
+const NamedPc = PcDetails.extend({ name: z.string().trim().min(1) });
 
 const NewSaveRequest = z.object({
   worldBrief: z.string().min(1),
-  pc: PcDetails.extend({ name: z.string().trim().min(1) }),
-  inventory: z.array(z.string().trim().min(1)).default([]),
+  pc: NamedPc,
   artStyle: z.string().optional(),
   startingHook: z.string().optional(),
-  worldId: z.string().optional(),
 });
 
 const WorldRequest = z.object({
@@ -43,21 +43,48 @@ const WorldRequest = z.object({
   artStyle: z.string().optional(),
 });
 
+/** `id` holds the images already drawn on the form, if any. One the server has lost simply starts again. */
+const NewWorldRequest = WorldRequest.extend({
+  id: z.string().optional(),
+  pc: NamedPc,
+  inventory: z.array(z.string().trim().min(1)).default([]),
+});
+
+const someWords = z.string().trim().min(1);
+
+// `id` as in `NewWorldRequest`. The form offers these only once their boxes are filled, and this holds it to that.
+const DrawRequest = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("cover"),
+    id: z.string().optional(),
+    title: someWords.max(80),
+    theme: someWords,
+    worldBrief: someWords,
+    artStyle: z.string().default(""),
+  }),
+  z.object({
+    kind: z.literal("portrait"),
+    id: z.string().optional(),
+    name: z.string().trim(),
+    physicalTraits: someWords,
+    artStyle: z.string().default(""),
+  }),
+]);
+
+const PcBoxes = z.record(z.enum(PC_FIELDS), z.string().trim());
+
 const PickRequest = z.object({
   theme: z.string().trim().min(1),
   title: z.string().trim().max(80),
   worldBrief: z.string().trim(),
   startingHook: z.string().trim().optional(),
+  pc: PcBoxes.optional(),
 });
 
-const PcBoxes = z.record(z.enum(PC_FIELDS), z.string().trim());
-
-const PcPickRequest = WorldRequest.extend({ pc: PcBoxes });
-
-// The other boxes may still be empty: Enhance needs only its own.
+// Any box may be empty, and an empty `text` asks for that box to be written from scratch.
 const EnhanceRequest = z.object({
   field: z.enum(ENHANCE_FIELDS),
-  text: z.string().trim().min(1),
+  text: z.string().trim(),
   theme: z.string().trim(),
   title: z.string().trim(),
   worldBrief: z.string().trim(),
@@ -69,8 +96,8 @@ class WorldNotFound extends Error {}
 
 const IMAGES_OFF = "Images are turned off or not set up in Settings.";
 
-/** A failure falls back on the cover before it, whose prompt stands too. */
-type DrawnCover = { prompt: string; bytes?: Uint8Array<ArrayBuffer>; failure?: string };
+/** A failure falls back on the image before it, whose prompt stands too. */
+type DrawnImage = EarlyImage & { failure?: string };
 
 const NewTurnRequest = z.object({ input: z.string().min(1) });
 
@@ -79,6 +106,9 @@ const NoFields = z.object({});
 const RewriteRequest = z.object({ feedback: z.string().trim().min(1) });
 
 const PromptRequest = z.object({ prompt: z.string().trim().min(1) });
+
+// The form's Art Style can change after a first draw.
+const HeldRedrawRequest = PromptRequest.extend({ artStyle: z.string().optional() });
 
 const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene"]), ref: z.number().int().nonnegative() });
 
@@ -211,32 +241,70 @@ export function startServer(options: {
   const local = comfyImages(settings, undefined, (problem) => (workflowProblem = problem));
   const images = imagePipeline(saves, { openrouter: options.imageAdapter, local }, settings);
   const engine = { ...options, images };
-  // Held here between the wizard's steps because a Save needs a PC, and so that the client never holds the secrets.
-  // shortcut: an abandoned world and its cover stay until the app restarts, evict them if that ever adds up.
-  const worlds = new Map<string, World & { title: string }>();
-  const covers = new Map<string, { drawn: Promise<DrawnCover>; artStyle: string; stop: AbortController }>();
+  // Held here until Begin because a Save holds it all at once, and so that the client never holds the secrets.
+  // shortcut: an abandoned world and its images stay until the app restarts, evict them if that ever adds up.
+  const worlds = new Map<string, World & WorldChoices & WorldPc & { sheet: Awaited<ReturnType<typeof pcSheet>> }>();
+  // By the id a form or its world goes by, as these can be drawn before either a world or a Save exists. The form's text is safe in its tab if a restart loses them.
+  const held: Record<ImageKind, Map<string, { drawn: Promise<DrawnImage>; artStyle: string; stop: AbortController }>> = {
+    cover: new Map(),
+    portrait: new Map(),
+  };
 
-  /** Replaces any unfinished cover, and never rejects: a failure falls back on `before`, so a failed Redraw leaves the old cover. */
-  function drawCover(id: string, prompt: string, artStyle: string, before: DrawnCover | Promise<DrawnCover>) {
-    covers.get(id)?.stop.abort();
+  /** Replaces any unfinished image, and never rejects: a failure falls back on `before`, so a failed Redraw leaves the old image. */
+  function drawHeld(kind: ImageKind, id: string, prompt: string, artStyle: string, before: DrawnImage | Promise<DrawnImage>) {
+    held[kind].get(id)?.stop.abort();
     const stop = new AbortController();
-    const drawn = images.drawCover(prompt, artStyle, stop.signal).then(
-      (bytes): DrawnCover => ({ prompt, bytes: bytes as Uint8Array<ArrayBuffer> | undefined }),
-      async (error: unknown): Promise<DrawnCover> => {
+    const drawn = images.drawEarly(kind, prompt, artStyle, stop.signal).then(
+      (bytes): DrawnImage => ({ prompt, bytes: bytes as Uint8Array<ArrayBuffer> | undefined }),
+      async (error: unknown): Promise<DrawnImage> => {
         if (stop.signal.aborted) return before;
         console.error(error);
         return { ...(await before), failure: shownFailure(error) };
       },
     );
-    covers.set(id, { drawn, artStyle, stop });
+    held[kind].set(id, { drawn, artStyle, stop });
     return drawn;
   }
 
-  /** In the background, so a slow image never holds up the world, and a regenerated world's cover replaces the unfinished one. */
-  function startCover(id: string, { title, theme, artStyle = "" }: WorldChoices, overview: string) {
-    const prompt = coverPrompt({ title, theme, overview });
-    drawCover(id, prompt, artStyle, { prompt });
+  /** In the background, so a slow image never holds up the world. An image drawn or drawing stays, and one that came to nothing gets another try. */
+  function drawIfMissing(kind: ImageKind, id: string, prompt: string, artStyle: string) {
+    const image = held[kind].get(id);
+    if (!image) return void drawHeld(kind, id, prompt, artStyle, { prompt });
+    void image.drawn.then(({ bytes }) => {
+      if (!bytes && held[kind].get(id) === image) drawHeld(kind, id, prompt, artStyle, { prompt });
+    });
   }
+
+  function drawWorldImages(id: string, overview: string, { title, theme, artStyle = "" }: WorldChoices) {
+    drawIfMissing("cover", id, coverPrompt({ title, theme, world: overview }), artStyle);
+    const { pc, sheet } = worlds.get(id)!;
+    const portrait = images.pcPortraitPrompt(pc, sheet.inventory.wearing);
+    if (portrait) drawIfMissing("portrait", id, portrait, artStyle);
+  }
+
+  // Answers once the image is done, so an img tag can simply wait for it.
+  const heldImage = async (kind: ImageKind, id: string) => {
+    const bytes = (await held[kind].get(id)?.drawn)?.bytes;
+    return bytes ? imageResponse(bytes) : Response.json({ error: `This world has no ${kind}` }, { status: 404 });
+  };
+
+  // Answers when the Redraw is done, and the Begin that may come first takes whichever image wins.
+  const redrawHeld = async (kind: ImageKind, id: string, req: Request) => {
+    const { prompt, artStyle } = await parseBody(req, HeldRedrawRequest);
+    const image = held[kind].get(id);
+    if (!image) throw new WorldNotFound();
+    if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
+    const { failure } = await drawHeld(kind, id, prompt, artStyle ?? image.artStyle, image.drawn);
+    return Response.json(failure ? { error: failure } : {}, { status: failure ? 502 : 200 });
+  };
+
+  // Answers once the image is done, like the image.
+  const heldDetails = async (kind: ImageKind, id: string) => {
+    const image = await held[kind].get(id)?.drawn;
+    if (!image) throw new WorldNotFound();
+    const { prompt, bytes, failure = "" } = image;
+    return Response.json({ prompt, hasImage: bytes !== undefined, failure, canRedraw: images.ready() });
+  };
 
   /** An allowlist, so a visible NPC the PC doesn't know yet stays hidden, and a Revert of that knowledge hides their portrait again. */
   const knownPortraits = (id: string) => {
@@ -285,6 +353,7 @@ export function startServer(options: {
       imageModel,
       hasImageApiKey: imageApiKey !== "",
       imagesEnabled,
+      imagesReady: images.ready(),
       comfyUrl,
       comfyFamily,
       comfySdBase,
@@ -389,61 +458,67 @@ export function startServer(options: {
       "/saves": {
         GET: () => Response.json({ saves: saves.list() }),
         POST: async (req) => {
-          const { worldId, inventory, ...save } = await parseBody(req, NewSaveRequest);
-          if (worldId === undefined) {
-            const id = saves.create(save);
-            images.saveCreated(id);
-            return Response.json({ id }, { status: 201 });
-          }
-          const world = worlds.get(worldId);
-          if (!world) throw new WorldNotFound();
-          const { opening, worldChanged } = await fitPc(options, world, save, inventory, req.signal);
-          // shortcut: held until now so a failure can retry, which lets a double submit pay for two fits, lock the world if that happens.
-          if (!worlds.has(worldId)) throw new WorldNotFound();
-          const id = saves.create({ ...save, opening, title: world.title });
-          worlds.delete(worldId);
+          const save = await parseBody(req, NewSaveRequest);
+          const id = saves.create(save);
           images.saveCreated(id);
-          // Often still drawing. The Save may be gone by the time it lands, and a story without a cover loses nothing.
-          covers.get(worldId)?.drawn.then(({ bytes, prompt }) => bytes && saves.setCover(id, bytes, prompt)).catch(console.error);
-          covers.delete(worldId);
-          return Response.json({ id, worldChanged }, { status: 201 });
+          return Response.json({ id }, { status: 201 });
         },
       },
       "/worlds": {
         POST: async (req) => {
-          const choices = await parseBody(req, WorldRequest);
-          const { overview, world } = await generateWorld(options, choices, req.signal);
-          const id = crypto.randomUUID();
-          worlds.set(id, { ...world, title: choices.title });
-          startCover(id, choices, overview);
+          const { id = crypto.randomUUID(), pc, inventory, ...choices } = await parseBody(req, NewWorldRequest);
+          // First, as it's the small call, and a failure here then costs no world.
+          const sheet = await pcSheet(options, pc, inventory, req.signal);
+          const { overview, world } = await generateWorld(options, choices, { pc, inventory }, req.signal);
+          worlds.set(id, { ...world, ...choices, pc, inventory, sheet });
+          drawWorldImages(id, overview, choices);
           return Response.json({ id, overview }, { status: 201 });
         },
       },
-      "/worlds/:id/cover": {
-        // Answers once the cover is done, so an img tag can simply wait for it.
-        GET: async (req) => {
-          const bytes = (await covers.get(req.params.id)?.drawn)?.bytes;
-          return bytes ? imageResponse(bytes) : Response.json({ error: "This world has no cover" }, { status: 404 });
-        },
-        // Answers when the Redraw is done, and the Accept that may come first takes whichever cover wins.
+      "/worlds/draw": {
+        // Answers at once, as the form goes on while an image draws. The prompt holds only the player's own words.
         POST: async (req) => {
-          const { id } = req.params;
-          const { prompt } = await parseBody(req, PromptRequest);
-          const cover = covers.get(id);
-          if (!cover) throw new WorldNotFound();
+          const ask = await parseBody(req, DrawRequest);
           if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
-          const { failure } = await drawCover(id, prompt, cover.artStyle, cover.drawn);
-          return Response.json(failure ? { error: failure } : {}, { status: failure ? 502 : 200 });
+          const { id = crypto.randomUUID(), artStyle } = ask;
+          const prompt =
+            ask.kind === "cover"
+              ? coverPrompt({ title: ask.title, theme: ask.theme, world: ask.worldBrief })
+              : images.pcPortraitPrompt({ name: ask.name, physicalTraits: ask.physicalTraits }, []);
+          drawHeld(ask.kind, id, prompt, artStyle, { prompt });
+          return Response.json({ id }, { status: 201 });
         },
       },
-      "/worlds/:id/cover/details": {
-        // Answers once the cover is done, like the image.
-        GET: async (req) => {
-          const cover = await covers.get(req.params.id)?.drawn;
-          if (!cover) throw new WorldNotFound();
-          const { prompt, bytes, failure = "" } = cover;
-          return Response.json({ prompt, hasCover: bytes !== undefined, failure, canRedraw: images.ready() });
+      "/worlds/:id/begin": {
+        POST: async (req) => {
+          const { artStyle } = await parseBody(req, ArtStyleRequest);
+          const world = worlds.get(req.params.id);
+          if (!world) throw new WorldNotFound();
+          const { title, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, sheet } = world;
+          const opening = { worldBible, worldRules, plotThreads, ...sheet };
+          const id = saves.create({ title, worldBrief, startingHook, pc, artStyle, opening });
+          worlds.delete(req.params.id);
+          images.saveCreated(id, held.portrait.get(req.params.id)?.drawn);
+          // Often still drawing. The Save may be gone by the time it lands, and a story without a cover loses nothing.
+          held.cover.get(req.params.id)?.drawn.then(({ bytes, prompt }) => bytes && saves.setCover(id, bytes, prompt)).catch(console.error);
+          held.cover.delete(req.params.id);
+          held.portrait.delete(req.params.id);
+          return Response.json({ id }, { status: 201 });
         },
+      },
+      "/worlds/:id/cover": {
+        GET: (req) => heldImage("cover", req.params.id),
+        POST: (req) => redrawHeld("cover", req.params.id, req),
+      },
+      "/worlds/:id/cover/details": {
+        GET: (req) => heldDetails("cover", req.params.id),
+      },
+      "/worlds/:id/portrait": {
+        GET: (req) => heldImage("portrait", req.params.id),
+        POST: (req) => redrawHeld("portrait", req.params.id, req),
+      },
+      "/worlds/:id/portrait/details": {
+        GET: (req) => heldDetails("portrait", req.params.id),
       },
       "/worlds/pick": {
         POST: async (req) => Response.json(await pickForMe(options, await parseBody(req, PickRequest), req.signal)),
@@ -451,17 +526,15 @@ export function startServer(options: {
       "/enhance": {
         POST: async (req) => Response.json({ text: await enhance(options, await parseBody(req, EnhanceRequest), req.signal) }),
       },
-      "/pc/pick": {
-        POST: async (req) => Response.json(await pickPc(options, await parseBody(req, PcPickRequest), req.signal)),
-      },
       "/worlds/:id/regenerate": {
         POST: async (req) => {
           const { id } = req.params;
           const choices = await parseBody(req, WorldRequest);
-          if (!worlds.has(id)) throw new WorldNotFound();
-          const { overview, world } = await generateWorld(options, choices, req.signal);
-          worlds.set(id, { ...world, title: choices.title });
-          startCover(id, choices, overview);
+          const before = worlds.get(id);
+          if (!before) throw new WorldNotFound();
+          const { overview, world } = await generateWorld(options, choices, before, req.signal);
+          worlds.set(id, { ...before, ...world, ...choices });
+          drawWorldImages(id, overview, choices);
           return Response.json({ overview });
         },
       },

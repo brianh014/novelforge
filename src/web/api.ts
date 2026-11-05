@@ -1,11 +1,12 @@
 import type { comfyModels } from "../comfyui";
+import type { ImageKind } from "../image-pipeline";
 import type { FailedTurn, LiveTurn } from "../live-turns";
 import type { ImageTarget, Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State } from "../state-applier";
-import type { EnhanceField, PcDraft, WorldChoices, WorldField } from "../world-creation";
+import type { EnhanceField, PcDraft, WorldChoices, WorldField, WorldPc } from "../world-creation";
 
-export type { EnhanceField, Message, PcDraft, Save, WorldChoices, WorldField };
+export type { EnhanceField, ImageKind, Message, PcDraft, Save, WorldChoices, WorldField };
 export type ListedSave = ReturnType<SaveStore["list"]>[number];
 export type OpenSave = ReturnType<SaveStore["read"]>;
 export type Inventory = State["inventory"];
@@ -13,6 +14,7 @@ export type Status = State["status"];
 export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKey"> & {
   hasTextApiKey: boolean;
   hasImageApiKey: boolean;
+  imagesReady: boolean;
   workflowProblem: string;
 };
 export type Journal = { summary: string; facts: string[]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[] };
@@ -22,7 +24,7 @@ export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];
 export type SceneImages = { images: SceneImageInfo[]; pending: boolean; session: number };
 export type GalleryImage = ImageTarget & { label: string; prompt: string | null; redraws: number; redrawing: boolean; failure: string };
 export type Gallery = { images: GalleryImage[]; pending: boolean; canRedraw: boolean };
-export type WorldCover = { prompt: string; hasCover: boolean; failure: string; canRedraw: boolean };
+export type HeldImage = { prompt: string; hasImage: boolean; failure: string; canRedraw: boolean };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
 export type TurnStatus = { running?: LiveTurn; failed?: FailedTurn };
 
@@ -115,8 +117,8 @@ export const imageUrl = (id: string, { messageId, redraws }: Pick<SceneImageInfo
 
 export const coverUrl = (id: string, redraws: number) => `/saves/${id}/cover?v=${redraws}`;
 
-/** Answers only once the cover is done. The version and `redraws` make a regenerated or redrawn cover a new address. */
-export const worldCoverUrl = (id: string, version: number, redraws: number) => `/worlds/${id}/cover?v=${version}.${redraws}`;
+/** Answers only once the image is done. The version makes a redrawn image a new address. */
+export const heldImageUrl = (id: string, kind: ImageKind, version: number) => `/worlds/${id}/${kind}?v=${version}`;
 
 export const getGallery = (id: string) => request<Gallery>(`/saves/${id}/gallery`);
 
@@ -128,10 +130,16 @@ export const galleryUrl = (id: string, { kind, ref, redraws }: GalleryImage) => 
 export const redrawImage = (id: string, { kind, ref }: GalleryImage, prompt: string) =>
   request<object>(`/saves/${id}/gallery/redraw`, jsonBody({ kind, ref, prompt }));
 
-/** Answers only once the cover is done, like its image. */
-export const getWorldCover = (id: string) => request<WorldCover>(`/worlds/${id}/cover/details`);
+/** Answers only once the image is done. */
+export const getHeldImage = (id: string, kind: ImageKind) => request<HeldImage>(`/worlds/${id}/${kind}/details`);
 
-export const redrawWorldCover = (id: string, prompt: string) => request<object>(`/worlds/${id}/cover`, jsonBody({ prompt }));
+export const redrawHeldImage = (id: string, kind: ImageKind, prompt: string, artStyle: string) =>
+  request<object>(`/worlds/${id}/${kind}`, jsonBody({ prompt, artStyle }));
+
+/** Starts drawing on the form and answers at once. `id` is the one this form's images are held under, if it has one yet. */
+export const drawOnForm = (
+  ask: { id?: string; artStyle: string } & ({ kind: "cover"; title: string; theme: string; worldBrief: string } | { kind: "portrait"; name: string; physicalTraits: string }),
+) => request<{ id: string }>("/worlds/draw", jsonBody(ask));
 
 export const decideForMe = (id: string, signal?: AbortSignal) =>
   request<{ text: string }>(`/saves/${id}/decide`, { ...jsonBody({}), signal }).then(({ text }) => text);
@@ -146,20 +154,20 @@ export const getStatus = (id: string) => request<Status>(`/saves/${id}/status`);
 export const statusWords = ({ health, injuries, conditions }: Status) =>
   [health, ...injuries, ...conditions].join(", ");
 
-export const createSave = (
-  save: Save & { worldId: string; artStyle: string; startingHook: string; inventory: string[] },
-  signal?: AbortSignal,
-) => request<{ id: string; worldChanged: boolean }>("/saves", { ...jsonBody(save), signal });
+/** `id` is the one this form's images are held under, if it has one yet. */
+export const generateWorld = (world: WorldChoices & WorldPc & { id?: string }, signal?: AbortSignal) =>
+  request<{ id: string; overview: string }>("/worlds", { ...jsonBody(world), signal });
 
-export const generateWorld = (choices: WorldChoices, signal?: AbortSignal) =>
-  request<{ id: string; overview: string }>("/worlds", { ...jsonBody(choices), signal });
+/** Makes the Save from the world held under `id`, with its images. */
+export const beginStory = (id: string, artStyle: string, signal?: AbortSignal) =>
+  request<{ id: string }>(`/worlds/${id}/begin`, { ...jsonBody({ artStyle }), signal });
 
 export const regenerateWorld = (id: string, choices: WorldChoices, signal?: AbortSignal) =>
   request<{ overview: string }>(`/worlds/${id}/regenerate`, { ...jsonBody(choices), signal });
 
-/** Writes the empty boxes of `world`. Leave out a box that shouldn't be written. */
-export const pickForMe = (theme: string, world: Partial<Record<WorldField, string>>, signal?: AbortSignal) =>
-  request<Partial<Record<WorldField, string>>>("/worlds/pick", { ...jsonBody({ theme, ...world }), signal });
+/** Writes the empty boxes of the form. Leave out a box that shouldn't be written. */
+export const pickForMe = (theme: string, form: Partial<Record<WorldField, string>> & { pc: PcDraft }, signal?: AbortSignal) =>
+  request<Partial<Record<WorldField, string> & PcDraft>>("/worlds/pick", { ...jsonBody({ theme, ...form }), signal });
 
 export const enhance = (
   field: EnhanceField,
@@ -167,9 +175,6 @@ export const enhance = (
   choices: Omit<WorldChoices, "artStyle"> & { pc?: PcDraft },
   signal?: AbortSignal,
 ) => request<{ text: string }>("/enhance", { ...jsonBody({ ...choices, field, text }), signal }).then(({ text }) => text);
-
-export const pickPc = (choices: WorldChoices, pc: PcDraft, signal?: AbortSignal) =>
-  request<Partial<PcDraft>>("/pc/pick", { ...jsonBody({ ...choices, pc }), signal });
 
 export const previewRevert = (id: string, messageId: number) =>
   request<{ messages: number; images: number; portraits: number }>(`/saves/${id}/messages/${messageId}/revert`);

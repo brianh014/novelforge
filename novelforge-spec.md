@@ -13,7 +13,7 @@ It can create images. Images created based on the current scene in the game, and
 
 ### Create the world
 
-The first step in a new game is creating the world, the player selects from lists or provides a free form answer
+A new game is one form, in this order: the world's fields, Art Style, Cover, the PC's fields, portrait. The player selects from lists or provides a free form answer
 
 * Theme: each has a short description, shown to the player once chosen and sent to the Narrator with its name  
   * High Fantasy  
@@ -35,8 +35,8 @@ The first step in a new game is creating the world, the player selects from list
 * Toggle for Starting Hook  
   * Yes \- the player specifies a Starting Hook at the beginning of the game  
   * No \- The PC just starts in the world with no immediate hook, more sandbox style start  
-* One “Pick for me” button that will use the theme and any provided info to generate the empty fields above  
-* An “Enhance” button on each of those fields, which rewrites what the player wrote into something richer, for a player with a general idea. Undo brings back their words  
+* One “Pick for me” button for the whole form, world and PC together. One Narrator call fills only the empty boxes, seeing every other box and only the player's own words, and leaves the Starting Hook alone while it's off  
+* A button on each box, including the PC's name. On a box with words it's “Enhance”, which rewrites what the player wrote into something richer, for a player with a general idea. On an empty box it writes that field from scratch. It sees every other box and only the player's own words, and Undo brings back what the box held  
 * Art style \- the style to be used for all image generation in this Save (can be changed in game, affects new images only)  
   * **Cinematic Photorealism**  
     * Ultra-detailed photorealistic style capturing hyper-accurate physics, micro-surface textures, natural volumetric light dispersion, realistic lens depth of field, and true-to-life subsurface scattering, indistinguishable from high-resolution digital cinema footage.  
@@ -70,21 +70,28 @@ The first step in a new game is creating the world, the player selects from list
     * Symmetrical luxury aesthetic featuring sharp geometric line work, metallic gold/bronze accents, sleek aerodynamic curves, high-contrast black-and-gold tones, and sunburst motifs.  
   * **Modern Anime & Manga Illustration**  
     * Polished Japanese graphic art style featuring sharp ink contour lines, vibrant cell-shading, expressive eye dynamics, clean hair clumps, and dramatic action-line perspective.  
-  * Describe your own art style
+  * Describe your own art style  
+* Cover \- a section to draw the Cover before the world exists, from the Title, theme and World Brief. It's unavailable until those are filled  
 
     
 
 ### Generate the world
 
-Once details are entered, the Narrator generates a detailed World Bible that is used for the rest of the game, along with the Plot Threads, which are kept secret from the player. The Narrator can expand the World Bible and create new Plot Threads during play, such as when the player has exhausted the current ones or ventured into an unmapped area.
+One button writes the world with the PC in view. The PC stays canon and the world bends to them, so there is no separate step to fit them in and no notice that the world changed. The Narrator also works out what the PC wears and their opening status, before the world, so a failure there costs no world. The Narrator generates a detailed World Bible that is used for the rest of the game, along with the Plot Threads, which are kept secret from the player. The Narrator can expand the World Bible and create new Plot Threads during play, such as when the player has exhausted the current ones or ventured into an unmapped area.
 
 The World Bible is a set of Lore Entries. Each has a title, keywords and self-contained content. The Narrator should give each entry several keywords so that paraphrases still activate it.
 
-Generation also produces a World Overview covering what the PC would plausibly know. The player can accept it or regenerate the world before creating the PC. Clicking the Cover there opens it larger, with a Redraw button that shows its Image Prompt, to Redraw only the Cover, and a Cover that failed to draw shows its prompt so it can be tried again. Regenerating the world discards an edited Cover prompt. The Ready page offers the same for the Cover and the PC's portrait.
+Generation also produces a World Overview covering what the PC would plausibly know. It then draws the Cover from the World Overview and the portrait from the PC, in what they wear, for whichever the player didn't draw on the form. An image drawn on the form isn't drawn again.
+
+A review shows the Cover, portrait and World Overview, with Regenerate and Begin. Clicking an image, here or on the form, opens it larger, with a Redraw button that shows its Image Prompt, to Redraw only that image, and an image that failed to draw shows its prompt so it can be tried again. Regenerate writes a new world around the same PC and keeps every image already drawn with its edited prompt, trying again only for one that came to nothing. If the form has changed since the world was written, the review says so, as Begin and Regenerate use what the world was written from.
+
+Begin creates the Save with the images and goes straight into the story. An image still drawing lands in the Save when it's done. A portrait stored this way survives every Revert, like any other portrait of the PC.
+
+Images drawn before Begin are held in memory, as neither a world nor a Save exists yet. A restart loses them and any world not yet begun, while the form's text stays in the tab, surviving a reload.
 
 ### Create a character
 
-The player can play whomever they want. Whatever the player writes during character creation is canon. If it conflicts with the world, the game shows a non-blocking warning and the Narrator updates the World Bible to fit. World rules apply strictly from the first Turn. For example, a player can create a wizard who throws fireballs in a strict modern-day world, and the world changes to allow it.
+The player can play whomever they want. Whatever the player writes during character creation is canon. If it conflicts with the theme or World Brief, the Narrator builds the world to fit them. World rules apply strictly from the first Turn. For example, a player can create a wizard who throws fireballs in a strict modern-day world, and the world changes to allow it.
 
 * Name
 * Background
@@ -93,8 +100,11 @@ The player can play whomever they want. Whatever the player writes during charac
 * Current inventory (inventory explained more further down)
 * Any other fields needed to fully describe the PC
 
-An image of the PC will be generated based on the descriptions.
-“Pick for me” button that will use any provided info to generate empty fields. Each field except the name also has “Enhance”, as in world creation
+A portrait section draws the PC from their physical traits, and is unavailable until those are filled. Drawn here, it has only the player's words, as nothing has yet worked out what the PC wears.
+
+Changing a field after drawing leaves that image as it is, for the player to Redraw. With images off or not set up, the Cover and portrait sections say so, and nothing else on the form changes.
+
+“Pick for me” and the button on each box work here as in the world's fields
 
 ## The game loop
 

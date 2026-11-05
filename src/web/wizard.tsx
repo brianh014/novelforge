@@ -1,32 +1,28 @@
-import { type FormEvent, Fragment, type ReactNode, useEffect, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { ART_EXAMPLES } from "./art-examples";
 import { ART_STYLES } from "./art-styles";
 import {
-  createSave,
+  beginStory,
+  drawOnForm,
   type EnhanceField,
   enhance,
-  type Gallery,
   generateWorld,
-  getGallery,
-  getSave,
-  getWorldCover,
-  type OpenSave,
+  getHeldImage,
   getSettings,
+  type HeldImage,
+  heldImageUrl,
+  type ImageKind,
   type PcDraft,
   pickForMe,
-  pickPc,
-  redrawWorldCover,
+  redrawHeldImage,
   regenerateWorld,
   setupProblem,
   type WorldChoices,
-  type WorldCover,
   type WorldField,
-  worldCoverUrl,
 } from "./api";
 import { DecideIcon } from "./icons";
-import { Fold, Sheet } from "./menu";
-import { IMAGE_CHECK_MS } from "./play";
-import { PromptBox, RedrawableImage, RedrawPanel, Zoomable } from "./zoom";
+import { Sheet } from "./menu";
+import { PromptBox, RedrawPanel, Zoomable } from "./zoom";
 
 /** Each description is shown to the player and sent to the Narrator with the theme's name. */
 const THEMES: Record<string, string> = {
@@ -45,9 +41,8 @@ const THEMES: Record<string, string> = {
   Noir: "Rain-slick streets, crooked cops and secrets that someone will kill to keep.",
 };
 const STEPS = [
-  { href: "#/new", name: "Of the World" },
+  { href: "#/new", name: "Of the World and the PC" },
   { href: "#/new/overview", name: "The World Overview" },
-  { href: "#/new/pc", name: "Of the PC" },
 ];
 
 const OWN_THEME = "Create your own";
@@ -64,8 +59,12 @@ const blank = {
   artStyle: Object.keys(ART_STYLES)[0]!,
   ownArtStyle: "",
   pc: { name: "", background: "", physicalTraits: "", skills: "", other: "", inventory: "" } as PcDraft,
+  /** What the server holds this form's images and world under, once it holds any. */
+  id: undefined as string | undefined,
+  /** Each image asked for, and how many times it has changed, so that a new image is a new address. */
+  drawn: {} as Partial<Record<ImageKind, number>>,
   /** The choices that made this world, as the form can change after it was generated. */
-  world: undefined as { id: string; overview: string; choices: WorldChoices; coverVersion: number; coverRedraws: number } | undefined,
+  world: undefined as { overview: string; choices: WorldChoices; form: string } | undefined,
 };
 
 const STORAGE_KEY = "novelforge-new-game";
@@ -97,53 +96,66 @@ function Choices(props: { legend: string; options: string[]; value: string; art?
   );
 }
 
-/** The story's cover, which is still being painted when this step opens, and never comes if images are off. A failed one offers its prompt to try again. */
-function CoverArt({ worldId, src, redraws, onRedrawn }: { worldId: string; src: string; redraws: number; onRedrawn: () => void }) {
-  const [cover, setCover] = useState<WorldCover>();
+const redrew = (drawn: typeof blank.drawn, kind: ImageKind) => ({ ...drawn, [kind]: (drawn[kind] ?? 0) + 1 });
+
+const IMAGE_NAMES: Record<ImageKind, { name: string; alt: string }> = {
+  cover: { name: "Cover", alt: "The cover of your story" },
+  portrait: { name: "portrait", alt: "Your PC's portrait" },
+};
+
+/**
+ * A Cover or portrait the server holds, which may still be painting. A failed one offers its prompt to try again.
+ * `onLost` is for one the server no longer holds or never drew, so that the form can offer it again.
+ */
+function HeldArt(props: { id: string; kind: ImageKind; version: number; artStyle: string; onRedrawn: () => void; onLost: () => void }) {
+  const { id, kind, version, artStyle, onRedrawn, onLost } = props;
+  const [image, setImage] = useState<HeldImage>();
   const [redrawing, setRedrawing] = useState(false);
   const [failure, setFailure] = useState("");
+  const { name, alt } = IMAGE_NAMES[kind];
 
   useEffect(() => {
     let leaving = false;
-    getWorldCover(worldId).then(
+    getHeldImage(id, kind).then(
       (details) => {
         if (leaving) return;
-        setCover(details);
+        setImage(details);
         setFailure(details.failure);
+        if (!details.hasImage && !details.failure) onLost();
       },
-      () => !leaving && setCover({ prompt: "", hasCover: false, failure: "", canRedraw: false }),
+      () => !leaving && onLost(),
     );
     return () => {
       leaving = true;
     };
-  }, [worldId, redraws]);
+  }, [id, kind, version]);
 
-  if (!cover) return <p className="waiting">The cover is being painted…</p>;
+  if (!image) return <p className="waiting">The {name} is being painted…</p>;
 
   const redraw = (prompt: string) => {
     setRedrawing(true);
     setFailure("");
-    redrawWorldCover(worldId, prompt).then(onRedrawn, (error: Error) => setFailure(error.message)).finally(() => setRedrawing(false));
+    redrawHeldImage(id, kind, prompt, artStyle).then(onRedrawn, (error: Error) => setFailure(error.message)).finally(() => setRedrawing(false));
   };
-  const box = <PromptBox prompt={cover.prompt} redrawing={redrawing} failure={failure} canRedraw={cover.canRedraw} onRedraw={redraw} />;
+  const box = <PromptBox prompt={image.prompt} redrawing={redrawing} failure={failure} canRedraw={image.canRedraw} onRedraw={redraw} />;
 
-  if (!cover.hasCover) {
+  if (!image.hasImage) {
     return failure || redrawing ? (
       <>
-        <p className="muted">The cover couldn't be painted. You can try again, or carry on without one.</p>
+        <p className="muted">The {name} couldn't be painted. You can try again, or carry on without one.</p>
         {box}
       </>
     ) : null;
   }
   return (
     <>
-      <figure className="plate cover">
-        <Zoomable src={src} alt="The cover of your story">
+      <figure className={kind === "cover" ? "plate cover" : "plate"}>
+        <Zoomable src={heldImageUrl(id, kind, version)} alt={alt}>
           <RedrawPanel busy={redrawing || !!failure}>{box}</RedrawPanel>
         </Zoomable>
       </figure>
-      {redrawing && <p className="waiting">Redrawing the cover…</p>}
-      {failure && <p className="error">Redraw failed. Open the cover to see why.</p>}
+      {redrawing && <p className="waiting">Redrawing the {name}…</p>}
+      {failure && <p className="error">Redraw failed. Open the {name} to see why.</p>}
     </>
   );
 }
@@ -169,7 +181,7 @@ function Heading({ step, title, busy }: { step: number; title: string; busy: boo
   }, [step, busy]);
   return (
     <>
-      <p className="muted">Step {step} of 3</p>
+      <p className="muted">Step {step} of 2</p>
       <h1 ref={heading} tabIndex={-1} className="big">{title}</h1>
     </>
   );
@@ -181,6 +193,9 @@ export function NewGame({ step }: { step?: string }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [setupNotice, setSetupNotice] = useState<string>();
+  const [imagesReady, setImagesReady] = useState<boolean>();
+  /** True while a draw is being asked for, so that a form's first two draws can't each get an id of their own. */
+  const [asking, setAsking] = useState(false);
   /** What each box held before Enhance, as replacing a box's value leaves nothing for the browser's own undo. */
   const [enhanced, setEnhanced] = useState<Partial<Record<EnhanceField, { was: string; now: string }>>>({});
   const set = (change: Partial<typeof blank>) => setDraft((current) => ({ ...current, ...change }));
@@ -191,7 +206,10 @@ export function NewGame({ step }: { step?: string }) {
   useEffect(() => () => running.current?.abort(), []);
   useEffect(() => setError(""), [step]);
   useEffect(() => {
-    getSettings().then((settings) => setSetupNotice(setupProblem(settings)), () => {});
+    getSettings().then((settings) => {
+      setSetupNotice(setupProblem(settings));
+      setImagesReady(settings.imagesReady);
+    }, () => {});
   }, []);
 
   const theme = draft.theme === OWN_THEME ? draft.ownTheme.trim() : draft.theme;
@@ -216,21 +234,46 @@ export function NewGame({ step }: { step?: string }) {
 
   const worldChoices = { title: draft.title, theme: themeForNarrator, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "" };
 
-  const fillWorld = () =>
+  /** What a world was written from, to tell if the form has moved on from it. */
+  const formNow = JSON.stringify([worldChoices, draft.pc]);
+
+  const fillForm = () =>
     run("The Narrator is thinking…", async (signal) => {
-      const { title, worldBrief, startingHook } = draft;
-      set(await pickForMe(themeForNarrator, { title, worldBrief, ...(draft.hookOn && { startingHook }) }, signal));
+      const { title, worldBrief, startingHook, pc } = draft;
+      const picked = Object.entries(await pickForMe(themeForNarrator, { title, worldBrief, ...(draft.hookOn && { startingHook }), pc }, signal));
+      const isPc = ([field]: [string, unknown]) => field in blank.pc;
+      setDraft((current) => ({
+        ...current,
+        ...Object.fromEntries(picked.filter((box) => !isPc(box))),
+        pc: { ...current.pc, ...Object.fromEntries(picked.filter(isPc)) },
+      }));
     });
 
-  function generate(event: FormEvent) {
-    event.preventDefault();
+  /** Only ever a first draw, as a drawn image then has its own Redraw. */
+  async function drawFirst(ask: Parameters<typeof drawOnForm>[0]) {
+    setAsking(true);
+    setError("");
+    try {
+      const { id } = await drawOnForm({ ...ask, id: draft.id });
+      setDraft((current) => ({ ...current, id, drawn: redrew(current.drawn, ask.kind) }));
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
+    setAsking(false);
+  }
+
+  function generate() {
     const choices = { ...worldChoices, artStyle };
-    // `required` accepts spaces, and a Starting Hook of spaces would quietly become a sandbox start.
-    if (!theme || !draft.worldBrief.trim() || !draft.title.trim() || (draft.hookOn && !draft.startingHook.trim())) {
+    // Checked here, not by `required`, as the images' Redraw forms can't sit inside a form of their own. Spaces would pass that anyway, and a Starting Hook of spaces would quietly become a sandbox start.
+    if (!theme || !draft.worldBrief.trim() || !draft.title.trim() || (draft.hookOn && !draft.startingHook.trim()) || !artStyle.trim()) {
       return setError("Fill in each box with some words, use Pick for me, or turn the Starting Hook off.");
     }
+    if (!draft.pc.name.trim()) return setError("Give your PC a name, or use Pick for me.");
+    const { inventory, ...pc } = draft.pc;
+    const items = inventory.split("\n").map((item) => item.trim()).filter(Boolean);
     return run("The Narrator is building the world. This can take a few minutes.", async (signal) => {
-      set({ world: { ...(await generateWorld(choices, signal)), choices, coverVersion: 0, coverRedraws: 0 } });
+      const { id, overview } = await generateWorld({ ...choices, id: draft.id, pc, inventory: items }, signal);
+      setDraft((current) => ({ ...current, id, world: { overview, choices, form: formNow }, drawn: redrew(redrew(current.drawn, "cover"), "portrait") }));
       location.hash = "/new/overview";
     });
   }
@@ -274,6 +317,9 @@ export function NewGame({ step }: { step?: string }) {
                   <>
                     <button type="button" className="jump" onClick={() => jump("world-choices")}>World choices</button>
                     <button type="button" className="jump" onClick={() => jump("art-style")}>Art Style</button>
+                    <button type="button" className="jump" onClick={() => jump("cover")}>Cover</button>
+                    <button type="button" className="jump" onClick={() => jump("pc")}>The PC</button>
+                    <button type="button" className="jump" onClick={() => jump("portrait")}>Portrait</button>
                   </>
                 )}
               </Fragment>
@@ -281,7 +327,7 @@ export function NewGame({ step }: { step?: string }) {
           </nav>
           <p className="muted so-far">
             <b>So far</b>
-            {[theme, draft.title.trim(), draft.artStyle === OWN_ART_STYLE ? "Your own Art Style" : draft.artStyle].filter(Boolean).map((choice) => (
+            {[theme, draft.title.trim(), draft.artStyle === OWN_ART_STYLE ? "Your own Art Style" : draft.artStyle, draft.pc.name.trim()].filter(Boolean).map((choice) => (
               <span key={choice}>{choice}</span>
             ))}
           </p>
@@ -293,26 +339,15 @@ export function NewGame({ step }: { step?: string }) {
     </Sheet>
   );
 
-  const pickRow = (filled: boolean, fill: () => void) => (
-    <>
-      <span className="muted">Fills only the empty boxes.</span>
-      <button type="button" className="quiet" disabled={filled} onClick={fill}>
-        Pick for me
-      </button>
-    </>
-  );
+  const setPc = (field: keyof PcDraft, text: string) =>
+    setDraft((current) => ({ ...current, pc: { ...current.pc, [field]: text } }));
 
-  const enhanceTools = (
-    field: EnhanceField,
-    label: string,
-    value: string,
-    write: (text: string) => void,
-    choices: Parameters<typeof enhance>[2],
-  ) => {
+  const enhanceTools = (field: EnhanceField, label: string, value: string, write: (text: string) => void) => {
     const before = enhanced[field];
+    const action = value.trim() ? "Enhance" : "Write";
     const improve = () =>
       run("The Narrator is thinking…", async (signal) => {
-        const now = await enhance(field, value, choices, signal);
+        const now = await enhance(field, value, { ...worldChoices, pc: draft.pc }, signal);
         setEnhanced((current) => ({ ...current, [field]: { was: value, now } }));
         write(now);
       });
@@ -323,43 +358,60 @@ export function NewGame({ step }: { step?: string }) {
             Undo
           </button>
         )}
-        {value.trim() && (
-          <button type="button" className="icon" title="Enhance" aria-label={`Enhance: ${label}`} disabled={!!busy} onClick={improve}>
-            {DecideIcon}
-          </button>
-        )}
+        <button type="button" className="icon" title={action} aria-label={`${action}: ${label}`} disabled={!!busy} onClick={improve}>
+          {DecideIcon}
+        </button>
       </div>
     );
   };
 
-  const worldTools = (field: WorldField, label: string) =>
-    enhanceTools(field, label, draft[field], (text) => set({ [field]: text }), worldChoices);
+  const worldTools = (field: WorldField, label: string) => enhanceTools(field, label, draft[field], (text) => set({ [field]: text }));
 
-  const { world } = draft;
+  const heldArt = (kind: ImageKind, version: number) => (
+    <HeldArt
+      id={draft.id!}
+      kind={kind}
+      version={version}
+      artStyle={artStyle}
+      // The player may have gone on by the time a Redraw ends, so these go by what the draft holds then.
+      onRedrawn={() => setDraft((current) => ({ ...current, drawn: redrew(current.drawn, kind) }))}
+      onLost={() =>
+        setDraft((current) => {
+          const { [kind]: _, ...drawn } = current.drawn;
+          return { ...current, drawn };
+        })
+      }
+    />
+  );
 
-  if (world && step === "overview") {
+  const { world, id: worldId } = draft;
+
+  if (world && worldId && step === "overview") {
     const regenerate = () =>
       run("The Narrator is rebuilding the world. This can take a few minutes.", async (signal) => {
-        const { overview } = await regenerateWorld(world.id, world.choices, signal);
-        set({ world: { ...world, overview, coverVersion: world.coverVersion + 1 } });
+        const { overview } = await regenerateWorld(worldId, { ...world.choices, artStyle }, signal);
+        setDraft((current) => ({ ...current, world: { ...world, overview }, drawn: redrew(redrew(current.drawn, "cover"), "portrait") }));
       });
-    // The player may have Accepted by the time a Redraw ends, so this goes by what the draft holds then.
-    const coverRedrawn = () =>
-      setDraft((current) =>
-        current.world?.id === world.id ? { ...current, world: { ...current.world, coverRedraws: current.world.coverRedraws + 1 } } : current,
-      );
+    const begin = () =>
+      run("Opening the book…", async (signal) => {
+        const { id } = await beginStory(worldId, artStyle, signal);
+        sessionStorage.removeItem(STORAGE_KEY);
+        location.hash = `/play/${id}`;
+      });
     return frame(
       1,
       <>
         <Heading step={2} title="The World Overview" busy={!!busy} />
-        <p className="muted">What your PC would know. Accept this world, or have the Narrator make another.</p>
-        <CoverArt
-          key={world.coverVersion}
-          worldId={world.id}
-          src={worldCoverUrl(world.id, world.coverVersion, world.coverRedraws)}
-          redraws={world.coverRedraws}
-          onRedrawn={coverRedrawn}
-        />
+        <p className="muted">What your PC would know. Begin the story in this world, or have the Narrator make another. Your PC and the pictures stay either way.</p>
+        {world.form !== formNow && (
+          <p className="notice">
+            The form has changed since this world was written, and Begin and Regenerate won't use those changes. <a href="#/new">Go back</a> and generate the world to use them.
+          </p>
+        )}
+        <div className="drawn-pair">
+          {draft.drawn.cover !== undefined && <div>{heldArt("cover", draft.drawn.cover)}</div>}
+          {draft.drawn.portrait !== undefined && <div>{heldArt("portrait", draft.drawn.portrait)}</div>}
+        </div>
         <div className="overview">
           <p>{world.overview}</p>
         </div>
@@ -368,79 +420,58 @@ export function NewGame({ step }: { step?: string }) {
         <button type="button" className="quiet" onClick={regenerate}>
           Regenerate
         </button>
-        <a className="action" href="#/new/pc">
-          Accept
-        </a>
+        <button type="button" className="action" onClick={begin}>
+          {error ? "Try again" : "Begin"}
+        </button>
       </>,
     );
   }
 
-  if (world && step === "pc") {
-    const setPc = (field: keyof PcDraft, text: string) =>
-      setDraft((current) => ({ ...current, pc: { ...current.pc, [field]: text } }));
+  const pcBox = (field: Exclude<keyof PcDraft, "name">, label: string, rows: number) => (
+    <div className="enhanceable">
+      <label>
+        {label}
+        <textarea rows={rows} value={draft.pc[field]} onChange={(e) => setPc(field, e.target.value)} />
+      </label>
+      {enhanceTools(field, label, draft.pc[field], (text) => setPc(field, text))}
+    </div>
+  );
 
-    const fillPc = () =>
-      run("The Narrator is thinking…", async (signal) => {
-        const picked = await pickPc(world.choices, draft.pc, signal);
-        setDraft((current) => ({ ...current, pc: { ...current.pc, ...picked } }));
-      });
-
-    const box = (field: Exclude<keyof PcDraft, "name">, label: string, rows: number) => (
-      <div className="enhanceable">
-        <label>
-          {label}
-          <textarea rows={rows} value={draft.pc[field]} onChange={(e) => setPc(field, e.target.value)} />
-        </label>
-        {enhanceTools(field, label, draft.pc[field], (text) => setPc(field, text), { ...world.choices, pc: draft.pc })}
-      </div>
+  /** `missing` says what must be filled before this image can be drawn, and `ask` is what it's drawn from. */
+  const imageSection = (kind: ImageKind, legend: string, missing: string, ask: Parameters<typeof drawOnForm>[0]) => {
+    const version = draft.drawn[kind];
+    return (
+      <fieldset id={kind}>
+        <legend>{legend}</legend>
+        {imagesReady === false ? (
+          <p className="muted">Images are turned off or not set up in Settings.</p>
+        ) : draft.id && version !== undefined ? (
+          heldArt(kind, version)
+        ) : (
+          <>
+            <p className="muted">{missing || `Draw it now to see it, or leave it and it's drawn when the world is written.`}</p>
+            <div className="row">
+              <button type="button" className="quiet" disabled={!!missing || asking} onClick={() => drawFirst(ask)}>
+                Draw the {IMAGE_NAMES[kind].name}
+              </button>
+            </div>
+          </>
+        )}
+      </fieldset>
     );
+  };
 
-    const begin = (event: FormEvent) => {
-      event.preventDefault();
-      // `required` accepts spaces.
-      if (!draft.pc.name.trim()) return setError("Give your PC a name, or use Pick for me.");
-      const { inventory, ...pc } = draft.pc;
-      const items = inventory.split("\n").map((item) => item.trim()).filter(Boolean);
-      const { worldBrief, startingHook } = world.choices;
-      return run("The Narrator is fitting your PC into the world. This can take a few minutes.", async (signal) => {
-        const { id, worldChanged } = await createSave(
-          { worldId: world.id, worldBrief, startingHook, artStyle, pc, inventory: items },
-          signal,
-        );
-        sessionStorage.removeItem(STORAGE_KEY);
-        location.hash = `/new/ready/${id}${worldChanged ? "/world-changed" : ""}`;
-      });
-    };
-    return frame(
-      2,
-      <form id="pc" className="fields wizard" onSubmit={begin}>
-        <div>
-          <Heading step={3} title="Of the PC" busy={!!busy} />
-          <p className="muted">Play whomever you want. What you write is canon, and the world changes if it must.</p>
-        </div>
-        <label>
-          PC name
-          <input required value={draft.pc.name} onChange={(e) => setPc("name", e.target.value)} />
-        </label>
-        {box("background", "Background", 3)}
-        {box("physicalTraits", "Physical traits", 3)}
-        {box("skills", "Skills and experience", 3)}
-        {box("inventory", "Starting inventory, one item per line", 4)}
-        {box("other", "Anything else", 2)}
-      </form>,
-      <>
-        {pickRow(Object.values(draft.pc).every((text) => text.trim()), fillPc)}
-        <button form="pc" className="action">{error ? "Try again" : "Begin"}</button>
-      </>,
-    );
-  }
+  const { title, worldBrief } = draft;
+  const worldBoxes = [draft.worldBrief, draft.title, ...(draft.hookOn ? [draft.startingHook] : [])];
+  const physicalTraits = draft.pc.physicalTraits;
 
+  // Not a form, as the images' Redraw forms sit inside it.
   return frame(
     0,
-    <form id="world" className="fields wizard" onSubmit={generate}>
+    <div className="fields wizard">
       <div id="world-choices" className="fields wizard">
         <div>
-          <Heading step={1} title="Of the World" busy={!!busy} />
+          <Heading step={1} title="Of the World and the PC" busy={!!busy} />
         </div>
         <Choices
           legend="Theme"
@@ -452,20 +483,20 @@ export function NewGame({ step }: { step?: string }) {
         {draft.theme === OWN_THEME && (
           <label>
             Your theme
-            <input required value={draft.ownTheme} onChange={(e) => set({ ownTheme: e.target.value })} />
+            <input value={draft.ownTheme} onChange={(e) => set({ ownTheme: e.target.value })} />
           </label>
         )}
         <div className="enhanceable">
           <label>
             World Brief
-            <textarea required rows={3} value={draft.worldBrief} onChange={(e) => set({ worldBrief: e.target.value })} />
+            <textarea rows={3} value={draft.worldBrief} onChange={(e) => set({ worldBrief: e.target.value })} />
           </label>
           {worldTools("worldBrief", "World Brief")}
         </div>
         <div className="enhanceable">
           <label>
             Title
-            <input required maxLength={80} value={draft.title} onChange={(e) => set({ title: e.target.value })} />
+            <input maxLength={80} value={draft.title} onChange={(e) => set({ title: e.target.value })} />
           </label>
           {worldTools("title", "Title")}
         </div>
@@ -477,7 +508,7 @@ export function NewGame({ step }: { step?: string }) {
           <div className="enhanceable">
             <label>
               What opens the story?
-              <textarea required rows={3} value={draft.startingHook} onChange={(e) => set({ startingHook: e.target.value })} />
+              <textarea rows={3} value={draft.startingHook} onChange={(e) => set({ startingHook: e.target.value })} />
             </label>
             {worldTools("startingHook", "Starting Hook")}
           </div>
@@ -496,80 +527,53 @@ export function NewGame({ step }: { step?: string }) {
         {draft.artStyle === OWN_ART_STYLE ? (
           <label>
             Your Art Style
-            <textarea required rows={3} value={draft.ownArtStyle} onChange={(e) => set({ ownArtStyle: e.target.value })} />
+            <textarea rows={3} value={draft.ownArtStyle} onChange={(e) => set({ ownArtStyle: e.target.value })} />
           </label>
         ) : (
           <p className="muted">{ART_STYLES[draft.artStyle]}</p>
         )}
         <p className="muted">You can change this in game. It affects new images only.</p>
       </div>
-    </form>,
-    <>
-      {pickRow(!theme || [draft.worldBrief, draft.title, ...(draft.hookOn ? [draft.startingHook] : [])].every((text) => text.trim()), fillWorld)}
-      <button form="world" className="action">{error ? "Try again" : "Generate the world"}</button>
-    </>,
-  );
-}
-
-/** The finished PC, whose portrait starts drawing as the Save is made. */
-export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean }) {
-  const [save, setSave] = useState<OpenSave>();
-  const [gallery, setGallery] = useState<Gallery>();
-  const [redraws, setRedraws] = useState(0);
-  const [drawing, setDrawing] = useState(true);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    let leaving = false;
-    // shortcut: read again only while something paints, so a cover that lands after that needs a reload, track the cover if that shows up.
-    const look = () =>
-      getGallery(id).then((gallery) => {
-        if (leaving) return;
-        getSave(id).then(setSave, () => {});
-        setGallery(gallery);
-        if (gallery.pending) timer = setTimeout(look, IMAGE_CHECK_MS);
-        else setDrawing(false);
-      }, () => setDrawing(false));
-    getSave(id).then(setSave, () => {});
-    look();
-    return () => {
-      leaving = true;
-      clearTimeout(timer);
-    };
-  }, [id, redraws]);
-
-  const name = save?.pc.name ?? "";
-  const cover = gallery?.images.find(({ kind }) => kind === "cover");
-  const portrait = gallery?.images.find(({ kind, label }) => kind === "portrait" && label === name);
-  const redrawable = (image: NonNullable<typeof cover>, alt: string) => (
-    <figure className="plate reveal">
-      <RedrawableImage id={id} image={image} alt={alt} canRedraw={gallery!.canRedraw} onRedrawn={() => setRedraws((count) => count + 1)} />
-    </figure>
-  );
-
-  return (
-    <main className="desk">
-      <div className="book ready">
-        <section className="sheet-main">
-          <Fold>
-            <div className="presented">
-              {cover && redrawable(cover, `Cover of ${save?.title || name}`)}
-              <h1 className="big">{save?.title || name}</h1>
-              <p>{save?.worldBrief}</p>
-              {portrait && redrawable(portrait, `Portrait of ${name}`)}
-            </div>
-          </Fold>
-          <div className="sheet-foot">
-            <div className="row">
-              {drawing && <span role="status" className="waiting">Your portrait is being painted…</span>}
-              <span className="muted">Your story is ready.</span>
-              <a className="action" href={`#/play/${id}${worldChanged ? "/world-changed" : ""}`}>
-                Open the book
-              </a>
-            </div>
-          </div>
-        </section>
+      {imageSection("cover", "Cover", theme && title.trim() && worldBrief.trim() ? "" : "Fill in the Title, theme and World Brief to draw this.", {
+        kind: "cover",
+        title,
+        theme: themeForNarrator,
+        worldBrief,
+        artStyle,
+      })}
+      <div id="pc" className="fields wizard">
+        <div>
+          <h2>Of the PC</h2>
+          <p className="muted">Play whomever you want. What you write is canon, and the world changes if it must.</p>
+        </div>
+        <div className="enhanceable">
+          <label>
+            PC name
+            <input value={draft.pc.name} onChange={(e) => setPc("name", e.target.value)} />
+          </label>
+          {enhanceTools("name", "PC name", draft.pc.name, (text) => setPc("name", text))}
+        </div>
+        {pcBox("background", "Background", 3)}
+        {pcBox("physicalTraits", "Physical traits", 3)}
+        {pcBox("skills", "Skills and experience", 3)}
+        {pcBox("inventory", "Starting inventory, one item per line", 4)}
+        {pcBox("other", "Anything else", 2)}
       </div>
-    </main>
+      {imageSection("portrait", "Portrait", physicalTraits.trim() ? "" : "Fill in the physical traits to draw this.", {
+        kind: "portrait",
+        name: draft.pc.name,
+        physicalTraits,
+        artStyle,
+      })}
+    </div>,
+    <>
+      <span className="muted">Fills only the empty boxes.</span>
+      <button type="button" className="quiet" disabled={!theme || [...worldBoxes, ...Object.values(draft.pc)].every((text) => text.trim())} onClick={fillForm}>
+        Pick for me
+      </button>
+      <button type="button" className="action" onClick={generate}>
+        {error ? "Try again" : "Generate the world"}
+      </button>
+    </>,
   );
 }

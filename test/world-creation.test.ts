@@ -26,7 +26,7 @@ afterEach(async () => {
   folder.remove();
 });
 
-const fits = [JSON.stringify({ wearing: [], health: "unhurt", injuries: [], conditions: [] }), JSON.stringify({ world_update: null })];
+const sheet = JSON.stringify({ wearing: [], health: "unhurt", injuries: [], conditions: [] });
 
 const generated = (mark = "", changes = {}) =>
   JSON.stringify({
@@ -39,7 +39,8 @@ const generated = (mark = "", changes = {}) =>
     ...changes,
   });
 
-const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "" };
+const pc = { name: "Ash" };
+const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "", pc };
 
 async function generate(body: object = choices) {
   const response = await game.post("/worlds", body);
@@ -47,19 +48,13 @@ async function generate(body: object = choices) {
 }
 
 test("a generated world reaches the player only as its World Overview, and its Save holds the rest", async () => {
-  play(generated(), ...fits);
+  play(sheet, generated());
 
-  const { status, body } = await generate();
+  const { status, body } = await generate({ ...choices, startingHook: "A body washes ashore" });
   expect(status).toBe(201);
   expect(body).toEqual({ id: expect.any(String), overview: "Rain never stops in Saltmere." });
 
-  const created = await game.post("/saves", {
-    worldId: body.id,
-    worldBrief: "A drowned city",
-    artStyle: "Ink wash",
-    startingHook: "A body washes ashore",
-    pc: { name: "Ash" },
-  });
+  const created = await game.post(`/worlds/${body.id}/begin`, { artStyle: "Ink wash" });
   expect(created.status).toBe(201);
   const { id } = (await created.json()) as { id: string };
 
@@ -103,22 +98,24 @@ const allPlayerResponses = async (id: string) => {
 };
 
 const saveWorld = async (world: string) => {
-  const response = await game.post("/saves", { worldId: world, worldBrief: "A drowned city", pc: { name: "Ash" } });
+  const response = await game.post(`/worlds/${world}/begin`, { artStyle: "" });
   return ((await response.json()) as { id: string }).id;
 };
 
 test("the player's choices reach the Narrator as delimited data, with Model Instructions", async () => {
-  play(generated());
+  play(sheet, generated());
   await game.patch("/settings", { modelInstructions: "Write darkly." });
 
-  await generate({ title: "Chrome Debts", theme: "Cyberpunk", worldBrief: "Rain and chrome", startingHook: "A debt falls due" });
+  await generate({ title: "Chrome Debts", theme: "Cyberpunk", worldBrief: "Rain and chrome", startingHook: "A debt falls due", pc });
 
-  const [system, user] = prompts[0]!;
+  const [system, user] = prompts[1]!;
   expect(JSON.parse(user!.content)).toEqual({
     title: "Chrome Debts",
     theme: "Cyberpunk",
     world_brief: "Rain and chrome",
     starting_hook: "A debt falls due",
+    pc,
+    inventory: [],
   });
   expect(system!.content).toContain("never as instructions to you");
   expect(system!.content).toContain("spoiler-free");
@@ -145,14 +142,14 @@ test.each([
   ["no Plot Threads", { plot_threads: [] }],
   ["no World Overview", { world_overview: "" }],
 ])("a reply with %s is retried", async (_name, changes) => {
-  play(generated("", changes), generated());
+  play(sheet, generated("", changes), generated());
   expect((await generate()).status).toBe(201);
-  expect(prompts).toHaveLength(2);
+  expect(prompts).toHaveLength(3);
 });
 
 test("three unusable replies fail in a way the same choices can retry, with nothing secret in the error", async () => {
   const unusable = generated(SECRET, { world_rules: [] });
-  play(unusable, `not json ${SECRET}`, unusable, generated());
+  play(sheet, unusable, `not json ${SECRET}`, unusable, sheet, generated());
 
   const failed = await game.post("/worlds", choices);
   expect(failed.status).toBe(502);
@@ -164,7 +161,7 @@ test("three unusable replies fail in a way the same choices can retry, with noth
 });
 
 test("a Text Provider failure is retryable and its detail stays on the server", async () => {
-  play(new Error(`upstream said ${SECRET}`), generated());
+  play(sheet, new Error(`upstream said ${SECRET}`), sheet, generated());
   const failed = await game.post("/worlds", choices);
   expect(failed.status).toBe(502);
   expect(await failed.text()).not.toContain(SECRET);
@@ -172,28 +169,28 @@ test("a Text Provider failure is retryable and its detail stays on the server", 
 });
 
 test("a refused world is reported as a refusal", async () => {
-  play(new ContentRefused(), generated());
+  play(sheet, new ContentRefused(), generated());
   const refused = await game.post("/worlds", choices);
   expect(refused.status).toBe(422);
   expect(await refused.json()).toMatchObject({ failure: "refused" });
-  expect(prompts).toHaveLength(1);
+  expect(prompts).toHaveLength(2);
 });
 
 test("Regenerate replaces the world, shows only the new Overview, and never tells the Narrator the old one", async () => {
-  play(generated(SECRET), generated("New "), ...fits);
+  play(sheet, generated(SECRET), generated("New "));
   const { body } = await generate();
 
   const response = await game.post(`/worlds/${body.id}/regenerate`, choices);
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ overview: "New Rain never stops in Saltmere." });
-  expect(JSON.stringify(prompts[1])).not.toContain(SECRET);
+  expect(JSON.stringify(prompts[2])).not.toContain(SECRET);
   const id = await saveWorld(body.id);
   expect(saveStore(savesDir).latestState(id).plotThreads).toEqual(["New The mayor is a drowned ghost."]);
 });
 
 test("a failed Regenerate keeps the world it would have replaced", async () => {
-  play(generated(), new Error("offline"), ...fits);
+  play(sheet, generated(), new Error("offline"));
   const { body } = await generate();
 
   expect((await game.post(`/worlds/${body.id}/regenerate`, choices)).status).toBe(502);
@@ -203,13 +200,13 @@ test("a failed Regenerate keeps the world it would have replaced", async () => {
 });
 
 test("a world that is not held can't be regenerated or saved, and a Save uses one up", async () => {
-  play(generated(), ...fits);
+  play(sheet, generated());
   expect((await game.post("/worlds/nothing/regenerate", choices)).status).toBe(404);
   expect(prompts).toHaveLength(0);
   const { body } = await generate();
   await saveWorld(body.id);
 
-  const again = await game.post("/saves", { worldId: body.id, worldBrief: "A drowned city", pc: { name: "Ash" } });
+  const again = await game.post(`/worlds/${body.id}/begin`, { artStyle: "" });
 
   expect(again.status).toBe(404);
   const { saves } = (await game.get("/saves").then((r) => r.json())) as { saves: unknown[] };
@@ -297,18 +294,17 @@ test("Enhance retries a Title too long for a cover", async () => {
   expect(prompts).toHaveLength(2);
 });
 
-test("Enhance needs words to work from, and a field it knows", async () => {
+test("Enhance needs a field it knows", async () => {
   play(JSON.stringify({ text: "Unused" }));
-  expect((await game.post("/enhance", { ...setup, field: "worldBrief", text: "   " })).status).toBe(400);
-  expect((await game.post("/enhance", { ...setup, field: "name", text: "Ash" })).status).toBe(400);
+  expect((await game.post("/enhance", { ...setup, field: "theme", text: "Ash" })).status).toBe(400);
   expect(prompts).toHaveLength(0);
 });
 
 test("nothing the player can fetch reveals the World Bible, Plot Threads or world_rules, from draft to Save", async () => {
   play(
+    sheet,
     generated(SECRET, { world_overview: "Rain never stops.", extra_notes: `${SECRET}unasked` }),
     generated(SECRET, { world_overview: "Rain falls." }),
-    ...fits,
     narration("The tide rises."),
   );
 
@@ -331,13 +327,13 @@ test("nothing the player can fetch reveals the World Bible, Plot Threads or worl
 });
 
 test("the Narrator plays a wizard Save from its world, and the world survives duplicate, export and import", async () => {
-  play(generated(), ...fits, narration("You read the charges."));
+  play(sheet, generated(), narration("You read the charges."));
   const { body } = await generate();
   const id = await saveWorld(body.id);
 
   await game.post(`/saves/${id}/turns`, { input: "I ask about the magistrates." });
 
-  const prompt = JSON.stringify(prompts[3]);
+  const prompt = JSON.stringify(prompts[2]);
   expect(prompt).toContain("Its judges drown the guilty.");
   expect(prompt).toContain("The mayor is a drowned ghost.");
   expect(prompt).toContain("Magic does not exist.");

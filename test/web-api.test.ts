@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import {
-  createSave,
+  beginStory,
   deleteSave,
   duplicateSave,
   generateWorld,
@@ -10,7 +10,6 @@ import {
   listSaves,
   enhance,
   pickForMe,
-  pickPc,
   playTurn,
   regenerateWorld,
   replaceResponse,
@@ -330,30 +329,29 @@ const worldReply = (overview: string) =>
 
 test("the wizard's calls carry a world from Pick for me to a Save", async () => {
   const sheet = JSON.stringify({ wearing: ["coat"], health: "unhurt", injuries: [], conditions: [] });
-  const replies = [JSON.stringify({ worldBrief: "A city on a whale.", title: "The Salt Reckoning" }), JSON.stringify({ text: "A vast city on a sleeping whale." }), worldReply("First."), worldReply("Second."), JSON.stringify({ skills: "Sailing" }), sheet, JSON.stringify({ world_update: null })];
+  const replies = [JSON.stringify({ worldBrief: "A city on a whale.", title: "The Salt Reckoning", skills: "Sailing" }), JSON.stringify({ text: "A vast city on a sleeping whale." }), sheet, worldReply("First."), worldReply("Second.")];
   start(async () => replies.shift()!);
 
-  const { worldBrief, title } = await pickForMe("Steampunk", { title: "", worldBrief: "" });
+  const pc = { name: "Ash", background: "B", physicalTraits: "T", skills: "", other: "O", inventory: "coat" };
+  const { worldBrief, title, skills } = await pickForMe("Steampunk", { title: "", worldBrief: "", pc });
   const choices = { title: title!, theme: "Steampunk", worldBrief: worldBrief!, startingHook: "" };
   const enhanced = await enhance("worldBrief", worldBrief!, choices);
-  const { id: world, overview } = await generateWorld(choices);
+  const { id: world, overview } = await generateWorld({ ...choices, pc: { name: "Ash" }, inventory: ["coat"] });
   const regenerated = await regenerateWorld(world, choices);
-  const picked = await pickPc(choices, { name: "Ash", background: "B", physicalTraits: "T", skills: "", other: "O", inventory: "coat" });
-  const { id, worldChanged } = await createSave({ worldId: world, worldBrief: worldBrief!, artStyle: "Ink", startingHook: "", pc: { name: "Ash" }, inventory: ["coat"] });
+  const { id } = await beginStory(world, "Ink");
 
   expect(worldBrief).toBe("A city on a whale.");
   expect(enhanced).toBe("A vast city on a sleeping whale.");
   expect(overview).toBe("First.");
   expect(regenerated.overview).toBe("Second.");
-  expect(picked).toEqual({ skills: "Sailing" });
-  expect(worldChanged).toBe(false);
+  expect(skills).toBe("Sailing");
   expect(await getSave(id)).toMatchObject({ worldBrief, artStyle: "Ink" });
 });
 
 test("a failed generation reaches the wizard as an error it can show", async () => {
   start(unreachable("offline"));
 
-  await expect(generateWorld({ title: "Dust", theme: "Western", worldBrief: "Dust", startingHook: "" })).rejects.toThrow(
+  await expect(generateWorld({ title: "Dust", theme: "Western", worldBrief: "Dust", startingHook: "", pc: { name: "Ash" }, inventory: [] })).rejects.toThrow(
     "The Text Provider request failed",
   );
 });

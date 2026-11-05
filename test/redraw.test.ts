@@ -254,14 +254,13 @@ const generated = JSON.stringify({
   plot_threads: ["A thread."],
 });
 const sheet = JSON.stringify({ wearing: [], health: "unhurt", injuries: [], conditions: [] });
-const noConflict = JSON.stringify({ world_update: null });
-const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "", artStyle: "Ink wash" };
+const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "", artStyle: "Ink wash", pc: { name: "Ash" } };
 
 const newWorld = async () => ((await (await game.post("/worlds", choices)).json()) as { id: string }).id;
 const coverOf = async (world: string) =>
-  (await game.get(`/worlds/${world}/cover/details`).then((r) => r.json())) as { prompt: string; hasCover: boolean; failure: string; canRedraw: boolean };
+  (await game.get(`/worlds/${world}/cover/details`).then((r) => r.json())) as { prompt: string; hasImage: boolean; failure: string; canRedraw: boolean };
 const accept = async (worldId: string) => {
-  const response = await game.post("/saves", { worldId, worldBrief: "A drowned city", startingHook: "", pc: { name: "Ash" }, inventory: [] });
+  const response = await game.post(`/worlds/${worldId}/begin`, { artStyle: choices.artStyle });
   return ((await response.json()) as { id: string }).id;
 };
 const storedCover = async (id: string) => {
@@ -273,11 +272,11 @@ const storedCover = async (id: string) => {
 };
 
 test("a world's cover can be redrawn from an edited prompt, which goes into the Save", async () => {
-  await play([generated, sheet, noConflict], png(1), png(2), png(3));
+  await play([sheet, generated], png(1), png(2), png(3));
   const world = await newWorld();
 
   const details = await coverOf(world);
-  expect(details).toMatchObject({ hasCover: true, failure: "", canRedraw: true });
+  expect(details).toMatchObject({ hasImage: true, failure: "", canRedraw: true });
   expect(details.prompt).toContain("Rain never stops in Saltmere.");
 
   expect((await game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" })).status).toBe(200);
@@ -295,12 +294,12 @@ test("a world's cover can be redrawn from an edited prompt, which goes into the 
 });
 
 test("a failed cover keeps its prompt for a retry, and a failed Redraw keeps the old cover", async () => {
-  await play([generated], new Error("The model is busy"), png(1), new Error("Still busy"));
+  await play([sheet, generated], new Error("The model is busy"), png(1), new Error("Still busy"));
   const world = await newWorld();
 
-  expect(await coverOf(world)).toMatchObject({ hasCover: false, failure: "The model is busy" });
+  expect(await coverOf(world)).toMatchObject({ hasImage: false, failure: "The model is busy" });
   expect((await game.post(`/worlds/${world}/cover`, { prompt: (await coverOf(world)).prompt })).status).toBe(200);
-  expect(await coverOf(world)).toMatchObject({ hasCover: true, failure: "" });
+  expect(await coverOf(world)).toMatchObject({ hasImage: true, failure: "" });
 
   const failed = await game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" });
   expect(failed.status).toBe(502);
@@ -312,7 +311,7 @@ test("a failed cover keeps its prompt for a retry, and a failed Redraw keeps the
 test("Accept during a Cover Redraw takes the result, or the old cover if it fails", async () => {
   let fail = (_: Error) => {};
   const failing = new Promise<never>((_, reject) => (fail = reject));
-  await play([generated, sheet, noConflict], png(1), failing, png(9));
+  await play([sheet, generated], png(1), failing, png(9));
   const world = await newWorld();
   const details = await coverOf(world);
 
@@ -328,21 +327,21 @@ test("Accept during a Cover Redraw takes the result, or the old cover if it fail
 });
 
 test("a cover Redraw is refused with images off, and a world with no cover drawn has nothing to retry", async () => {
-  await play([generated], png(1));
+  await play([sheet, generated], png(1));
   await game.patch("/settings", { imagesEnabled: false });
   const world = await newWorld();
 
-  expect(await coverOf(world)).toMatchObject({ hasCover: false, failure: "", canRedraw: false });
+  expect(await coverOf(world)).toMatchObject({ hasImage: false, failure: "", canRedraw: false });
   expect((await game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" })).status).toBe(409);
   expect((await game.post(`/worlds/nowhere/cover`, { prompt: "A lighthouse" })).status).toBe(404);
 });
 
-test("regenerating a world replaces a cover's edited prompt", async () => {
-  await play([generated, generated], png(1), png(2), png(3));
+test("regenerating a world keeps a cover's edited prompt", async () => {
+  await play([sheet, generated, generated], png(1), png(2));
   const world = await newWorld();
   await game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" });
 
   await game.post(`/worlds/${world}/regenerate`, choices);
 
-  expect((await coverOf(world)).prompt).toContain("Rain never stops in Saltmere.");
+  expect((await coverOf(world)).prompt).toBe("A lighthouse");
 });

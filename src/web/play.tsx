@@ -141,7 +141,7 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
   return { more, room, onScroll, refit };
 }
 
-export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }) {
+export function Play({ id }: { id: string }) {
   const [save, setSave] = useState<OpenSave>();
   const [topOpen, setTopOpen] = useState(false);
   const [folded, setFolded] = useState(leftFolded);
@@ -527,9 +527,6 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
             onScroll={onScroll}
           >
             <div>
-              {worldChanged && told.length < 2 && (
-                <p className="notice">{pc} didn't fit the world as it stood, so the world has changed to fit them.</p>
-              )}
               {messages.length === 0 && !turn && (
                 <>
                   <p className="muted">{save.startingHook || "The page is blank."}</p>

@@ -10,7 +10,11 @@ type Npc = State["npcs"][number];
 export type Scene = { changed: boolean; moved: boolean; description: string; location: string; npcs: Npc[]; wearing: string[]; portraits: Npc[] };
 /** A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. */
 type Job = { messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string };
-type Cover = { title: string; theme: string; overview: string };
+/** `world` is what the player can read of it: the World Overview, or the World Brief before there is one. */
+type Cover = { title: string; theme: string; world: string };
+export type ImageKind = "cover" | "portrait";
+/** An image held for a world with no Save yet. */
+export type EarlyImage = { prompt: string; bytes?: Uint8Array<ArrayBuffer> };
 /**
  * At most one image draws per Save. Portraits and Redraws go first, so a Scene Image can use them, and all of them wait
  * their turn, as each was asked for once. Of the scenes only the newest waits, so a run of quick Turns pays for two images.
@@ -43,10 +47,11 @@ export function portraitsDue(before: State, after: State) {
   return [...new Set(due)].flatMap((name) => after.npcs.filter((npc) => npc.name === name));
 }
 
-const pcLooks = ({ name, physicalTraits = "" }: Save["pc"], wearing: string[]) =>
-  [physicalTraits.trim().replace(/\s*\n\s*/g, " ").replace(/\.$/, "").replaceAll(name, "this person"), wearing.length > 0 && `wearing ${wearing.join(", ")}`]
-    .filter(Boolean)
-    .join(", ");
+function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: string[]) {
+  const traits = physicalTraits.trim().replace(/\s*\n\s*/g, " ").replace(/\.$/, "");
+  // A PC on the form may have no name yet, and an empty search would match between every letter.
+  return [name ? traits.replaceAll(name, "this person") : traits, wearing.length > 0 && `wearing ${wearing.join(", ")}`].filter(Boolean).join(", ");
+}
 
 // Longer stored looks would crowd out the scene, as a player can write as much as they like for their PC.
 const MOST_LOOKS_WORDS = 60;
@@ -92,8 +97,8 @@ const portraitPrompt = (looks: string, style: PromptStyle) =>
 
 type Role = ImagePayload["reference_images"][number]["role"];
 
-export const coverPrompt = ({ title, theme, overview }: Cover) =>
-  `The front cover of a novel, one striking image of its world's mood and subject, not a moment from the story. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly, and it must be the only lettering on the cover: ${JSON.stringify(title)}\nTheme: ${theme}\nThe world: ${overview}`;
+export const coverPrompt = ({ title, theme, world }: Cover) =>
+  `The front cover of a novel, one striking image of its world's mood and subject, not a moment from the story. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly, and it must be the only lettering on the cover: ${JSON.stringify(title)}\nTheme: ${theme}\nThe world: ${world}`;
 
 const coverPayload = (prompt: string, style_preset: string): ImagePayload => ({
   prompt,
@@ -169,7 +174,9 @@ export function imagePipeline(
     saves.addSceneImage(id, messageId, location, bytes, prompt, pictured);
   }
 
-  async function drawPortrait(id: string, messageId: number, npc: Npc | undefined, signal: AbortSignal) {
+  async function drawPortrait(id: string, messageId: number, npc: Npc | undefined, signal: AbortSignal, early?: Promise<EarlyImage>) {
+    const held = await early;
+    if (held?.bytes) return saves.addPortrait(id, messageId, null, held.bytes, held.prompt);
     // shortcut: a person keeps their first portrait when update_npc changes their looks, redraw if that shows in play.
     const name = npc?.name ?? null;
     const { pc, artStyle } = saves.read(id);
@@ -226,24 +233,27 @@ export function imagePipeline(
     void drain(id, jobs);
   }
 
-  const portraitJob = (id: string, messageId: number, npc?: Npc): Job => ({
+  const portraitJob = (id: string, messageId: number, npc?: Npc, early?: Promise<EarlyImage>): Job => ({
     messageId,
-    draw: (signal) => drawPortrait(id, messageId, npc, signal),
+    draw: (signal) => drawPortrait(id, messageId, npc, signal, early),
   });
 
   return {
     ready: () => Boolean(ready()),
 
     /**
-     * A story's cover, for a world that has no Save yet. Its prompt holds only what the player reads, as nothing here
-     * knows the World Bible. Undefined when images are off, and a failure is the caller's to report.
+     * A Cover or the PC's portrait, for a world that has no Save yet. Its prompt holds only what the player reads, as
+     * nothing here knows the World Bible. Undefined when images are off, and a failure is the caller's to report.
      */
-    async drawCover(prompt: string, artStyle: string, signal: AbortSignal) {
+    async drawEarly(kind: ImageKind, prompt: string, artStyle: string, signal: AbortSignal) {
       if (!ready()) return undefined;
-      const bytes = await adapter(coverPayload(prompt, artStyle), signal);
+      const bytes = await adapter((kind === "cover" ? coverPayload : portraitPayload)(prompt, artStyle), signal);
       session++;
       return bytes;
     },
+
+    /** Empty for a PC with no physical traits, who gets no portrait. */
+    pcPortraitPrompt: (pc: Save["pc"], wearing: string[]) => (pc.physicalTraits?.trim() ? portraitPrompt(pcLooks(pc, wearing), promptStyle(settings.read())) : ""),
 
     /** False when that image is already being redrawn. Jobs live in memory, so stopping the server loses this one too, and the old image stands. */
     redraw(id: string, target: ImageTarget, messageId: number, prompt: string) {
@@ -269,9 +279,12 @@ export function imagePipeline(
       return { redrawing: isRedrawing(id, key), failure: failures.get(key) ?? "" };
     },
 
-    /** The PC's portrait outlives every Revert, so no Message holds it. Nothing here may delay the new Save. */
-    saveCreated(id: string) {
-      enqueue(id, (jobs) => jobs.queue.push(portraitJob(id, OPENING_SNAPSHOT)));
+    /**
+     * The PC's portrait outlives every Revert, so no Message holds it. Nothing here may delay the new Save. An `early`
+     * portrait waits in the queue, so a Turn can neither draw a second nor miss it as a reference. If it came to nothing, one is drawn.
+     */
+    saveCreated(id: string, early?: Promise<EarlyImage>) {
+      enqueue(id, (jobs) => jobs.queue.push(portraitJob(id, OPENING_SNAPSHOT, undefined, early)));
     },
 
     /**
