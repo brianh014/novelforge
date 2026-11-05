@@ -142,6 +142,8 @@ async function turnResponse(req: Request, run: (emit?: TurnEvents) => Promise<Me
       try {
         send("done", { messages: await run(send) });
       } catch (error) {
+        // In this log, as the client's copy is gone once the page moves on, and it may repeat the story.
+        if (!req.signal.aborted) console.error("A Turn failed:", error);
         const response = errorResponse(error);
         send("error", { status: response.status, ...((await response.json()) as object) });
       }

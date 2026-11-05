@@ -725,12 +725,20 @@ a.action {
 
 /* The story */
 
+.story-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .story {
   flex: 1;
   min-height: 0;
   overflow: auto;
   display: flex;
-  /* Keeps the newest text pinned to the bottom without leaving someone who scrolled back. */
+  /* Keeps the newest text pinned to the bottom, until a response fills the view (see useResponseScroll). */
   flex-direction: column-reverse;
   /* Room for a focus ring, which this scroller would otherwise clip. */
   padding-inline: 4px;

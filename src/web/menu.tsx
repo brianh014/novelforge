@@ -43,19 +43,17 @@ export function Fold({ children, view }: { children: ReactNode; view?: unknown }
       <div ref={scroller} className="sheet-scroll">
         <div className="sheet-body">{children}</div>
       </div>
-      {more && (
-        <div className="more-below">
-          <button
-            type="button"
-            className="icon"
-            title="More below"
-            aria-label="More below"
-            onClick={() => scroller.current!.scrollBy({ top: scroller.current!.clientHeight * 0.8 })}
-          >
-            {DownIcon}
-          </button>
-        </div>
-      )}
+      {more && <MoreBelow onClick={() => scroller.current!.scrollBy({ top: scroller.current!.clientHeight * 0.8 })} />}
+    </div>
+  );
+}
+
+export function MoreBelow({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="more-below">
+      <button type="button" className="icon" title="More below" aria-label="More below" onClick={onClick}>
+        {DownIcon}
+      </button>
     </div>
   );
 }

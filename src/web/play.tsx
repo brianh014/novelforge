@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, useEffect, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   coverUrl,
   decideForMe,
@@ -28,11 +28,10 @@ import {
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { DecideIcon, DownIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
-import { Book, BookTabs, Fold } from "./menu";
+import { Book, BookTabs, Fold, MoreBelow } from "./menu";
+import { type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
 
-// Text from a Turn cut short by leaving the screen, to put back in the box on return.
-const unsent = new Map<string, string>();
 // An item's action, which the Story plays as a Turn once it has loaded, so it streams like any other.
 const itemActions = new Map<string, string>();
 
@@ -63,6 +62,47 @@ export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
   event.currentTarget.form!.requestSubmit();
 }
 
+/**
+ * A new Turn snaps the player's words to the top of the story, and the response streams in below them, held there to
+ * read at the player's pace. Blank room under the text lets a short Turn reach the top, and shrinks as text takes its
+ * place, so nothing moves. The story's reversed layout means a scrollTop of 0 is the bottom.
+ */
+function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, latestId: number | undefined) {
+  const [more, setMore] = useState(false);
+  const room = useRef<HTMLDivElement>(null);
+  const following = useRef(false);
+  const inTurn = useRef(false);
+  const startedOn = useRef(latestId);
+
+  const checkMore = () => setMore(!!room.current && -story.current!.scrollTop > 8);
+
+  useLayoutEffect(() => {
+    const area = story.current;
+    if (turn && !inTurn.current) {
+      following.current = true;
+      startedOn.current = latestId;
+    }
+    inTurn.current = !!turn;
+    if (area && room.current) {
+      // A failed Turn has no words of its own left to hold, and neither has a Revert.
+      if (turn || (following.current && latestId !== startedOn.current)) {
+        // The Opening has no player words, and starts at the top.
+        const anchor = [...area.querySelectorAll(".message.player")].at(-1) ?? area.querySelector(".message.narrator")!;
+        const textHeight = room.current.getBoundingClientRect().top - anchor.getBoundingClientRect().top;
+        room.current.style.height = `${Math.max(0, area.clientHeight - textHeight)}px`;
+        const fromAnchor = area.firstElementChild!.getBoundingClientRect().bottom - anchor.getBoundingClientRect().top;
+        if (following.current) area.scrollTop = -Math.max(0, fromAnchor - area.clientHeight);
+      } else {
+        room.current.style.height = "0";
+      }
+    }
+    if (!turn) following.current = false;
+    checkMore();
+  }, [turn, latestId]);
+
+  return { more, room, checkMore, stopFollowing: () => (following.current = false) };
+}
+
 export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }) {
   const [save, setSave] = useState<OpenSave>();
   const [topOpen, setTopOpen] = useState(false);
@@ -74,7 +114,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const [journal, setJournal] = useState<Journal>();
   // Unset until the player moves, so that each new response opens on its first beat.
   const [chosenBeat, setChosenBeat] = useState<number>();
-  const [draft, setDraft] = useState(unsent.get(id) ?? "");
+  const [draft, setDraft] = useState("");
   const [turn, setTurn] = useState<TurnInProgress>();
   const [deciding, setDeciding] = useState(false);
   // The response being rewritten, by id, so the box goes if the story moves on from it.
@@ -86,14 +126,23 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const [reverting, setReverting] = useState<Message>();
   const inputBox = useRef<HTMLTextAreaElement>(null);
   const story = useRef<HTMLDivElement>(null);
+  const { more, room, checkMore, stopFollowing } = useTurnScroll(story, turn, messages.at(-1)?.id);
   const rewriteButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(new AbortController());
+  const unwatchTurn = useRef(() => {});
   const imageCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
   const duplicating = useRef(false);
 
   useEffect(() => {
     const action = itemActions.get(id);
     itemActions.delete(id);
+    // Taken now, as it may finish while the page loads, and its Messages must not be missed.
+    const inProgress = runningTurn(id);
+    const missed = takeMissedFailure(id);
+    if (missed) {
+      setError(missed.error);
+      setDraft(missed.input);
+    }
     // Without Settings the story still reads, in Prose.
     const reading = getSettings().catch(() => undefined);
     Promise.all([getSave(id), getMessages(id), getStatus(id), reading]).then(([save, messages, status, settings]) => {
@@ -104,13 +153,18 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       setSave(save);
       setMessages(messages);
       setStatus(status);
-      if (action) playInput(action, messages);
+      if (inProgress) {
+        // One Turn at a time, so an item used meanwhile waits in the box.
+        if (action) setDraft(action);
+        follow(inProgress);
+      } else if (action) playInput(action, messages);
       // Without a working Narrator this would only fail, and the page already says what to fix.
       else if (messages.length === 0 && settings && !setupProblem(settings)) openStory();
     }, (failure: Error) => setLoadError(failure.message));
     checkImages();
     return () => {
       leaving.current.abort();
+      unwatchTurn.current();
       clearTimeout(imageCheck.current);
     };
   }, [id]);
@@ -129,7 +183,6 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   function send(event: FormEvent) {
     event.preventDefault();
     if (turn || !draft.trim()) return;
-    unsent.delete(id);
     setDraft("");
     playInput(draft, messages);
   }
@@ -194,37 +247,32 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
     );
   }
 
-  async function run(
-    started: TurnInProgress,
-    before: Message[],
-    play: (show: (narration: string) => void, signal: AbortSignal) => Promise<TurnResult>,
-  ) {
-    const { replaces } = started;
-    let streamed = false;
+  function run(started: TurnInProgress, before: Message[], play: Parameters<typeof startTurn>[2]) {
     setError("");
     setAnnouncement("");
     setRewriting(undefined);
     setChosenBeat(undefined);
-    setTurn(started);
-    const show = (narration: string) => {
-      streamed = true;
-      setTurn({ ...started, narration });
-    };
-    const { signal } = leaving.current;
-    const result = await play(show, signal);
-    setTurn(undefined);
+    follow(startTurn(id, started, play), before);
+  }
+
+  /** Shows a running Turn, which goes on without this screen. With no `before`, it was started on an earlier visit. */
+  async function follow(running: RunningTurn, before?: Message[]) {
+    unwatchTurn.current = running.watch(setTurn);
+    const result = await running.finished;
+    if (leaving.current.signal.aborted) return;
+    unwatchTurn.current();
+    const { replaces, narration } = running.turn;
     if ("messages" in result) {
+      const latest = before ? [...before, ...result.messages] : await getMessages(id).catch(() => result.messages);
+      setTurn(undefined);
       setFeedback("");
-      setMessages([...before, ...result.messages]);
+      setMessages(latest);
       // Streamed text was already read out by the live region, and the Message list isn't live.
-      if (!streamed) setAnnouncement(result.messages.at(-1)!.text);
+      if (!narration) setAnnouncement(result.messages.at(-1)!.text);
     } else {
-      if (replaces) {
-        setRewriting(result.input ? replaces.id : undefined);
-      } else {
-        if (signal.aborted) unsent.set(id, result.input);
-        setDraft(result.input);
-      }
+      setTurn(undefined);
+      if (replaces) setRewriting(result.input ? replaces.id : undefined);
+      else setDraft(result.input);
       setError(result.error);
       // A stale Turn means the story moved on without this page.
       getMessages(id).then(setMessages, () => {});
@@ -375,38 +423,61 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
           {(message) => sceneImage(message && images.images.findLast(({ messageId }) => messageId <= message.id))}
         </StageBox>
       ) : (
-        <div ref={story} className={`story chat-${chatStyle}`} tabIndex={0} role="region" aria-label="Story">
-          <div>
-            {worldChanged && told.length < 2 && (
-              <p className="notice">{pc} didn't fit the world as it stood, so the world has changed to fit them.</p>
-            )}
-            {messages.length === 0 && !turn && (
-              <>
-                <p className="muted">{save.startingHook || "The page is blank."}</p>
-                <button className="quiet" onClick={openStory}>
-                  Have the Narrator open the story
-                </button>
-              </>
-            )}
-            {told.map((message) => (
-              <div key={message.id} className={`message ${message.role}`}>
-                {messageBeats(message).map(line)}
-                {controls(message)}
+        <div className="story-view">
+          <div
+            ref={story}
+            className={`story chat-${chatStyle}`}
+            tabIndex={0}
+            role="region"
+            aria-label="Story"
+            onScroll={checkMore}
+            onWheel={stopFollowing}
+            onTouchMove={stopFollowing}
+            onPointerDown={stopFollowing}
+            onKeyDown={stopFollowing}
+          >
+            <div>
+              {worldChanged && told.length < 2 && (
+                <p className="notice">{pc} didn't fit the world as it stood, so the world has changed to fit them.</p>
+              )}
+              {messages.length === 0 && !turn && (
+                <>
+                  <p className="muted">{save.startingHook || "The page is blank."}</p>
+                  <button className="quiet" onClick={openStory}>
+                    Have the Narrator open the story
+                  </button>
+                </>
+              )}
+              {told.map((message) => (
+                <div key={message.id} className={`message ${message.role}`}>
+                  {messageBeats(message).map(line)}
+                  {controls(message)}
+                </div>
+              ))}
+              {turn?.input && !turn.replaces && (
+                <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>
+              )}
+              {/* Mounted before any text arrives, or screen readers would not announce it. */}
+              <div aria-live="polite" className="message narrator">
+                {turn &&
+                  (turn.narration ? (
+                    messageBeats({ role: "narrator", text: turn.narration }).map(line)
+                  ) : (
+                    <p className="waiting">{WRITING}</p>
+                  ))}
               </div>
-            ))}
-            {turn?.input && !turn.replaces && (
-              <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>
-            )}
-            {/* Mounted before any text arrives, or screen readers would not announce it. */}
-            <div aria-live="polite" className="message narrator">
-              {turn &&
-                (turn.narration ? (
-                  messageBeats({ role: "narrator", text: turn.narration }).map(line)
-                ) : (
-                  <p className="waiting">{WRITING}</p>
-                ))}
+              <div ref={room} aria-hidden="true" />
             </div>
           </div>
+          {more && (
+            <MoreBelow
+              onClick={() => {
+                stopFollowing();
+                // The story's reversed layout puts its newest text at 0.
+                story.current!.scrollTo({ top: 0 });
+              }}
+            />
+          )}
         </div>
       )}
       <div className="visually-hidden" aria-live="polite">
