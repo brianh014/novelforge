@@ -47,10 +47,10 @@ export const IMAGE_CHECK_MS = 2000;
 
 const WRITING = "The Narrator is writing…";
 
-export function SceneImage({ id, image }: { id: string; image: SceneImageInfo }) {
+export function SceneImage({ id, image, onLoad }: { id: string; image: SceneImageInfo; onLoad?: () => void }) {
   return (
     <figure className="plate">
-      <Zoomable lazy src={imageUrl(id, image)} alt={image.caption ? `Scene Image: ${image.caption}` : "Scene Image"} />
+      <Zoomable lazy src={imageUrl(id, image)} alt={image.caption ? `Scene Image: ${image.caption}` : "Scene Image"} onLoad={onLoad} />
       {image.caption && <figcaption aria-hidden="true">{image.caption}</figcaption>}
     </figure>
   );
@@ -67,40 +67,64 @@ export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
  * read at the player's pace. Blank room under the text lets a short Turn reach the top, and shrinks as text takes its
  * place, so nothing moves. The story's reversed layout means a scrollTop of 0 is the bottom.
  */
-function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, latestId: number | undefined) {
+function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, latestId: number | undefined, inlineCount: number) {
   const [more, setMore] = useState(false);
   const room = useRef<HTMLDivElement>(null);
   const following = useRef(false);
+  const held = useRef(0);
   const inTurn = useRef(false);
   const startedOn = useRef(latestId);
+  // The response the blank room belongs to, which stays for images that land under it after the Turn.
+  const heldOn = useRef<number | undefined>(undefined);
 
   const checkMore = () => setMore(!!room.current && -story.current!.scrollTop > 8);
 
+  // Only a move this code didn't make is the player's: a tap, or a wheel with nowhere to go, leaves the hold alone.
+  function onScroll() {
+    if (Math.abs(story.current!.scrollTop - held.current) > 2) following.current = false;
+    checkMore();
+  }
+
+  /** Sizes the room to what the text leaves, so a change below the words takes room from it instead of moving them. */
+  function fitRoom(area: HTMLElement) {
+    // The Opening has no player words, and starts at the top.
+    const anchor = [...area.querySelectorAll(".message.player")].at(-1) ?? area.querySelector(".message.narrator")!;
+    const textHeight = room.current!.getBoundingClientRect().top - anchor.getBoundingClientRect().top;
+    room.current!.style.height = `${Math.max(0, area.clientHeight - textHeight)}px`;
+    return anchor;
+  }
+
   useLayoutEffect(() => {
     const area = story.current;
-    if (turn && !inTurn.current) {
+    const wasInTurn = inTurn.current;
+    if (turn && !wasInTurn) {
       following.current = true;
       startedOn.current = latestId;
     }
     inTurn.current = !!turn;
     if (area && room.current) {
-      // A failed Turn has no words of its own left to hold, and neither has a Revert.
-      if (turn || (following.current && latestId !== startedOn.current)) {
-        // The Opening has no player words, and starts at the top.
-        const anchor = [...area.querySelectorAll(".message.player")].at(-1) ?? area.querySelector(".message.narrator")!;
-        const textHeight = room.current.getBoundingClientRect().top - anchor.getBoundingClientRect().top;
-        room.current.style.height = `${Math.max(0, area.clientHeight - textHeight)}px`;
+      if (wasInTurn && !turn && latestId !== startedOn.current) heldOn.current = latestId;
+      // The room stays once a response ends, but a Revert leaves it nothing to hold.
+      if (turn || latestId === heldOn.current) {
+        const anchor = fitRoom(area);
         const fromAnchor = area.firstElementChild!.getBoundingClientRect().bottom - anchor.getBoundingClientRect().top;
-        if (following.current) area.scrollTop = -Math.max(0, fromAnchor - area.clientHeight);
+        if (following.current) {
+          area.scrollTop = -Math.max(0, fromAnchor - area.clientHeight);
+          held.current = area.scrollTop;
+        }
       } else {
         room.current.style.height = "0";
       }
     }
     if (!turn) following.current = false;
     checkMore();
-  }, [turn, latestId]);
+  }, [turn, latestId, inlineCount]);
 
-  return { more, room, checkMore, stopFollowing: () => (following.current = false) };
+  const refit = () => {
+    if (latestId === heldOn.current) fitRoom(story.current!);
+  };
+
+  return { more, room, onScroll, refit };
 }
 
 export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }) {
@@ -126,7 +150,8 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   const [reverting, setReverting] = useState<Message>();
   const inputBox = useRef<HTMLTextAreaElement>(null);
   const story = useRef<HTMLDivElement>(null);
-  const { more, room, checkMore, stopFollowing } = useTurnScroll(story, turn, messages.at(-1)?.id);
+  const inlineCount = images.images.length + (journal?.portraits.length ?? 0);
+  const { more, room, onScroll, refit } = useTurnScroll(story, turn, messages.at(-1)?.id, inlineCount);
   const rewriteButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(new AbortController());
   const unwatchTurn = useRef(() => {});
@@ -308,6 +333,30 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
 
   const picture = !staged && (sceneImage() || cover);
 
+  /** Folded in the story under the response they came with, for a phone, which has no room for them beside it. */
+  const inlineImages = (message: Message) => {
+    const image = images.images.find(({ messageId }) => messageId === message.id);
+    return (
+      <>
+        {image && (
+          <details className="inline-image" onToggle={refit}>
+            <summary>Picture{image.caption && `: ${image.caption}`}</summary>
+            {/* Only an open row loads its picture, and only then is its height known. */}
+            <SceneImage id={id} image={image} onLoad={refit} />
+          </details>
+        )}
+        {portraits
+          .filter(({ npc, messageId }) => npc && messageId === message.id)
+          .map((portrait) => (
+            <details key={portrait.id} className="inline-image" onToggle={refit}>
+              <summary>Portrait: {portrait.npc}</summary>
+              <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={portrait.npc!} onLoad={refit} />
+            </details>
+          ))}
+      </>
+    );
+  };
+
   const line = (beat: Beat, key: number) => {
     const portrait = portraitOf(beat.speaker);
     return <BeatLine key={key} beat={beat} style={chatStyle} pc={pc} face={portrait && portraitUrl(id, portrait)} />;
@@ -430,11 +479,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
             tabIndex={0}
             role="region"
             aria-label="Story"
-            onScroll={checkMore}
-            onWheel={stopFollowing}
-            onTouchMove={stopFollowing}
-            onPointerDown={stopFollowing}
-            onKeyDown={stopFollowing}
+            onScroll={onScroll}
           >
             <div>
               {worldChanged && told.length < 2 && (
@@ -451,6 +496,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
               {told.map((message) => (
                 <div key={message.id} className={`message ${message.role}`}>
                   {messageBeats(message).map(line)}
+                  {inlineImages(message)}
                   {controls(message)}
                 </div>
               ))}
@@ -470,13 +516,8 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
             </div>
           </div>
           {more && (
-            <MoreBelow
-              onClick={() => {
-                stopFollowing();
-                // The story's reversed layout puts its newest text at 0.
-                story.current!.scrollTo({ top: 0 });
-              }}
-            />
+            // The story's reversed layout puts its newest text at 0.
+            <MoreBelow onClick={() => story.current!.scrollTo({ top: 0 })} />
           )}
         </div>
       )}

@@ -56,7 +56,35 @@ export function PromptBox({
   );
 }
 
-/** An image of a Save, which opens larger with its prompt. `onRedrawn` is for reading the Gallery again, as drawing goes on in the background. */
+/** Keeps a viewed picture clear of its prompt until asked. It stays open to show a Redraw under way or failed, and shuts with the dialog. */
+export function RedrawPanel({ busy, children }: { busy: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const dialog = panel.current!.closest("dialog")!;
+    const shut = () => setOpen(false);
+    dialog.addEventListener("close", shut);
+    return () => dialog.removeEventListener("close", shut);
+  }, []);
+  const shown = open || busy;
+  return (
+    <>
+      {!shown && (
+        <div className="row">
+          <button type="button" className="action" onClick={() => setOpen(true)}>
+            Redraw…
+          </button>
+        </div>
+      )}
+      {/* Hidden rather than removed, so a dialog closed and opened again keeps what was typed. */}
+      <div ref={panel} className="redraw-panel" hidden={!shown}>
+        {children}
+      </div>
+    </>
+  );
+}
+
+/** An image of a Save, which opens larger with its prompt behind a button. `onRedrawn` is for reading the Gallery again, as drawing goes on in the background. */
 export function RedrawableImage({
   id,
   image,
@@ -77,13 +105,15 @@ export function RedrawableImage({
   };
   return (
     <Zoomable lazy src={galleryUrl(id, image)} alt={alt}>
-      <PromptBox
-        prompt={image.prompt}
-        redrawing={image.redrawing}
-        failure={image.failure || refused}
-        canRedraw={canRedraw}
-        onRedraw={redraw}
-      />
+      <RedrawPanel busy={image.redrawing || !!image.failure || !!refused}>
+        <PromptBox
+          prompt={image.prompt}
+          redrawing={image.redrawing}
+          failure={image.failure || refused}
+          canRedraw={canRedraw}
+          onRedraw={redraw}
+        />
+      </RedrawPanel>
     </Zoomable>
   );
 }

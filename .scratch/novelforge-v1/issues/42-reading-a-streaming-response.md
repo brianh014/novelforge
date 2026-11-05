@@ -17,3 +17,4 @@
 - **Asked for by the user (2026-11-04):** first, stop following once the response fills the view. Then, after trying that, snap their own words to the top instead.
 - Measured in headless Chrome with a fake streaming text server, in Prose at desktop and phone widths. Bubbles used the earlier version of this behaviour and hasn't been run since the snap. iOS Safari hasn't been run.
 - A Turn that finishes while the player is away opens at the end of the response on return, like any page load, not at their words.
+- **Reported by the user (2026-11-04):** the view still snapped to the bottom as a response ended. A tap or wheel in the story during a Turn stopped the following, and the end of that Turn then removed the blank room, so the text dropped to the bottom. Now only a real scroll stops the following, and the room stays either way.

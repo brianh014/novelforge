@@ -359,6 +359,10 @@ h2 {
   display: contents;
 }
 
+.inline-image {
+  display: none;
+}
+
 .icon.story-toggle {
   display: none;
 }
@@ -836,7 +840,7 @@ a.action {
 }
 
 /* The prompt shares the dialog with its image. */
-.viewer:has(.prompt-box) img {
+.viewer:has(.redraw-panel:not([hidden])) img {
   max-height: 55dvh;
 }
 
@@ -1520,6 +1524,25 @@ dialog blockquote {
 
   .story-top:not(.open) {
     display: none;
+  }
+
+  /* Pictures are out of sight here, so each sits folded in the story where it happened. */
+  .inline-image {
+    display: block;
+    margin-block: 6px;
+    color: var(--muted);
+    font: 400 14px var(--label);
+  }
+
+  .inline-image summary {
+    cursor: pointer;
+    min-height: 32px;
+    align-content: center;
+  }
+
+  .inline-image .portrait {
+    width: 120px;
+    height: 120px;
   }
 
   .icon.story-toggle {

@@ -101,17 +101,17 @@ export function imagePipeline(
   }
 
   /** Identity comes first when a model takes few references. A Scene Image is what the PC sees, so the PC is rarely in it. */
-  const references = (id: string, messageId: number, visible: Npc[]) => [
+  const references = (id: string, messageId: number, location: string, visible: Npc[]) => [
     ...visible.flatMap(({ name }) => reference("npc", saves.portraitOf(id, name))),
-    ...reference("previous_scene", saves.previousSceneImage(id, messageId)),
+    ...reference("previous_scene", saves.previousSceneImage(id, messageId, location)),
     ...reference("pc", saves.portraitOf(id, null)),
   ];
 
-  const scenePayload = (id: string, messageId: number, prompt: string, visible: Npc[]): ImagePayload => ({
+  const scenePayload = (id: string, messageId: number, prompt: string, location: string, visible: Npc[]): ImagePayload => ({
     prompt,
     negative_prompt: AVOID,
     aspect_ratio: "16:9",
-    reference_images: references(id, messageId, visible),
+    reference_images: references(id, messageId, location, visible),
     style_preset: saves.read(id).artStyle,
   });
 
@@ -119,7 +119,7 @@ export function imagePipeline(
     const looks = visible.map(({ appearance }) => appearance).filter(Boolean);
     // Looks without names, as a model may letter a name into the picture.
     const prompt = looks.length > 0 ? `${description}\nPeople in view: ${looks.join("; ")}` : description;
-    const bytes = await adapter(scenePayload(id, messageId, prompt, visible), signal);
+    const bytes = await adapter(scenePayload(id, messageId, prompt, location, visible), signal);
     // Counted before storing, as the player has paid for it whether or not its Message is still there.
     session++;
     saves.addSceneImage(id, messageId, location, bytes, prompt);
@@ -139,7 +139,10 @@ export function imagePipeline(
 
   /** The same kind of request that made the image, so only the prompt, the Art Style and the Settings can differ. */
   function redrawPayload(id: string, { kind, ref }: ImageTarget, prompt: string) {
-    if (kind === "scene") return scenePayload(id, ref, prompt, visibleNpcs(saves.snapshot(id, ref)));
+    if (kind === "scene") {
+      const state = saves.snapshot(id, ref);
+      return scenePayload(id, ref, prompt, state.scene.location, visibleNpcs(state));
+    }
     return (kind === "cover" ? coverPayload : portraitPayload)(prompt, saves.read(id).artStyle);
   }
 

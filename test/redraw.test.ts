@@ -87,7 +87,7 @@ test("the Gallery lists the PC, known NPCs and Scene Images with their prompts, 
 
 test("redrawing a Scene Image replaces only it, with its shape, references and the current Art Style", async () => {
   await play(
-    [turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("A dry street", scene("The pier", "Hesper"))],
+    [turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("A dry street", scene("The ferry", "Hesper"))],
     png(1),
     png(2),
     png(3),

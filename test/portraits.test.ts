@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ImageAdapter } from "../src/image-adapter";
 import { png, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
 
-type Journal = { npcs: string[]; portraits: { id: number; npc: string | null; redraws: number }[] };
+type Journal = { npcs: string[]; portraits: { id: number; npc: string | null; redraws: number; messageId: number }[] };
 type Images = { images: { messageId: number }[]; pending: boolean; session: number };
 
 let folder: ReturnType<typeof tempFolder>;
@@ -77,7 +77,7 @@ test("an NPC gets a portrait on entering the visible cast, not on being added, a
 
   expect(portraitPrompts()).toHaveLength(1);
   expect(portraitPrompts()[0]).toContain("Tall, in oilskins");
-  expect((await journalOf(id)).portraits).toEqual([{ id: expect.any(Number), npc: "Hesper", redraws: 0 }]);
+  expect((await journalOf(id)).portraits).toEqual([{ id: expect.any(Number), npc: "Hesper", redraws: 0, messageId: expect.any(Number) }]);
 });
 
 test("a portrait is served as an image, read from its bytes", async () => {
@@ -106,7 +106,7 @@ test("a visible NPC the PC doesn't know yet has a portrait no route will show", 
 
   await playSettled(id);
   const { portraits } = await journalOf(id);
-  expect(portraits).toEqual([{ id: 1, npc: "MARKER-STRANGER", redraws: 0 }]);
+  expect(portraits).toEqual([{ id: 1, npc: "MARKER-STRANGER", redraws: 0, messageId: expect.any(Number) }]);
   expect(await game.get(`/saves/${id}/portraits/1`).then((r) => r.bytes())).toEqual(png(1));
 });
 
@@ -119,7 +119,7 @@ test.each(["__proto__", "constructor", "../../secret", "Mara/mara?#", "mara"])("
 
   const { portraits, npcs } = await journalOf(id);
   expect(npcs).toEqual([name]);
-  expect(portraits).toEqual([{ id: 1, npc: name, redraws: 0 }]);
+  expect(portraits).toEqual([{ id: 1, npc: name, redraws: 0, messageId: expect.any(Number) }]);
   expect(await game.get(`/saves/${id}/portraits/1`).then((r) => r.status)).toBe(200);
 });
 
@@ -150,7 +150,7 @@ test("a new PC gets a portrait from their description, which never holds their n
   expect(images.payloads[0]!.prompt).toContain("Grey-eyed");
   expect(images.payloads[0]!.prompt).toContain("A lapsed ferryman");
   expect(images.payloads[0]!.prompt).not.toContain("Ash");
-  expect((await journalOf(id)).portraits).toEqual([{ id: 1, npc: null, redraws: 0 }]);
+  expect((await journalOf(id)).portraits).toEqual([{ id: 1, npc: null, redraws: 0, messageId: expect.any(Number) }]);
   expect(await game.get(`/saves/${id}/portraits/1`).then((r) => r.bytes())).toEqual(png(1));
 });
 
@@ -193,7 +193,7 @@ test("a failed portrait doesn't touch play, tells the client nothing, and the ne
   expect(images.payloads).toHaveLength(2);
 
   await playSettled(id);
-  expect((await journalOf(id)).portraits).toEqual([{ id: 1, npc: "Hesper", redraws: 0 }]);
+  expect((await journalOf(id)).portraits).toEqual([{ id: 1, npc: "Hesper", redraws: 0, messageId: expect.any(Number) }]);
   restore();
 });
 
@@ -253,7 +253,7 @@ test("a Scene Image gets visible NPCs' portraits first, then the previous scene,
   play(
     [
       turn(moveTo("The street")),
-      turn(meet("Hesper", "Tall, in oilskins"), meet("Orin", "Stooped, red scarf"), meet("Tobin", "Unseen"), inView("Orin", "Hesper")),
+      turn(meet("Hesper", "Tall, in oilskins"), meet("Orin", "Stooped, red scarf"), meet("Tobin", "Unseen"), moveTo("The street", "Orin", "Hesper")),
       turn(moveTo("The pier", "Orin")),
     ],
     png(1),
@@ -323,7 +323,7 @@ test("Revert counts and deletes a portrait from a Reverted first appearance, and
   expect(await game.post(`/saves/${id}/messages/2/revert`, {}).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 1 });
 
   // The PC's stays: no Message drew it.
-  expect((await journalOf(id)).portraits).toEqual([{ id: before[0]!.id, npc: null, redraws: 0 }]);
+  expect((await journalOf(id)).portraits).toEqual([{ id: before[0]!.id, npc: null, redraws: 0, messageId: expect.any(Number) }]);
   expect((await game.get(`/saves/${id}/portraits/${before[1]!.id}`)).status).toBe(404);
 
   await playSettled(id);
@@ -428,7 +428,7 @@ test("export and import carry portraits, and an NPC isn't drawn twice afterwards
   const imported = await importSave(await (await game.get(`/saves/${id}/export`)).bytes());
   const { portraits } = await journalOf(imported);
 
-  expect(portraits).toEqual([{ id: 1, npc: "Hesper", redraws: 0 }]);
+  expect(portraits).toEqual([{ id: 1, npc: "Hesper", redraws: 0, messageId: expect.any(Number) }]);
   expect((await game.get(`/saves/${imported}/portraits/1`)).headers.get("content-type")).toBe("image/jpeg");
   await playSettled(imported);
   expect(portraitPrompts()).toHaveLength(1);
@@ -448,7 +448,7 @@ test("a Save from before portraits opens at the new version with none, and draws
   expect((await journalOf(id)).portraits).toEqual([]);
   await playSettled(id);
 
-  expect((await journalOf(id)).portraits).toEqual([{ id: 1, npc: "Hesper", redraws: 0 }]);
+  expect((await journalOf(id)).portraits).toEqual([{ id: 1, npc: "Hesper", redraws: 0, messageId: expect.any(Number) }]);
 });
 
 test("no route shows an NPC's appearance text or a PC description given to the image model", async () => {
@@ -531,7 +531,7 @@ test("an NPC the PC comes to know gets a portrait without being in view, and one
   expect(images.payloads).toEqual([]);
 
   await playSettled(id);
-  expect((await journalOf(id)).portraits).toEqual([{ id: expect.any(Number), npc: "Jenny", redraws: 0 }]);
+  expect((await journalOf(id)).portraits).toEqual([{ id: expect.any(Number), npc: "Jenny", redraws: 0, messageId: expect.any(Number) }]);
   expect(portraitPrompts()).toHaveLength(1);
 });
 

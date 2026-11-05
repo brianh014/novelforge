@@ -545,16 +545,17 @@ export function saveStore(savesDir: string) {
       return image.bytes;
     },
 
-    /** The latest image before `messageId`, to carry its background into the next one. */
-    previousSceneImage(id: string, messageId: number) {
+    /** The latest image before `messageId`, to carry its background into the next one. A different place has no background to carry. */
+    previousSceneImage(id: string, messageId: number, location: string) {
       using db = open(id);
       const image = db
-        .query<{ bytes: Uint8Array }, [number]>(
-          "SELECT bytes FROM scene_images WHERE message_id < ? ORDER BY message_id DESC LIMIT 1",
+        .query<{ bytes: Uint8Array; caption: string }, [number]>(
+          "SELECT bytes, caption FROM scene_images WHERE message_id < ? ORDER BY message_id DESC LIMIT 1",
         )
         .get(messageId);
-      const mediaType = image && imageType(image.bytes);
-      return mediaType && { bytes: image!.bytes, mediaType };
+      if (image?.caption !== location) return undefined;
+      const mediaType = imageType(image.bytes);
+      return mediaType && { bytes: image.bytes, mediaType };
     },
 
     /** Stores nothing if the Message has gone, so a generation can't outlive a Revert or a replaced response. */
@@ -572,7 +573,11 @@ export function saveStore(savesDir: string) {
     /** Every portrait without its bytes, including those of NPCs the player must not see yet. */
     portraits(id: string) {
       using db = open(id);
-      return db.query<{ id: number; npc: string | null; redraws: number }, []>("SELECT id, npc, redraws FROM portraits ORDER BY id").all();
+      return db
+        .query<{ id: number; npc: string | null; redraws: number; messageId: number }, []>(
+          "SELECT id, npc, redraws, message_id AS messageId FROM portraits ORDER BY id",
+        )
+        .all();
     },
 
     portrait(id: string, portraitId: number) {

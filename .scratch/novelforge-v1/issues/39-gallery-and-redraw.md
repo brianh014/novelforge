@@ -28,3 +28,4 @@
 - Not run for real: a Redraw through OpenRouter, as it costs money. NPC portrait Redraws and a Revert during a Redraw are covered by tests only.
 - After Accept during a Cover Redraw, the Save holds no Cover until the Redraw ends, so the Ready page shows none until a reload. The grilling session said it would show the old Cover.
 - **User decision (2026-11-04):** the Gallery moved out of the Journal into its own tab, as the Journal had too much going on.
+- **User decision (2026-11-04):** opening an image shows it alone, and a Redraw button shows the prompt. It stays shown during or after a failed Redraw.

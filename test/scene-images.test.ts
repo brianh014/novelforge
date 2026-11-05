@@ -235,7 +235,7 @@ test("new images use the current Art Style, and stored images never change", asy
 });
 
 test("the previous Scene Image goes along as a role-tagged reference", async () => {
-  play([newScene(), newScene("A pier", "The pier")], png(1), png(2));
+  play([newScene(), newScene("The same street, later")], png(1), png(2));
   await enableImages();
   const id = await game.createSave();
   await playTurn(id);
@@ -249,9 +249,51 @@ test("the previous Scene Image goes along as a role-tagged reference", async () 
   expect(new Uint8Array(reference!.bytes)).toEqual(png(1));
 });
 
+test("a new location has no previous Scene Image as a reference, and returning to one doesn't either", async () => {
+  play(
+    [newScene("A train", "The subway"), newScene("Desks", "The office"), newScene("A train", "The subway")],
+    png(1),
+    png(2),
+    png(3),
+  );
+  await enableImages();
+  const id = await game.createSave();
+
+  for (let turns = 0; turns < 3; turns++) {
+    await playTurn(id);
+    await settled(id);
+  }
+
+  expect(images.payloads.map(({ reference_images }) => reference_images)).toEqual([[], [], []]);
+});
+
+test("a Scene Image in the same location keeps the previous one as its reference, and so does its Redraw", async () => {
+  play(
+    [
+      turn({ state_operations: moveTo("The office"), scene_changed: true, visual_description: "Desks" }),
+      turn({ scene_changed: true, visual_description: "Desks at night" }),
+    ],
+    png(1),
+    png(2),
+    png(3),
+  );
+  await enableImages();
+  const id = await game.createSave();
+
+  await playTurn(id);
+  await settled(id);
+  await playTurn(id);
+  const { images: drawn } = await settled(id);
+  expect(images.payloads[1]!.reference_images).toMatchObject([{ role: "previous_scene", bytes: png(1) }]);
+
+  await game.post(`/saves/${id}/gallery/redraw`, { kind: "scene", ref: drawn[1]!.messageId, prompt: "Redrawn" });
+  await settled(id);
+  expect(images.payloads[2]).toMatchObject({ prompt: "Redrawn", reference_images: [{ role: "previous_scene", bytes: png(1) }] });
+});
+
 test("quick Turns pay only for the image in flight and the newest scene, which builds on it", async () => {
   const { promise, resolve } = Promise.withResolvers<Uint8Array>();
-  play([newScene("One", "One"), newScene("Two", "Two"), newScene("Three", "Three")], promise, png(3));
+  play([newScene("One", "The pier"), newScene("Two", "The pier"), newScene("Three", "The pier")], promise, png(3));
   await enableImages();
   const id = await game.createSave();
 
@@ -260,7 +302,7 @@ test("quick Turns pay only for the image in flight and the newest scene, which b
   await playTurn(id);
   resolve(png(1));
 
-  expect(await settled(id)).toMatchObject({ images: [{ caption: "One" }, { caption: "Three" }], session: 2 });
+  expect(await settled(id)).toMatchObject({ images: [{ caption: "The pier" }, { caption: "The pier" }], session: 2 });
   expect(images.payloads.map(({ prompt }) => prompt)).toEqual(["One", "Three"]);
   expect(new Uint8Array(images.payloads[1]!.reference_images[0]!.bytes)).toEqual(png(1));
 });

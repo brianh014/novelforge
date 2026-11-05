@@ -163,7 +163,7 @@ test("the image key never reaches ComfyUI", async () => {
 });
 
 test("the next SD scene uploads the previous Scene Image and uses it through img2img", async () => {
-  const running = play(newScene("One", "One"), newScene("Two", "Two"));
+  const running = play(newScene("One"), newScene("Two"));
   await running.patch("/settings", sdSetup());
   const id = await running.createSave();
   await playTurn(id);
@@ -182,7 +182,7 @@ test("the next SD scene uploads the previous Scene Image and uses it through img
 });
 
 test("FLUX.2 sends the previous scene and the PC's portrait, each under its own name", async () => {
-  const running = play(newScene("One", "One"), newScene("Two", "Two"));
+  const running = play(newScene("One"), newScene("Two"));
   await running.patch("/settings", flux2Setup());
   const created = await running.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "Tall" } });
   const { id } = (await created.json()) as { id: string };
@@ -200,7 +200,7 @@ test("FLUX.2 sends the previous scene and the PC's portrait, each under its own 
   expect(new Set(nodes(graph, "LoadImage").map(({ inputs }) => inputs.image)).size).toBe(2);
   expect(comfy.jobs.uploads.at(-2)!.bytes).toEqual(png(1));
   expect(comfy.jobs.uploads.at(-1)!.bytes).toEqual(new Uint8Array(PNG));
-  expect((await imagesOf(id)).images.map(({ caption }) => caption)).toEqual(["One", "Two"]);
+  expect((await imagesOf(id)).images.map(({ caption }) => caption)).toEqual(["The street", "The street"]);
 });
 
 test("an image generates with no references at all", async () => {
@@ -401,7 +401,7 @@ test("references reach a workflow by role, with a blank in an empty slot", async
     "4": { class_type: "Weight", inputs: { scene: "{{has_previous_scene}}", npc: "{{has_npc_1}}" } },
     "5": { class_type: "PreviewImage", inputs: {} },
   });
-  const running = play(newScene("One", "One"), newScene("Two", "Two"));
+  const running = play(newScene("One"), newScene("Two"));
   await running.patch("/settings", advancedSetup(workflow));
   const id = await running.createSave();
   comfy.control.image = png(1);
@@ -590,7 +590,7 @@ test("a job with no image output says so", async () => {
 
 test("the problem clears with the next image, and with a changed workflow", async () => {
   const logged = spyOn(console, "error").mockImplementation(() => {});
-  const running = play(newScene("One", "One"), newScene("Two", "Two"), newScene("Three", "Three"));
+  const running = play(newScene("One"), newScene("Two"), newScene("Three", "Three"));
   await running.patch("/settings", advancedSetup());
   const id = await running.createSave();
   comfy.control.historyError = true;

@@ -26,7 +26,7 @@ import {
 import { DecideIcon } from "./icons";
 import { Fold, Sheet } from "./menu";
 import { IMAGE_CHECK_MS } from "./play";
-import { PromptBox, RedrawableImage, Zoomable } from "./zoom";
+import { PromptBox, RedrawableImage, RedrawPanel, Zoomable } from "./zoom";
 
 /** Each description is shown to the player and sent to the Narrator with the theme's name. */
 const THEMES: Record<string, string> = {
@@ -138,7 +138,9 @@ function CoverArt({ worldId, src, redraws, onRedrawn }: { worldId: string; src: 
   return (
     <>
       <figure className="plate cover">
-        <Zoomable src={src} alt="The cover of your story">{box}</Zoomable>
+        <Zoomable src={src} alt="The cover of your story">
+          <RedrawPanel busy={redrawing || !!failure}>{box}</RedrawPanel>
+        </Zoomable>
       </figure>
       {redrawing && <p className="waiting">Redrawing the cover…</p>}
       {failure && <p className="error">Redraw failed. Open the cover to see why.</p>}
