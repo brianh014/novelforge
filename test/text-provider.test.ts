@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import { settingsStore } from "../src/settings-store";
 import { textProvider } from "../src/text-provider";
@@ -270,7 +270,7 @@ test("the schema keeps to what strict schema modes accept, with check first", as
   const { schema } = provider.requests[0]!.body.response_format.json_schema;
 
   expect(schema.type).toBe("object");
-  expect(Object.keys(schema.properties)).toEqual(["check", "narration", "state_operations", "scene_changed", "visual_description"]);
+  expect(Object.keys(schema.properties)).toEqual(["check", "narration", "state_operations", "people", "summary", "scene_changed", "visual_description"]);
   const visit = (node: any) => {
     if (typeof node !== "object" || node === null) return;
     for (const refused of ["oneOf", "minLength", "$schema"]) expect(Object.keys(node)).not.toContain(refused);
@@ -397,18 +397,14 @@ test("changing the base URL drops a stored key unless a new one comes with it", 
   expect((await game.patch("/settings", { textBaseUrl: "file:///etc/passwd" })).status).toBe(400);
 });
 
-test("a client that leaves mid-stream stops the Turn, and nothing is committed", async () => {
-  const { promise: stopped, resolve: stop } = Promise.withResolvers<void>();
+test("a client that leaves mid-stream doesn't stop the Turn, which is saved", async () => {
   play([
     async function* () {
-      try {
-        yield delta('{"check":null,"narration":"The tide ');
-        yield delta("rises");
-        await Bun.sleep(300);
-        yield delta('"}');
-      } finally {
-        stop();
-      }
+      yield delta('{"check":null,"narration":"The tide ');
+      yield delta("rises");
+      await Bun.sleep(150);
+      yield delta('"}');
+      yield "data: [DONE]\n\n";
     },
   ]);
   const id = await game.createSave();
@@ -418,9 +414,8 @@ test("a client that leaves mid-stream stops the Turn, and nothing is committed",
   await response.body!.getReader().read();
   client.abort();
 
-  await Promise.race([stopped, Bun.sleep(1000)]);
-  await Bun.sleep(100);
-  expect(await storedMessages(id)).toEqual([]);
+  await Bun.sleep(300);
+  expect((await storedMessages(id)).map(({ text }) => text)).toEqual(["I wade forward.", "The tide rises"]);
 });
 
 test("a streamed Turn survives a silence longer than Bun's default idle timeout", async () => {
@@ -492,4 +487,197 @@ test("the Settings text test says when the server can't be reached", async () =>
 
   expect(response.status).toBe(502);
   expect((await body(response)).error).toContain("can't be reached");
+});
+
+/** Everything the server logs while `run` plays, as one string. */
+async function logOf(run: () => Promise<unknown>) {
+  const lines: string[] = [];
+  const keep = (...args: unknown[]) => void lines.push(args.map((arg) => (typeof arg === "string" ? arg : Bun.inspect(arg))).join(" "));
+  const log = spyOn(console, "log").mockImplementation(keep);
+  const error = spyOn(console, "error").mockImplementation(keep);
+  try {
+    await run();
+    return lines.join("\n");
+  } finally {
+    log.mockRestore();
+    error.mockRestore();
+  }
+}
+
+const broken = ['data: {"choices":[{"delta":{"content":"The ti\n\n'];
+
+test("a broken line in the stream retries the Turn, and the log shows why", async () => {
+  play([broken, narrated("The tide rises.")]);
+  const id = await game.createSave();
+
+  const log = await logOf(async () => {
+    const events = await turnEvents(await streamTurn(id, "I wade forward."));
+    expect(events.at(-1)!.event).toBe("done");
+  });
+
+  expect(provider.requests).toHaveLength(2);
+  expect((await storedMessages(id)).at(-1)!.text).toBe("The tide rises.");
+  expect(log).toContain("attempt 1 of 3");
+  expect(log).toContain('"last":{"chars":');
+});
+
+test("a stream that stays broken fails the Turn as retryable once the retries run out", async () => {
+  play([broken, broken, broken]);
+  const id = await game.createSave();
+
+  await logOf(async () => {
+    const events = await turnEvents(await streamTurn(id, "I wade forward."));
+    expect(events.at(-1)).toEqual({
+      event: "error",
+      data: { status: 502, error: "The Narrator gave no usable response", failure: "retryable", input: "I wade forward." },
+    });
+  });
+
+  expect(provider.requests).toHaveLength(3);
+  expect(await storedMessages(id)).toEqual([]);
+});
+
+test("the log shows how each reply went, and none of the story", async () => {
+  const finished = sse({
+    id: "gen-1",
+    provider: "FakeHost",
+    choices: [{ delta: { content: "" }, finish_reason: "stop", native_finish_reason: "STOP" }],
+    usage: { prompt_tokens: 5, completion_tokens: 7 },
+  });
+  const reply = { check: null, narration: "The tide rises.", state_operations: [], people: [{ name: "Ada", appearance: "tall" }], summary: "A wet day." };
+  play([[delta(JSON.stringify(reply)), finished, "data: [DONE]\n\n"]]);
+  const id = await game.createSave();
+
+  const log = await logOf(() => streamTurn(id, "I wade forward.").then(turnEvents));
+
+  for (const fact of ['"generation":"gen-1"', '"provider":"FakeHost"', '"finish":"stop"', '"nativeFinish":"STOP"', '"completion_tokens":7']) {
+    expect(log).toContain(fact);
+  }
+  expect(log).toContain('"people":["Ada"]');
+  expect(log).toContain('"summary":10');
+  expect(log).toContain('"attempts":1');
+  for (const story of ["The tide rises", "A wet day", "I wade forward"]) expect(log).not.toContain(story);
+});
+
+test("a client that leaves is logged as that, not as a failed Turn", async () => {
+  play([
+    async function* () {
+      yield delta('{"check":null,"narration":"The tide ');
+      await Bun.sleep(100);
+      yield delta('"}');
+    },
+  ]);
+  const id = await game.createSave();
+  const client = new AbortController();
+
+  const log = await logOf(async () => {
+    const response = await streamTurn(id, "I wade forward.", client.signal);
+    await response.body!.getReader().read();
+    client.abort();
+    await Bun.sleep(300);
+  });
+
+  expect(log).toContain("client left");
+  expect(log).not.toContain("A Turn failed");
+  expect(log).not.toContain("I wade forward");
+});
+
+const liveTurn = (id: string) => game.get(`/saves/${id}/turn`).then((r) => r.json());
+
+test("a running Turn can be read back with its text so far, and is gone once saved", async () => {
+  const { promise: release, resolve: finish } = Promise.withResolvers<void>();
+  play([
+    async function* () {
+      yield delta('{"check":null,"narration":"The tide ');
+      yield delta("rises");
+      await release;
+      yield delta('"}');
+    },
+  ]);
+  const id = await game.createSave();
+  const client = new AbortController();
+  const response = await streamTurn(id, "I wade forward.", client.signal);
+  await response.body!.getReader().read();
+  client.abort();
+  await Bun.sleep(50);
+
+  expect(await liveTurn(id)).toEqual({ running: { input: "I wade forward.", narration: "The tide rises", after: 0 } });
+
+  finish();
+  await Bun.sleep(100);
+  expect(await liveTurn(id)).toEqual({});
+});
+
+test("a replacement that is running names the Message it replaces", async () => {
+  const { promise: release, resolve: finish } = Promise.withResolvers<void>();
+  play([
+    narrated("The tide rises."),
+    async function* () {
+      await release;
+      yield* narrated("The tide falls.");
+    },
+  ]);
+  const id = await game.createSave();
+  await streamTurn(id, "I wade forward.").then(turnEvents);
+
+  const replacing = game.post(`/saves/${id}/messages/2/regenerate`, {});
+  await Bun.sleep(50);
+
+  expect(await liveTurn(id)).toEqual({ running: { input: "", narration: "", after: 2, replaces: 2 } });
+  finish();
+  await replacing;
+});
+
+test("a Turn that fails with nobody there waits, once, for the player's return", async () => {
+  play([
+    async function* () {
+      yield delta('{"check":null,"narration":"The ti');
+      await Bun.sleep(50);
+      throw new Error("The stream broke");
+    },
+  ]);
+  const id = await game.createSave();
+  const client = new AbortController();
+
+  await logOf(async () => {
+    const response = await streamTurn(id, "I wade forward.", client.signal);
+    await response.body!.getReader().read();
+    client.abort();
+    await Bun.sleep(150);
+  });
+
+  expect(await liveTurn(id)).toMatchObject({ failed: { status: 502, input: "I wade forward.", error: expect.any(String) } });
+  expect(await liveTurn(id)).toEqual({});
+  expect(await storedMessages(id)).toEqual([]);
+});
+
+test("a second Turn while one runs is refused, and never reaches the model", async () => {
+  const { promise: release, resolve: finish } = Promise.withResolvers<void>();
+  play([
+    async function* () {
+      await release;
+      yield* narrated("The tide rises.");
+    },
+    narrated("Never asked for."),
+  ]);
+  const id = await game.createSave();
+  const first = streamTurn(id, "I wade forward.").then(turnEvents);
+  await Bun.sleep(50);
+
+  const second = await game.post(`/saves/${id}/turns`, { input: "I run." });
+
+  expect(second.status).toBe(409);
+  expect(provider.requests).toHaveLength(1);
+  finish();
+  expect((await first).at(-1)!.event).toBe("done");
+});
+
+test("a second Turn is allowed once the first has finished", async () => {
+  play([narrated("One."), narrated("Two.")]);
+  const id = await game.createSave();
+
+  await streamTurn(id, "First.").then(turnEvents);
+  const events = await streamTurn(id, "Second.").then(turnEvents);
+
+  expect(events.at(-1)!.event).toBe("done");
 });

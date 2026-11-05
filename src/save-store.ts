@@ -31,6 +31,8 @@ export class NoteNotFound extends Error {}
 export class PortraitNotFound extends Error {}
 export class InvalidSave extends Error {}
 
+const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+
 // The shape at schema version 1, which later versions change through MIGRATIONS rather than here.
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS save (
@@ -218,8 +220,13 @@ function toVersion9(db: Database) {
   }
 }
 
+/** Null for a Message from before this, whose time was never kept. */
+const toVersion10 = (db: Database) => {
+  if (!hasColumn(db, "messages", "created_at")) db.run("ALTER TABLE messages ADD COLUMN created_at TEXT");
+};
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -302,6 +309,7 @@ function assertValidSave(db: Database) {
     role: z.enum(["player", "narrator"]),
     text: z.string(),
     hidden_check: jsonText(StoredCheck).nullable(),
+    created_at: z.iso.datetime().nullable(),
   });
   const content = new Map(
     rowsOf(db, "sections", { id: rowId, content: z.string() }).map((section) => [section.id, section.content]),
@@ -709,7 +717,7 @@ export function saveStore(savesDir: string) {
     ) {
       using db = open(id);
       const insert = db.query<Message, [Message["role"], string, string | null]>(
-        "INSERT INTO messages (role, text, hidden_check) VALUES (?, ?, ?) RETURNING id, role, text",
+        `INSERT INTO messages (role, text, hidden_check, created_at) VALUES (?, ?, ?, ${NOW}) RETURNING id, role, text`,
       );
       return db.transaction(() => {
         // Message ids are never reused, so any Revert or other Turn since `basedOn` is caught here.
@@ -758,7 +766,7 @@ export function saveStore(savesDir: string) {
         deleteAfter(db, player.id);
         const replacement = db
           .query<Message, [string, string | null]>(
-            "INSERT INTO messages (role, text, hidden_check) VALUES ('narrator', ?, ?) RETURNING id, role, text",
+            `INSERT INTO messages (role, text, hidden_check, created_at) VALUES ('narrator', ?, ?, ${NOW}) RETURNING id, role, text`,
           )
           .get(narration, narrator.hidden_check)!;
         writeSnapshot(db, replacement.id, advance(state));

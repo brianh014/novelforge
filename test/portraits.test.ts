@@ -563,3 +563,88 @@ test("someone already known with no portrait is drawn when the Scene next moves,
   expect(portraitPrompts()).toHaveLength(2);
   expect((await journalOf(id)).portraits.map(({ npc }) => npc)).toEqual(["Jenny"]);
 });
+
+const naming = (people: unknown, ...state_operations: object[]) =>
+  JSON.stringify({ check: null, narration: "The tide rises.", state_operations, people, scene_changed: false, visual_description: "A wet street" });
+const person = (name: string, appearance = "Tall, in oilskins") => ({ name, appearance });
+
+test("someone the response names but the Narrator never added becomes a known NPC with a portrait", async () => {
+  play([naming([person("Priya", "Short, with a green scarf")])], png(1));
+  await enableImages();
+  const id = await game.createSave();
+
+  await playSettled(id);
+
+  expect(portraitPrompts()).toEqual([expect.stringContaining("Short, with a green scarf")]);
+  const { npcs, portraits } = await journalOf(id);
+  expect(npcs).toEqual(["Priya"]);
+  expect(portraits.map(({ npc }) => npc)).toEqual(["Priya"]);
+});
+
+test("someone with a portrait who was never made known appears once named, with no second drawing", async () => {
+  play([turn(meet("Marcus"), inView("Marcus")), naming([person("Marcus")])], png(1), png(2));
+  await enableImages();
+  const id = await game.createSave();
+
+  await playSettled(id);
+  expect((await journalOf(id)).portraits).toEqual([]);
+  const drawn = portraitPrompts().length;
+  await playSettled(id);
+
+  expect(portraitPrompts()).toHaveLength(drawn);
+  const { npcs, portraits } = await journalOf(id);
+  expect(npcs).toEqual(["Marcus"]);
+  expect(portraits.map(({ npc }) => npc)).toEqual(["Marcus"]);
+});
+
+test("the Narrator doing the same work in its operations costs nothing, and a summary and the cast can use the new name", async () => {
+  play(
+    [naming([person("Priya")], meet("Priya"), know("Priya"), { op: "set_known_npc_summary", name: "Priya", summary: "A ferry hand." }, inView("Priya"))],
+    png(1),
+    png(2),
+  );
+  await enableImages();
+  const id = await game.createSave();
+
+  const response = await playTurn(id);
+  await settled(id);
+
+  expect(response.status).toBe(201);
+  expect((await journalOf(id)).npcs).toEqual(["Priya"]);
+  expect((await game.get(`/saves/${id}/journal`).then((r) => r.json())).npcSummaries).toEqual({ Priya: "A ferry hand." });
+  expect((await game.get(`/saves/${id}/journal`).then((r) => r.json())).recentNpcs).toEqual(["Priya"]);
+});
+
+test("the PC, someone with no looks to draw, and a repeat in the list add no NPC", async () => {
+  play([naming([person("Ash"), person("Nobody", " "), person("Priya"), person("Priya", "Someone else")])], png(1));
+  await enableImages();
+  const id = await game.createSave();
+
+  await playSettled(id);
+
+  expect((await journalOf(id)).npcs).toEqual(["Priya"]);
+  expect(portraitPrompts()).toEqual([expect.stringContaining("Tall, in oilskins")]);
+});
+
+test("a malformed list of people doesn't cost the Turn", async () => {
+  play([naming("nobody in particular")]);
+  const id = await game.createSave();
+
+  const response = await playTurn(id);
+
+  expect(response.status).toBe(201);
+  expect((await journalOf(id)).npcs).toEqual([]);
+});
+
+test("older responses show who they named, so that the Narrator has a filled list to copy", async () => {
+  const named = JSON.stringify({ check: null, narration: "Priya waves.", state_operations: [], people: [person("Priya")], scene_changed: false, visual_description: "" });
+  const provider = scriptedTextProvider(named, turn());
+  images = scriptedImages();
+  game = startGame(join(folder.path, "Saves"), provider.textProvider, undefined, undefined, images.imageAdapter);
+  const id = await game.createSave();
+  await playTurn(id);
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  const older = provider.prompts[1]!.find(({ role }) => role === "assistant")!;
+  expect(JSON.parse(older.content as string).people).toEqual([person("Priya")]);
+});

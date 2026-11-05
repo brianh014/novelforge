@@ -21,6 +21,7 @@ import {
 } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textModels } from "./text-provider";
+import { type BegunTurn, liveTurns, TurnRunning } from "./live-turns";
 import { ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
 import { decideForPc, ENHANCE_FIELDS, enhance, fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World, type WorldChoices } from "./world-creation";
@@ -113,9 +114,11 @@ function errorResponse(error: unknown) {
     return Response.json({ error: "This world is no longer held. Go back to your choices and generate it again." }, { status: 404 });
   }
   if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
+  if (error instanceof TurnRunning) return Response.json({ error: "A Turn is still running for this story" }, { status: 409 });
   if (error instanceof TurnFailed) {
-    console.error(error);
     const { message, failure, input } = error;
+    // Not the error itself, as its `input` is the story.
+    console.error(`A Turn failed (${failure}): ${message}`, error.cause);
     return Response.json({ error: message, failure, input }, { status: failure === "refused" ? 422 : 502 });
   }
   console.error(error);
@@ -128,25 +131,51 @@ const imageResponse = (bytes: Uint8Array<ArrayBuffer>) =>
     headers: { "Content-Type": imageType(bytes) ?? "application/octet-stream", "X-Content-Type-Options": "nosniff" },
   });
 
+// A Turn outlives its request, so the player can switch away. The Text Provider's silence limit still ends a stuck one.
+const NEVER = new AbortController().signal;
+
 /** Answers with the committed Messages, as one JSON body or, if the client asks, as a stream of the Turn. */
-async function turnResponse(req: Request, run: (emit?: TurnEvents) => Promise<Message[]>) {
-  if (!req.headers.get("accept")?.includes("text/event-stream")) {
-    return Response.json({ messages: await run() }, { status: 201 });
+async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvents) => Promise<Message[]>) {
+  const streaming = req.headers.get("accept")?.includes("text/event-stream");
+  let client: TurnEvents = () => {};
+  // Not started yet, as a reply can begin at once and the stream below must be there to hear it.
+  const played = Promise.resolve()
+    .then(() =>
+      run((event, data) => {
+        turn.heard(event, data);
+        client(event, data);
+      }),
+    )
+    .then(
+      (messages) => {
+        turn.end();
+        return { messages };
+      },
+      async (error: unknown) => {
+        // In this log, as the client's copy is gone once the page moves on.
+        if (!(error instanceof TurnFailed)) console.error("A Turn failed:", error);
+        const response = errorResponse(error);
+        const body = (await response.json()) as { error: string };
+        // A plain JSON client gets its answer here, and has no page to come back to.
+        turn.end(streaming ? { input: turn.input, replaces: turn.replaces, status: response.status, ...body } : undefined);
+        return { status: response.status, body };
+      },
+    );
+  if (!streaming) {
+    const result = await played;
+    return "messages" in result ? Response.json(result, { status: 201 }) : Response.json(result.body, { status: result.status });
   }
   const stream = new ReadableStream({
     async start(controller) {
-      // A client that leaves aborts the signal, which stops the Turn, and its stream takes no more events.
+      // A client that leaves stops hearing the Turn, and its stream takes no more events.
       const send = (event: string, data: object) => {
         if (!req.signal.aborted) controller.enqueue(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
-      try {
-        send("done", { messages: await run(send) });
-      } catch (error) {
-        // In this log, as the client's copy is gone once the page moves on, and it may repeat the story.
-        if (!req.signal.aborted) console.error("A Turn failed:", error);
-        const response = errorResponse(error);
-        send("error", { status: response.status, ...((await response.json()) as object) });
-      }
+      client = send;
+      const result = await played;
+      if (req.signal.aborted) console.log("A Turn ended after its client left.");
+      if ("messages" in result) send("done", result);
+      else send("error", { status: result.status, ...result.body });
       if (!req.signal.aborted) controller.close();
     },
   });
@@ -165,6 +194,7 @@ export function startServer(options: {
   port: number;
 }) {
   const saves = saveStore(options.savesDir);
+  const turns = liveTurns();
   const { settings } = options;
   // Held here, not in Settings, as it's only how the last job went. It's safe to show, unlike the log.
   // shortcut: a restart clears it and an open Settings screen doesn't update, poll or store it if players miss failures.
@@ -524,14 +554,23 @@ export function startServer(options: {
       "/saves/:id/turns": {
         POST: async (req) => {
           const { input } = await parseBody(req, NewTurnRequest);
-          return turnResponse(req, (emit) => playTurn(saves, engine, req.params.id, input, req.signal, emit));
+          const { id } = req.params;
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), input), (emit) =>
+            playTurn(saves, engine, id, input, NEVER, emit),
+          );
         },
       },
       "/saves/:id/opening": {
         POST: async (req) => {
           await parseBody(req, NoFields);
-          return turnResponse(req, (emit) => playOpening(saves, engine, req.params.id, req.signal, emit));
+          const { id } = req.params;
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), ""), (emit) =>
+            playOpening(saves, engine, id, NEVER, emit),
+          );
         },
+      },
+      "/saves/:id/turn": {
+        GET: (req) => Response.json(turns.status(req.params.id)),
       },
       "/saves/:id/decide": {
         POST: async (req) => {
@@ -601,8 +640,8 @@ export function startServer(options: {
         POST: async (req) => {
           const { feedback } = await parseBody(req, RewriteRequest);
           const { id, messageId } = req.params;
-          return turnResponse(req, (emit) =>
-            replaceResponse(saves, engine, id, Number(messageId), feedback, req.signal, emit),
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), feedback, Number(messageId)), (emit) =>
+            replaceResponse(saves, engine, id, Number(messageId), feedback, NEVER, emit),
           );
         },
       },
@@ -610,8 +649,8 @@ export function startServer(options: {
         POST: async (req) => {
           await parseBody(req, NoFields);
           const { id, messageId } = req.params;
-          return turnResponse(req, (emit) =>
-            replaceResponse(saves, engine, id, Number(messageId), undefined, req.signal, emit),
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), "", Number(messageId)), (emit) =>
+            replaceResponse(saves, engine, id, Number(messageId), undefined, NEVER, emit),
           );
         },
       },

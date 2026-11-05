@@ -1331,6 +1331,27 @@ a.action {
   background: var(--soft);
 }
 
+.dismissable {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dismissable p {
+  margin: 0;
+}
+
+.dismissable button {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -8px -8px -8px 0;
+  color: inherit;
+  font-size: 20px;
+  text-decoration: none;
+}
+
 .notice {
   color: var(--ink);
 }

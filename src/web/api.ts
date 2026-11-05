@@ -1,4 +1,5 @@
 import type { comfyModels } from "../comfyui";
+import type { FailedTurn, LiveTurn } from "../live-turns";
 import type { ImageTarget, Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State } from "../state-applier";
@@ -23,6 +24,7 @@ export type GalleryImage = ImageTarget & { label: string; prompt: string | null;
 export type Gallery = { images: GalleryImage[]; pending: boolean; canRedraw: boolean };
 export type WorldCover = { prompt: string; hasCover: boolean; failure: string; canRedraw: boolean };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
+export type TurnStatus = { running?: LiveTurn; failed?: FailedTurn };
 
 const jsonBody = (body: object): RequestInit => ({
   method: "POST",
@@ -230,6 +232,52 @@ export const replaceResponse = (
     signal,
   );
 
+/** The state of a Turn on the server, which goes on without this page. Reading a failure takes it. */
+export const getTurn = (id: string) => request<TurnStatus>(`/saves/${id}/turn`);
+
+// About as long as a phone takes to find its network again after being woken. An object so that tests can shorten it.
+export const turnPolling = { everyMs: 1000, tries: 30 };
+
+const withHint = (error: string, status: number, retryHint: string) => (status === 502 ? `${error}. ${retryHint}` : error);
+
+const retryHintFor = ({ input, replaces }: { input: string; replaces?: number }) =>
+  input && replaces === undefined ? "Send it again to retry." : "Try again.";
+
+/** What to tell the player about a Turn that failed while they were away. */
+export const failureMessage = ({ error, status, input, replaces }: FailedTurn) =>
+  withHint(error, status, retryHintFor({ input, replaces }));
+
+/** Follows a Turn from the server until it ends, for a page that lost its stream or never had one. */
+async function awaitTurn(
+  id: string,
+  input: string,
+  after: number,
+  retryHint: string,
+  show: (narration: string) => void,
+): Promise<TurnResult> {
+  for (let misses = 0; misses < turnPolling.tries; ) {
+    try {
+      const { running, failed } = await getTurn(id);
+      misses = 0;
+      if (failed) return { error: withHint(failed.error, failed.status, retryHint), input: failed.input };
+      if (!running) {
+        const messages = (await getMessages(id)).filter((message) => message.id > after);
+        if (messages.length > 0) return { messages };
+        return { error: `The connection dropped and this wasn't saved. ${retryHint}`, input };
+      }
+      show(running.narration);
+    } catch {
+      misses++;
+    }
+    await new Promise((resolve) => setTimeout(resolve, turnPolling.everyMs));
+  }
+  return { error: "NovelForge can't be reached. Make sure it's still running, then reload this page.", input };
+}
+
+/** Picks up a Turn this page didn't start or no longer holds, such as after a reload. */
+export const resumeTurn = (id: string, turn: LiveTurn, show: (narration: string) => void) =>
+  awaitTurn(id, turn.input, turn.after, retryHintFor(turn), show);
+
 async function streamTurn(
   id: string,
   resource: string,
@@ -240,10 +288,16 @@ async function streamTurn(
   show: (narration: string) => void,
   signal: AbortSignal,
 ): Promise<TurnResult> {
+  // A phone can kill a stream while it sleeps without ever failing it, so a page coming back asks the server instead.
+  const stale = new AbortController();
+  const onReturn = () => {
+    if (document.visibilityState === "visible") stale.abort();
+  };
+  globalThis.document?.addEventListener("visibilitychange", onReturn);
   try {
     const response = await fetch(`/saves/${id}/${resource}`, {
       ...jsonBody(body),
-      signal,
+      signal: AbortSignal.any([signal, stale.signal]),
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     });
     if (!response.ok) return { error: await errorMessage(response), input };
@@ -253,17 +307,15 @@ async function streamTurn(
       if (event === "restart") show((narration = ""));
       if (event === "done") return { messages: data.messages };
       if (event === "error") {
-        return { error: data.status === 502 ? `${data.error}. ${retryHint}` : data.error, input };
+        // Heard here, so the server needn't keep it for the player's return.
+        getTurn(id).catch(() => {});
+        return { error: withHint(data.error, data.status, retryHint), input };
       }
     }
   } catch {
     // Fall through: a failed read is the same dropped connection as a stream that just stops.
+  } finally {
+    globalThis.document?.removeEventListener("visibilitychange", onReturn);
   }
-  try {
-    const messages = (await getMessages(id)).filter((message) => message.id > after);
-    if (messages.length > 0) return { messages };
-    return { error: `The connection dropped and this wasn't saved. ${retryHint}`, input };
-  } catch {
-    return { error: "NovelForge can't be reached. Make sure it's still running, then reload this page.", input };
-  }
+  return awaitTurn(id, input, after, retryHint, show);
 }

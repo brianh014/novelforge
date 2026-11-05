@@ -157,3 +157,25 @@ export function applyOperations(state: State, operations: StateOperation[]) {
   const refused = operations.filter((operation) => !apply(next, operation));
   return { next, refused };
 }
+
+export const Person = z.object({ name: z.string().trim().min(1), appearance: z.string() });
+
+/**
+ * Makes everyone a response names a known NPC, as Narrators often forget to, ahead of `operations`, so that those can
+ * use the new names. Returns the state and what's left of `operations` once anything this already did is taken out.
+ */
+export function introduce(state: State, people: z.infer<typeof Person>[], pcName: string, operations: StateOperation[]) {
+  // A list of people is never worth a Turn, so someone with no looks waits until they're named again.
+  const introductions = people
+    .filter(({ name, appearance }) => !pcName.split(" ").includes(name) && name !== pcName && (findNpc(state, name) || appearance.trim()))
+    .flatMap(({ name, appearance }): StateOperation[] => [
+      ...(findNpc(state, name) ? [] : [{ op: "add_npc" as const, name, appearance }]),
+      ...(state.pcKnown.npcs.includes(name) ? [] : [{ op: "add_known_npc" as const, name }]),
+    ]);
+  return {
+    state: applyOperations(state, introductions).next,
+    operations: operations.filter(
+      (operation) => !introductions.some((done) => done.op === operation.op && "name" in done && "name" in operation && done.name === operation.name),
+    ),
+  };
+}

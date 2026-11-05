@@ -17,11 +17,15 @@ const LIMITS = {
 type ProviderError = { metadata?: { error_type?: string; reasons?: string[] } };
 
 type Chunk = {
+  id?: string;
+  provider?: string;
+  usage?: object;
   error?: ProviderError;
   choices?: {
     delta?: { content?: string | null; refusal?: string | null };
     message?: { content?: string | null };
     finish_reason?: string | null;
+    native_finish_reason?: string | null;
   }[];
 };
 
@@ -95,6 +99,11 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
             cause: new Error(redacted(`Text Provider error: ${JSON.stringify({ status, error })}`)),
           });
 
+    // For the server log, so it holds how the reply went and none of its text.
+    const started = Date.now();
+    const seen: Record<string, unknown> = { model: textModel };
+    let reply = "";
+
     const silence = new AbortController();
     let timer: Timer | undefined;
     const heardFrom = () => {
@@ -126,13 +135,16 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
 
     try {
       const useSchema = schema !== undefined && (await supportsSchema(url, textModel, headers, signal));
+      seen.schema = useSchema;
       let response = await send(useSchema);
       // A listing can claim schema support that the routed provider then rejects, and that must not fail every Turn.
       if (useSchema && (response.status === 400 || response.status === 404)) {
         console.error(`Schema mode rejected for ${textModel}:`, redacted(await response.text()));
         schemaSupport.set(`${url} ${textModel}`, false);
+        seen.schema = false;
         response = await send(false);
       }
+      seen.status = response.status;
       if (!response.ok || !response.body) {
         const { error } = (await response.json().catch(() => ({}))) as Chunk;
         throw failure(error, response.status);
@@ -140,12 +152,22 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
 
       // Some servers ignore `stream` and send the whole reply as one JSON body.
       const whole = response.headers.get("content-type")?.includes("application/json");
-      let reply = "";
       for await (const data of whole ? [await response.text()] : eventData(response.body, heardFrom)) {
         if (data === "[DONE]") break;
-        const { error, choices } = JSON.parse(data) as Chunk;
+        seen.lines = ((seen.lines as number) ?? 0) + 1;
+        // Long enough to tell cut-off JSON from an HTML page, and too short to hold much of the story.
+        seen.last = { chars: data.length, start: redacted(data.slice(0, 20)) };
+        const { id, provider, usage, error, choices } = JSON.parse(data) as Chunk;
+        delete seen.last;
         if (error) throw failure(error, response.status);
-        const { delta, message, finish_reason } = choices?.[0] ?? {};
+        const { delta, message, finish_reason, native_finish_reason } = choices?.[0] ?? {};
+        Object.assign(seen, {
+          generation: id ?? seen.generation,
+          provider: provider ?? seen.provider,
+          usage: usage ?? seen.usage,
+          finish: finish_reason ?? seen.finish,
+          nativeFinish: native_finish_reason ?? seen.nativeFinish,
+        });
         if (delta?.refusal || finish_reason === "content_filter") throw new ContentRefused();
         const text = delta?.content ?? message?.content;
         if (text) {
@@ -155,11 +177,13 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
       }
       return reply;
     } catch (cause) {
+      seen.failed = signal.aborted ? "the client left" : (cause as Error).name;
       const known = cause instanceof ContentRefused || cause instanceof TextProviderFailed;
       if (known || signal.aborted || cause instanceof SyntaxError) throw cause;
       throw new TextProviderFailed(silence.signal.aborted ? STOPPED : UNREACHABLE, { cause });
     } finally {
       clearTimeout(timer);
+      console.log(`Text reply: ${JSON.stringify({ ...seen, chars: reply.length, ms: Date.now() - started })}`);
     }
   };
 }

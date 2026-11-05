@@ -129,13 +129,16 @@ Every Turn is a fresh, stateless LLM call (see [ADR 0002](docs/adr/0002-stateles
 Lore Entry activation:
 
 * Always-on entries include `world_rules` and active Plot Threads
+* Each finished Turn replaces the rolling summary with its `summary`, and a blank one leaves it as it was
+* Every eighth response, the prompt names the next Plot Thread in turn and asks the Narrator to bring it into play
+* The last instruction before the player's action keeps the PC's choices and speech to the player, and treats anything the PC is said to think as private
 * Other entries activate when their keywords appear in recent Messages, within a token budget
 * Activation allows one level of recursion
 * There are no probability rolls, timers or embeddings
 
 **Structured Output Protocol:** Force function calling / JSON Schema output mode on supporting models, falling back to validating the JSON and retrying on models without it. Narration streams as it arrives. The Narrator's response is one of:
 
-* **A finished Turn:** narration, state operations, PC-known updates, `scene_changed` and `visual_description`
+* **A finished Turn:** narration, state operations, PC-known updates, `people`, `summary`, `scene_changed` and `visual_description`
 * **A Check request:** the action being attempted and its difficulty
 
 System prompt must explicitly instruct the Narrator: *"Evaluate player action against `world_rules`. If an action violates world constraints, describe the failure in-character rather than fulfilling it."*
@@ -185,9 +188,12 @@ The player can Revert to any previous Message, which restores that Message's Sna
 
 A failed Turn writes nothing and keeps the player's text in the input box.
 
-* Invalid JSON retries automatically up to twice
+* Invalid JSON retries automatically up to twice, and so does a broken line in the reply's stream
 * A content refusal tells the player it was refused and lets them edit the message
 * Network or API errors offer a retry
+* The error stays above the input box until the player dismisses it or starts another Turn
+* A Turn goes on without its client, so the player can switch apps, lock the phone or reload. The page picks it up on return, text so far included, and a failure waits to be told once. A Turn still costs its model call if the player never comes back, and a server restart ends it unsaved.
+* Only one Turn runs per Save, and a second is refused before it reaches the model
 
 ### State Snapshots
 
@@ -217,7 +223,7 @@ Redraw draws that image again from the same or an edited prompt, using the Save'
 
 Redraws wait in the Save's image queue and are never dropped for a newer Scene Image. Each image has one Redraw at a time, and the button is disabled with an empty prompt or while images are off. A Revert or replaced Turn that removes an image stops its Redraw, and a replaced Turn draws a fresh Scene Image, which loses any Redraw of the old one. Duplicates and exports include Image Prompts.
 
-An NPC portrait is generated once, the first time that NPC appears in a Scene or the PC comes to know them, even if they aren't in view, such as someone seen in a photo. An NPC who is only in the state gets none. Anyone missed is drawn when the Scene next moves. Each NPC stores appearance text for image prompts. Portraits are displayed in the Journal and used as reference images for Scene Images where the model supports it.
+An NPC portrait is generated once, the first time that NPC appears in a Scene or the PC comes to know them, even if they aren't in view, such as someone seen in a photo. An NPC who is only in the state gets none. Each finished Turn lists everyone its narration names, with their looks, and anyone listed but missing joins the state and becomes known to the PC, even if the Narrator left out the operations for it. A list that is malformed is ignored rather than costing the Turn. Anyone missed is drawn when the Scene next moves. Each NPC stores appearance text for image prompts. Portraits are displayed in the Journal and used as reference images for Scene Images where the model supports it.
 
 **Explicit Image Triggering:** The Narrator's structured output includes a boolean `scene_changed` flag and a `visual_description` string. A Scene Image is generated only when `scene_changed` is true or the server sees the location or visible cast change. There is no text comparison of descriptions.
 

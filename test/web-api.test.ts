@@ -14,6 +14,9 @@ import {
   playTurn,
   regenerateWorld,
   replaceResponse,
+  resumeTurn,
+  getTurn,
+  turnPolling,
   saveArtStyle,
   saveSettings,
   setupProblem,
@@ -188,27 +191,15 @@ test("an older Turn is not mistaken for the dropped one", async () => {
   expect(result).toMatchObject({ input: "Second." });
 });
 
-test("leaving mid-Turn stops it, stores nothing and keeps the player's text", async () => {
-  start(async (_prompt, { onText, signal }) => {
-    onText('{"check":null,"narration":"The ti');
-    await new Promise((_, reject) => signal.addEventListener("abort", reject));
-    return "";
-  });
-  const id = await game.createSave();
-  const leaving = new AbortController();
-
-  const result = await playTurn(id, "I wade forward.", 0, () => leaving.abort(), leaving.signal);
-
-  expect(result).toMatchObject({ input: "I wade forward." });
-  expect(await game.get(`/saves/${id}/messages`).then((r) => r.json())).toEqual({ messages: [] });
-});
-
 test("losing the server altogether keeps the player's text", async () => {
   start(reply("Unused."));
   const id = await game.createSave();
   spyOn(globalThis, "fetch").mockImplementation(unreachable("connection refused") as unknown as typeof fetch);
+  const realEvery = turnPolling.everyMs;
+  turnPolling.everyMs = 1;
 
   const { result } = await play(id, "I wade forward.");
+  turnPolling.everyMs = realEvery;
 
   expect(result).toMatchObject({ input: "I wade forward." });
   expect((result as { error: string }).error).toContain("can't be reached");
@@ -365,4 +356,84 @@ test("a failed generation reaches the wizard as an error it can show", async () 
   await expect(generateWorld({ title: "Dust", theme: "Western", worldBrief: "Dust", startingHook: "" })).rejects.toThrow(
     "The Text Provider request failed",
   );
+});
+
+const slowly =
+  (text: string, ms: number): TextProvider =>
+  async (_prompt, { onText }) => {
+    onText(narration(text).slice(0, -2).slice(0, 40));
+    await Bun.sleep(ms);
+    return narration(text);
+  };
+
+test("a dropped stream waits for the Turn that is still running, then shows it", async () => {
+  const realEvery = turnPolling.everyMs;
+  turnPolling.everyMs = 20;
+  try {
+    start(slowly("The tide rises.", 120), async (send) => {
+      void send();
+      await Bun.sleep(30);
+      return new Response("");
+    });
+    const id = await game.createSave();
+
+    const { result } = await play(id, "I wade forward.");
+
+    expect(result).toMatchObject({ messages: [{ id: 1 }, { id: 2, text: "The tide rises." }] });
+  } finally {
+    turnPolling.everyMs = realEvery;
+  }
+});
+
+test("a page that returns to a running Turn picks it up, and finishes with its Messages", async () => {
+  const realEvery = turnPolling.everyMs;
+  turnPolling.everyMs = 20;
+  try {
+    start(slowly("The tide rises.", 120));
+    const id = await game.createSave();
+    const started = playTurn(id, "I wade forward.", 0, () => {}, new AbortController().signal);
+    await Bun.sleep(40);
+
+    const { running } = await getTurn(id);
+    const result = await resumeTurn(id, running!, () => {});
+
+    expect(result).toMatchObject({ messages: [{ id: 1 }, { id: 2, text: "The tide rises." }] });
+    await started;
+  } finally {
+    turnPolling.everyMs = realEvery;
+  }
+});
+
+test("coming back to the page reads a stream that has gone quiet from the Turn instead", async () => {
+  const realEvery = turnPolling.everyMs;
+  turnPolling.everyMs = 20;
+  const page = Object.assign(new EventTarget(), { visibilityState: "visible" });
+  (globalThis as { document?: unknown }).document = page;
+  try {
+    start(slowly("The tide rises.", 120));
+    const id = await game.createSave();
+    const playing = playTurn(id, "I wade forward.", 0, () => {}, new AbortController().signal);
+    await Bun.sleep(40);
+
+    page.dispatchEvent(new Event("visibilitychange"));
+
+    expect(await playing).toMatchObject({ messages: [{ id: 1 }, { id: 2, text: "The tide rises." }] });
+    const asked = (fetch as unknown as { mock: { calls: [string][] } }).mock.calls.map(([path]) => String(path));
+    expect(asked.some((path) => path.endsWith("/turn"))).toBe(true);
+  } finally {
+    turnPolling.everyMs = realEvery;
+    delete (globalThis as { document?: unknown }).document;
+  }
+});
+
+test("a failure the stream delivered isn't told a second time", async () => {
+  start(async () => {
+    throw new ContentRefused();
+  });
+  const id = await game.createSave();
+
+  await playTurn(id, "I wade forward.", 0, () => {}, new AbortController().signal);
+  await Bun.sleep(20);
+
+  expect(await getTurn(id)).toEqual({});
 });

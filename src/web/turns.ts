@@ -11,7 +11,7 @@ export type RunningTurn = {
   watch: (listener: (turn: TurnInProgress) => void) => () => void;
 };
 
-// Held outside the screens, so the player can look at the Journal while a Turn streams. A reload still drops it.
+// Held outside the screens, so the player can look at the Journal while a Turn streams. A reload drops this, and the page asks the server instead.
 const running = new Map<string, RunningTurn>();
 const missed = new Map<string, Failure>();
 
@@ -35,7 +35,7 @@ export function startTurn(id: string, started: TurnInProgress, play: Play) {
     entry.turn = { ...started, narration };
     watcher?.(entry.turn);
   };
-  // Never aborted, as leaving the screen no longer ends a Turn.
+  // Never aborted, as leaving the screen doesn't end a Turn.
   entry.finished = play(show, new AbortController().signal).then((result) => {
     running.delete(id);
     if ("error" in result && !watcher) missed.set(id, result);

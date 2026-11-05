@@ -1,0 +1,56 @@
+import type { TurnEvents } from "./turn-engine";
+
+export type LiveTurn = {
+  input: string;
+  /** The text so far. */
+  narration: string;
+  /** The latest Message when the Turn began, so anything newer is this Turn's. */
+  after: number;
+  /** The Message a Rewrite or Regenerate replaces. */
+  replaces?: number;
+};
+export type FailedTurn = { status: number; error: string; input: string; replaces?: number };
+
+export class TurnRunning extends Error {}
+
+/**
+ * The Turns being played, which outlive the requests that started them, so a player can leave and come back. Held in
+ * memory: a restart ends them all, and a Turn it ended was never saved.
+ */
+export function liveTurns() {
+  const running = new Map<string, LiveTurn>();
+  const failed = new Map<string, FailedTurn>();
+  return {
+    /** Only one per Save, as a second would fail at the end anyway, after the model was paid for it. */
+    begin(id: string, after: number, input: string, replaces?: number) {
+      if (running.has(id)) throw new TurnRunning();
+      failed.delete(id);
+      const turn: LiveTurn = { input, narration: "", after, ...(replaces !== undefined && { replaces }) };
+      running.set(id, turn);
+      return {
+        input,
+        replaces,
+        heard: (...[event, data]: Parameters<TurnEvents>) => {
+          turn.narration = event === "restart" ? "" : turn.narration + (data as { text: string }).text;
+        },
+        /** A `failure` waits for the player, who may not have been there to see it. */
+        end(failure?: FailedTurn) {
+          running.delete(id);
+          if (failure) failed.set(id, failure);
+        },
+      };
+    },
+
+    /** Reading a failure takes it, so it's told once. */
+    status(id: string) {
+      const turn = running.get(id);
+      if (turn) return { running: turn };
+      const failure = failed.get(id);
+      failed.delete(id);
+      return failure ? { failed: failure } : {};
+    },
+  };
+}
+
+export type LiveTurns = ReturnType<typeof liveTurns>;
+export type BegunTurn = ReturnType<LiveTurns["begin"]>;

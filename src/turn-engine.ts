@@ -4,7 +4,7 @@ import { type ImagePipeline, movedScene, portraitsDue, type Scene, visibleNpcs }
 import { assemblePrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
-import { applyOperations, type State, StateOperation } from "./state-applier";
+import { applyOperations, introduce, Person, type State, StateOperation } from "./state-applier";
 
 /** Throws ContentRefused when the content is refused. Anything else it throws is a network or API error. */
 export type TextProvider = (
@@ -34,6 +34,8 @@ export class TurnFailed extends Error {
 const FinishedTurn = z.object({
   narration: z.string().trim().min(1),
   state_operations: z.array(StateOperation).default([]),
+  people: z.array(Person).catch([]),
+  summary: z.string().catch(""),
   scene_changed: z.boolean().nullish(),
   visual_description: z.string().nullish(),
   // Without this, narration beside an invalid difficulty would pass as a finished Turn and dodge the Check.
@@ -64,6 +66,8 @@ const responseSchema = jsonSchemaOf(
     check: CheckRequest.nullable(),
     narration: z.string().nullable(),
     state_operations: z.array(StateOperation),
+    people: z.array(Person),
+    summary: z.string(),
     scene_changed: z.boolean().nullable(),
     visual_description: z.string().nullable(),
   }),
@@ -93,6 +97,7 @@ type Narrated = {
   /** The text a failure hands back to the player. */
   input: string;
   refusal: string;
+  pcName: string;
   check?: Check;
   /** Left out when no new roll is allowed, which makes a Check request an invalid reply. */
   rollCheck?: (request: z.infer<typeof CheckRequest>) => Check;
@@ -129,6 +134,7 @@ export async function playTurn(
     prompt,
     input,
     refusal: "The Narrator refused this message. Edit it and try again.",
+    pcName: saves.read(id).pc.name,
     rollCheck: mayCheck ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
     committed: (messageId, scene) => images.sceneChanged(id, messageId, scene),
@@ -170,6 +176,7 @@ export async function replaceResponse(
     prompt: [...prompt, replacementInstruction(feedback === undefined ? undefined : { narration, feedback })],
     input: feedback ?? "",
     refusal: "The Narrator refused this, so the response stays as it was.",
+    pcName: saves.read(id).pc.name,
     check,
     commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
     committed: (replacement, scene) => {
@@ -183,7 +190,7 @@ async function narrate(
   textProvider: TextProvider,
   signal: AbortSignal,
   emit: TurnEvents,
-  { prompt, input, refusal, check: storedCheck, rollCheck, commit, committed }: Narrated,
+  { prompt, input, refusal, pcName, check: storedCheck, rollCheck, commit, committed }: Narrated,
 ) {
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check = storedCheck;
@@ -199,14 +206,14 @@ async function narrate(
       emit("narration", { text: narration.slice(narrationSent) });
       narrationSent = narration.length;
     };
-    const reply = await askNarrator(
-      textProvider,
-      check ? [...prompt, resultInstruction(check)] : prompt,
-      { schema: responseSchema, onText, signal },
-      input,
-      refusal,
-    );
     try {
+      const reply = await askNarrator(
+        textProvider,
+        check ? [...prompt, resultInstruction(check)] : prompt,
+        { schema: responseSchema, onText, signal },
+        input,
+        refusal,
+      );
       const response = parseReply(reply, NarratorResponse);
       if (response.check) {
         if (check || !rollCheck) throw new InvalidResponse();
@@ -214,15 +221,17 @@ async function narrate(
         attempt = 0; // The result call gets its own retries.
         continue;
       }
-      const { narration, state_operations, scene_changed, visual_description } = response;
+      const { narration, state_operations, people, summary, scene_changed, visual_description } = response;
       let moved = false;
       let location = "";
       let visible: Scene["visible"] = [];
       let portraits: Scene["portraits"] = [];
       const messages = commit(narration, check, (state) => {
-        const { next, refused } = applyOperations(state, state_operations);
+        const introduced = introduce(state, people, pcName, state_operations);
+        const { next, refused } = applyOperations(introduced.state, introduced.operations);
         // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
         if (refused.length > 0) throw new InvalidResponse(undefined, { cause: refused });
+        if (summary.trim()) next.summary = summary.trim();
         moved = movedScene(state, next);
         location = next.scene.location;
         visible = visibleNpcs(next);
@@ -237,13 +246,40 @@ async function narrate(
         visible,
         portraits,
       });
+      // Counts and names only, so that the log never repeats the story.
+      console.log(
+        `Turn committed: ${JSON.stringify({
+          message: messages.at(-1)!.id,
+          attempts: attempt,
+          check: !!check,
+          narration: narration.length,
+          summary: summary.trim().length,
+          people: people.map(({ name }) => name),
+          operations: state_operations.map(({ op }) => op),
+          sceneChanged: !!scene_changed,
+        })}`,
+      );
       return messages;
     } catch (cause) {
-      if (!(cause instanceof InvalidResponse)) throw cause;
-      if (attempt === MAX_ATTEMPTS) {
-        throw new TurnFailed("The Narrator gave no usable response", "retryable", input, { cause });
-      }
+      retryIfInvalid(cause, attempt, input);
     }
+  }
+}
+
+/** What was wrong with a reply, without any of its text. */
+function whyInvalid({ cause }: InvalidResponse) {
+  if (cause instanceof z.ZodError) return cause.issues.map(({ path, code }) => `${path.join(".")}: ${code}`).join(", ");
+  if (Array.isArray(cause)) return `refused operations: ${cause.map(({ op }) => op).join(", ")}`;
+  return cause instanceof Error ? cause.message : "a Check request where none is allowed";
+}
+
+/** Returns if another attempt should run. Anything but an invalid reply goes on up. */
+function retryIfInvalid(cause: unknown, attempt: number, input: string) {
+  if (!(cause instanceof InvalidResponse)) throw cause;
+  const reason = whyInvalid(cause);
+  console.error(`Unusable Narrator reply, attempt ${attempt} of ${MAX_ATTEMPTS}: ${reason}`);
+  if (attempt === MAX_ATTEMPTS) {
+    throw new TurnFailed("The Narrator gave no usable response", "retryable", input, { cause: new Error(reason) });
   }
 }
 
@@ -260,6 +296,8 @@ async function askNarrator(
     if (cause instanceof ContentRefused) {
       throw new TurnFailed(refusal, "refused", input, { cause });
     }
+    // A stream line that isn't JSON is a garbled reply, so it gets the same retries as one.
+    if (cause instanceof SyntaxError) throw new InvalidResponse(undefined, { cause });
     const message = cause instanceof TextProviderFailed ? cause.message : "The Text Provider request failed";
     throw new TurnFailed(message, "retryable", input, { cause });
   }
@@ -275,13 +313,10 @@ export async function askForJson<T>(
 ) {
   const request = { schema: jsonSchemaOf(schema), onText: () => {}, signal };
   for (let attempt = 1; ; attempt++) {
-    const reply = await askNarrator(textProvider, prompt, request, "", refusal);
     try {
-      return parseReply(reply, schema);
+      return parseReply(await askNarrator(textProvider, prompt, request, "", refusal), schema);
     } catch (cause) {
-      if (attempt === MAX_ATTEMPTS) {
-        throw new TurnFailed("The Narrator gave no usable response", "retryable", "", { cause });
-      }
+      retryIfInvalid(cause, attempt, "");
     }
   }
 }

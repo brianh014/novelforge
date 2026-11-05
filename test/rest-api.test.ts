@@ -1826,31 +1826,31 @@ test("a replacement that fails partway through its commit changes nothing", asyn
   expect((await game.get(`/saves/${id}/messages/2/snapshot`)).status).toBe(200);
 });
 
-test("a response replaced during a Turn in flight refuses that Turn, and a Turn committed first refuses the replacement", async () => {
+test("a Turn and a replacement can't overlap, whichever came first", async () => {
   const slow = Promise.withResolvers<string>();
-  const replies = [Promise.resolve(narration("Rain.")), slow.promise, Promise.resolve(narration("Snow."))];
+  const replies = [Promise.resolve(narration("Rain.")), slow.promise];
   game = startGame(savesDir, () => replies.shift()!);
   const id = await game.createSave();
   await game.post(`/saves/${id}/turns`, { input: "I wait." });
   const turn = game.post(`/saves/${id}/turns`, { input: "I go on." });
   await Bun.sleep(50);
 
-  await regenerate(game, id, 2);
-  slow.resolve(narration("Written after the old response."));
+  expect((await regenerate(game, id, 2)).status).toBe(409);
+  slow.resolve(narration("Hail."));
 
-  expect((await turn).status).toBe(409);
-  expect(await messageTexts(game, id)).toEqual(["I wait.", "Snow."]);
+  expect((await turn).status).toBe(201);
+  expect(await messageTexts(game, id)).toEqual(["I wait.", "Rain.", "I go on.", "Hail."]);
 
   const slowReplacement = Promise.withResolvers<string>();
-  replies.push(slowReplacement.promise, Promise.resolve(narration("Hail.")));
-  const replacement = regenerate(game, id, 3);
+  replies.push(slowReplacement.promise);
+  const replacement = regenerate(game, id, 4);
   await Bun.sleep(50);
 
-  await game.post(`/saves/${id}/turns`, { input: "I go on." });
-  slowReplacement.resolve(narration("Written over a newer Turn."));
+  expect((await game.post(`/saves/${id}/turns`, { input: "I run." })).status).toBe(409);
+  slowReplacement.resolve(narration("Snow."));
 
-  expect((await replacement).status).toBe(409);
-  expect(await messageTexts(game, id)).toEqual(["I wait.", "Snow.", "I go on.", "Hail."]);
+  expect((await replacement).status).toBe(201);
+  expect(await messageTexts(game, id)).toEqual(["I wait.", "Rain.", "I go on.", "Snow."]);
 });
 
 test("a replacement in flight when a Revert happens is refused", async () => {

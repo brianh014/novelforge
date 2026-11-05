@@ -552,15 +552,15 @@ test("a Message can follow a player Message that a Revert left unanswered", asyn
 const TABLE_TRICKS: [string, (db: Database) => void][] = [
   ["a CHECK that stops new Messages", (db) => {
     db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, text TEXT, hidden_check TEXT, CHECK (id < 1))");
+    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, text TEXT, hidden_check TEXT, created_at TEXT, CHECK (id < 1))");
   }],
   ["Message ids with no primary key", (db) => {
     db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER, role TEXT, text TEXT, hidden_check TEXT)");
+    db.run("CREATE TABLE messages (id INTEGER, role TEXT, text TEXT, hidden_check TEXT, created_at TEXT)");
   }],
   ["a generated column", (db) => {
     db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, hidden_check TEXT, text TEXT AS ('x'))");
+    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, hidden_check TEXT, created_at TEXT, text TEXT AS ('x'))");
   }],
   ["an exhausted id sequence", (db) => {
     db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello')");
@@ -623,4 +623,69 @@ test("import only accepts the binary content type, which no form on another site
 
   expect(response.status).toBe(415);
   expect(readdirSync(savesDir)).toEqual([`${id}.sqlite`]);
+});
+
+const messageTimes = (id: string) => {
+  using db = new Database(join(savesDir, `${id}.sqlite`));
+  return db.query<{ id: number; created_at: string | null }, []>("SELECT id, created_at FROM messages ORDER BY id").all();
+};
+
+test("each Message records when it was written, and a Rewrite gets its own time", async () => {
+  play(narration("The tide rises."), narration("The tide falls."));
+  const id = await game.createSave();
+  const before = new Date().toISOString();
+
+  const { messages } = (await game.post(`/saves/${id}/turns`, { input: "I wade." }).then((r) => r.json())) as { messages: Message[] };
+  await game.post(`/saves/${id}/messages/${messages[1]!.id}/regenerate`, {});
+
+  const times = messageTimes(id);
+  expect(times).toHaveLength(2);
+  for (const { created_at } of times) {
+    expect(created_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+    expect(created_at! >= before.slice(0, 19)).toBe(true);
+  }
+  expect((await game.get(`/saves/${id}/messages`).then((r) => r.json())).messages[0]).toEqual(messages[0]);
+});
+
+test("Messages from before timestamps open with no time, and new ones get one", async () => {
+  play(narration("The tide rises."), narration("The tide falls."));
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I wade." });
+  await game.stop();
+  {
+    using db = new Database(join(savesDir, `${id}.sqlite`));
+    db.run("ALTER TABLE messages DROP COLUMN created_at; PRAGMA user_version = 9");
+  }
+  play(narration("The tide falls."));
+
+  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(messageTimes(id).map(({ created_at }) => created_at !== null)).toEqual([false, false, true, true]);
+});
+
+test("a Save with a malformed time is refused on import", async () => {
+  play(narration("The tide rises."));
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I wade." });
+  const path = join(folder.path, "bad.sqlite");
+  copyFileSync(join(savesDir, `${id}.sqlite`), path);
+  {
+    using db = new Database(path);
+    db.run("UPDATE messages SET created_at = 7");
+  }
+
+  const response = await importSave(new Uint8Array(readFileSync(path)));
+
+  expect(response.status).toBe(422);
+});
+
+test("an exported Save keeps its Message times through import", async () => {
+  play(narration("The tide rises."));
+  const id = await game.createSave();
+  await game.post(`/saves/${id}/turns`, { input: "I wade." });
+
+  const imported = await importedId(await exportSave(id));
+
+  expect(messageTimes(imported)).toEqual(messageTimes(id));
+  expect(messageTimes(id)[0]!.created_at).not.toBeNull();
 });

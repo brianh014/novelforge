@@ -7,15 +7,17 @@ export type Prompt = { role: "system" | "user" | "assistant"; content: string }[
 
 const RECENT_MESSAGES = 20;
 const LORE_TOKEN_BUDGET = 2000;
+const RESPONSES_PER_THREAD_NUDGE = 8;
 
 // JSON encoding means player text can never close the delimiter early.
 const inCharacter = (text: string) => JSON.stringify({ in_character: text });
 
-const toPrompt = ({ role, text }: Message): Prompt[number] =>
+const toPrompt = (npcs: State["npcs"]) => ({ role, text }: Message): Prompt[number] =>
   role === "player"
     ? { role: "user", content: inCharacter(text) }
     : // The same key order as a new reply, because the Narrator copies what it sees and streaming needs check first.
-      { role: "assistant", content: JSON.stringify({ check: null, narration: text, state_operations: [], scene_changed: false, visual_description: "" }) };
+      // No summary, as one in each of these would cost far more than it teaches.
+      { role: "assistant", content: JSON.stringify({ check: null, narration: text, state_operations: [], people: npcs.filter(({ name }) => text.includes(name)), scene_changed: false, visual_description: "" }) };
 
 /** The player Message of the Turn that opens a story. Every Narrator Message follows a player Message, so this one is stored too, and the page hides it. */
 export const OPENING_INPUT = "Begin the story.";
@@ -33,6 +35,15 @@ ${FULL_OPENING}`
     : `
 This is the first Turn and it is a sandbox start: the PC is simply living in the world, with nothing forcing their hand yet.
 ${FULL_OPENING}`;
+}
+
+/** Threads can sit unused for a whole story, and which have shown isn't tracked, so each gets its turn by the clock. */
+function threadNudge(plotThreads: string[], messages: Message[]) {
+  const told = messages.filter(({ role }) => role === "narrator").length;
+  if (told === 0 || told % RESPONSES_PER_THREAD_NUDGE !== 0 || plotThreads.length === 0) return "";
+  const thread = plotThreads[(told / RESPONSES_PER_THREAD_NUDGE - 1) % plotThreads.length]!;
+  return `
+Bring this Plot Thread into play at the next natural moment, through a person or event that reaches the PC, and if it has already shown, move it a step forward. It stays secret, so show only what the PC could see: ${JSON.stringify(thread)}`;
 }
 
 export function assemblePrompt({
@@ -68,8 +79,9 @@ Current state: ${JSON.stringify(currentState)}
 Change the state only through state_operations, naming things exactly as the current state does. Reply only with JSON matching this schema, with its keys in the same order and check set to null for a finished Turn: ${responseSchema}
 If the PC attempts something risky, do not narrate it yet. Reply with a check instead, naming the action and one difficulty that already accounts for the PC's skills, condition and the situation. Safe actions need no check. Never mention dice, numbers or Checks.
 Put each spoken line of the narration on its own line as [Name]: “the words”, with the speaker's name as the state has it and nothing else on that line. Put actions and description on separate lines, with no square brackets.
-Older Messages leave this prompt, so keep a short summary of the story through set_summary, covering only what the PC has experienced.
-Record what the PC learns through add_known_fact, and each NPC the PC comes to know of through add_known_npc, using add_npc first only for an NPC not yet in the state. Never repeat a known fact or NPC. Right after add_known_npc, use set_known_npc_summary to say in one short sentence who that NPC is, as the PC understands them, and use it again when that understanding changes. Give one now to any known NPC in the state that has none. The player reads these too, so never put Lore Entry or Plot Thread secrets in them. The player reads the summary and known facts in the Journal, so write them as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
+Older Messages leave this prompt, so in every finished Turn set summary to the whole story so far in under 300 words, covering only what the PC has experienced. Keep what still matters from the current summary, including plans, appointments and invitations still open, and add what just happened.
+In every finished Turn, list in people everyone the narration names, other than the PC, even someone only mentioned, by the name the state has for them, with their looks in a few concrete words with no name. Anyone listed joins the state and becomes known to the PC, with no need for add_npc or add_known_npc.
+Record what the PC learns through add_known_fact, and each unnamed NPC the PC comes to know of through add_known_npc, using add_npc first only for an NPC not yet in the state. Never repeat a known fact or NPC. Whenever the PC first comes to know an NPC, use set_known_npc_summary to say in one short sentence who that NPC is, as the PC understands them, and use it again when that understanding changes. Give one now to any known NPC in the state that has none. The player reads these too, so never put Lore Entry or Plot Thread secrets in them. The player reads the summary and known facts in the Journal, so write them as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
 The player reads the inventory and status too, so write them as the PC would, with no Lore Entry or Plot Thread secrets. Keep the inventory realistic for this world: add only what the PC could really wear or carry there, and narrate anything too heavy or bulky being left behind instead of adding it. Use remove_item only for an item the state lists, and to move an item between wearing and carrying use remove_item and then add_item. Describe health, injuries and conditions in words with no digits, never as points or percentages. Use remove_status only for an entry the state lists under that kind, and never add_status one it already lists.
 The Lore Entries and Plot Threads are secret. Let them shape the story and reveal them only through play. When play goes somewhere they do not cover, add a Lore Entry with several keywords so that paraphrases still activate it. Resolve a Plot Thread once play has exhausted it, and add a new one when none remain.
 Keep the scene in the state current. Whenever the PC reaches a new location or the NPCs they can see change, use set_scene with a short name for the location, repeated exactly while they stay there, and visible_cast listing the NPCs in view by their names in the state, using add_npc first for a new one. An NPC's appearance is used to paint them, so give their looks in a few concrete words with no name, and use update_npc when their looks change. The player reads the location as a caption, so write it as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
@@ -79,11 +91,13 @@ Plot Threads: ${JSON.stringify(plotThreads)}
 Summary of the story so far: ${summary}
 Model Instructions, which are the player's out-of-character guidance to follow: ${modelInstructions}${firstTurnInstruction(startingHook, messages)}`,
     },
-    ...recent.map(toPrompt),
+    ...recent.map(toPrompt(currentState.npcs)),
     {
       role: "system",
       content: `world_rules: ${JSON.stringify(worldRules)}
-Evaluate the player's action against world_rules. If it violates them, do not request a check. Describe the failure in character rather than fulfilling the action.`,
+Evaluate the player's action against world_rules. If it violates them, do not request a check. Describe the failure in character rather than fulfilling the action.
+The player alone decides what the PC says, chooses and does. Narrate the action they gave and how the world answers it, and add no decision, spoken words or change of plan for the PC. Anything the player says the PC thinks, such as a line ending in "I think", is a private thought and is not spoken aloud.
+The older replies above are shortened, so fill in every field of the schema.${threadNudge(plotThreads, messages)}`,
     },
     { role: "user", content: inCharacter(input) },
   ];
@@ -93,7 +107,7 @@ Evaluate the player's action against world_rules. If it violates them, do not re
 export function replacementInstruction(rewrite?: { narration: string; feedback: string }): Prompt[number] {
   return {
     role: "system",
-    content: `This is a new response to the player's last action, replacing an earlier one that no longer counts. The state above is from before that action, so include every state operation this response needs, including set_summary and add_known_fact where they apply. Reply with a finished Turn, and do not request a check.${
+    content: `This is a new response to the player's last action, replacing an earlier one that no longer counts. The state above is from before that action, so include every state operation this response needs, including add_known_fact where it applies, and a summary that covers this response. Reply with a finished Turn, and do not request a check.${
       rewrite
         ? `
 The player rejected the earlier response and gave out-of-character feedback on it, delimited as JSON. Follow the feedback in the new response, while keeping to world_rules: ${JSON.stringify({ rejected_response: rewrite.narration, feedback: rewrite.feedback })}`

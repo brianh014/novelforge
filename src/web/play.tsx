@@ -3,7 +3,11 @@ import {
   coverUrl,
   decideForMe,
   duplicateFrom,
+  failureMessage,
   getMessages,
+  getTurn,
+  resumeTurn,
+  type TurnStatus,
   getImages,
   getJournal,
   getSave,
@@ -76,19 +80,24 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
   const startedOn = useRef(latestId);
   // The response the blank room belongs to, which stays for images that land under it after the Turn.
   const heldOn = useRef<number | undefined>(undefined);
+  // Where the words sit on screen during a Turn, to put them back as it ends.
+  const wordsAt = useRef(0);
 
   const checkMore = () => setMore(!!room.current && -story.current!.scrollTop > 8);
 
   // Only a move this code didn't make is the player's: a tap, or a wheel with nowhere to go, leaves the hold alone.
   function onScroll() {
     if (Math.abs(story.current!.scrollTop - held.current) > 2) following.current = false;
+    if (inTurn.current) wordsAt.current = wordsIn(story.current!).getBoundingClientRect().top;
     checkMore();
   }
 
+  // The Opening has no player words, and starts at the top.
+  const wordsIn = (area: HTMLElement) => [...area.querySelectorAll(".message.player")].at(-1) ?? area.querySelector(".message.narrator")!;
+
   /** Sizes the room to what the text leaves, so a change below the words takes room from it instead of moving them. */
   function fitRoom(area: HTMLElement) {
-    // The Opening has no player words, and starts at the top.
-    const anchor = [...area.querySelectorAll(".message.player")].at(-1) ?? area.querySelector(".message.narrator")!;
+    const anchor = wordsIn(area);
     const textHeight = room.current!.getBoundingClientRect().top - anchor.getBoundingClientRect().top;
     room.current!.style.height = `${Math.max(0, area.clientHeight - textHeight)}px`;
     return anchor;
@@ -103,7 +112,8 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
     }
     inTurn.current = !!turn;
     if (area && room.current) {
-      if (wasInTurn && !turn && latestId !== startedOn.current) heldOn.current = latestId;
+      const finished = wasInTurn && !turn && latestId !== startedOn.current;
+      if (finished) heldOn.current = latestId;
       // The room stays once a response ends, but a Revert leaves it nothing to hold.
       if (turn || latestId === heldOn.current) {
         const anchor = fitRoom(area);
@@ -111,7 +121,11 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
         if (following.current) {
           area.scrollTop = -Math.max(0, fromAnchor - area.clientHeight);
           held.current = area.scrollTop;
+        } else if (finished) {
+          // The browser's scroll anchor can sit in the streamed text, and would ride it down as that text is replaced.
+          area.scrollTop += anchor.getBoundingClientRect().top - wordsAt.current;
         }
+        if (turn) wordsAt.current = anchor.getBoundingClientRect().top;
       } else {
         room.current.style.height = "0";
       }
@@ -170,7 +184,8 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
     }
     // Without Settings the story still reads, in Prose.
     const reading = getSettings().catch(() => undefined);
-    Promise.all([getSave(id), getMessages(id), getStatus(id), reading]).then(([save, messages, status, settings]) => {
+    const live: Promise<TurnStatus> = inProgress ? Promise.resolve({}) : getTurn(id).catch(() => ({}));
+    Promise.all([getSave(id), getMessages(id), getStatus(id), reading, live]).then(([save, messages, status, settings, { running, failed }]) => {
       if (settings) {
         setSetupNotice(setupProblem(settings));
         setChatStyle(settings.chatStyle);
@@ -178,10 +193,17 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       setSave(save);
       setMessages(messages);
       setStatus(status);
-      if (inProgress) {
+      if (failed) {
+        setError(failureMessage(failed));
+        if (failed.replaces === undefined) setDraft(failed.input);
+      }
+      const replaces = messages.find((message) => message.id === running?.replaces);
+      const resumed =
+        running && startTurn(id, { input: running.input, narration: running.narration, replaces }, (show) => resumeTurn(id, running, show));
+      if (inProgress || resumed) {
         // One Turn at a time, so an item used meanwhile waits in the box.
         if (action) setDraft(action);
-        follow(inProgress);
+        follow(inProgress ?? resumed!);
       } else if (action) playInput(action, messages);
       // Without a working Narrator this would only fail, and the page already says what to fix.
       else if (messages.length === 0 && settings && !setupProblem(settings)) openStory();
@@ -533,7 +555,12 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
           {setupNotice} The Narrator can't reply until then. <a href={`#/settings/${id}`}>Open Settings</a>
         </p>
       )}
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && (
+        <div role="alert" className="error dismissable">
+          <p>{error}</p>
+          <button type="button" className="quiet" aria-label="Dismiss this error" onClick={() => setError("")}>×</button>
+        </div>
+      )}
       {replaceable && rewriting === replaceable.id && (
         <form className="ask" onSubmit={sendFeedback}>
           <label>

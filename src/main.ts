@@ -7,6 +7,12 @@ import { startServer } from "./rest-api";
 import { settingsStore } from "./settings-store";
 import { textProvider } from "./text-provider";
 
+// Here rather than at each call, so every line of the log has a time, from any part of the app.
+for (const level of ["log", "error"] as const) {
+  const write = console[level];
+  console[level] = (...args) => write(new Date().toISOString(), ...args);
+}
+
 // Under `bun run`, execPath is Bun itself, so keep dev Saves in the project rather than beside Bun.
 const isCompiled = basename(process.execPath, ".exe") !== "bun";
 const appDir = isCompiled ? dirname(process.execPath) : process.cwd();

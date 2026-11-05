@@ -8,8 +8,9 @@ const folder = tempFolder();
 const executable = join(folder.path, process.platform === "win32" ? "novelforge.exe" : "novelforge");
 const provider = fakeOpenAi([[delta(JSON.stringify({ narration: "The tide rises." }))]]);
 
+// Loopback, as Windows Firewall asks about every new executable that opens a network port, and each run builds a new one.
 async function launch() {
-  const app = Bun.spawn([executable], { cwd: folder.path, env: { ...process.env, PORT: "0" }, stdout: "pipe" });
+  const app = Bun.spawn([executable], { cwd: folder.path, env: { ...process.env, PORT: "0", HOST: "127.0.0.1" }, stdout: "pipe" });
   const { value } = await app.stdout.getReader().read();
   const url = new TextDecoder().decode(value).match(/http:\S+/)![0];
   return { app, url: new URL(url) };
@@ -66,22 +67,27 @@ test("the compiled app serves the SPA from inside itself", async () => {
   expect(script).toContain("Main Menu");
 });
 
-test("the compiled app listens on the LAN as well as on localhost", async () => {
-  const { app, url } = await launch();
+// Through Bun, one program the firewall asks about once. It reads what the app says rather than connecting, as whether
+// a connection gets through depends on the firewall's rules for each network, not on the app.
+test("the app listens on the LAN by default", async () => {
+  const { HOST: _, ...env } = process.env;
+  const app = Bun.spawn([process.execPath, "run", join(import.meta.dir, "../src/main.ts")], {
+    cwd: folder.path,
+    env: { ...env, PORT: "0" },
+    stdout: "pipe",
+    timeout: 10_000,
+  });
   const lanAddress = Object.values(networkInterfaces())
     .flat()
     .find((address) => address?.family === "IPv4" && !address.internal)?.address;
-  const reachable = async (host: string) =>
-    fetch(`http://${host}:${url.port}/saves`).then(
-      () => true,
-      () => false,
-    );
 
-  const local = await reachable("127.0.0.1");
-  const lan = lanAddress ? await reachable(lanAddress) : true;
+  let printed = "";
+  for await (const part of app.stdout) {
+    printed += new TextDecoder().decode(part);
+    if (printed.includes(`http://${lanAddress}:`) || !lanAddress) break;
+  }
   app.kill();
   await app.exited;
 
-  expect(local).toBe(true);
-  expect(lan).toBe(true);
-});
+  if (lanAddress) expect(printed).toContain(`On your network: http://${lanAddress}:`);
+}, 15_000);
