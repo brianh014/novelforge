@@ -288,6 +288,8 @@ h2 {
 }
 
 .sheet-scroll {
+  /* Holds the visually hidden radios, which otherwise escape it and scroll the whole page. */
+  position: relative;
   flex: 1;
   min-width: 0;
   padding: 14px 30px 30px;
@@ -299,7 +301,6 @@ h2 {
 }
 
 .sheet-body {
-  max-width: 780px;
   min-height: 100%;
   display: grid;
   align-content: start;
@@ -323,7 +324,8 @@ h2 {
 }
 
 .sheet-body .chips.art {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* Extra width adds thumbnails rather than enlarging them, as they would go soft and push the page down. */
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }
 
 .sheet-body #art-style {
@@ -360,10 +362,6 @@ h2 {
 .page .sheet-scroll,
 .book:has(.tabs) .page .sheet-scroll {
   padding: 0 0 24px;
-}
-
-.page .sheet-body {
-  max-width: none;
 }
 
 .story-card {
