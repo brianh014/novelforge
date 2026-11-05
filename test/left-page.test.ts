@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { leftFolded, rememberLeftFolded } from "../src/web/menu";
+import { storyName } from "../src/web/api";
 
 const real = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
 
@@ -29,4 +30,10 @@ test("blocked storage only loses the choice", () => {
   storage({ getItem: blocked, setItem: blocked });
   expect(leftFolded()).toBe(false);
   expect(() => rememberLeftFolded(true)).not.toThrow();
+});
+
+test("a story is called by its Title, and a Save with no Title by its PC", () => {
+  const pc = { name: "Mara Vey" };
+  expect(storyName({ title: "The Salt Road", pc })).toBe("The Salt Road");
+  expect(storyName({ title: "", pc })).toBe("Mara Vey");
 });

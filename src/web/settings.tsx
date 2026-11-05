@@ -25,7 +25,7 @@ const RESOLUTIONS = [
   ["1080p", "1080p (1920 × 1088)"],
   ["4k", "4K (3840 × 2160)"],
 ];
-const THIS_GAME = "This game";
+const THIS_STORY = "This story";
 
 export const applyLook = ({ fontSize, theme }: Settings) => {
   document.documentElement.dataset.fontSize = fontSize;
@@ -600,7 +600,7 @@ function InstallSettings({
     <form
       id="settings-form"
       className="fields settings"
-      hidden={section === THIS_GAME}
+      hidden={section === THIS_STORY}
       onSubmit={submit}
       // A required box in a hidden section stops Save with nothing to show for it, so go there. In time for the browser to point at the box.
       onInvalidCapture={(event) => {
@@ -780,7 +780,7 @@ function InstallSettings({
       </label>
       </div>
     </form>,
-    section !== THIS_GAME && (
+    section !== THIS_STORY && (
       <>
         {feedback}
         <div className="row">
@@ -811,13 +811,13 @@ export function SettingsScreen({ id }: { id?: string }) {
         <>
           <h1 className="big">Settings</h1>
           <nav aria-label="Settings sections">
-            {[...(id ? [THIS_GAME] : []), ...SECTIONS].map((name) => (
+            {[...(id ? [THIS_STORY] : []), ...SECTIONS].map((name) => (
               <button key={name} type="button" aria-current={name === section || undefined} onClick={() => setSection(name)}>
                 {name}
               </button>
             ))}
           </nav>
-          {!id && <p className="muted so-far">Open a game to change its Art Style.</p>}
+          {!id && <p className="muted so-far">Open a story to change its Art Style.</p>}
           <a className="quiet" href="#/">
             Main Menu
           </a>
@@ -827,7 +827,7 @@ export function SettingsScreen({ id }: { id?: string }) {
       {loadError && <p role="alert" className="error">{loadError}</p>}
       {/* Stays mounted, so an unsaved edit survives a look at another section. */}
       {id && (
-        <div hidden={section !== THIS_GAME}>
+        <div hidden={section !== THIS_STORY}>
           <ArtStyle key={id} id={id} />
         </div>
       )}

@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { OPENING_INPUT } from "../src/prompt-assembler";
 import { saveStore } from "../src/save-store";
 import { readable } from "../src/web/chat-style";
-import { narration, png, scriptedDice, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { narration, png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 
 beforeEach(() => {
   folder = tempFolder();
@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
@@ -33,15 +33,15 @@ const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A 
 async function withImages(replies: (string | Error)[], ...images: Parameters<typeof scriptedImages>) {
   const script = scriptedTextProvider(...replies);
   const drawn = scriptedImages(...images);
-  game = startGame(savesDir, script.textProvider, scriptedDice(), 2, drawn.imageAdapter);
-  await game.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
+  app = startApp(savesDir, script.textProvider, scriptedDice(), 2, drawn.imageAdapter);
+  await app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
   return { ...script, ...drawn };
 }
 
-const newWorld = async () => ((await (await game.post("/worlds", choices)).json()) as { id: string }).id;
+const newWorld = async () => ((await (await app.post("/worlds", choices)).json()) as { id: string }).id;
 
 const begin = async (worldId: string) => {
-  const response = await game.post(`/worlds/${worldId}/begin`, { artStyle: choices.artStyle });
+  const response = await app.post(`/worlds/${worldId}/begin`, { artStyle: choices.artStyle });
   return ((await response.json()) as { id: string }).id;
 };
 
@@ -57,7 +57,7 @@ test("a new world's cover is portrait book art from what the player reads, in th
   const { payloads } = await withImages([sheet, generated], png(1));
 
   const world = await newWorld();
-  const response = await game.get(`/worlds/${world}/cover`);
+  const response = await app.get(`/worlds/${world}/cover`);
 
   expect(response.status).toBe(200);
   expect(new Uint8Array(await response.arrayBuffer())).toEqual(png(1));
@@ -76,23 +76,23 @@ test("the cover goes with the world into its Save, even if it finishes after the
   await withImages([sheet, generated], painted, png(2));
 
   const id = await begin(await newWorld());
-  expect((await game.get(`/saves/${id}/cover`)).status).toBe(404);
+  expect((await app.get(`/saves/${id}/cover`)).status).toBe(404);
   finish(png(1));
 
   expect(await coverIsStored(id)).toBe(true);
-  expect(new Uint8Array(await (await game.get(`/saves/${id}/cover`)).arrayBuffer())).toEqual(png(1));
+  expect(new Uint8Array(await (await app.get(`/saves/${id}/cover`)).arrayBuffer())).toEqual(png(1));
 });
 
 test("a Revert leaves the cover, and a duplicate and an exported Save keep it", async () => {
   await withImages([sheet, generated, narration("One."), narration("Two.")], png(1), png(2));
   const id = await begin(await newWorld());
   expect(await coverIsStored(id)).toBe(true);
-  await game.post(`/saves/${id}/turns`, { input: "A" });
-  await game.post(`/saves/${id}/turns`, { input: "B" });
+  await app.post(`/saves/${id}/turns`, { input: "A" });
+  await app.post(`/saves/${id}/turns`, { input: "B" });
 
-  await game.post(`/saves/${id}/messages/2/revert`, {});
-  const { id: copy } = (await (await game.post(`/saves/${id}/duplicate`, {})).json()) as { id: string };
-  const bytes = await (await game.get(`/saves/${id}/export`)).arrayBuffer();
+  await app.post(`/saves/${id}/messages/2/revert`, {});
+  const { id: copy } = (await (await app.post(`/saves/${id}/duplicate`, {})).json()) as { id: string };
+  const bytes = await (await app.get(`/saves/${id}/export`)).arrayBuffer();
   const imported = saveStore(savesDir).import(new Uint8Array(bytes));
 
   for (const save of [id, copy, imported]) expect(saveStore(savesDir).cover(save)).toEqual(png(1));
@@ -102,7 +102,7 @@ test("an imported Save whose cover isn't an image is refused", async () => {
   await withImages([sheet, generated], png(1), png(2));
   const id = await begin(await newWorld());
   expect(await coverIsStored(id)).toBe(true);
-  const db = Database.deserialize(new Uint8Array(await (await game.get(`/saves/${id}/export`)).arrayBuffer()));
+  const db = Database.deserialize(new Uint8Array(await (await app.get(`/saves/${id}/export`)).arrayBuffer()));
   db.run("UPDATE cover SET bytes = x'3c736376673e'");
 
   expect(() => saveStore(savesDir).import(db.serialize())).toThrow("isn't a valid Save");
@@ -112,20 +112,20 @@ test("a failed cover or images being off leaves a world and its Save with no cov
   const { payloads } = await withImages([sheet, generated, sheet, generated], new Error("image model down"));
 
   const failed = await newWorld();
-  expect((await game.get(`/worlds/${failed}/cover`)).status).toBe(404);
+  expect((await app.get(`/worlds/${failed}/cover`)).status).toBe(404);
 
-  await game.patch("/settings", { imagesEnabled: false });
+  await app.patch("/settings", { imagesEnabled: false });
   const off = await newWorld();
-  expect((await game.get(`/worlds/${off}/cover`)).status).toBe(404);
+  expect((await app.get(`/worlds/${off}/cover`)).status).toBe(404);
   expect(payloads).toHaveLength(1);
 });
 
 test("the opening is a first Turn that asks for the whole picture, without showing the player a stored input", async () => {
   const script = scriptedTextProvider(narration("The rain never stops."));
-  game = startGame(savesDir, script.textProvider);
-  const id = await game.createSave();
+  app = startApp(savesDir, script.textProvider);
+  const id = await app.createSave();
 
-  const response = await game.post(`/saves/${id}/opening`, {});
+  const response = await app.post(`/saves/${id}/opening`, {});
 
   expect(response.status).toBe(201);
   const { messages } = (await response.json()) as { messages: Parameters<typeof readable>[0] };
@@ -137,22 +137,22 @@ test("the opening is a first Turn that asks for the whole picture, without showi
 test("the opening rolls no Check, and can't overwrite a story already under way", async () => {
   const check = JSON.stringify({ check: { action: "Leap", difficulty: "Hard" }, narration: null, state_operations: [] });
   const script = scriptedTextProvider(check, narration("It begins."), narration("Next."));
-  game = startGame(savesDir, script.textProvider, scriptedDice());
-  const id = await game.createSave();
+  app = startApp(savesDir, script.textProvider, scriptedDice());
+  const id = await app.createSave();
 
-  expect((await game.post(`/saves/${id}/opening`, {})).status).toBe(201);
+  expect((await app.post(`/saves/${id}/opening`, {})).status).toBe(201);
   expect(script.prompts).toHaveLength(2);
-  expect((await game.post(`/saves/${id}/opening`, {})).status).toBe(409);
+  expect((await app.post(`/saves/${id}/opening`, {})).status).toBe(409);
   expect(script.prompts).toHaveLength(2);
 });
 
 test("the opening can be Regenerated like any response, and a player's words are never hidden", async () => {
   const script = scriptedTextProvider(narration("First."), narration("Second."));
-  game = startGame(savesDir, script.textProvider);
-  const id = await game.createSave();
-  await game.post(`/saves/${id}/opening`, {});
+  app = startApp(savesDir, script.textProvider);
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/opening`, {});
 
-  const response = await game.post(`/saves/${id}/messages/2/regenerate`, {});
+  const response = await app.post(`/saves/${id}/messages/2/regenerate`, {});
 
   expect(response.status).toBe(201);
   const all = saveStore(savesDir).messages(id);
@@ -164,12 +164,12 @@ test("the opening can be Regenerated like any response, and a player's words are
 
 test("Decide for me writes the PC's next move from what the player can read, and plays nothing", async () => {
   const script = scriptedTextProvider(sheet, generated, narration("A boat drifts near."), JSON.stringify({ text: "I hail the boat." }));
-  game = startGame(savesDir, script.textProvider);
+  app = startApp(savesDir, script.textProvider);
   const world = await newWorld();
   const id = await begin(world);
-  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
 
-  const response = await game.post(`/saves/${id}/decide`, {});
+  const response = await app.post(`/saves/${id}/decide`, {});
 
   expect(await response.json()).toEqual({ text: "I hail the boat." });
   const prompt = JSON.stringify(script.prompts.at(-1));
@@ -179,33 +179,33 @@ test("Decide for me writes the PC's next move from what the player can read, and
 });
 
 test("the theme is a stored setting that follows the device until the player picks one", async () => {
-  game = startGame(savesDir, scriptedTextProvider().textProvider);
-  const read = async () => ((await (await game.get("/settings")).json()) as { theme: string }).theme;
+  app = startApp(savesDir, scriptedTextProvider().textProvider);
+  const read = async () => ((await (await app.get("/settings")).json()) as { theme: string }).theme;
 
   expect(await read()).toBe("system");
-  expect((await game.patch("/settings", { theme: "dark" })).status).toBe(200);
-  await game.restart();
+  expect((await app.patch("/settings", { theme: "dark" })).status).toBe(200);
+  await app.restart();
   expect(await read()).toBe("dark");
-  expect((await game.patch("/settings", { theme: "sepia" })).status).toBe(400);
+  expect((await app.patch("/settings", { theme: "sepia" })).status).toBe(400);
 });
 
 test("a Save from before the personality field went keeps it, and a new PC can't ask for one", async () => {
   const script = scriptedTextProvider(JSON.stringify({ startingHook: "H", name: "Ash", background: "B", physicalTraits: "T", skills: "S", other: "O", inventory: "I" }));
-  game = startGame(savesDir, script.textProvider);
-  const created = await game.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", personality: "Dry." } });
+  app = startApp(savesDir, script.textProvider);
+  const created = await app.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", personality: "Dry." } });
   const { id } = (await created.json()) as { id: string };
   expect(saveStore(savesDir).read(id).pc.personality).toBe("Dry.");
 
   const pc = { name: "", background: "", physicalTraits: "", skills: "", other: "", inventory: "" };
-  expect((await game.post("/worlds/pick", { ...choices, pc })).status).toBe(200);
+  expect((await app.post("/worlds/pick", { ...choices, pc })).status).toBe(200);
   expect(JSON.stringify(script.prompts[0])).not.toContain("personality");
 });
 
-test("a world's title goes with it into its Save and the Load Game list", async () => {
+test("a world's title goes with it into its Save and the Load Story list", async () => {
   await withImages([sheet, generated], png(1));
 
   const id = await begin(await newWorld());
 
-  const { saves } = (await (await game.get("/saves")).json()) as { saves: { id: string; title: string }[] };
+  const { saves } = (await (await app.get("/saves")).json()) as { saves: { id: string; title: string }[] };
   expect(saves.find((save) => save.id === id)?.title).toBe("The Salt Reckoning");
 });

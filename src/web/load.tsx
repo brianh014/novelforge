@@ -1,11 +1,11 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { coverUrl, deleteSave, duplicateSave, importSave, type ListedSave, listSaves } from "./api";
+import { coverUrl, deleteSave, duplicateSave, importSave, type ListedSave, listSaves, storyName } from "./api";
 import { Sheet } from "./menu";
 import { Zoomable } from "./zoom";
 
 const lastChanged = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-export function LoadGame() {
+export function LoadStory() {
   const [saves, setSaves] = useState<ListedSave[]>();
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -44,7 +44,7 @@ export function LoadGame() {
     <Sheet
       rail={
         <>
-          <h1 className="big" ref={heading} tabIndex={-1}>Load Game</h1>
+          <h1 className="big" ref={heading} tabIndex={-1}>Load Story</h1>
           <p className="muted so-far">Pick up a story, branch it, or carry it to another machine.</p>
           <a className="quiet" href="#/">Main Menu</a>
         </>
@@ -64,17 +64,17 @@ export function LoadGame() {
     >
       {saves?.length === 0 && (
         <p className="muted">
-          No Saves yet. <a href="#/new">Start a New Game</a>.
+          No Saves yet. <a href="#/new">Start a New Story</a>.
         </p>
       )}
       <ul className="saves">
         {saves?.map((save) => {
-          const name = "unreadable" in save ? "Unreadable Save" : save.pc.name;
+          const name = "unreadable" in save ? "Unreadable Save" : storyName(save);
           return (
             <li key={save.id} className={"hasCover" in save && save.hasCover ? "with-cover" : undefined}>
-              {"hasCover" in save && save.hasCover && <Zoomable lazy src={coverUrl(save.id, save.coverRedraws)} alt={`Cover of ${name}'s story`} />}
-              <p className="title">{("title" in save && save.title) || name}</p>
-              {"title" in save && save.title && <p className="muted">{name}</p>}
+              {"hasCover" in save && save.hasCover && <Zoomable lazy src={coverUrl(save.id, save.coverRedraws)} alt={`Cover of ${name}`} />}
+              <p className="title">{name}</p>
+              {"title" in save && save.title && <p className="muted">{save.pc.name}</p>}
               {"unreadable" in save ? (
                 <p className="muted">This file can't be opened. A newer version of NovelForge may have made it.</p>
               ) : (
@@ -116,7 +116,7 @@ export function LoadGame() {
       {deleting && (
         <DeleteDialog
           id={deleting.id}
-          name={"unreadable" in deleting ? "this unreadable Save" : deleting.pc.name}
+          name={"unreadable" in deleting ? "this unreadable Save" : storyName(deleting)}
           onClose={() => setDeleting(undefined)}
           onDeleted={(name) => {
             // The button that opened the dialog went with the Save, and focus must not fall back to the page.

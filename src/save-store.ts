@@ -309,7 +309,7 @@ const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene
 function assertSafeToMigrate(db: Database) {
   const version = schemaVersion(db);
   const { integrity_check } = db.query<{ integrity_check: string }, []>("PRAGMA integrity_check").get()!;
-  // Automatic indexes have no sql. A trigger, view or virtual table would run in place of the tables the game trusts.
+  // Automatic indexes have no sql. A trigger, view or virtual table would run in place of the tables the app trusts.
   const stranger = db
     .query(
       `SELECT 1 FROM sqlite_schema WHERE sql IS NOT NULL AND name <> 'sqlite_sequence'
@@ -329,7 +329,7 @@ const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 const startsWith = (bytes: Uint8Array, signature: number[], offset = 0) =>
   signature.every((byte, index) => bytes[offset + index] === byte);
 
-/** The type of an image the game can show, read from the bytes themselves. Everything else, SVG and HTML above all, is undefined. */
+/** The type of an image the app can show, read from the bytes themselves. Everything else, SVG and HTML above all, is undefined. */
 export function imageType(bytes: Uint8Array) {
   if (bytes.byteLength > MAX_IMAGE_BYTES) return undefined;
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
@@ -459,7 +459,7 @@ function latestTurn(db: Database, messageId: number) {
   return { narrator: narrator!, player: player!, state, edits };
 }
 
-// shortcut: room for a few hundred images, and import holds several copies in memory, so a longer game can export but not import until import streams.
+// shortcut: room for a few hundred images, and import holds several copies in memory, so a longer story can export but not import until import streams.
 export const MAX_IMPORT_BYTES = 512 * 1024 * 1024;
 
 export function saveStore(savesDir: string) {

@@ -3,16 +3,16 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
 import { ContentRefused } from "../src/turn-engine";
-import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 let prompts: ReturnType<typeof scriptedTextProvider>["prompts"];
 
 const play = (...replies: (string | Error)[]) => {
   const script = scriptedTextProvider(...replies);
-  game = startGame(savesDir, script.textProvider);
+  app = startApp(savesDir, script.textProvider);
   prompts = script.prompts;
 };
 
@@ -22,7 +22,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
@@ -43,7 +43,7 @@ const pc = { name: "Ash" };
 const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "", pc };
 
 async function generate(body: object = choices) {
-  const response = await game.post("/worlds", body);
+  const response = await app.post("/worlds", body);
   return { status: response.status, body: (await response.json()) as { id: string; overview: string } };
 }
 
@@ -54,7 +54,7 @@ test("a generated world reaches the player only as its World Overview, and its S
   expect(status).toBe(201);
   expect(body).toEqual({ id: expect.any(String), overview: "Rain never stops in Saltmere." });
 
-  const created = await game.post(`/worlds/${body.id}/begin`, { artStyle: "Ink wash" });
+  const created = await app.post(`/worlds/${body.id}/begin`, { artStyle: "Ink wash" });
   expect(created.status).toBe(201);
   const { id } = (await created.json()) as { id: string };
 
@@ -68,7 +68,7 @@ test("a generated world reaches the player only as its World Overview, and its S
     hasCover: false,
     coverRedraws: 0,
   });
-  expect(await game.get(`/saves/${id}`).then((r) => r.json())).toMatchObject({ title: "The Salt Reckoning" });
+  expect(await app.get(`/saves/${id}`).then((r) => r.json())).toMatchObject({ title: "The Salt Reckoning" });
   const { worldBible, worldRules, plotThreads } = saves.latestState(id);
   expect(worldBible).toEqual([
     {
@@ -94,17 +94,17 @@ const allPlayerResponses = async (id: string) => {
     `/saves/${id}/notes`,
     `/saves/${id}/messages`,
   ];
-  return (await Promise.all(paths.map((path) => game.get(path).then((r) => r.text())))).join("\n");
+  return (await Promise.all(paths.map((path) => app.get(path).then((r) => r.text())))).join("\n");
 };
 
 const saveWorld = async (world: string) => {
-  const response = await game.post(`/worlds/${world}/begin`, { artStyle: "" });
+  const response = await app.post(`/worlds/${world}/begin`, { artStyle: "" });
   return ((await response.json()) as { id: string }).id;
 };
 
 test("the player's choices reach the Narrator as delimited data, with Model Instructions", async () => {
   play(sheet, generated());
-  await game.patch("/settings", { modelInstructions: "Write darkly." });
+  await app.patch("/settings", { modelInstructions: "Write darkly." });
 
   await generate({ title: "Chrome Debts", theme: "Cyberpunk", worldBrief: "Rain and chrome", startingHook: "A debt falls due", pc });
 
@@ -151,7 +151,7 @@ test("three unusable replies fail in a way the same choices can retry, with noth
   const unusable = generated(SECRET, { world_rules: [] });
   play(sheet, unusable, `not json ${SECRET}`, unusable, sheet, generated());
 
-  const failed = await game.post("/worlds", choices);
+  const failed = await app.post("/worlds", choices);
   expect(failed.status).toBe(502);
   const text = await failed.text();
   expect(text).not.toContain(SECRET);
@@ -162,7 +162,7 @@ test("three unusable replies fail in a way the same choices can retry, with noth
 
 test("a Text Provider failure is retryable and its detail stays on the server", async () => {
   play(sheet, new Error(`upstream said ${SECRET}`), sheet, generated());
-  const failed = await game.post("/worlds", choices);
+  const failed = await app.post("/worlds", choices);
   expect(failed.status).toBe(502);
   expect(await failed.text()).not.toContain(SECRET);
   expect((await generate()).status).toBe(201);
@@ -170,7 +170,7 @@ test("a Text Provider failure is retryable and its detail stays on the server", 
 
 test("a refused world is reported as a refusal", async () => {
   play(sheet, new ContentRefused(), generated());
-  const refused = await game.post("/worlds", choices);
+  const refused = await app.post("/worlds", choices);
   expect(refused.status).toBe(422);
   expect(await refused.json()).toMatchObject({ failure: "refused" });
   expect(prompts).toHaveLength(2);
@@ -180,7 +180,7 @@ test("Regenerate replaces the world, shows only the new Overview, and never tell
   play(sheet, generated(SECRET), generated("New "));
   const { body } = await generate();
 
-  const response = await game.post(`/worlds/${body.id}/regenerate`, choices);
+  const response = await app.post(`/worlds/${body.id}/regenerate`, choices);
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ overview: "New Rain never stops in Saltmere." });
@@ -193,7 +193,7 @@ test("a failed Regenerate keeps the world it would have replaced", async () => {
   play(sheet, generated(), new Error("offline"));
   const { body } = await generate();
 
-  expect((await game.post(`/worlds/${body.id}/regenerate`, choices)).status).toBe(502);
+  expect((await app.post(`/worlds/${body.id}/regenerate`, choices)).status).toBe(502);
 
   const id = await saveWorld(body.id);
   expect(saveStore(savesDir).latestState(id).worldRules).toEqual(["Magic does not exist."]);
@@ -201,22 +201,22 @@ test("a failed Regenerate keeps the world it would have replaced", async () => {
 
 test("a world that is not held can't be regenerated or saved, and a Save uses one up", async () => {
   play(sheet, generated());
-  expect((await game.post("/worlds/nothing/regenerate", choices)).status).toBe(404);
+  expect((await app.post("/worlds/nothing/regenerate", choices)).status).toBe(404);
   expect(prompts).toHaveLength(0);
   const { body } = await generate();
   await saveWorld(body.id);
 
-  const again = await game.post(`/worlds/${body.id}/begin`, { artStyle: "" });
+  const again = await app.post(`/worlds/${body.id}/begin`, { artStyle: "" });
 
   expect(again.status).toBe(404);
-  const { saves } = (await game.get("/saves").then((r) => r.json())) as { saves: unknown[] };
+  const { saves } = (await app.get("/saves").then((r) => r.json())) as { saves: unknown[] };
   expect(saves).toHaveLength(1);
 });
 
 test("Pick for me writes only the empty world boxes, from the theme and what the player wrote", async () => {
   play(JSON.stringify({ title: "The Whale City", worldBrief: "Not asked for", startingHook: "The whale wakes." }));
 
-  const response = await game.post("/worlds/pick", { theme: "Steampunk", title: " ", worldBrief: "A city on a whale", startingHook: "" });
+  const response = await app.post("/worlds/pick", { theme: "Steampunk", title: " ", worldBrief: "A city on a whale", startingHook: "" });
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ title: "The Whale City", startingHook: "The whale wakes." });
@@ -231,7 +231,7 @@ test("Pick for me writes only the empty world boxes, from the theme and what the
 test("Pick for me leaves out a Starting Hook that's turned off", async () => {
   play(JSON.stringify({ worldBrief: "A city on a whale.", startingHook: "Not asked for" }));
 
-  const response = await game.post("/worlds/pick", { theme: "Steampunk", title: "Tide", worldBrief: "" });
+  const response = await app.post("/worlds/pick", { theme: "Steampunk", title: "Tide", worldBrief: "" });
 
   expect(await response.json()).toEqual({ worldBrief: "A city on a whale." });
 });
@@ -243,7 +243,7 @@ test("Pick for me needs every empty box back, and retries a Title too long for a
     JSON.stringify({ title: "The Whale City", worldBrief: "A city on a whale." }),
   );
 
-  const response = await game.post("/worlds/pick", { theme: "Steampunk", title: "", worldBrief: "" });
+  const response = await app.post("/worlds/pick", { theme: "Steampunk", title: "", worldBrief: "" });
 
   expect(await response.json()).toEqual({ title: "The Whale City", worldBrief: "A city on a whale." });
   expect(prompts).toHaveLength(3);
@@ -251,7 +251,7 @@ test("Pick for me needs every empty box back, and retries a Title too long for a
 
 test("Pick for me can fail and be retried like a generated world", async () => {
   play(new ContentRefused(), new Error("offline"), JSON.stringify({ worldBrief: "A city on a whale." }));
-  const pick = () => game.post("/worlds/pick", { theme: "Steampunk", title: "Tide", worldBrief: "" });
+  const pick = () => app.post("/worlds/pick", { theme: "Steampunk", title: "Tide", worldBrief: "" });
 
   expect((await pick()).status).toBe(422);
   expect((await pick()).status).toBe(502);
@@ -263,7 +263,7 @@ const setup = { theme: "Steampunk", title: "", worldBrief: "A city on a whale", 
 test("Enhance rewrites one box from the player's words and their other choices", async () => {
   play(JSON.stringify({ text: "A vast city on a sleeping whale." }));
 
-  const response = await game.post("/enhance", { ...setup, field: "worldBrief", text: "  A city on a whale " });
+  const response = await app.post("/enhance", { ...setup, field: "worldBrief", text: "  A city on a whale " });
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ text: "A vast city on a sleeping whale." });
@@ -278,7 +278,7 @@ test("Enhance reads the PC boxes for a PC field, and works without a theme", asy
   play(JSON.stringify({ text: "rope\nbrass lantern" }));
   const pc = { name: "Ash", background: "", physicalTraits: "", skills: "", other: "", inventory: "rope, lamp" };
 
-  const response = await game.post("/enhance", { ...setup, theme: "", pc, field: "inventory", text: "rope, lamp" });
+  const response = await app.post("/enhance", { ...setup, theme: "", pc, field: "inventory", text: "rope, lamp" });
 
   expect(await response.json()).toEqual({ text: "rope\nbrass lantern" });
   expect(prompts[0]![0]!.content).toContain("one item per line");
@@ -288,7 +288,7 @@ test("Enhance reads the PC boxes for a PC field, and works without a theme", asy
 test("Enhance retries a Title too long for a cover", async () => {
   play(JSON.stringify({ text: "x".repeat(81) }), JSON.stringify({ text: "The Whale City" }));
 
-  const response = await game.post("/enhance", { ...setup, field: "title", text: "whale city" });
+  const response = await app.post("/enhance", { ...setup, field: "title", text: "whale city" });
 
   expect(await response.json()).toEqual({ text: "The Whale City" });
   expect(prompts).toHaveLength(2);
@@ -296,7 +296,7 @@ test("Enhance retries a Title too long for a cover", async () => {
 
 test("Enhance needs a field it knows", async () => {
   play(JSON.stringify({ text: "Unused" }));
-  expect((await game.post("/enhance", { ...setup, field: "theme", text: "Ash" })).status).toBe(400);
+  expect((await app.post("/enhance", { ...setup, field: "theme", text: "Ash" })).status).toBe(400);
   expect(prompts).toHaveLength(0);
 });
 
@@ -308,16 +308,16 @@ test("nothing the player can fetch reveals the World Bible, Plot Threads or worl
     narration("The tide rises."),
   );
 
-  const first = await (await game.post("/worlds", choices)).text();
+  const first = await (await app.post("/worlds", choices)).text();
   const { id: world } = JSON.parse(first) as { id: string };
-  const second = await (await game.post(`/worlds/${world}/regenerate`, choices)).text();
+  const second = await (await app.post(`/worlds/${world}/regenerate`, choices)).text();
   const id = await saveWorld(world);
-  const turn = await fetch(game.url(`/saves/${id}/turns`), {
+  const turn = await fetch(app.url(`/saves/${id}/turns`), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify({ input: "I wade forward." }),
   }).then((r) => r.text());
-  const snapshot = await game.get(`/saves/${id}/messages/2/snapshot`).then((r) => r.text());
+  const snapshot = await app.get(`/saves/${id}/messages/2/snapshot`).then((r) => r.text());
   const everything = await allPlayerResponses(id);
 
   expect(turn).toContain("The tide rises.");
@@ -331,7 +331,7 @@ test("the Narrator plays a wizard Save from its world, and the world survives du
   const { body } = await generate();
   const id = await saveWorld(body.id);
 
-  await game.post(`/saves/${id}/turns`, { input: "I ask about the magistrates." });
+  await app.post(`/saves/${id}/turns`, { input: "I ask about the magistrates." });
 
   const prompt = JSON.stringify(prompts[2]);
   expect(prompt).toContain("Its judges drown the guilty.");
@@ -340,9 +340,9 @@ test("the Narrator plays a wizard Save from its world, and the world survives du
 
   const saves = saveStore(savesDir);
   const original = saves.latestState(id);
-  const copy = ((await (await game.post(`/saves/${id}/duplicate`, {})).json()) as { id: string }).id;
-  const bytes = await (await game.get(`/saves/${id}/export`)).arrayBuffer();
-  const imported = await fetch(game.url("/saves/import"), {
+  const copy = ((await (await app.post(`/saves/${id}/duplicate`, {})).json()) as { id: string }).id;
+  const bytes = await (await app.get(`/saves/${id}/export`)).arrayBuffer();
+  const imported = await fetch(app.url("/saves/import"), {
     method: "POST",
     headers: { "Content-Type": "application/octet-stream" },
     body: bytes,
@@ -358,7 +358,7 @@ test("the Narrator plays a wizard Save from its world, and the world survives du
 
 test("a Save from before Starting Hooks gains an empty one", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
   {
     using db = new Database(join(savesDir, `${id}.sqlite`));
     db.run("ALTER TABLE save DROP COLUMN starting_hook; ALTER TABLE save DROP COLUMN pc_details; PRAGMA user_version = 2");

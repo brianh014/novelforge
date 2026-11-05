@@ -5,17 +5,17 @@ import { comfyImages } from "../src/comfyui";
 import type { Graph } from "../src/graph-builder";
 import { settingsStore } from "../src/settings-store";
 import { fakeComfyUI } from "./fake-comfyui";
-import { PNG, png, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { PNG, png, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 type Images = { images: { messageId: number; caption: string, redraws: 0 }[]; pending: boolean; session: number };
 
 let folder: ReturnType<typeof tempFolder>;
-let game: ReturnType<typeof startGame> | undefined;
+let app: ReturnType<typeof startApp> | undefined;
 let comfy: ReturnType<typeof fakeComfyUI>;
 
 const play = (...replies: (string | Error)[]) => {
-  game = startGame(join(folder.path, "Saves"), scriptedTextProvider(...replies).textProvider);
-  return game;
+  app = startApp(join(folder.path, "Saves"), scriptedTextProvider(...replies).textProvider);
+  return app;
 };
 
 const sdSetup = () => ({
@@ -39,8 +39,8 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game?.stop();
-  game = undefined;
+  await app?.stop();
+  app = undefined;
   await comfy.stop();
   folder.remove();
 });
@@ -49,8 +49,8 @@ const turn = (fields: object) => JSON.stringify({ check: null, narration: "The t
 const newScene = (description = "A flooded street", location = "The street") =>
   turn({ scene_changed: true, visual_description: description, state_operations: [{ op: "set_scene", location, visible_cast: [] }] });
 
-const imagesOf = async (id: string) => (await game!.get(`/saves/${id}/images`).then((r) => r.json())) as Images;
-const playTurn = (id: string) => game!.post(`/saves/${id}/turns`, { input: "I wade forward." });
+const imagesOf = async (id: string) => (await app!.get(`/saves/${id}/images`).then((r) => r.json())) as Images;
+const playTurn = (id: string) => app!.post(`/saves/${id}/turns`, { input: "I wade forward." });
 
 async function settled(id: string) {
   for (let tries = 0; tries < 800; tries++) {
@@ -68,7 +68,7 @@ async function until(done: () => boolean) {
 
 const nodes = (graph: Graph, classType: string) => Object.values(graph).filter((node) => node.class_type === classType);
 
-const listModels = () => game!.get("/settings/comfy-models").then((r) => r.json()) as Promise<Record<string, unknown>>;
+const listModels = () => app!.get("/settings/comfy-models").then((r) => r.json()) as Promise<Record<string, unknown>>;
 
 test("Settings lists what's installed from both forms of combo input", async () => {
   await play().patch("/settings", { comfyUrl: comfy.url });
@@ -358,7 +358,7 @@ const advancedSetup = (comfyWorkflow = INSTALLED_EXAMPLE) => ({
   comfyMode: "advanced",
   comfyWorkflow,
 });
-const settingsNow = () => game!.get("/settings").then((r) => r.json()) as Promise<Record<string, unknown>>;
+const settingsNow = () => app!.get("/settings").then((r) => r.json()) as Promise<Record<string, unknown>>;
 const graphWith = (nodes: object) => JSON.stringify({ "1": { class_type: "Text", inputs: { text: "{{prompt}}" } }, ...nodes });
 
 test("an Advanced workflow draws a Scene Image into the Save, and it counts", async () => {
@@ -628,7 +628,7 @@ test("a job stopped by a Revert isn't a problem with the workflow", async () => 
   expect((await settingsNow()).workflowProblem).toBe("");
 });
 
-const testImage = (prompt: string) => game!.post("/settings/comfy-test", { prompt });
+const testImage = (prompt: string) => app!.post("/settings/comfy-test", { prompt });
 
 test("the Settings test draws the prompt with the saved choices and returns the image, without a Save", async () => {
   await play().patch("/settings", sdSetup());
@@ -640,7 +640,7 @@ test("the Settings test draws the prompt with the saved choices and returns the 
   expect(new Uint8Array(await response.arrayBuffer())).toEqual(comfy.control.image);
   const [encoded] = nodes(comfy.jobs.prompts[0]!, "CLIPTextEncode");
   expect(encoded!.inputs.text).toBe("A harbour at dusk");
-  expect(await (await game!.get("/saves")).json()).toEqual({ saves: [] });
+  expect(await (await app!.get("/saves")).json()).toEqual({ saves: [] });
 });
 
 const statsOf = (response: Response) => JSON.parse(decodeURIComponent(response.headers.get("x-draw-stats")!));

@@ -2,20 +2,20 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
-import { png, scriptedDice, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 type Item = { kind: string; ref: number; label: string; prompt: string | null; redraws: number; redrawing: boolean; failure: string };
 type Gallery = { images: Item[]; pending: boolean; canRedraw: boolean };
 
 let folder: ReturnType<typeof tempFolder>;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 let drawn: ReturnType<typeof scriptedImages>;
 let savesDir: string;
 
 const play = (replies: string[], ...imageReplies: Parameters<typeof scriptedImages>) => {
   drawn = scriptedImages(...imageReplies);
-  game = startGame(savesDir, scriptedTextProvider(...replies).textProvider, scriptedDice(), 2, drawn.imageAdapter);
-  return game.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
+  app = startApp(savesDir, scriptedTextProvider(...replies).textProvider, scriptedDice(), 2, drawn.imageAdapter);
+  return app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
 };
 
 beforeEach(() => {
@@ -24,7 +24,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
@@ -37,11 +37,11 @@ const scene = (location: string, ...visible_cast: string[]) => ({ op: "set_scene
 
 // Described, so that the PC gets a portrait, which takes the first image.
 const newSave = async () => {
-  const response = await game.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "Short" } });
+  const response = await app.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "Short" } });
   return ((await response.json()) as { id: string }).id;
 };
 
-const galleryOf = async (id: string) => (await game.get(`/saves/${id}/gallery`).then((r) => r.json())) as Gallery;
+const galleryOf = async (id: string) => (await app.get(`/saves/${id}/gallery`).then((r) => r.json())) as Gallery;
 
 async function settled(id: string) {
   for (let tries = 0; tries < 200; tries++) {
@@ -53,13 +53,13 @@ async function settled(id: string) {
 }
 
 const playTurn = async (id: string) => {
-  await game.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+  await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
   return settled(id);
 };
 
-const redraw = (id: string, { kind, ref }: Item, prompt: string) => game.post(`/saves/${id}/gallery/redraw`, { kind, ref, prompt });
+const redraw = (id: string, { kind, ref }: Item, prompt: string) => app.post(`/saves/${id}/gallery/redraw`, { kind, ref, prompt });
 
-const bytesOf = async (path: string) => new Uint8Array(await (await game.get(path)).arrayBuffer());
+const bytesOf = async (path: string) => new Uint8Array(await (await app.get(path)).arrayBuffer());
 
 const find = (gallery: Gallery, kind: string) => gallery.images.find((item) => item.kind === kind)!;
 
@@ -97,8 +97,8 @@ test("redrawing a Scene Image replaces only it, with its shape, references and t
   const id = await newSave();
   await playTurn(id);
   const before = await playTurn(id);
-  const state = await game.get(`/saves/${id}/journal`).then((r) => r.text());
-  await game.patch(`/saves/${id}`, { artStyle: "Ink wash" });
+  const state = await app.get(`/saves/${id}/journal`).then((r) => r.text());
+  await app.patch(`/saves/${id}`, { artStyle: "Ink wash" });
   const newest = before.images.at(-1)!;
 
   expect((await redraw(id, newest, "A sunny street")).status).toBe(202);
@@ -112,8 +112,8 @@ test("redrawing a Scene Image replaces only it, with its shape, references and t
   expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc", "previous_scene", "pc"]);
   expect(after.images.at(-1)).toMatchObject({ prompt: "A sunny street", redraws: 1 });
   expect(await bytesOf(`/saves/${id}/messages/${newest.ref}/image`)).toEqual(png(5));
-  expect(await game.get(`/saves/${id}/journal`).then((r) => r.text())).toBe(state);
-  expect(await game.get(`/saves/${id}/images`).then((r) => r.json())).toMatchObject({
+  expect(await app.get(`/saves/${id}/journal`).then((r) => r.text())).toBe(state);
+  expect(await app.get(`/saves/${id}/images`).then((r) => r.json())).toMatchObject({
     images: [{ redraws: 0 }, { messageId: newest.ref, redraws: 1 }],
     session: 5,
   });
@@ -174,7 +174,7 @@ test("a Redraw is refused for a hidden NPC, an empty prompt, a second request, o
   finish(png(4));
   await settled(id);
 
-  await game.patch("/settings", { imagesEnabled: false });
+  await app.patch("/settings", { imagesEnabled: false });
   expect((await galleryOf(id)).canRedraw).toBe(false);
   expect((await redraw(id, item, "Three")).status).toBe(409);
   expect(drawn.payloads.filter(({ prompt }) => prompt === "Three")).toEqual([]);
@@ -190,7 +190,7 @@ test("a newer Scene Image never drops a queued Redraw", async () => {
 
   await redraw(id, portrait, "First");
   await redraw(id, item, "Second");
-  await game.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+  await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
   finish(png(3));
   await settled(id);
 
@@ -210,7 +210,7 @@ test("a Revert past a Scene Image stops its Redraw, and a replaced Turn loses it
   const second = (await playTurn(id)).images.at(-1)!;
 
   await redraw(id, second, "Lost");
-  await game.post(`/saves/${id}/messages/${first.ref}/revert`, {});
+  await app.post(`/saves/${id}/messages/${first.ref}/revert`, {});
   const gallery = await settled(id);
 
   expect(drawn.aborted.length).toBe(1);
@@ -230,7 +230,7 @@ test("older images have no prompt, can be given one, and import still checks the
   db.run("UPDATE scene_images SET prompt = NULL");
   db.close();
   const send = async () =>
-    fetch(game.url("/saves/import"), {
+    fetch(app.url("/saves/import"), {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
       body: await Bun.file(path).arrayBuffer(),
@@ -256,11 +256,11 @@ const generated = JSON.stringify({
 const sheet = JSON.stringify({ wearing: [], health: "unhurt", injuries: [], conditions: [] });
 const choices = { title: "The Salt Reckoning", theme: "Western", worldBrief: "A drowned city", startingHook: "", artStyle: "Ink wash", pc: { name: "Ash" } };
 
-const newWorld = async () => ((await (await game.post("/worlds", choices)).json()) as { id: string }).id;
+const newWorld = async () => ((await (await app.post("/worlds", choices)).json()) as { id: string }).id;
 const coverOf = async (world: string) =>
-  (await game.get(`/worlds/${world}/cover/details`).then((r) => r.json())) as { prompt: string; hasImage: boolean; failure: string; canRedraw: boolean };
+  (await app.get(`/worlds/${world}/cover/details`).then((r) => r.json())) as { prompt: string; hasImage: boolean; failure: string; canRedraw: boolean };
 const accept = async (worldId: string) => {
-  const response = await game.post(`/worlds/${worldId}/begin`, { artStyle: choices.artStyle });
+  const response = await app.post(`/worlds/${worldId}/begin`, { artStyle: choices.artStyle });
   return ((await response.json()) as { id: string }).id;
 };
 const storedCover = async (id: string) => {
@@ -279,7 +279,7 @@ test("a world's cover can be redrawn from an edited prompt, which goes into the 
   expect(details).toMatchObject({ hasImage: true, failure: "", canRedraw: true });
   expect(details.prompt).toContain("Rain never stops in Saltmere.");
 
-  expect((await game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" })).status).toBe(200);
+  expect((await app.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" })).status).toBe(200);
   expect(drawn.payloads[1]).toMatchObject({ prompt: "A lighthouse", aspect_ratio: "2:3", style_preset: "Ink wash", reference_images: [] });
   expect(await bytesOf(`/worlds/${world}/cover`)).toEqual(png(2));
 
@@ -298,10 +298,10 @@ test("a failed cover keeps its prompt for a retry, and a failed Redraw keeps the
   const world = await newWorld();
 
   expect(await coverOf(world)).toMatchObject({ hasImage: false, failure: "The model is busy" });
-  expect((await game.post(`/worlds/${world}/cover`, { prompt: (await coverOf(world)).prompt })).status).toBe(200);
+  expect((await app.post(`/worlds/${world}/cover`, { prompt: (await coverOf(world)).prompt })).status).toBe(200);
   expect(await coverOf(world)).toMatchObject({ hasImage: true, failure: "" });
 
-  const failed = await game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" });
+  const failed = await app.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" });
   expect(failed.status).toBe(502);
   expect(await failed.json()).toEqual({ error: "Still busy" });
   expect(await bytesOf(`/worlds/${world}/cover`)).toEqual(png(1));
@@ -315,7 +315,7 @@ test("Accept during a Cover Redraw takes the result, or the old cover if it fail
   const world = await newWorld();
   const details = await coverOf(world);
 
-  const redrawing = game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" });
+  const redrawing = app.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" });
   await Bun.sleep(5);
   const id = await accept(world);
   fail(new Error("Too late"));
@@ -328,20 +328,20 @@ test("Accept during a Cover Redraw takes the result, or the old cover if it fail
 
 test("a cover Redraw is refused with images off, and a world with no cover drawn has nothing to retry", async () => {
   await play([sheet, generated], png(1));
-  await game.patch("/settings", { imagesEnabled: false });
+  await app.patch("/settings", { imagesEnabled: false });
   const world = await newWorld();
 
   expect(await coverOf(world)).toMatchObject({ hasImage: false, failure: "", canRedraw: false });
-  expect((await game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" })).status).toBe(409);
-  expect((await game.post(`/worlds/nowhere/cover`, { prompt: "A lighthouse" })).status).toBe(404);
+  expect((await app.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" })).status).toBe(409);
+  expect((await app.post(`/worlds/nowhere/cover`, { prompt: "A lighthouse" })).status).toBe(404);
 });
 
 test("regenerating a world keeps a cover's edited prompt", async () => {
   await play([sheet, generated, generated], png(1), png(2));
   const world = await newWorld();
-  await game.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" });
+  await app.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" });
 
-  await game.post(`/worlds/${world}/regenerate`, choices);
+  await app.post(`/worlds/${world}/regenerate`, choices);
 
   expect((await coverOf(world)).prompt).toBe("A lighthouse");
 });

@@ -406,7 +406,7 @@ export function startServer(options: {
       "/settings/text-models": {
         GET: async (req) => Response.json({ models: await textModels(settings, req.signal) }),
       },
-      // The prompt and Model Instructions alone, with no schema, so a failure points at the model and not at the game.
+      // The prompt and Model Instructions alone, with no schema, so a failure points at the model and not at the app.
       "/settings/text-test": {
         POST: async (req) => {
           const { prompt } = await parseBody(req, PromptRequest);

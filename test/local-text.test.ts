@@ -3,13 +3,13 @@ import { join } from "node:path";
 import { openRouterImages } from "../src/image-adapter";
 import { settingsStore } from "../src/settings-store";
 import { textProvider } from "../src/text-provider";
-import { delta, fakeOpenAi, PNG, scriptedDice, startGame, tempFolder, turnEvents } from "./support";
+import { delta, fakeOpenAi, PNG, scriptedDice, startApp, tempFolder, turnEvents } from "./support";
 
 const MODEL = "qwen-local";
 const FINISHED = '{"check":null,"narration":"The tide rises.","state_operations":[]}';
 
 let folder: ReturnType<typeof tempFolder>;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 let provider: ReturnType<typeof fakeOpenAi>;
 let settings: ReturnType<typeof settingsStore>;
 const others: { stop: (force: boolean) => unknown }[] = [];
@@ -25,18 +25,18 @@ function playLocal(
 
 function startAt(baseUrl: string, dice = scriptedDice(), limits?: Parameters<typeof textProvider>[1]) {
   settings.update({ textBaseUrl: baseUrl, textModel: MODEL });
-  game = startGame(join(folder.path, "Saves"), textProvider(settings, limits), dice);
+  app = startApp(join(folder.path, "Saves"), textProvider(settings, limits), dice);
 }
 
 const streamTurn = (id: string, input: string) =>
-  fetch(game.url(`/saves/${id}/turns`), {
+  fetch(app.url(`/saves/${id}/turns`), {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify({ input }),
   });
 
 const storedMessages = async (id: string) =>
-  ((await game.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { text: string }[] }).messages;
+  ((await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { text: string }[] }).messages;
 
 /** A server that takes every request and never answers it. */
 function silentServer() {
@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game?.stop();
+  await app?.stop();
   provider?.stop();
   await Promise.all(others.splice(0).map((other) => other.stop(true)));
   folder.remove();
@@ -67,7 +67,7 @@ afterEach(async () => {
 
 test("a server with no key and no schema mode plays a Turn on plain JSON", async () => {
   playLocal([[delta(FINISHED), "data: [DONE]\n\n"]]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I wade forward."));
 
@@ -90,7 +90,7 @@ ${FINISHED}`],
   ["in another key order", '{"state_operations":[],"narration":"The tide rises.","check":null}'],
 ])("a reply %s is accepted", async (_, reply) => {
   playLocal([[delta(reply)]]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I wade forward."));
 
@@ -103,21 +103,21 @@ test.each([
   ["a last event with no newline", delta(FINISHED).trimEnd()],
 ])("a stream with %s still plays", async (_, stream) => {
   playLocal([[stream]]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   expect((await turnEvents(await streamTurn(id, "I wade forward."))).at(-1)!.event).toBe("done");
 });
 
 test("a server that ignores `stream` and answers one JSON body still plays", async () => {
   playLocal([Response.json({ choices: [{ message: { content: FINISHED }, finish_reason: "stop" }] })]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   expect((await turnEvents(await streamTurn(id, "I wade forward."))).at(-1)!.event).toBe("done");
 });
 
 test("a fenced reply streams its narration as it is written", async () => {
   playLocal([[delta("```json\n"), delta('{"check":null,"narration":"The tide '), delta('rises."}\n```')]]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I wade forward."));
 
@@ -128,7 +128,7 @@ test("a reply in another key order shows no narration until done, as it could st
   playLocal([[delta('{"narration":"You land"'), delta(',"check":{"action":"Leap","difficulty":"Hard"}}')], [delta(FINISHED)]], {
     dice: scriptedDice(18),
   });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I leap the gap."));
 
@@ -139,7 +139,7 @@ test("a reply in another key order shows no narration until done, as it could st
 test("a Check request wrapped in a fence is still rolled", async () => {
   const fenced = '```json\n{"check":{"action":"Leap","difficulty":"Hard"},"narration":null}\n```';
   playLocal([[delta(fenced)], [delta(FINISHED)]], { dice: scriptedDice(18) });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await turnEvents(await streamTurn(id, "I leap the gap."));
 
@@ -148,7 +148,7 @@ test("a Check request wrapped in a fence is still rolled", async () => {
 
 test("a reply cut off mid-thought is never taken for a finished Turn", async () => {
   playLocal([[delta(`<think>Perhaps ${FINISHED}`)], [delta(`{"check":null,"narration":"The rain stops."}`)]]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await turnEvents(await streamTurn(id, "I wade forward."));
 
@@ -158,14 +158,14 @@ test("a reply cut off mid-thought is never taken for a finished Turn", async () 
 test("wizard calls accept wrapped JSON too", async () => {
   playLocal([[delta('Sure!\n```json\n{"worldBrief":"A city of canals"}\n```')]]);
 
-  const response = await game.post("/worlds/pick", { theme: "Steampunk", title: "Canals", worldBrief: "" });
+  const response = await app.post("/worlds/pick", { theme: "Steampunk", title: "Canals", worldBrief: "" });
 
   expect(await response.json()).toEqual({ worldBrief: "A city of canals" });
 });
 
 test("a listing with unusual fields doesn't stop a Turn", async () => {
   playLocal([[delta(FINISHED)]], { models: { data: [{ id: MODEL, supported_parameters: { temperature: {} } }] } });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   expect((await turnEvents(await streamTurn(id, "I wade forward."))).at(-1)!.event).toBe("done");
 });
@@ -175,7 +175,7 @@ const STOPPED = /stopped responding.*loading a model/;
 
 test("a refused connection fails a Turn as retryable, keeps the player's text and commits nothing", async () => {
   startAt(await closedAddress());
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I wade forward."));
 
@@ -188,7 +188,7 @@ test("a refused connection fails a Turn as retryable, keeps the player's text an
 
 test("a refused connection gives a wizard call the same message, and it works once the server is up", async () => {
   startAt(await closedAddress());
-  const pick = () => game.post("/worlds/pick", { theme: "Steampunk", title: "Canals", worldBrief: "" });
+  const pick = () => app.post("/worlds/pick", { theme: "Steampunk", title: "Canals", worldBrief: "" });
 
   const failed = await pick();
 
@@ -202,7 +202,7 @@ test("a refused connection gives a wizard call the same message, and it works on
 
 test("a server that never answers is reported as stopped, not unreachable", async () => {
   startAt(silentServer(), undefined, { silenceMs: 100, listMs: 50 });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I wade forward."));
 
@@ -219,7 +219,7 @@ test("a stream that stalls is reported as stopped", async () => {
     ],
     { limits: { silenceMs: 100, listMs: 50 } },
   );
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I wade forward."));
 
@@ -240,14 +240,14 @@ test("a slow first response and gaps between chunks are fine, however long the r
     ],
     { limits: { silenceMs: 500, listMs: 50 } },
   );
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   expect((await turnEvents(await streamTurn(id, "I wade forward."))).at(-1)!.event).toBe("done");
 });
 
 test("a server's error names what to check, and its detail stays on the server", async () => {
   playLocal([Response.json({ error: { message: "PROVIDER-DETAIL: model not found" } }, { status: 404 })]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I wade forward."));
 
@@ -258,7 +258,7 @@ test("a server's error names what to check, and its detail stays on the server",
 test("Settings can list the saved server's models", async () => {
   playLocal([], { models: { data: [{ id: "qwen-local" }, { id: "llama-local" }] } });
 
-  expect(await game.get("/settings/text-models").then((r) => r.json())).toEqual({ models: ["qwen-local", "llama-local"] });
+  expect(await app.get("/settings/text-models").then((r) => r.json())).toEqual({ models: ["qwen-local", "llama-local"] });
 });
 
 test.each([
@@ -268,13 +268,13 @@ test.each([
 ])("a server that %s lists no models", async (_, models) => {
   playLocal([], { models });
 
-  expect(await game.get("/settings/text-models").then((r) => r.json())).toEqual({ models: [] });
+  expect(await app.get("/settings/text-models").then((r) => r.json())).toEqual({ models: [] });
 });
 
 test("an unreachable server lists no models", async () => {
   startAt(await closedAddress());
 
-  expect(await game.get("/settings/text-models").then((r) => r.json())).toEqual({ models: [] });
+  expect(await app.get("/settings/text-models").then((r) => r.json())).toEqual({ models: [] });
 });
 
 test("text on Local and images on OpenRouter each get their own address and key", async () => {
@@ -289,7 +289,7 @@ test("text on Local and images on OpenRouter each get their own address and key"
   });
   others.push(openRouter);
   settings.update({ textApiKey: "local-key", imageApiKey: "image-key", imageModel: "fake/image" });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await turnEvents(await streamTurn(id, "I wade forward."));
   await openRouterImages(settings, new URL("/v1", openRouter.url).href)(
@@ -321,10 +321,10 @@ test("a server that redirects can't take the key to another address", async () =
   others.push(elsewhere, redirecting);
   startAt(new URL("/v1", redirecting.url).href);
   settings.update({ textBaseUrl: new URL("/v2", redirecting.url).href, textApiKey: "local-key" });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await streamTurn(id, "I wade forward.").then((r) => r.text());
-  await game.get("/settings/text-models").then((r) => r.text());
+  await app.get("/settings/text-models").then((r) => r.text());
 
   expect(authorizations.length).toBeGreaterThan(0);
   expect(authorizations.every((authorization) => authorization === null)).toBe(true);

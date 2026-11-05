@@ -4,16 +4,16 @@ import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path";
 import { MAX_IMPORT_BYTES, type Message } from "../src/save-store";
 import type { ListedSave } from "../src/web/api";
-import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 let prompts: ReturnType<typeof scriptedTextProvider>["prompts"];
 
 const play = (...replies: (string | Error)[]) => {
   const script = scriptedTextProvider(...replies);
-  game = startGame(savesDir, script.textProvider);
+  app = startApp(savesDir, script.textProvider);
   prompts = script.prompts;
 };
 
@@ -23,34 +23,34 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
 const savePath = (id: string) => join(savesDir, `${id}.sqlite`);
 
-const listed = async () => ((await game.get("/saves").then((r) => r.json())) as { saves: ListedSave[] }).saves;
+const listed = async () => ((await app.get("/saves").then((r) => r.json())) as { saves: ListedSave[] }).saves;
 const listedIds = async () => (await listed()).map(({ id }) => id).sort();
 
 const messagesOf = async (id: string) =>
-  ((await game.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: Message[] })
+  ((await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: Message[] })
     .messages;
 
-const exportSave = async (id: string) => (await game.get(`/saves/${id}/export`)).bytes();
+const exportSave = async (id: string) => (await app.get(`/saves/${id}/export`)).bytes();
 
 const importSave = (bytes: Uint8Array<ArrayBuffer>, contentType = "application/octet-stream") =>
-  fetch(game.url("/saves/import"), { method: "POST", headers: { "Content-Type": contentType }, body: bytes });
+  fetch(app.url("/saves/import"), { method: "POST", headers: { "Content-Type": contentType }, body: bytes });
 
 const importedId = async (bytes: Uint8Array<ArrayBuffer>) =>
   ((await (await importSave(bytes)).json()) as { id: string }).id;
 
 test("the list shows every Save, most recently played first", async () => {
   play(narration("The tide rises."));
-  const first = await game.createSave();
-  const second = await game.post("/saves", { worldBrief: "A frozen moon", pc: { name: "Wren" } });
+  const first = await app.createSave();
+  const second = await app.post("/saves", { worldBrief: "A frozen moon", pc: { name: "Wren" } });
   const { id: secondId } = (await second.json()) as { id: string };
   await Bun.sleep(5);
-  await game.post(`/saves/${first}/turns`, { input: "I wade forward." });
+  await app.post(`/saves/${first}/turns`, { input: "I wade forward." });
 
   const saves = await listed();
 
@@ -67,7 +67,7 @@ test("the list starts empty", async () => {
 
 test("a file in the Saves folder that can't be opened is listed as unreadable and can still be deleted", async () => {
   play();
-  const good = await game.createSave();
+  const good = await app.createSave();
   const bad = crypto.randomUUID();
   writeFileSync(savePath(bad), "not a database");
   writeFileSync(join(savesDir, "notes.sqlite"), "not ours");
@@ -76,15 +76,15 @@ test("a file in the Saves folder that can't be opened is listed as unreadable an
 
   expect(saves.map(({ id }) => id).sort()).toEqual([good, bad].sort());
   expect(saves.find(({ id }) => id === bad)).toMatchObject({ unreadable: true });
-  expect((await game.delete(`/saves/${bad}`)).status).toBe(204);
+  expect((await app.delete(`/saves/${bad}`)).status).toBe(204);
   expect(await listedIds()).toEqual([good]);
 });
 
 test("a whole duplicate appears in the list as its own Save", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
-  const response = await game.post(`/saves/${id}/duplicate`, {});
+  const response = await app.post(`/saves/${id}/duplicate`, {});
 
   const { id: copy } = (await response.json()) as { id: string };
   expect(await listedIds()).toEqual([id, copy].sort());
@@ -92,38 +92,38 @@ test("a whole duplicate appears in the list as its own Save", async () => {
 
 test("deleting a Save also removes what a crash left beside it", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
   writeFileSync(`${savePath(id)}-journal`, "story text");
   writeFileSync(`${savePath(id)}-wal`, "story text");
 
-  await game.delete(`/saves/${id}`);
+  await app.delete(`/saves/${id}`);
 
   expect(readdirSync(savesDir)).toEqual([]);
 });
 
 test("deleting a Save removes its file and nothing else", async () => {
   play();
-  const doomed = await game.createSave();
-  const kept = await game.createSave();
+  const doomed = await app.createSave();
+  const kept = await app.createSave();
 
-  const response = await game.delete(`/saves/${doomed}`);
+  const response = await app.delete(`/saves/${doomed}`);
 
   expect(response.status).toBe(204);
   expect(readdirSync(savesDir)).toEqual([`${kept}.sqlite`]);
-  expect((await game.get(`/saves/${doomed}`)).status).toBe(404);
-  expect((await game.delete(`/saves/${doomed}`)).status).toBe(404);
+  expect((await app.get(`/saves/${doomed}`)).status).toBe(404);
+  expect((await app.delete(`/saves/${doomed}`)).status).toBe(404);
 });
 
 test("a route refuses anything that isn't a Save id, so no path can reach outside the Saves folder", async () => {
   play();
   const outside = join(folder.path, "outside.sqlite");
   writeFileSync(outside, "keep me");
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   for (const badId of ["not-a-uuid", "..%2Foutside", "..%5Coutside", `${id}%2F..%2F..%2Foutside`, `${id}.sqlite`]) {
-    expect((await game.delete(`/saves/${badId}`)).status).toBe(404);
-    expect((await game.get(`/saves/${badId}/export`)).status).toBe(404);
-    expect((await game.post(`/saves/${badId}/duplicate`, {})).status).toBe(404);
+    expect((await app.delete(`/saves/${badId}`)).status).toBe(404);
+    expect((await app.get(`/saves/${badId}/export`)).status).toBe(404);
+    expect((await app.post(`/saves/${badId}/duplicate`, {})).status).toBe(404);
   }
 
   expect(readFileSync(outside, "utf8")).toBe("keep me");
@@ -132,10 +132,10 @@ test("a route refuses anything that isn't a Save id, so no path can reach outsid
 
 test("an exported Save imports as a new Save with the same story", async () => {
   play(narration("The tide rises."));
-  const id = await game.createSave();
-  await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I wade forward." });
 
-  const exported = await game.get(`/saves/${id}/export`);
+  const exported = await app.get(`/saves/${id}/export`);
   expect(exported.headers.get("content-disposition")).toStartWith("attachment");
   const response = await importSave(await exported.bytes());
 
@@ -144,12 +144,12 @@ test("an exported Save imports as a new Save with the same story", async () => {
   expect(copy).not.toBe(id);
   expect(await listedIds()).toEqual([id, copy].sort());
   expect(await messagesOf(copy)).toEqual(await messagesOf(id));
-  expect(await game.get(`/saves/${copy}`).then((r) => r.json())).toEqual({ title: "", worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "", startingHook: "", hasCover: false, coverRedraws: 0 });
+  expect(await app.get(`/saves/${copy}`).then((r) => r.json())).toEqual({ title: "", worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "", startingHook: "", hasCover: false, coverRedraws: 0 });
 });
 
 test("importing the same file twice gives two Saves", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
   const bytes = await exportSave(id);
 
   const one = await importedId(bytes);
@@ -160,9 +160,9 @@ test("importing the same file twice gives two Saves", async () => {
 
 test("an export leaves no file behind and carries a Reverted future in no form", async () => {
   play(narration("A secret future."));
-  const id = await game.createSave();
-  await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
-  await game.post(`/saves/${id}/messages/1/revert`, {});
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I wade forward." });
+  await app.post(`/saves/${id}/messages/1/revert`, {});
 
   const bytes = await exportSave(id);
 
@@ -172,7 +172,7 @@ test("an export leaves no file behind and carries a Reverted future in no form",
 
 test("an export holds everything even when a crash left the data in a WAL file beside the Save", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
   const crashed = crypto.randomUUID();
   {
     using live = new Database(savePath(id));
@@ -184,7 +184,7 @@ test("an export holds everything even when a crash left the data in a WAL file b
 
   const copy = await importedId(await exportSave(crashed));
 
-  const save = (await game.get(`/saves/${copy}`).then((r) => r.json())) as { pc: { name: string } };
+  const save = (await app.get(`/saves/${copy}`).then((r) => r.json())) as { pc: { name: string } };
   expect(save.pc.name).toBe("Only in the WAL");
   expect(readdirSync(savesDir).filter((name) => /-(wal|shm|journal)$/.test(name))).toEqual([]);
 });
@@ -225,7 +225,7 @@ const OLD_LATEST = {
   pcKnown: { facts: ["The city is flooded."], npcs: [] },
 };
 
-/** One played Turn in the old format, written by hand as that version of the game would have. */
+/** One played Turn in the old format, written by hand as that version of the app would have. */
 function writeOldSave(path: string) {
   using db = new Database(path, { create: true });
   db.run(SCHEMA_BEFORE_CHECKS);
@@ -256,31 +256,31 @@ test("an old Save opens with its story and Snapshots whole, and keeps playing", 
     { id: 1, role: "player", text: "I wade forward." },
     { id: 2, role: "narrator", text: "You find a rope." },
   ]);
-  expect(await game.get(`/saves/${id}/inventory`).then((r) => r.json())).toEqual({ wearing: [], carrying: ["rope"] });
-  const snapshot = await game.get(`/saves/${id}/messages/1/snapshot`).then((r) => r.json());
+  expect(await app.get(`/saves/${id}/inventory`).then((r) => r.json())).toEqual({ wearing: [], carrying: ["rope"] });
+  const snapshot = await app.get(`/saves/${id}/messages/1/snapshot`).then((r) => r.json());
   expect(snapshot).toMatchObject({ inventory: { carrying: [] } });
-  expect(await game.get(`/saves/${id}/journal`).then((r) => r.json())).toMatchObject({
+  expect(await app.get(`/saves/${id}/journal`).then((r) => r.json())).toMatchObject({
     summary: "",
     facts: ["The city is flooded."],
   });
 
-  const added = await game.post(`/saves/${id}/notes`, { text: "The rope is frayed." });
-  const turn = await game.post(`/saves/${id}/turns`, { input: "I climb." });
+  const added = await app.post(`/saves/${id}/notes`, { text: "The rope is frayed." });
+  const turn = await app.post(`/saves/${id}/turns`, { input: "I climb." });
 
   expect(added.status).toBe(201);
   expect(turn.status).toBe(201);
   expect(JSON.stringify(prompts[0])).not.toContain("The rope is frayed.");
   expect(await messagesOf(id)).toHaveLength(4);
-  const reverted = await game.post(`/saves/${id}/messages/2/revert`, {});
+  const reverted = await app.post(`/saves/${id}/messages/2/revert`, {});
   expect(reverted.status).toBe(200);
-  expect(await game.get(`/saves/${id}/notes`).then((r) => r.json())).toEqual({ notes: [] });
+  expect(await app.get(`/saves/${id}/notes`).then((r) => r.json())).toEqual({ notes: [] });
 });
 
 test("an old Turn can be Regenerated, staying without a Check", async () => {
   play(narration("A knife instead."));
   const id = oldSave();
 
-  const response = await game.post(`/saves/${id}/messages/2/regenerate`, {});
+  const response = await app.post(`/saves/${id}/messages/2/regenerate`, {});
 
   expect(response.status).toBe(201);
   expect((await messagesOf(id)).map(({ text }) => text)).toEqual(["I wade forward.", "A knife instead."]);
@@ -303,8 +303,8 @@ test("a Save from before Snapshots existed gets them, and keeps playing", async 
     `);
   }
 
-  expect((await game.get(`/saves/${id}/messages/2/snapshot`)).status).toBe(200);
-  expect((await game.post(`/saves/${id}/turns`, { input: "I climb." })).status).toBe(201);
+  expect((await app.get(`/saves/${id}/messages/2/snapshot`)).status).toBe(200);
+  expect((await app.post(`/saves/${id}/turns`, { input: "I climb." })).status).toBe(201);
 });
 
 test("a migration that fails leaves the old Save byte for byte as it was", async () => {
@@ -316,7 +316,7 @@ test("a migration that fails leaves the old Save byte for byte as it was", async
   }
   const before = readFileSync(savePath(id));
 
-  const response = await game.get(`/saves/${id}`);
+  const response = await app.get(`/saves/${id}`);
 
   expect(response.status).toBe(500);
   expect(readFileSync(savePath(id)).equals(before)).toBe(true);
@@ -327,10 +327,10 @@ test("a migration that fails leaves the old Save byte for byte as it was", async
 test("a migrated Save is not migrated again, so reading it leaves the file alone", async () => {
   play();
   const id = oldSave();
-  await game.get(`/saves/${id}`);
+  await app.get(`/saves/${id}`);
   const migrated = readFileSync(savePath(id));
 
-  await game.get(`/saves/${id}/messages`);
+  await app.get(`/saves/${id}/messages`);
 
   expect(readFileSync(savePath(id)).equals(migrated)).toBe(true);
 });
@@ -345,13 +345,13 @@ function setSchemaVersion(path: string, version: number) {
   db.run(`PRAGMA user_version = ${version}`);
 }
 
-test("a Save from a newer version of the game is refused and left alone", async () => {
+test("a Save from a newer version of the app is refused and left alone", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
   setSchemaVersion(savePath(id), schemaVersion(savePath(id)) + 1);
   const before = readFileSync(savePath(id));
 
-  const response = await game.get(`/saves/${id}`);
+  const response = await app.get(`/saves/${id}`);
 
   expect(response.status).toBe(422);
   expect(((await response.json()) as { error: string }).error).toContain("newer");
@@ -360,9 +360,9 @@ test("a Save from a newer version of the game is refused and left alone", async 
 
 test("a Save records its schema version, and a duplicate and an export keep it", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
-  const { id: copy } = (await (await game.post(`/saves/${id}/duplicate`, {})).json()) as { id: string };
+  const { id: copy } = (await (await app.post(`/saves/${id}/duplicate`, {})).json()) as { id: string };
   const imported = await importedId(await exportSave(id));
 
   expect(schemaVersion(savePath(id))).toBeGreaterThan(0);
@@ -373,19 +373,19 @@ test("a Save records its schema version, and a duplicate and an export keep it",
 /** A real export, changed by `tamper` as a hostile or damaged file might be. */
 async function tamperedExport(tamper: (db: Database, path: string) => void) {
   const path = join(folder.path, "tampered.sqlite");
-  const id = await game.createSave();
+  const id = await app.createSave();
   writeFileSync(path, await exportSave(id));
   {
     using db = new Database(path);
     tamper(db, path);
   }
   const bytes = new Uint8Array(readFileSync(path));
-  await game.delete(`/saves/${id}`);
+  await app.delete(`/saves/${id}`);
   return bytes;
 }
 
 async function expectRefused(bytes: Uint8Array<ArrayBuffer>) {
-  const kept = await game.createSave();
+  const kept = await app.createSave();
   const before = readFileSync(savePath(kept));
 
   const response = await importSave(bytes);
@@ -429,9 +429,9 @@ test("import refuses a SQLite file with no tables", async () => {
 
 test("import refuses a Save cut short", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
   const bytes = await exportSave(id);
-  await game.delete(`/saves/${id}`);
+  await app.delete(`/saves/${id}`);
 
   await expectRefused(bytes.slice(0, bytes.length - 4096));
 });
@@ -547,20 +547,20 @@ test("import refuses a file left in WAL mode", async () => {
 
 test("Director's Notes waiting for the next Message survive an export and import", async () => {
   play();
-  const id = await game.createSave();
-  await game.post(`/saves/${id}/notes`, { text: "The rope is frayed." });
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/notes`, { text: "The rope is frayed." });
 
   const copy = await importedId(await exportSave(id));
 
-  expect(await game.get(`/saves/${copy}/notes`).then((r) => r.json())).toEqual({ notes: ["The rope is frayed."] });
+  expect(await app.get(`/saves/${copy}/notes`).then((r) => r.json())).toEqual({ notes: ["The rope is frayed."] });
 });
 
 test("a Message can follow a player Message that a Revert left unanswered", async () => {
   play(narration("One."), narration("Two."));
-  const id = await game.createSave();
-  await game.post(`/saves/${id}/turns`, { input: "First." });
-  await game.post(`/saves/${id}/messages/1/revert`, {});
-  await game.post(`/saves/${id}/turns`, { input: "Second." });
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "First." });
+  await app.post(`/saves/${id}/messages/1/revert`, {});
+  await app.post(`/saves/${id}/turns`, { input: "Second." });
 
   expect((await importSave(await exportSave(id))).status).toBe(201);
 });
@@ -585,11 +585,11 @@ const TABLE_TRICKS: [string, (db: Database) => void][] = [
   }],
 ];
 
-test.each(TABLE_TRICKS)("a file with %s imports into the game's own tables, and plays", async (_name, tamper) => {
+test.each(TABLE_TRICKS)("a file with %s imports into the app's own tables, and plays", async (_name, tamper) => {
   play(narration("The tide rises."));
   const id = await importedId(await tamperedExport(tamper));
 
-  const turn = await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+  const turn = await app.post(`/saves/${id}/turns`, { input: "I wade forward." });
 
   expect(turn.status).toBe(201);
   expect((await messagesOf(id)).map(({ id }) => id)).toEqual([1, 2]);
@@ -613,7 +613,7 @@ test("import takes an old Save and migrates it", async () => {
   const id = await importedId(new Uint8Array(readFileSync(path)));
 
   expect(await messagesOf(id)).toHaveLength(2);
-  expect((await game.post(`/saves/${id}/turns`, { input: "I climb." })).status).toBe(201);
+  expect((await app.post(`/saves/${id}/turns`, { input: "I climb." })).status).toBe(201);
   expect(schemaVersion(savePath(id))).toBeGreaterThan(0);
 });
 
@@ -632,7 +632,7 @@ test("an old file that breaks its own migration is refused on import", async () 
 
 test("import only accepts the binary content type, which no form on another site can send", async () => {
   play();
-  const id = await game.createSave();
+  const id = await app.createSave();
   const bytes = await exportSave(id);
 
   const response = await importSave(bytes, "text/plain");
@@ -648,11 +648,11 @@ const messageTimes = (id: string) => {
 
 test("each Message records when it was written, and a Rewrite gets its own time", async () => {
   play(narration("The tide rises."), narration("The tide falls."));
-  const id = await game.createSave();
+  const id = await app.createSave();
   const before = new Date().toISOString();
 
-  const { messages } = (await game.post(`/saves/${id}/turns`, { input: "I wade." }).then((r) => r.json())) as { messages: Message[] };
-  await game.post(`/saves/${id}/messages/${messages[1]!.id}/regenerate`, {});
+  const { messages } = (await app.post(`/saves/${id}/turns`, { input: "I wade." }).then((r) => r.json())) as { messages: Message[] };
+  await app.post(`/saves/${id}/messages/${messages[1]!.id}/regenerate`, {});
 
   const times = messageTimes(id);
   expect(times).toHaveLength(2);
@@ -660,29 +660,29 @@ test("each Message records when it was written, and a Rewrite gets its own time"
     expect(created_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
     expect(created_at! >= before.slice(0, 19)).toBe(true);
   }
-  expect((await game.get(`/saves/${id}/messages`).then((r) => r.json())).messages[0]).toEqual(messages[0]);
+  expect((await app.get(`/saves/${id}/messages`).then((r) => r.json())).messages[0]).toEqual(messages[0]);
 });
 
 test("Messages from before timestamps open with no time, and new ones get one", async () => {
   play(narration("The tide rises."), narration("The tide falls."));
-  const id = await game.createSave();
-  await game.post(`/saves/${id}/turns`, { input: "I wade." });
-  await game.stop();
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I wade." });
+  await app.stop();
   {
     using db = new Database(join(savesDir, `${id}.sqlite`));
     db.run("ALTER TABLE messages DROP COLUMN created_at; PRAGMA user_version = 9");
   }
   play(narration("The tide falls."));
 
-  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
 
   expect(messageTimes(id).map(({ created_at }) => created_at !== null)).toEqual([false, false, true, true]);
 });
 
 test("a Save with a malformed time is refused on import", async () => {
   play(narration("The tide rises."));
-  const id = await game.createSave();
-  await game.post(`/saves/${id}/turns`, { input: "I wade." });
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I wade." });
   const path = join(folder.path, "bad.sqlite");
   copyFileSync(join(savesDir, `${id}.sqlite`), path);
   {
@@ -697,8 +697,8 @@ test("a Save with a malformed time is refused on import", async () => {
 
 test("an exported Save keeps its Message times through import", async () => {
   play(narration("The tide rises."));
-  const id = await game.createSave();
-  await game.post(`/saves/${id}/turns`, { input: "I wade." });
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I wade." });
 
   const imported = await importedId(await exportSave(id));
 

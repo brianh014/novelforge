@@ -115,8 +115,8 @@ export function Menu() {
       }
     >
       <nav className="menu" aria-label="Main Menu">
-        <a href="#/new">New Game</a>
-        <a href="#/load">Load Game</a>
+        <a href="#/new">New Story</a>
+        <a href="#/load">Load Story</a>
         <a href="#/settings">Settings</a>
       </nav>
     </Book>

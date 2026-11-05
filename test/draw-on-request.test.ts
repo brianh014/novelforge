@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
 import { ContentRefused, TextProviderFailed, type TextProvider } from "../src/turn-engine";
-import { png, scriptedDice, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 type Requested = { ref: number; messageId: number; caption: string; redraws: number };
 type Listing = { images: Requested[]; drawing: number };
@@ -11,7 +11,7 @@ type Item = { kind: string; ref: number; label: string; prompt: string | null; r
 type Gallery = { images: Item[]; pending: boolean; canRedraw: boolean };
 
 let folder: ReturnType<typeof tempFolder>;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 let drawn: ReturnType<typeof scriptedImages>;
 let written: ReturnType<typeof scriptedTextProvider>;
 let savesDir: string;
@@ -25,8 +25,8 @@ const play = async (replies: (string | Error)[], ...imageReplies: Parameters<typ
     await held;
     return written.textProvider(...call);
   };
-  game = startGame(savesDir, waiting, scriptedDice(), 2, drawn.imageAdapter);
-  await game.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
+  app = startApp(savesDir, waiting, scriptedDice(), 2, drawn.imageAdapter);
+  await app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
 };
 
 beforeEach(() => {
@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
@@ -50,13 +50,13 @@ const know = (name: string) => ({ op: "add_known_npc", name });
 const scene = (location: string, ...visible_cast: string[]) => ({ op: "set_scene", location, visible_cast });
 
 const newSave = async () => {
-  const response = await game.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "a short person with cropped hair" } });
+  const response = await app.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "a short person with cropped hair" } });
   return ((await response.json()) as { id: string }).id;
 };
 
-const galleryOf = async (id: string) => (await game.get(`/saves/${id}/gallery`).then((r) => r.json())) as Gallery;
-const requestedOf = async (id: string) => (await game.get(`/saves/${id}/requested-images`).then((r) => r.json())) as Listing;
-const failureOf = async (id: string) => (await game.get(`/saves/${id}/requested-images/failure`).then((r) => r.json())) as { failure?: { error: string; words: string } };
+const galleryOf = async (id: string) => (await app.get(`/saves/${id}/gallery`).then((r) => r.json())) as Gallery;
+const requestedOf = async (id: string) => (await app.get(`/saves/${id}/requested-images`).then((r) => r.json())) as Listing;
+const failureOf = async (id: string) => (await app.get(`/saves/${id}/requested-images/failure`).then((r) => r.json())) as { failure?: { error: string; words: string } };
 
 async function settled(id: string) {
   for (let tries = 0; tries < 200; tries++) {
@@ -68,18 +68,18 @@ async function settled(id: string) {
 }
 
 const playTurn = async (id: string) => {
-  await game.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+  await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
   return settled(id);
 };
 
-const request = (id: string, words: string) => game.post(`/saves/${id}/requested-images`, { words });
+const request = (id: string, words: string) => app.post(`/saves/${id}/requested-images`, { words });
 
 const asked = async (id: string, words: string) => {
   expect((await request(id, words)).status).toBe(202);
   return settled(id);
 };
 
-const bytesOf = async (path: string) => new Uint8Array(await (await game.get(path)).arrayBuffer());
+const bytesOf = async (path: string) => new Uint8Array(await (await app.get(path)).arrayBuffer());
 
 const callText = () => written.prompts.at(-1)!.map(({ content }) => content).join("\n");
 
@@ -158,11 +158,11 @@ test("the text call gets the recent story and the Scene's people with their look
     ...Array.from({ length: 12 }, (_, index) => png(index)),
   );
   const world = (await (
-    await game.post("/worlds", { title: "Salt", theme: "Western", worldBrief: "A drowned city", startingHook: "", pc: { name: "Ash", physicalTraits: "cropped hair" }, inventory: ["a tin badge"] })
+    await app.post("/worlds", { title: "Salt", theme: "Western", worldBrief: "A drowned city", startingHook: "", pc: { name: "Ash", physicalTraits: "cropped hair" }, inventory: ["a tin badge"] })
   ).json()) as { id: string };
-  const { id } = (await (await game.post(`/worlds/${world.id}/begin`, { artStyle: "" })).json()) as { id: string };
+  const { id } = (await (await app.post(`/worlds/${world.id}/begin`, { artStyle: "" })).json()) as { id: string };
   await playTurn(id);
-  expect((await game.post(`/saves/${id}/world-change`, { change: "the mayor is a smuggler" })).status).toBe(200);
+  expect((await app.post(`/saves/${id}/world-change`, { change: "the mayor is a smuggler" })).status).toBe(200);
 
   await asked(id, "the woman in the corner");
 
@@ -257,7 +257,7 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   ]);
 
   const item = gallery.images.at(-1)!;
-  expect((await game.post(`/saves/${id}/gallery/redraw`, { kind: item.kind, ref: item.ref, prompt: "Redrawn" })).status).toBe(202);
+  expect((await app.post(`/saves/${id}/gallery/redraw`, { kind: item.kind, ref: item.ref, prompt: "Redrawn" })).status).toBe(202);
   const after = await settled(id);
 
   expect(drawn.payloads.at(-1)).toMatchObject({ prompt: "Redrawn", aspect_ratio: "16:9" });
@@ -270,7 +270,7 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
 
 test("the keyword Prompt Style gets short phrases and no marks", async () => {
   await play([turn("A wet street", scene("The ferry")), written_("woman, bench, rain")], png(1), png(2));
-  await game.patch("/settings", { imageProvider: "local", comfyUrl: "http://127.0.0.1:1", comfyFamily: "sd", comfyMode: "simple", comfyCheckpoint: "sd.safetensors" });
+  await app.patch("/settings", { imageProvider: "local", comfyUrl: "http://127.0.0.1:1", comfyFamily: "sd", comfyMode: "simple", comfyCheckpoint: "sd.safetensors" });
   const id = await newSave();
   await playTurn(id);
 
@@ -329,7 +329,7 @@ test("a failed Redraw of a requested image keeps it, says why, and keeps the pro
   const item = (await asked(id, "the woman")).images.at(-1)!;
   const logged = spyOn(console, "error").mockImplementation(() => {});
 
-  await game.post(`/saves/${id}/gallery/redraw`, { kind: item.kind, ref: item.ref, prompt: "A sunny bench" });
+  await app.post(`/saves/${id}/gallery/redraw`, { kind: item.kind, ref: item.ref, prompt: "A sunny bench" });
   const after = await settled(id);
 
   const lines = JSON.stringify(logged.mock.calls);
@@ -348,7 +348,7 @@ test("a request is refused with images off, during a Turn, with no story, or wit
   expect((await request(id, "the woman")).status).toBe(409);
 
   held = new Promise<void>((resolve) => (finish = resolve));
-  const running = game.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+  const running = app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
   await Bun.sleep(5);
   expect((await request(id, "the woman")).status).toBe(409);
   finish();
@@ -359,7 +359,7 @@ test("a request is refused with images off, during a Turn, with no story, or wit
   expect((await request(id, "x".repeat(301))).status).toBe(400);
   expect((await request("nowhere", "the woman")).status).toBe(404);
 
-  await game.patch("/settings", { imagesEnabled: false });
+  await app.patch("/settings", { imagesEnabled: false });
   expect((await request(id, "the woman")).status).toBe(409);
   expect(written.prompts).toHaveLength(1);
   expect(await requestedOf(id)).toEqual({ images: [], drawing: 0 });
@@ -373,16 +373,16 @@ test("it isn't a Turn: no Message, no Snapshot, and the Narrator never hears abo
     using db = new Database(join(savesDir, `${id}.sqlite`));
     return db.query(query).all();
   };
-  const messages = await game.get(`/saves/${id}/messages`).then((r) => r.text());
-  const journal = await game.get(`/saves/${id}/journal`).then((r) => r.text());
+  const messages = await app.get(`/saves/${id}/messages`).then((r) => r.text());
+  const journal = await app.get(`/saves/${id}/journal`).then((r) => r.text());
   const snapshots = count("SELECT * FROM snapshot_sections");
 
   await asked(id, "the woman in the corner");
 
-  expect(await game.get(`/saves/${id}/messages`).then((r) => r.text())).toBe(messages);
-  expect(await game.get(`/saves/${id}/journal`).then((r) => r.text())).toBe(journal);
+  expect(await app.get(`/saves/${id}/messages`).then((r) => r.text())).toBe(messages);
+  expect(await app.get(`/saves/${id}/journal`).then((r) => r.text())).toBe(journal);
   expect(count("SELECT * FROM snapshot_sections")).toEqual(snapshots);
-  expect(await game.get(`/saves/${id}/turn`).then((r) => r.json())).toEqual({});
+  expect(await app.get(`/saves/${id}/turn`).then((r) => r.json())).toEqual({});
 
   await playTurn(id);
   const narrator = callText();
@@ -400,7 +400,7 @@ test("while one draws the player can play on, and it stays on the Message they a
   expect((await request(id, "the woman")).status).toBe(202);
   await Bun.sleep(5);
   expect(await requestedOf(id)).toEqual({ images: [], drawing: 1 });
-  await game.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+  await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
   finish(png(3));
   await settled(id);
 
@@ -412,7 +412,7 @@ test("a request waits behind a running draw and every one is kept, while a newer
   const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
   await play([turn("A wet street", scene("The ferry")), written_("One"), written_("Two")], png(1), slow, png(3), png(4));
   const id = await newSave();
-  await game.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+  await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
 
   await request(id, "one");
   await request(id, "two");
@@ -440,15 +440,15 @@ test("a Revert past its Message removes it and counts it, one to its Message kee
   await request(id, "stopped");
   await Bun.sleep(5);
 
-  expect(await game.get(`/saves/${id}/messages/2/revert`).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 0 });
-  await game.post(`/saves/${id}/messages/2/revert`, {});
+  expect(await app.get(`/saves/${id}/messages/2/revert`).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 0 });
+  await app.post(`/saves/${id}/messages/2/revert`, {});
   const gallery = await settled(id);
 
   expect(drawn.aborted).toHaveLength(1);
   expect((await requestedOf(id)).images.map(({ caption }) => caption)).toEqual(["kept"]);
   expect(gallery.images.map(({ label }) => label)).toEqual(["Ash", "The ferry", "kept"]);
   expect(await failureOf(id)).toEqual({});
-  expect((await game.get(`/saves/${id}/requested-images/2/image`)).status).toBe(404);
+  expect((await app.get(`/saves/${id}/requested-images/2/image`)).status).toBe(404);
 });
 
 test("replacing the latest Message takes its requested images with it, and stops one on the way", async () => {
@@ -465,7 +465,7 @@ test("replacing the latest Message takes its requested images with it, and stops
   await request(id, "stopped");
   await Bun.sleep(5);
 
-  await game.post(`/saves/${id}/messages/2/regenerate`, {}).then((r) => r.text());
+  await app.post(`/saves/${id}/messages/2/regenerate`, {}).then((r) => r.text());
   await settled(id);
 
   expect(drawn.aborted).toHaveLength(1);
@@ -477,11 +477,11 @@ test("a Revert to a player Message leaves one to join it, and that Save still ex
   await play([turn("A wet street", scene("The ferry")), written_("A woman")], png(1), png(2), png(3));
   const id = await newSave();
   await playTurn(id);
-  await game.post(`/saves/${id}/messages/1/revert`, {});
+  await app.post(`/saves/${id}/messages/1/revert`, {});
 
   await asked(id, "the woman");
   const exported = await bytesOf(`/saves/${id}/export`);
-  const response = await fetch(game.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: exported });
+  const response = await fetch(app.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: exported });
   const { id: imported } = (await response.json()) as { id: string };
 
   expect((await requestedOf(id)).images).toMatchObject([{ messageId: 1 }]);
@@ -496,10 +496,10 @@ test("export, import and duplicate carry it, and a duplicate from an earlier Mes
   await playTurn(id);
 
   const exported = await bytesOf(`/saves/${id}/export`);
-  const response = await fetch(game.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: exported });
+  const response = await fetch(app.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: exported });
   const { id: imported } = (await response.json()) as { id: string };
-  const { id: copy } = (await (await game.post(`/saves/${id}/duplicate`, {})).json()) as { id: string };
-  const { id: early } = (await (await game.post(`/saves/${id}/duplicate`, { fromMessage: 1 })).json()) as { id: string };
+  const { id: copy } = (await (await app.post(`/saves/${id}/duplicate`, {})).json()) as { id: string };
+  const { id: early } = (await (await app.post(`/saves/${id}/duplicate`, { fromMessage: 1 })).json()) as { id: string };
 
   for (const save of [imported, copy]) {
     expect((await requestedOf(save)).images).toEqual([{ ref: item.ref, messageId: 2, caption: "the bench", redraws: 0 }]);
@@ -514,13 +514,13 @@ test("an older Save opens with the new table, empty, and a request works on it",
   await play([turn("A wet street", scene("The ferry")), written_("A woman")], png(1), png(2), png(3));
   const id = await newSave();
   await playTurn(id);
-  await game.stop();
+  await app.stop();
   const path = join(savesDir, `${id}.sqlite`);
   {
     using db = new Database(path);
     db.run("DROP TABLE requested_images; PRAGMA user_version = 12");
   }
-  game = startGame(savesDir, written.textProvider, scriptedDice(), 2, drawn.imageAdapter);
+  app = startApp(savesDir, written.textProvider, scriptedDice(), 2, drawn.imageAdapter);
 
   expect(await requestedOf(id)).toEqual({ images: [], drawing: 0 });
   await asked(id, "the woman");

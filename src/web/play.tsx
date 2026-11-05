@@ -33,6 +33,7 @@ import {
   setupProblem,
   type Status,
   statusWords,
+  storyName,
   takeImageFailure,
   type TurnResult,
 } from "./api";
@@ -421,7 +422,7 @@ export function Play({ id }: { id: string }) {
   const sceneImage = (image = scene) => image && <SceneImage id={id} image={image} />;
   const cover = save.hasCover && (
     <figure className="plate">
-      <Zoomable src={coverUrl(id, save.coverRedraws)} alt={`Cover of ${pc}'s story`} />
+      <Zoomable src={coverUrl(id, save.coverRedraws)} alt={`Cover of ${storyName(save)}`} />
     </figure>
   );
 
@@ -531,7 +532,7 @@ export function Play({ id }: { id: string }) {
           <Fold>
             {/* A Save from before titles has only its PC. */}
             <div className="story-title">
-              <h1 className="title">{save.title || pc}</h1>
+              <h1 className="title">{storyName(save)}</h1>
               {save.title && <p className="muted">{pc}</p>}
             </div>
             {picture && (

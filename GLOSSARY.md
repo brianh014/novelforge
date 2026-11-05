@@ -19,6 +19,10 @@ Any character in the world voiced by the Narrator.
 
 ### Story structure
 
+**Story**:
+One world and PC played from the Opening on, held in a Save and always called by its Title. A Save with no Title goes by the PC's name.
+_Avoid_: Game
+
 **Message**:
 A single entry in the chat history, and the unit the player can revert to.
 
@@ -30,7 +34,7 @@ _Avoid_: Message (when the input-and-response pair is meant)
 A continuous place and situation in the story. A Scene can have several Scene Images over time, such as when its cast changes.
 
 **Cover**:
-The book-cover art of a story, with its title lettered into the picture, drawn from what the player can read: the Title, theme and World Brief if the player draws it while creating the game, otherwise the World Overview. It is kept in the Save through every Revert.
+The book-cover art of a story, with its title lettered into the picture, drawn from what the player can read: the Title, theme and World Brief if the player draws it while creating the story, otherwise the World Overview. It is kept in the Save through every Revert.
 _Avoid_: Title image, world image
 
 **Opening**:
@@ -62,7 +66,7 @@ _Avoid_: Roll, skill check, saving throw
 ### World
 
 **World Brief**:
-The player's description of the world: written on the new game form, where it seeds the World Bible, and editable in the Journal. A Snapshot holds the one in use.
+The player's description of the world: written on the New Story form, where it seeds the World Bible, and editable in the Journal. A Snapshot holds the one in use.
 _Avoid_: World details
 
 **World Bible**:
@@ -70,7 +74,7 @@ The full generated world used by the Narrator, kept secret from the player.
 _Avoid_: World details, lore
 
 **Starting Hook**:
-The optional opening situation chosen during game creation.
+The optional opening situation chosen during story creation.
 _Avoid_: Hook (alone)
 
 **Plot Thread**:
@@ -116,7 +120,7 @@ _Avoid_: System prompt
 ### State
 
 **Snapshot**:
-The complete, immutable game state belonging to a Message. Reverting to a Message restores its Snapshot.
+The complete, immutable story state belonging to a Message. Reverting to a Message restores its Snapshot.
 _Avoid_: Save (a Snapshot is not a player-facing save)
 
 **Journal**:
@@ -131,5 +135,5 @@ Returning to an earlier Message and permanently deleting everything after it.
 _Avoid_: Undo, rollback
 
 **Save**:
-One player-facing game on disk. Duplicating a Save is how the player branches a story.
+One story on disk, and the player-facing word for that file. Duplicating a Save is how the player branches a story.
 _Avoid_: Branch, slot

@@ -76,7 +76,7 @@ const sendJson = (method: string, url: URL, body: unknown) =>
 export const postJson = (url: URL, body: unknown) => sendJson("POST", url, body);
 
 /** A real server over a real Saves folder. `restart` keeps the folder. */
-export function startGame(
+export function startApp(
   savesDir: string,
   textProvider: TextProvider,
   dice = scriptedDice(),

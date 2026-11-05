@@ -4,11 +4,11 @@ import { join } from "node:path";
 import { saveStore } from "../src/save-store";
 import { mergeWorldUpdate } from "../src/state-applier";
 import { ContentRefused, TextProviderFailed } from "../src/turn-engine";
-import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 let prompts: ReturnType<typeof scriptedTextProvider>["prompts"];
 
 beforeEach(() => {
@@ -17,14 +17,14 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
 const play = (...replies: (string | Error)[]) => {
   const script = scriptedTextProvider(...replies);
   prompts = script.prompts;
-  game = startGame(savesDir, script.textProvider);
+  app = startApp(savesDir, script.textProvider);
 };
 
 const SECRET = "ZQX-SECRET";
@@ -42,10 +42,10 @@ const createSave = () =>
   store().create({ worldBrief: "A drowned city", pc: { name: "Ash" }, opening: { ...WORLD, npcs: NPCS, pcKnown: KNOWN, summary: "It began to rain." } });
 
 const json = async (response: Response | Promise<Response>) => (await (await response).json()) as Record<string, unknown>;
-const edit = (id: string, change: object) => game.post(`/saves/${id}/edits`, change);
-const turn = (id: string, input = "I wait.") => game.post(`/saves/${id}/turns`, { input });
-const journal = (id: string) => json(game.get(`/saves/${id}/journal`));
-const brief = async (id: string) => (await json(game.get(`/saves/${id}`))).worldBrief;
+const edit = (id: string, change: object) => app.post(`/saves/${id}/edits`, change);
+const turn = (id: string, input = "I wait.") => app.post(`/saves/${id}/turns`, { input });
+const journal = (id: string) => json(app.get(`/saves/${id}/journal`));
+const brief = async (id: string) => (await json(app.get(`/saves/${id}`))).worldBrief;
 const facts = (id: string) => store().latestState(id).pcKnown.facts;
 const everyPrompt = () => JSON.stringify(prompts);
 const firstFact = KNOWN.facts[0]!;
@@ -65,7 +65,7 @@ test("the World Brief, Recent summary and an NPC's summary can be edited", async
   }
 
   expect(await brief(id)).toBe("A city of glass");
-  expect((await json(game.get("/saves"))).saves).toMatchObject([{ id, worldBrief: "A city of glass" }]);
+  expect((await json(app.get("/saves"))).saves).toMatchObject([{ id, worldBrief: "A city of glass" }]);
   expect(await journal(id)).toMatchObject({
     summary: "It stopped raining.",
     npcSummaries: { Hesper: "A smuggler, as far as Ash can tell." },
@@ -115,7 +115,7 @@ test("an edit can't reach what the player can't see, or what has gone", async ()
   expect(await unknown.json()).toEqual(await nobody.json());
 
   expect((await edit(id, { edit: "fact", old: "Never known.", new: "x" })).status).toBe(404);
-  expect((await game.post(`/saves/${crypto.randomUUID()}/edits`, { edit: "summary", text: "x" })).status).toBe(404);
+  expect((await app.post(`/saves/${crypto.randomUUID()}/edits`, { edit: "summary", text: "x" })).status).toBe(404);
   expect(store().latestState(id).pcKnown).toEqual(KNOWN);
 });
 
@@ -163,11 +163,11 @@ test("a Revert to before an edit undoes it, and one to after keeps it", async ()
   await turn(id);
   await turn(id);
 
-  await game.post(`/saves/${id}/messages/4/revert`, {});
+  await app.post(`/saves/${id}/messages/4/revert`, {});
   expect(await brief(id)).toBe("A city of glass");
   expect(await journal(id)).toMatchObject({ summary: "Edited." });
 
-  await game.post(`/saves/${id}/messages/2/revert`, {});
+  await app.post(`/saves/${id}/messages/2/revert`, {});
   expect(await brief(id)).toBe("A drowned city");
   expect(await journal(id)).toMatchObject({ summary: "It began to rain.", facts: KNOWN.facts, npcSummaries: KNOWN.summaries });
 });
@@ -179,7 +179,7 @@ test("an edit waiting for its next Message goes with a Revert to the Message bef
   await turn(id);
   await edit(id, { edit: "worldBrief", text: "A city of glass" });
 
-  await game.post(`/saves/${id}/messages/2/revert`, {});
+  await app.post(`/saves/${id}/messages/2/revert`, {});
 
   expect(await brief(id)).toBe("A drowned city");
 });
@@ -194,14 +194,14 @@ test.each([
   await edit(id, { edit: "worldBrief", text: "A city of glass" });
   await edit(id, { edit: "fact", old: firstFact, new: "The city is dry." });
 
-  const first = await game.post(`/saves/${id}/messages/2/${action}`, body);
+  const first = await app.post(`/saves/${id}/messages/2/${action}`, body);
   expect(first.status).toBe(201);
   expect(prompts[1]![0]!.content).toContain("World Brief: A city of glass");
   expect(prompts[1]![0]!.content).toContain("The city is dry.");
   expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
 
   const { messages } = (await first.json()) as { messages: { id: number }[] };
-  await game.post(`/saves/${id}/messages/${messages[0]!.id}/${action}`, body);
+  await app.post(`/saves/${id}/messages/${messages[0]!.id}/${action}`, body);
   expect(prompts[2]![0]!.content).toContain("The city is dry.");
   expect(prompts[2]![0]!.content).toContain("World Brief: A city of glass");
   expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
@@ -214,9 +214,9 @@ test("a Revert past a replaced response undoes an edit it carried", async () => 
   await turn(id);
   await turn(id);
   await edit(id, { edit: "worldBrief", text: "A city of glass" });
-  await game.post(`/saves/${id}/messages/4/regenerate`, {});
+  await app.post(`/saves/${id}/messages/4/regenerate`, {});
 
-  await game.post(`/saves/${id}/messages/2/revert`, {});
+  await app.post(`/saves/${id}/messages/2/revert`, {});
 
   expect(await brief(id)).toBe("A drowned city");
 });
@@ -227,7 +227,7 @@ test("an edit to something the replaced response wrote still stands after a Rege
   await turn(id);
   await edit(id, { edit: "fact", old: "Bees sing.", new: "Bees hum." });
 
-  await game.post(`/saves/${id}/messages/2/regenerate`, {});
+  await app.post(`/saves/${id}/messages/2/regenerate`, {});
 
   expect(facts(id)).toEqual([...KNOWN.facts, "Bees hum."]);
 });
@@ -238,7 +238,7 @@ test("a failed Regenerate leaves an edit waiting", async () => {
   await turn(id);
   await edit(id, { edit: "summary", text: "Edited." });
 
-  expect((await game.post(`/saves/${id}/messages/2/regenerate`, {})).status).toBe(422);
+  expect((await app.post(`/saves/${id}/messages/2/regenerate`, {})).status).toBe(422);
 
   expect(await journal(id)).toMatchObject({ summary: "Edited." });
 });
@@ -249,8 +249,8 @@ test("duplicating a whole Save keeps an edit, and from a Message starts from tha
   await turn(id);
   await edit(id, { edit: "worldBrief", text: "A city of glass" });
 
-  const whole = (await json(game.post(`/saves/${id}/duplicate`, {}))).id as string;
-  const part = (await json(game.post(`/saves/${id}/duplicate`, { fromMessage: 2 }))).id as string;
+  const whole = (await json(app.post(`/saves/${id}/duplicate`, {}))).id as string;
+  const part = (await json(app.post(`/saves/${id}/duplicate`, { fromMessage: 2 }))).id as string;
 
   expect(await brief(whole)).toBe("A city of glass");
   expect(await brief(part)).toBe("A drowned city");
@@ -258,10 +258,10 @@ test("duplicating a whole Save keeps an edit, and from a Message starts from tha
 
 test("an edit is refused while a Turn is running", async () => {
   let finish = (_: string) => {};
-  game = startGame(savesDir, () => new Promise((resolve) => (finish = resolve)));
+  app = startApp(savesDir, () => new Promise((resolve) => (finish = resolve)));
   const id = createSave();
   const running = turn(id);
-  while ((await json(game.get(`/saves/${id}/turn`))).running === undefined) await Bun.sleep(1);
+  while ((await json(app.get(`/saves/${id}/turn`))).running === undefined) await Bun.sleep(1);
   await Bun.sleep(5);
 
   const refused = await edit(id, { edit: "summary", text: "Edited." });
@@ -277,7 +277,7 @@ test("a Save from before Snapshots held the World Brief opens with it in all of 
   const id = createSave();
   await turn(id);
   await turn(id);
-  await game.stop();
+  await app.stop();
   {
     using db = new Database(join(savesDir, `${id}.sqlite`));
     db.run("DELETE FROM snapshot_sections WHERE name = 'worldBrief'");
@@ -290,7 +290,7 @@ test("a Save from before Snapshots held the World Brief opens with it in all of 
   expect(store().snapshot(id, 2)).toMatchObject({ worldBrief: "A drowned city" });
   await edit(id, { edit: "worldBrief", text: "A city of glass" });
   await turn(id);
-  await game.post(`/saves/${id}/messages/2/revert`, {});
+  await app.post(`/saves/${id}/messages/2/revert`, {});
   expect(await brief(id)).toBe("A drowned city");
   {
     using db = new Database(join(savesDir, `${id}.sqlite`));
@@ -306,8 +306,8 @@ test("an exported Save with an edit waiting comes back with it", async () => {
   await edit(id, { edit: "worldBrief", text: "A city of glass" });
   await edit(id, { edit: "summary", text: "Edited." });
 
-  const file = await (await game.get(`/saves/${id}/export`)).arrayBuffer();
-  const imported = await fetch(game.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
+  const file = await (await app.get(`/saves/${id}/export`)).arrayBuffer();
+  const imported = await fetch(app.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file });
   const copy = ((await imported.json()) as { id: string }).id;
 
   expect(await brief(copy)).toBe("A city of glass");
@@ -319,20 +319,20 @@ test("import refuses malformed edits carried on a Message", async () => {
   const id = createSave();
   await turn(id);
   const path = join(folder.path, "tampered.sqlite");
-  await Bun.write(path, await (await game.get(`/saves/${id}/export`)).arrayBuffer());
+  await Bun.write(path, await (await app.get(`/saves/${id}/export`)).arrayBuffer());
   {
     using db = new Database(path);
     db.run(`UPDATE messages SET edits = '[{"edit":"summary"}]' WHERE id = 2`);
   }
 
-  const imported = await fetch(game.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: Bun.file(path) });
+  const imported = await fetch(app.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: Bun.file(path) });
 
   expect(imported.status).toBe(422);
 });
 
 // The hidden change
 
-const change = (id: string, text = "the mayor is secretly a smuggler") => game.post(`/saves/${id}/world-change`, { change: text });
+const change = (id: string, text = "the mayor is secretly a smuggler") => app.post(`/saves/${id}/world-change`, { change: text });
 const update = (fields: object = {}) =>
   JSON.stringify({ lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [], ...fields });
 const SMUGGLER = { title: "The Mayor", keywords: ["mayor", "harbour", "smuggler"], content: `${SECRET} the mayor smuggles.` };
@@ -498,7 +498,7 @@ test.each([
   play();
   const id = createSave();
 
-  const response = await game.post(`/saves/${id}/world-change`, body);
+  const response = await app.post(`/saves/${id}/world-change`, body);
 
   expect(response.status).toBe(400);
   expect(await response.text()).not.toContain(SECRET);
@@ -533,7 +533,7 @@ test("a Revert to before a hidden change undoes it", async () => {
   await change(id);
   await turn(id);
 
-  await game.post(`/saves/${id}/messages/2/revert`, {});
+  await app.post(`/saves/${id}/messages/2/revert`, {});
 
   expect(hidden(id)).toEqual(WORLD);
 });
@@ -544,8 +544,8 @@ test("Regenerate keeps a hidden change, however often it runs", async () => {
   await turn(id);
   await change(id);
 
-  const { messages } = (await json(game.post(`/saves/${id}/messages/2/regenerate`, {}))) as { messages: { id: number }[] };
-  await game.post(`/saves/${id}/messages/${messages[0]!.id}/regenerate`, {});
+  const { messages } = (await json(app.post(`/saves/${id}/messages/2/regenerate`, {}))) as { messages: { id: number }[] };
+  await app.post(`/saves/${id}/messages/${messages[0]!.id}/regenerate`, {});
 
   expect(everyPrompt()).toContain("Rewritten.");
   expect(hidden(id).plotThreads).toEqual(["Rewritten.", WORLD.plotThreads[1]!]);
@@ -554,10 +554,10 @@ test("Regenerate keeps a hidden change, however often it runs", async () => {
 
 test("a hidden change is refused while a Turn is running", async () => {
   let finish = (_: string) => {};
-  game = startGame(savesDir, () => new Promise((resolve) => (finish = resolve)));
+  app = startApp(savesDir, () => new Promise((resolve) => (finish = resolve)));
   const id = createSave();
   const running = turn(id);
-  while ((await json(game.get(`/saves/${id}/turn`))).running === undefined) await Bun.sleep(1);
+  while ((await json(app.get(`/saves/${id}/turn`))).running === undefined) await Bun.sleep(1);
   await Bun.sleep(5);
 
   expect((await change(id)).status).toBe(409);
@@ -570,7 +570,7 @@ test("a hidden change is refused while a Turn is running", async () => {
 let heldCall: ((reply: string) => void) | undefined;
 const slowNarrator = () => {
   heldCall = undefined;
-  game = startGame(savesDir, () => new Promise((resolve) => (heldCall = resolve)));
+  app = startApp(savesDir, () => new Promise((resolve) => (heldCall = resolve)));
 };
 
 /** A hidden change that stays with the Narrator until `finish`. */
@@ -590,7 +590,7 @@ test("while the Narrator changes the world, Turns and edits wait, and a failure 
   expect(((await turnRefused.json()) as { error: string }).error).toContain("changing the world");
   expect((await edit(id, { edit: "summary", text: "Edited." })).status).toBe(409);
   expect((await change(id)).status).toBe(409);
-  expect((await json(game.get(`/saves/${id}/turn`))).running).toBeUndefined();
+  expect((await json(app.get(`/saves/${id}/turn`))).running).toBeUndefined();
 
   underway.finish();
   expect((await underway.response).status).toBe(200);
@@ -612,7 +612,7 @@ test("a Revert during a hidden change wins, and the change says the story moved"
   store().commitTurn(id, 0, "I wait.", "One.", undefined, (state) => state);
   const underway = await changeUnderway(id, update({ removed_lore: ["The Tide"] }));
 
-  await game.post(`/saves/${id}/messages/1/revert`, {});
+  await app.post(`/saves/${id}/messages/1/revert`, {});
   underway.finish();
 
   expect((await underway.response).status).toBe(409);

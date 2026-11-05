@@ -1,23 +1,23 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { narration, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 
 beforeEach(() => {
   folder = tempFolder();
-  game = startGame(join(folder.path, "Saves"), scriptedTextProvider().textProvider);
+  app = startApp(join(folder.path, "Saves"), scriptedTextProvider().textProvider);
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
-const settings = () => game.get("/settings").then((r) => r.json());
-const change = (body: unknown) => game.patch("/settings", body);
+const settings = () => app.get("/settings").then((r) => r.json());
+const change = (body: unknown) => app.patch("/settings", body);
 
 test("a fresh install has images on, Prose, medium type, blank Model Instructions and no keys", async () => {
   expect(await settings()).toEqual({
@@ -95,7 +95,7 @@ test("every setting survives a restart, and no key comes back", async () => {
   };
   expect(await response.json()).toEqual(expected);
 
-  await game.restart();
+  await app.restart();
 
   expect(await settings()).toEqual(expected);
 });
@@ -122,7 +122,7 @@ test("options that don't exist are refused and change nothing", async () => {
 
 test.each(["script", "prose", "bubbles", "stage"])("the %s Chat style persists through a restart", async (chatStyle) => {
   expect((await change({ chatStyle })).status).toBe(200);
-  await game.restart();
+  await app.restart();
   expect(await settings()).toMatchObject({ chatStyle });
 });
 
@@ -132,57 +132,57 @@ test("an install's settings file from before these settings gets their defaults"
   expect(await settings()).toMatchObject({ textModel: "old/model", imagesEnabled: true, fontSize: "medium" });
 });
 
-const artStyleOf = async (id: string) => ((await game.get(`/saves/${id}`).then((r) => r.json())) as { artStyle: string }).artStyle;
-const setArtStyle = (id: string, artStyle: string) => game.patch(`/saves/${id}`, { artStyle });
+const artStyleOf = async (id: string) => ((await app.get(`/saves/${id}`).then((r) => r.json())) as { artStyle: string }).artStyle;
+const setArtStyle = (id: string, artStyle: string) => app.patch(`/saves/${id}`, { artStyle });
 
 test("Art Style belongs to one Save and is blank until set", async () => {
-  const id = await game.createSave();
-  const other = await game.createSave();
+  const id = await app.createSave();
+  const other = await app.createSave();
   expect(await artStyleOf(id)).toBe("");
 
   const response = await setArtStyle(id, "Luminous Fluid Watercolor");
 
   expect(await response.json()).toEqual({ artStyle: "Luminous Fluid Watercolor" });
-  await game.restart();
+  await app.restart();
   expect(await artStyleOf(id)).toBe("Luminous Fluid Watercolor");
   expect(await artStyleOf(other)).toBe("");
 });
 
 test("Art Style can't be set on a missing Save or to something that isn't text", async () => {
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   expect((await setArtStyle(crypto.randomUUID(), "Ink")).status).toBe(404);
-  expect((await game.patch(`/saves/${id}`, { artStyle: 7 })).status).toBe(400);
+  expect((await app.patch(`/saves/${id}`, { artStyle: 7 })).status).toBe(400);
 });
 
 const idOf = (response: Response) => response.json().then((body) => (body as { id: string }).id);
 
 const importBytes = (body: Uint8Array) =>
-  fetch(game.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: body as BodyInit });
+  fetch(app.url("/saves/import"), { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: body as BodyInit });
 
 test("Art Style survives a Turn, a Revert, both kinds of duplicate, and export then import", async () => {
-  await game.stop();
-  game = startGame(
+  await app.stop();
+  app = startApp(
     join(folder.path, "Saves"),
     scriptedTextProvider(narration("The tide rises."), narration("The tide falls.")).textProvider,
   );
-  const id = await game.createSave();
+  const id = await app.createSave();
   await setArtStyle(id, "Ukiyo-e");
-  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
   await setArtStyle(id, "Art Deco");
-  await game.post(`/saves/${id}/turns`, { input: "I wait again." });
-  const { messages } = (await game.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { id: number }[] };
+  await app.post(`/saves/${id}/turns`, { input: "I wait again." });
+  const { messages } = (await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { id: number }[] };
 
-  const duplicate = await game.post(`/saves/${id}/duplicate`, {}).then(idOf);
-  const partial = await game.post(`/saves/${id}/duplicate`, { fromMessage: messages[1]!.id }).then(idOf);
-  const imported = await importBytes(await game.get(`/saves/${id}/export`).then((r) => r.bytes())).then(idOf);
-  await game.post(`/saves/${id}/messages/${messages[1]!.id}/revert`, {});
+  const duplicate = await app.post(`/saves/${id}/duplicate`, {}).then(idOf);
+  const partial = await app.post(`/saves/${id}/duplicate`, { fromMessage: messages[1]!.id }).then(idOf);
+  const imported = await importBytes(await app.get(`/saves/${id}/export`).then((r) => r.bytes())).then(idOf);
+  await app.post(`/saves/${id}/messages/${messages[1]!.id}/revert`, {});
 
   for (const save of [id, duplicate, partial, imported]) expect(await artStyleOf(save)).toBe("Art Deco");
 });
 
 test("a Save from before Art Style opens with it blank and keeps its story, and can still be imported", async () => {
-  const id = await game.createSave();
+  const id = await app.createSave();
   const path = join(folder.path, "Saves", `${id}.sqlite`);
   {
     using db = new Database(path);
@@ -192,27 +192,27 @@ test("a Save from before Art Style opens with it blank and keeps its story, and 
   }
   const older = await Bun.file(path).bytes();
 
-  expect(await game.get(`/saves/${id}`).then((r) => r.json())).toMatchObject({ worldBrief: "A drowned city", artStyle: "" });
+  expect(await app.get(`/saves/${id}`).then((r) => r.json())).toMatchObject({ worldBrief: "A drowned city", artStyle: "" });
   const imported = await importBytes(older);
   expect(imported.status).toBe(201);
   expect(await artStyleOf(((await imported.json()) as { id: string }).id)).toBe("");
 });
 
 test("API keys never enter a Save, its duplicates or its export", async () => {
-  await game.stop();
-  game = startGame(join(folder.path, "Saves"), scriptedTextProvider(narration("The tide rises.")).textProvider);
+  await app.stop();
+  app = startApp(join(folder.path, "Saves"), scriptedTextProvider(narration("The tide rises.")).textProvider);
   const textKey = `text-key-${crypto.randomUUID()}`;
   const imageKey = `image-key-${crypto.randomUUID()}`;
   await change({ textApiKey: textKey, imageApiKey: imageKey, modelInstructions: "Keep it short." });
-  const id = await game.createSave();
+  const id = await app.createSave();
   await setArtStyle(id, "Ink");
-  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
 
-  const duplicate = await game.post(`/saves/${id}/duplicate`, {}).then(idOf);
-  const partial = await game.post(`/saves/${id}/duplicate`, { fromMessage: 1 }).then(idOf);
+  const duplicate = await app.post(`/saves/${id}/duplicate`, {}).then(idOf);
+  const partial = await app.post(`/saves/${id}/duplicate`, { fromMessage: 1 }).then(idOf);
   const files = [id, duplicate, partial].map((save) => join(folder.path, "Saves", `${save}.sqlite`));
   const rawFiles = await Promise.all(files.map((file) => Bun.file(file).bytes()));
-  const exported = await game.get(`/saves/${id}/export`).then((r) => r.bytes());
+  const exported = await app.get(`/saves/${id}/export`).then((r) => r.bytes());
 
   // The markers must be where keys belong, or this test would pass with no key stored at all.
   const stored = await Bun.file(join(folder.path, "settings.json")).bytes();
@@ -222,5 +222,5 @@ test("API keys never enter a Save, its duplicates or its export", async () => {
     expect(Buffer.from(bytes).includes(textKey)).toBe(false);
     expect(Buffer.from(bytes).includes(imageKey)).toBe(false);
   }
-  expect(await game.get("/settings").then((r) => r.text())).not.toContain("-key-");
+  expect(await app.get("/settings").then((r) => r.text())).not.toContain("-key-");
 });

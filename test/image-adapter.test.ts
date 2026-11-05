@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import { type ImagePayload, openRouterImages } from "../src/image-adapter";
 import { settingsStore } from "../src/settings-store";
-import { PNG, png, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { PNG, png, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 const generated = () => Response.json({ data: [{ b64_json: PNG.toString("base64"), media_type: "image/png" }] });
 
@@ -201,20 +201,20 @@ test("a whole Turn through the real adapter stores the image and logs no key", a
     scene_changed: true,
     visual_description: "A flooded street",
   });
-  const game = startGame(join(folder.path, "Saves"), scriptedTextProvider(reply).textProvider, undefined, undefined, adapter);
-  const id = await game.createSave();
+  const app = startApp(join(folder.path, "Saves"), scriptedTextProvider(reply).textProvider, undefined, undefined, adapter);
+  const id = await app.createSave();
 
-  await game.post(`/saves/${id}/turns`, { input: "I wade forward." });
+  await app.post(`/saves/${id}/turns`, { input: "I wade forward." });
   for (let tries = 0; tries < 200; tries++) {
-    const { pending } = (await game.get(`/saves/${id}/images`).then((r) => r.json())) as { pending: boolean };
+    const { pending } = (await app.get(`/saves/${id}/images`).then((r) => r.json())) as { pending: boolean };
     if (!pending) break;
     await Bun.sleep(5);
   }
 
-  expect((await game.get(`/saves/${id}/messages/2/image`)).status).toBe(200);
+  expect((await app.get(`/saves/${id}/messages/2/image`)).status).toBe(200);
   expect(sent().body.prompt).toContain("A flooded street");
   expect(sent().authorization).toBe("Bearer image-key-value");
   expect(logged).not.toHaveBeenCalled();
   logged.mockRestore();
-  await game.stop();
+  await app.stop();
 });

@@ -4,16 +4,16 @@
 
 # Brief
 
-A game/app that lets the user go through a choose your own adventure style visual novel that’s driven by an LLM. The user controls their own actions and speaks for themselves, while the LLM drives the story, controls NPCs, tracks the state of the world, and presents interesting hooks for the player to take.  
-It can create images. Images created based on the current scene in the game, and a new one is generated once the scene has changed enough to justify creating a new one.
+An app that lets the user go through a choose your own adventure style visual novel that’s driven by an LLM. The user controls their own actions and speaks for themselves, while the LLM drives the story, controls NPCs, tracks the state of the world, and presents interesting hooks for the player to take.  
+It can create images. Images created based on the current scene in the story, and a new one is generated once the scene has changed enough to justify creating a new one.
 
 # Features
 
-## Game creation, wizard style workflow
+## Story creation, wizard style workflow
 
 ### Create the world
 
-A new game is one form, in this order: the world's fields, Art Style, Cover, the PC's fields, portrait. The player selects from lists or provides a free form answer
+A new story is one form, in this order: the world's fields, Art Style, Cover, the PC's fields, portrait. The player selects from lists or provides a free form answer
 
 * Theme: each has a short description, shown to the player once chosen and sent to the Narrator with its name  
   * High Fantasy  
@@ -33,11 +33,11 @@ A new game is one form, in this order: the world's fields, Art Style, Cover, the
 * World Brief \- free form field to describe the world  
 * Title - free form field for the story's title, lettered into the Cover  
 * Toggle for Starting Hook  
-  * Yes \- the player specifies a Starting Hook at the beginning of the game  
+  * Yes \- the player specifies a Starting Hook at the beginning of the story  
   * No \- The PC just starts in the world with no immediate hook, more sandbox style start  
 * One “Pick for me” button for the whole form, world and PC together. One Narrator call fills only the empty boxes, seeing every other box and only the player's own words, and leaves the Starting Hook alone while it's off  
 * A button on each box, including the PC's name. On a box with words it's “Enhance”, which rewrites what the player wrote into something richer, for a player with a general idea. On an empty box it writes that field from scratch. It sees every other box and only the player's own words, and Undo brings back what the box held  
-* Art style \- the style to be used for all image generation in this Save (can be changed in game, affects new images only)  
+* Art style \- the style to be used for all image generation in this Save (can be changed during the story, affects new images only)  
   * **Cinematic Photorealism**  
     * Ultra-detailed photorealistic style capturing hyper-accurate physics, micro-surface textures, natural volumetric light dispersion, realistic lens depth of field, and true-to-life subsurface scattering, indistinguishable from high-resolution digital cinema footage.  
   * **Modern Digital Painting & Concept Art**  
@@ -77,7 +77,7 @@ A new game is one form, in this order: the world's fields, Art Style, Cover, the
 
 ### Generate the world
 
-One button writes the world with the PC in view. The PC stays canon and the world bends to them, so there is no separate step to fit them in and no notice that the world changed. The Narrator also works out what the PC wears and their opening status, before the world, so a failure there costs no world. The Narrator generates a detailed World Bible that is used for the rest of the game, along with the Plot Threads, which are kept secret from the player. The Narrator can expand the World Bible and create new Plot Threads during play, such as when the player has exhausted the current ones or ventured into an unmapped area.
+One button writes the world with the PC in view. The PC stays canon and the world bends to them, so there is no separate step to fit them in and no notice that the world changed. The Narrator also works out what the PC wears and their opening status, before the world, so a failure there costs no world. The Narrator generates a detailed World Bible that is used for the rest of the story, along with the Plot Threads, which are kept secret from the player. The Narrator can expand the World Bible and create new Plot Threads during play, such as when the player has exhausted the current ones or ventured into an unmapped area.
 
 The World Bible is a set of Lore Entries. Each has a title, keywords and self-contained content. The Narrator should give each entry several keywords so that paraphrases still activate it.
 
@@ -106,9 +106,9 @@ Changing a field after drawing leaves that image as it is, for the player to Red
 
 “Pick for me” and the button on each box work here as in the world's fields
 
-## The game loop
+## The story loop
 
-The game plays like a typical AI chat session, but the game is a harness to help guide a choose your own visual novel story.
+The app plays like a typical AI chat session, but the app is a harness to help guide a choose your own visual novel story.
 
 ### The “chat”
 
@@ -128,9 +128,9 @@ Ashley takes the spanners from you
 [Ashley] “Oh thank you so much! I really needed these.”
 ```
 
-The Narrator must not take instructions from the player in the main chat, ie no prompt/instruction injection. Player text is always passed as clearly delimited in-character data. The player can only say what the PC is saying or doing, and they cannot “break the game”/do something that doesn't fit the world. For example, in a modern day theme strictly based on the current 2026 world, a PC would not be able to cast magic if it hasn't somehow been introduced into the story.
+The Narrator must not take instructions from the player in the main chat, ie no prompt/instruction injection. Player text is always passed as clearly delimited in-character data. The player can only say what the PC is saying or doing, and they cannot “break the story”/do something that doesn't fit the world. For example, in a modern day theme strictly based on the current 2026 world, a PC would not be able to cast magic if it hasn't somehow been introduced into the story.
 
-Rewrite, Model Instructions and Tell the Narrator in the Journal are the only out-of-character inputs. A World Change is a deliberate instruction about the world, so it reaches the Narrator as JSON data in a call of its own, never in the main chat, and the Narrator treats it only as what should be true of the world, never as instructions about anything else. Director's Notes are out of the game for now: Rewrite covers correcting the Narrator. Their code stays, as they may come back (ticket 31).
+Rewrite, Model Instructions and Tell the Narrator in the Journal are the only out-of-character inputs. A World Change is a deliberate instruction about the world, so it reaches the Narrator as JSON data in a call of its own, never in the main chat, and the Narrator treats it only as what should be true of the world, never as instructions about anything else. Director's Notes are out of play for now: Rewrite covers correcting the Narrator. Their code stays, as they may come back (ticket 31).
 
 ### Turns
 
@@ -207,7 +207,7 @@ A failed Turn writes nothing and keeps the player's text in the input box.
 
 ### State Snapshots
 
-Game state (Inventory, Status, World Bible, world rules, Plot Threads, NPC lists, PC-known information, summary, World Brief, Director's Notes) is stored as a logically complete, immutable Snapshot linked to every Message `ID`. Reverting to Message `N` restores Snapshot `N` instantly without re-summarization or API calls.
+Story state (Inventory, Status, World Bible, world rules, Plot Threads, NPC lists, PC-known information, summary, World Brief, Director's Notes) is stored as a logically complete, immutable Snapshot linked to every Message `ID`. Reverting to Message `N` restores Snapshot `N` instantly without re-summarization or API calls.
 
 Snapshots never change, so an edit made in the Journal waits on the Save, is laid over the latest Snapshot for everything that reads the state, and goes into the Snapshot of the next Message. A Revert to any Message from before an edit undoes it, for hidden and visible edits alike, and so does Duplicate from a Message from before it. A Rewrite or Regenerate of the latest response keeps every edit made since that response's player Message, however many times it runs, by replaying them over that Message's Snapshot. An edit to something only the replaced response wrote stands as an addition. The World Brief the Save began with stays on the Save, and the Snapshots hold the one in use.
 
@@ -270,7 +270,7 @@ Unlike a RPG, these are not hard numbers but general conditions for the story. L
 
 # Settings
 
-Menu to change various settings. While a game is open, Art Style edits the current Save.
+Menu to change various settings. While a story is open, Art Style edits the current Save.
 
 Per Save:
 
@@ -295,13 +295,15 @@ Per install:
 
 API keys live in the install's settings file and are never written to a Save, because Saves are made to be shared.
 
-Model switching is allowed mid-game, and a LoRA list carries across Saves, so it may need changing when switching to a Save with a different Art Style.
+Model switching is allowed mid-story, and a LoRA list carries across Saves, so it may need changing when switching to a Save with a different Art Style.
 
 # Main Menu
 
-* New Game
-* Load Game \- load, duplicate, delete with confirmation, and import or export a Save file
+* New Story
+* Load Story \- load, duplicate, delete with confirmation, and import or export a Save file
 * Settings
+
+A story is always called by its Title, with its PC's name as a second line under it on Load Story and the Story's left page. A Save with no Title goes by the PC's name, as that's all that tells such Saves apart.
 
 Every Turn saves automatically, so there is no manual save. Players branch a story by duplicating a Save, either from this menu or with “Duplicate from here” on any Message.
 
@@ -309,7 +311,7 @@ Every Turn saves automatically, so there is no manual save. Players branch a sto
 
 NovelForge is a single-player app that runs on one person's machine. The server listens on the LAN as well as localhost, so other devices at home can play, with no accounts, hosting or cloud. Anyone on that network can reach everything the player can, and setting `HOST=127.0.0.1` keeps it to this machine.
 
-The game is a web based SPA with a local RESTful API server. Being API based, the coding agent building the game can easily test on its own and build its own testing harness.
+The app is a web based SPA with a local RESTful API server. Being API based, the coding agent building the app can easily test on its own and build its own testing harness.
 
 The app is TypeScript on both ends, compiled with Bun into a single executable with the SPA embedded, so it has low system requirements and needs nothing else installed. Local model servers are the exception (see [ADR 0001](docs/adr/0001-connect-to-local-models-not-bundle.md)).
 
@@ -379,18 +381,18 @@ A fake LLM provider and a controllable dice roller let Turns be tested determini
 
 An old book, open on a desk: aged paper, ink browns and bottle green, the story on the right page, and bookmarks hanging from the top right. It is responsive to screen size. The dark theme is the same book on charcoal laid paper.
 
-World creation, Settings, Load Game, Inventory and the Gallery use the Index Sheet layout from the layout options report: one sheet with a side index, a column that fills the rest of the sheet, and a pinned bottom bar, plus a down arrow whenever a page runs past the fold. Settings shows one section at a time. The Ready page, from its options report, runs down one scrolling page: the cover, the title and World Brief, then the PC's portrait, with Open the book pinned at the bottom. Everything else stays a two-page book. A new Turn snaps the player's words to the top of the view, and the response streams in below them, with blank room under short ones and a down arrow to the newest text once text runs past the bottom. The view never jumps when the response ends. Scrolling the story stops the following at once, while a tap leaves it alone. A Turn goes on while the player visits another screen, and the Story picks it up on their return, with any failure shown then. Reloading or closing the page still ends it. On a phone, the Story's picture folds away behind a toggle by the title and starts folded, and its Condition is left to the Inventory. As pictures are out of sight there, each Scene Image and NPC portrait also sits folded in the story under the response it came with, as a one-line row that opens it in place. On a wider screen, an arrow on the left page folds it away to get the same reading: a strip with the title and Main Menu, one column of story, and folded rows for images. It starts open, and each browser remembers the choice.
+World creation, Settings, Load Story, Inventory and the Gallery use the Index Sheet layout from the layout options report: one sheet with a side index, a column that fills the rest of the sheet, and a pinned bottom bar, plus a down arrow whenever a page runs past the fold. Settings shows one section at a time. The Ready page, from its options report, runs down one scrolling page: the cover, the title and World Brief, then the PC's portrait, with Open the book pinned at the bottom. Everything else stays a two-page book. A new Turn snaps the player's words to the top of the view, and the response streams in below them, with blank room under short ones and a down arrow to the newest text once text runs past the bottom. The view never jumps when the response ends. Scrolling the story stops the following at once, while a tap leaves it alone. A Turn goes on while the player visits another screen, and the Story picks it up on their return, with any failure shown then. Reloading or closing the page still ends it. On a phone, the Story's picture folds away behind a toggle by the title and starts folded, and its Condition is left to the Inventory. As pictures are out of sight there, each Scene Image and NPC portrait also sits folded in the story under the response it came with, as a one-line row that opens it in place. On a wider screen, an arrow on the left page folds it away to get the same reading: a strip with the title and Main Menu, one column of story, and folded rows for images. It starts open, and each browser remembers the choice.
 
-**An HTML report of UI options is only made when the user asks for one, for a large visual change.** Other UI changes are built directly. The first report showed 3 distinct visual directions, each mocking up the main game screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story, plus the Chat style options. The mockups are throwaway, and the user can pick one direction or mix parts. The player-facing UI contains no Check elements.
+**An HTML report of UI options is only made when the user asks for one, for a large visual change.** Other UI changes are built directly. The first report showed 3 distinct visual directions, each mocking up the main story screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story, plus the Chat style options. The mockups are throwaway, and the user can pick one direction or mix parts. The player-facing UI contains no Check elements.
 
 # Build order
 
 Everything in this spec is in v1.
 
-1. Fake provider, minimal game creation, Turns, Snapshots, Checks, Revert, and OpenRouter text, with no UI
+1. Fake provider, minimal story creation, Turns, Snapshots, Checks, Revert, and OpenRouter text, with no UI
 2. UI options report, then the user chooses
 3. Journal, inventory, status, and Rewrite/Regenerate/Director's Notes
-4. Full game-creation wizard and World Bible generation
+4. Full story-creation wizard and World Bible generation
 5. OpenRouter images
 6. ComfyUI and local text
 7. UI polish

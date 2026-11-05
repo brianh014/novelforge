@@ -121,6 +121,9 @@ export const imageUrl = (id: string, { messageId, redraws }: Pick<SceneImageInfo
 export const requestedImageUrl = (id: string, { ref, redraws }: Pick<RequestedImage, "ref" | "redraws">) =>
   `/saves/${id}/requested-images/${ref}/image?v=${redraws}`;
 
+/** What a story is called. A Save from before titles has only its PC to tell it apart. */
+export const storyName = ({ title, pc }: { title: string; pc: { name: string } }) => title || pc.name;
+
 export const coverUrl = (id: string, redraws: number) => `/saves/${id}/cover?v=${redraws}`;
 
 /** Answers only once the image is done. The version makes a redrawn image a new address. */

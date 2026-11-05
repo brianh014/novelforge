@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
-import { narration, png, scriptedDice, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { narration, png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 
 beforeEach(() => {
   folder = tempFolder();
@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
@@ -36,20 +36,20 @@ const portraitAsk = { kind: "portrait", name: pc.name, physicalTraits: pc.physic
 async function withImages(replies: (string | Error)[], ...images: Parameters<typeof scriptedImages>) {
   const script = scriptedTextProvider(...replies);
   const drawn = scriptedImages(...images);
-  game = startGame(savesDir, script.textProvider, scriptedDice(), 2, drawn.imageAdapter);
-  await game.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
+  app = startApp(savesDir, script.textProvider, scriptedDice(), 2, drawn.imageAdapter);
+  await app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
   return { ...script, ...drawn };
 }
 
 const json = async <T = { id: string; overview: string }>(response: Promise<Response> | Response) => (await (await response).json()) as T;
 const details = (world: string, kind: string) =>
-  json<{ prompt: string; hasImage: boolean; failure: string; canRedraw: boolean }>(game.get(`/worlds/${world}/${kind}/details`));
-const bytesOf = async (path: string) => new Uint8Array(await (await game.get(path)).arrayBuffer());
-const begin = (world: string, artStyle = "Ink wash") => json<{ id: string }>(game.post(`/worlds/${world}/begin`, { artStyle }));
+  json<{ prompt: string; hasImage: boolean; failure: string; canRedraw: boolean }>(app.get(`/worlds/${world}/${kind}/details`));
+const bytesOf = async (path: string) => new Uint8Array(await (await app.get(path)).arrayBuffer());
+const begin = (world: string, artStyle = "Ink wash") => json<{ id: string }>(app.post(`/worlds/${world}/begin`, { artStyle }));
 
 const settled = async (id: string) => {
   for (let tries = 0; tries < 100; tries++) {
-    const gallery = await json<{ images: { kind: string; prompt: string }[]; pending: boolean }>(game.get(`/saves/${id}/gallery`));
+    const gallery = await json<{ images: { kind: string; prompt: string }[]; pending: boolean }>(app.get(`/saves/${id}/gallery`));
     if (!gallery.pending) return gallery;
     await Bun.sleep(5);
   }
@@ -59,7 +59,7 @@ const settled = async (id: string) => {
 test("the Narrator writes the world with the PC in view, as canon the world bends to, in one press", async () => {
   const { prompts } = await withImages([sheet, generated()], png(1), png(2));
 
-  const response = await game.post("/worlds", form);
+  const response = await app.post("/worlds", form);
 
   expect(response.status).toBe(201);
   expect(prompts).toHaveLength(2);
@@ -80,7 +80,7 @@ test("the Narrator writes the world with the PC in view, as canon the world bend
 test("a PC with a name of only spaces is refused without calling the Narrator", async () => {
   const { prompts } = await withImages([]);
 
-  const response = await game.post("/worlds", { ...form, pc: { name: "  " } });
+  const response = await app.post("/worlds", { ...form, pc: { name: "  " } });
 
   expect(response.status).toBe(400);
   expect(prompts).toHaveLength(0);
@@ -89,7 +89,7 @@ test("a PC with a name of only spaces is refused without calling the Narrator", 
 test("a failed PC sheet costs no world, and nothing is held", async () => {
   const { prompts } = await withImages([new Error("offline")]);
 
-  expect((await game.post("/worlds", form)).status).toBe(502);
+  expect((await app.post("/worlds", form)).status).toBe(502);
 
   expect(prompts).toHaveLength(1);
 });
@@ -97,7 +97,7 @@ test("a failed PC sheet costs no world, and nothing is held", async () => {
 test("writing the world draws the Cover from the World Overview and the portrait from the PC, in what they wear", async () => {
   const { payloads } = await withImages([sheet, generated()], png(1), png(2));
 
-  const { id } = await json(game.post("/worlds", form));
+  const { id } = await json(app.post("/worlds", form));
 
   expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(1));
   expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
@@ -110,17 +110,17 @@ test("writing the world draws the Cover from the World Overview and the portrait
 test("a PC with no physical traits gets no portrait", async () => {
   const { payloads } = await withImages([sheet, generated()], png(1));
 
-  const { id } = await json(game.post("/worlds", { ...form, pc: { name: "Ash" } }));
+  const { id } = await json(app.post("/worlds", { ...form, pc: { name: "Ash" } }));
 
   await details(id, "cover");
   expect(payloads).toHaveLength(1);
-  expect((await game.get(`/worlds/${id}/portrait/details`)).status).toBe(404);
+  expect((await app.get(`/worlds/${id}/portrait/details`)).status).toBe(404);
 });
 
 test("a Cover drawn on the form comes from the Title, theme and World Brief, before any world", async () => {
   const { payloads, prompts } = await withImages([], png(1));
 
-  const response = await game.post("/worlds/draw", coverAsk);
+  const response = await app.post("/worlds/draw", coverAsk);
 
   expect(response.status).toBe(201);
   const { id } = await json(response);
@@ -134,9 +134,9 @@ test("a Cover drawn on the form comes from the Title, theme and World Brief, bef
 
 test("a portrait drawn on the form comes from the player's words alone, under the same id as the Cover", async () => {
   const { payloads } = await withImages([], png(1), png(2));
-  const { id } = await json(game.post("/worlds/draw", coverAsk));
+  const { id } = await json(app.post("/worlds/draw", coverAsk));
 
-  const portrait = await json(game.post("/worlds/draw", { ...portraitAsk, id }));
+  const portrait = await json(app.post("/worlds/draw", { ...portraitAsk, id }));
 
   expect(portrait.id).toBe(id);
   expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
@@ -148,7 +148,7 @@ test("a portrait drawn on the form comes from the player's words alone, under th
 test("a portrait can be drawn before the PC has a name", async () => {
   const { payloads } = await withImages([], png(1));
 
-  const { id } = await json(game.post("/worlds/draw", { ...portraitAsk, name: "" }));
+  const { id } = await json(app.post("/worlds/draw", { ...portraitAsk, name: "" }));
 
   await details(id, "portrait");
   expect(payloads[0]!.prompt).toContain("Tall, Ash has one grey eye");
@@ -162,27 +162,27 @@ test.each([
 ])("%s can't be drawn", async (_name, body) => {
   const { payloads } = await withImages([]);
 
-  expect((await game.post("/worlds/draw", body)).status).toBe(400);
+  expect((await app.post("/worlds/draw", body)).status).toBe(400);
 
   expect(payloads).toHaveLength(0);
 });
 
 test("nothing can be drawn on the form with images off, and the Settings say so", async () => {
   await withImages([]);
-  expect(await json<{ imagesReady: boolean }>(game.get("/settings"))).toMatchObject({ imagesReady: true });
+  expect(await json<{ imagesReady: boolean }>(app.get("/settings"))).toMatchObject({ imagesReady: true });
 
-  await game.patch("/settings", { imagesEnabled: false });
+  await app.patch("/settings", { imagesEnabled: false });
 
-  expect(await json<{ imagesReady: boolean }>(game.get("/settings"))).toMatchObject({ imagesReady: false });
-  expect((await game.post("/worlds/draw", coverAsk)).status).toBe(409);
+  expect(await json<{ imagesReady: boolean }>(app.get("/settings"))).toMatchObject({ imagesReady: false });
+  expect((await app.post("/worlds/draw", coverAsk)).status).toBe(409);
 });
 
 test("images drawn on the form aren't drawn again by the world, and go into the Save", async () => {
   const { payloads } = await withImages([sheet, generated()], png(1), png(2));
-  const { id: held } = await json(game.post("/worlds/draw", coverAsk));
-  await json(game.post("/worlds/draw", { ...portraitAsk, id: held }));
+  const { id: held } = await json(app.post("/worlds/draw", coverAsk));
+  await json(app.post("/worlds/draw", { ...portraitAsk, id: held }));
 
-  const { id: world } = await json(game.post("/worlds", { ...form, id: held }));
+  const { id: world } = await json(app.post("/worlds", { ...form, id: held }));
 
   expect(world).toBe(held);
   expect(await bytesOf(`/worlds/${world}/cover`)).toEqual(png(1));
@@ -200,7 +200,7 @@ test("images drawn on the form aren't drawn again by the world, and go into the 
 test("an image the server lost to a restart is drawn with the world, using the same id", async () => {
   const { payloads } = await withImages([sheet, generated()], png(1), png(2));
 
-  const { id } = await json(game.post("/worlds", { ...form, id: "lost" }));
+  const { id } = await json(app.post("/worlds", { ...form, id: "lost" }));
 
   expect(id).toBe("lost");
   await details(id, "portrait");
@@ -209,28 +209,28 @@ test("an image the server lost to a restart is drawn with the world, using the s
 
 test("a held portrait has a Redraw from its edited Image Prompt, in the Art Style the form now has", async () => {
   const { payloads } = await withImages([], png(1), png(2), new Error("Still busy"));
-  const { id } = await json(game.post("/worlds/draw", portraitAsk));
+  const { id } = await json(app.post("/worlds/draw", portraitAsk));
   expect(await details(id, "portrait")).toMatchObject({ hasImage: true, failure: "", canRedraw: true });
 
-  expect((await game.post(`/worlds/${id}/portrait`, { prompt: "A bust", artStyle: "Oils" })).status).toBe(200);
+  expect((await app.post(`/worlds/${id}/portrait`, { prompt: "A bust", artStyle: "Oils" })).status).toBe(200);
 
   expect(payloads[1]).toMatchObject({ prompt: "A bust", aspect_ratio: "1:1", style_preset: "Oils" });
   expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
-  const failed = await game.post(`/worlds/${id}/portrait`, { prompt: "A statue" });
+  const failed = await app.post(`/worlds/${id}/portrait`, { prompt: "A statue" });
   expect(failed.status).toBe(502);
   expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
   expect(payloads[2]).toMatchObject({ style_preset: "Oils" });
-  expect((await game.post("/worlds/nowhere/portrait", { prompt: "A bust" })).status).toBe(404);
+  expect((await app.post("/worlds/nowhere/portrait", { prompt: "A bust" })).status).toBe(404);
 });
 
 test("Regenerate keeps the PC and every image, with no new sheet, and the Redraws they had", async () => {
   const { payloads, prompts } = await withImages([sheet, generated(), generated("A new world.")], png(1), png(2), png(3));
-  const { id } = await json(game.post("/worlds", form));
+  const { id } = await json(app.post("/worlds", form));
   await details(id, "cover");
   await details(id, "portrait");
-  await game.post(`/worlds/${id}/cover`, { prompt: "A lighthouse" });
+  await app.post(`/worlds/${id}/cover`, { prompt: "A lighthouse" });
 
-  const response = await game.post(`/worlds/${id}/regenerate`, choices);
+  const response = await app.post(`/worlds/${id}/regenerate`, choices);
 
   expect(await response.json()).toEqual({ overview: "A new world." });
   expect(prompts).toHaveLength(3);
@@ -245,9 +245,9 @@ test("Regenerate leaves an image still drawing to finish", async () => {
   let finish = (_: Uint8Array) => {};
   const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
   const { aborted, payloads } = await withImages([sheet, generated(), generated()], slow, png(2));
-  const { id } = await json(game.post("/worlds", form));
+  const { id } = await json(app.post("/worlds", form));
 
-  await game.post(`/worlds/${id}/regenerate`, choices);
+  await app.post(`/worlds/${id}/regenerate`, choices);
   finish(png(1));
 
   expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(1));
@@ -257,10 +257,10 @@ test("Regenerate leaves an image still drawing to finish", async () => {
 
 test("Regenerate tries again for an image that failed, from the new World Overview", async () => {
   const { payloads } = await withImages([sheet, generated(), generated("A new world.")], new Error("Busy"), png(2), png(3));
-  const { id } = await json(game.post("/worlds", form));
+  const { id } = await json(app.post("/worlds", form));
   expect(await details(id, "cover")).toMatchObject({ hasImage: false, failure: "Busy" });
 
-  await game.post(`/worlds/${id}/regenerate`, choices);
+  await app.post(`/worlds/${id}/regenerate`, choices);
 
   expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(3));
   expect(payloads[2]!.prompt).toContain("A new world.");
@@ -270,7 +270,7 @@ test("Begin creates the Save at once with the player's Art Style, and a portrait
   let finish = (_: Uint8Array) => {};
   const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
   const { payloads } = await withImages([sheet, generated()], png(1), slow);
-  const { id: world } = await json(game.post("/worlds", form));
+  const { id: world } = await json(app.post("/worlds", form));
 
   const { id } = await begin(world, "Oils");
 
@@ -289,10 +289,10 @@ test("a Turn while the portrait draws waits for it rather than drawing a second"
   const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
   const move = { op: "set_scene", location: "The Quay", visible_cast: [] };
   const { payloads } = await withImages([sheet, generated(), narration("You rise.", move)], png(1), slow);
-  const { id: world } = await json(game.post("/worlds", form));
+  const { id: world } = await json(app.post("/worlds", form));
   const { id } = await begin(world);
 
-  await game.post(`/saves/${id}/turns`, { input: "I rise." });
+  await app.post(`/saves/${id}/turns`, { input: "I rise." });
   finish(png(2));
   await settled(id);
 
@@ -302,13 +302,13 @@ test("a Turn while the portrait draws waits for it rather than drawing a second"
 
 test("a portrait stored at Begin survives every Revert", async () => {
   await withImages([sheet, generated(), narration("You rise."), narration("You run.")], png(1), png(2));
-  const { id: world } = await json(game.post("/worlds", form));
+  const { id: world } = await json(app.post("/worlds", form));
   const { id } = await begin(world);
   await settled(id);
-  await game.post(`/saves/${id}/turns`, { input: "I rise." });
-  await game.post(`/saves/${id}/turns`, { input: "I run." });
+  await app.post(`/saves/${id}/turns`, { input: "I rise." });
+  await app.post(`/saves/${id}/turns`, { input: "I run." });
 
-  await game.post(`/saves/${id}/messages/1/revert`, {});
+  await app.post(`/saves/${id}/messages/1/revert`, {});
 
   expect(saveStore(savesDir).portraits(id)).toHaveLength(1);
   expect(saveStore(savesDir).portraitOf(id, null)).toBeTruthy();
@@ -316,7 +316,7 @@ test("a portrait stored at Begin survives every Revert", async () => {
 
 test("a portrait that failed is tried once more when the Save is made", async () => {
   const { payloads } = await withImages([sheet, generated()], png(1), new Error("Busy"), png(3));
-  const { id: world } = await json(game.post("/worlds", form));
+  const { id: world } = await json(app.post("/worlds", form));
   await details(world, "portrait");
 
   const { id } = await begin(world);
@@ -328,22 +328,22 @@ test("a portrait that failed is tried once more when the Save is made", async ()
 
 test("Begin uses the world up, so a second is refused", async () => {
   await withImages([sheet, generated()], png(1), png(2));
-  const { id: world } = await json(game.post("/worlds", form));
+  const { id: world } = await json(app.post("/worlds", form));
 
-  const responses = await Promise.all([game.post(`/worlds/${world}/begin`, { artStyle: "" }), game.post(`/worlds/${world}/begin`, { artStyle: "" })]);
+  const responses = await Promise.all([app.post(`/worlds/${world}/begin`, { artStyle: "" }), app.post(`/worlds/${world}/begin`, { artStyle: "" })]);
 
   expect(responses.map(({ status }) => status).toSorted()).toEqual([201, 404]);
-  expect((await game.post("/worlds/nowhere/begin", { artStyle: "" })).status).toBe(404);
+  expect((await app.post("/worlds/nowhere/begin", { artStyle: "" })).status).toBe(404);
 });
 
 test("no reply from form to Save holds the hidden world", async () => {
   await withImages([sheet, generated()], png(1), png(2));
 
-  const first = await (await game.post("/worlds", form)).text();
+  const first = await (await app.post("/worlds", form)).text();
   const { id } = JSON.parse(first) as { id: string };
-  const cover = await game.get(`/worlds/${id}/cover/details`).then((r) => r.text());
-  const portrait = await game.get(`/worlds/${id}/portrait/details`).then((r) => r.text());
-  const begun = await (await game.post(`/worlds/${id}/begin`, { artStyle: "" })).text();
+  const cover = await app.get(`/worlds/${id}/cover/details`).then((r) => r.text());
+  const portrait = await app.get(`/worlds/${id}/portrait/details`).then((r) => r.text());
+  const begun = await (await app.post(`/worlds/${id}/begin`, { artStyle: "" })).text();
 
   expect(first + cover + portrait + begun).not.toContain(SECRET);
   expect(JSON.stringify(saveStore(savesDir).latestState(JSON.parse(begun).id))).toContain(SECRET);
@@ -356,7 +356,7 @@ test("Pick for me is one call over the whole form's empty boxes, seeing every ot
     JSON.stringify({ title: "The Whale City", startingHook: "The whale wakes.", name: "Ash", skills: "Sailing", worldBrief: "Not asked for", background: "Not asked for" }),
   ]);
 
-  const response = await game.post("/worlds/pick", {
+  const response = await app.post("/worlds/pick", {
     theme: "Steampunk",
     title: "",
     worldBrief: "A city on a whale",
@@ -382,7 +382,7 @@ test("Pick for me is one call over the whole form's empty boxes, seeing every ot
 test("Pick for me leaves the Starting Hook alone while it's off", async () => {
   await withImages([JSON.stringify({ skills: "Sailing", startingHook: "Not asked for" })]);
 
-  const response = await game.post("/worlds/pick", {
+  const response = await app.post("/worlds/pick", {
     theme: "Steampunk",
     title: "Tide",
     worldBrief: "A city",
@@ -400,7 +400,7 @@ test.each([
   const { prompts } = await withImages([JSON.stringify({ text: "Written." })]);
   const setup = { theme: "Steampunk", title: "Tide", worldBrief: "", startingHook: "", pc: { ...emptyPc, skills: "Sailing" } };
 
-  const response = await game.post("/enhance", { ...setup, field, text: "  " });
+  const response = await app.post("/enhance", { ...setup, field, text: "  " });
 
   expect(await response.json()).toEqual({ text: "Written." });
   const [system, user] = prompts[0]!;

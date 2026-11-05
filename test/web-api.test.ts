@@ -21,17 +21,17 @@ import {
   setupProblem,
 } from "../src/web/api";
 import { ContentRefused, type TextProvider } from "../src/turn-engine";
-import { narration, startGame, tempFolder } from "./support";
+import { narration, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 
 /** The browser's relative fetch, aimed at a real server. `tamper` gets each Turn request and decides what comes back. */
 function start(textProvider: TextProvider, tamper = (send: () => Promise<Response>) => send()) {
-  game = startGame(join(folder.path, "Saves"), textProvider);
+  app = startApp(join(folder.path, "Saves"), textProvider);
   const realFetch = fetch;
   spyOn(globalThis, "fetch").mockImplementation((async (path: string, init?: RequestInit) => {
-    const send = () => realFetch(game.url(path), init);
+    const send = () => realFetch(app.url(path), init);
     return /\/(turns|regenerate|rewrite)$/.test(String(path)) ? tamper(send) : send();
   }) as typeof fetch);
 }
@@ -60,13 +60,13 @@ beforeEach(() => {
 
 afterEach(async () => {
   (fetch as unknown as { mockRestore(): void }).mockRestore();
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
 test("narration builds up as it streams, and the committed Messages finish the Turn", async () => {
   start(streamed('{"check":null,"narration":"The tide ', 'rises.","state_operations":[]}'));
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { result, shown } = await play(id, "I wade forward.");
 
@@ -81,7 +81,7 @@ test("narration builds up as it streams, and the committed Messages finish the T
 
 test("a Turn with no narration events still finishes from its committed Messages", async () => {
   start(reply("The tide rises."));
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { result, shown } = await play(id, "I wade forward.");
 
@@ -96,7 +96,7 @@ test("a restart discards the narration shown so far", async () => {
     if (attempts === 1) return streamed('{"check":null,"narration":"The wrong tide')(prompt, request);
     return streamed('{"check":null,"narration":"The ', 'tide.","state_operations":[]}')(prompt, request);
   });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { shown } = await play(id, "I wade forward.");
 
@@ -107,7 +107,7 @@ test("a refusal gives back the server's message and the player's text", async ()
   start(async () => {
     throw new ContentRefused();
   });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { result } = await play(id, "Something refused.");
 
@@ -115,12 +115,12 @@ test("a refusal gives back the server's message and the player's text", async ()
     error: "The Narrator refused this message. Edit it and try again.",
     input: "Something refused.",
   });
-  expect(await game.get(`/saves/${id}/messages`).then((r) => r.json())).toEqual({ messages: [] });
+  expect(await app.get(`/saves/${id}/messages`).then((r) => r.json())).toEqual({ messages: [] });
 });
 
 test("a failed Turn sent over HTTP 200 keeps the player's text", async () => {
   start(unreachable("provider down"));
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { result } = await play(id, "I wade forward.");
 
@@ -132,7 +132,7 @@ test("a failed Turn sent over HTTP 200 keeps the player's text", async () => {
 
 test("a bad request answered before any stream keeps the player's text", async () => {
   start(reply("Never used."));
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { result } = await play(id, "");
 
@@ -148,7 +148,7 @@ test("events split across network chunks still parse, even inside a character", 
     const parts = [bytes.subarray(0, 5), bytes.subarray(5, middle), bytes.subarray(middle)];
     return new Response(new ReadableStream({ start: (c) => (parts.forEach((p) => c.enqueue(p)), c.close()) }));
   });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { result, shown } = await play(id, "I wade forward.");
 
@@ -161,7 +161,7 @@ test("a stream that drops after the Turn committed recovers the Turn from the Me
     await send().then((response) => response.text());
     return new Response('event: narration\ndata: {"text":"The ti"}\n\n');
   });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { result } = await play(id, "I wade forward.");
 
@@ -170,7 +170,7 @@ test("a stream that drops after the Turn committed recovers the Turn from the Me
 
 test("a stream that drops with nothing committed keeps the player's text", async () => {
   start(reply("Unused."), async () => new Response('event: narration\ndata: {"text":"The ti"}\n\n'));
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const { result } = await play(id, "I wade forward.");
 
@@ -181,7 +181,7 @@ test("a stream that drops with nothing committed keeps the player's text", async
 test("an older Turn is not mistaken for the dropped one", async () => {
   let dropping = false;
   start(reply("The tide rises."), async (send) => (dropping ? new Response("") : send()));
-  const id = await game.createSave();
+  const id = await app.createSave();
   await play(id, "First.");
   dropping = true;
 
@@ -192,7 +192,7 @@ test("an older Turn is not mistaken for the dropped one", async () => {
 
 test("losing the server altogether keeps the player's text", async () => {
   start(reply("Unused."));
-  const id = await game.createSave();
+  const id = await app.createSave();
   spyOn(globalThis, "fetch").mockImplementation(unreachable("connection refused") as unknown as typeof fetch);
   const realEvery = turnPolling.everyMs;
   turnPolling.everyMs = 1;
@@ -217,7 +217,7 @@ test("the player is told when the Narrator has no model or key, but a local serv
 
 test("Settings and Art Style save through the API client, which reports a refusal", async () => {
   start(reply("Unused."));
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   expect(await saveSettings({ fontSize: "large", imageApiKey: "image-key" })).toMatchObject({
     fontSize: "large",
@@ -238,7 +238,7 @@ const replace = async (id: string, messageId: number, feedback: string) => {
 test("a replacement streams, and finishes with only the new Narrator Message", async () => {
   const replies = [reply("Rain."), streamed('{"check":null,"narration":"Sn', 'ow.","state_operations":[]}')];
   start((prompt, request) => replies.shift()!(prompt, request));
-  const id = await game.createSave();
+  const id = await app.createSave();
   await play(id, "I wait.");
 
   const { result, shown } = await replace(id, 2, "");
@@ -250,7 +250,7 @@ test("a replacement streams, and finishes with only the new Narrator Message", a
 test("a Rewrite that fails hands the feedback back, with the response still in place", async () => {
   const replies = [reply("Rain."), () => Promise.reject(new ContentRefused())];
   start((prompt, request) => replies.shift()!(prompt, request));
-  const id = await game.createSave();
+  const id = await app.createSave();
   await play(id, "I wait.");
 
   const { result } = await replace(id, 2, "Make it snow.");
@@ -264,7 +264,7 @@ test("a Rewrite that fails hands the feedback back, with the response still in p
 test("a failed Regenerate asks the player to try again, not to send anything", async () => {
   const replies = [reply("Rain."), ...Array(3).fill(() => Promise.reject(new Error("network down")))];
   start((prompt, request) => replies.shift()!(prompt, request));
-  const id = await game.createSave();
+  const id = await app.createSave();
   await play(id, "I wait.");
 
   const { result } = await replace(id, 2, "");
@@ -280,7 +280,7 @@ test("a replacement whose stream drops after it committed recovers the new respo
     await response.text();
     throw new Error("connection lost");
   });
-  const id = await game.createSave();
+  const id = await app.createSave();
   await play(id, "I wait.");
   dropping = true;
 
@@ -292,7 +292,7 @@ test("a replacement whose stream drops after it committed recovers the new respo
 test("a replacement whose stream drops with nothing committed says so, and keeps the feedback", async () => {
   let dropping = false;
   start(reply("Rain."), (send) => (dropping ? Promise.reject(new Error("connection lost")) : send()));
-  const id = await game.createSave();
+  const id = await app.createSave();
   await play(id, "I wait.");
   dropping = true;
 
@@ -304,10 +304,10 @@ test("a replacement whose stream drops with nothing committed says so, and keeps
   });
 });
 
-test("the Load Game calls duplicate, import and delete a Save", async () => {
+test("the Load Story calls duplicate, import and delete a Save", async () => {
   start(reply("Unused."));
-  const id = await game.createSave();
-  const bytes = await game.get(`/saves/${id}/export`).then((r) => r.bytes());
+  const id = await app.createSave();
+  const bytes = await app.get(`/saves/${id}/export`).then((r) => r.bytes());
 
   const { id: copy } = await duplicateSave(id);
   const { id: imported } = await importSave(new File([bytes], "ash.sqlite"));
@@ -373,7 +373,7 @@ test("a dropped stream waits for the Turn that is still running, then shows it",
       await Bun.sleep(30);
       return new Response("");
     });
-    const id = await game.createSave();
+    const id = await app.createSave();
 
     const { result } = await play(id, "I wade forward.");
 
@@ -388,7 +388,7 @@ test("a page that returns to a running Turn picks it up, and finishes with its M
   turnPolling.everyMs = 20;
   try {
     start(slowly("The tide rises.", 120));
-    const id = await game.createSave();
+    const id = await app.createSave();
     const started = playTurn(id, "I wade forward.", 0, () => {}, new AbortController().signal);
     await Bun.sleep(40);
 
@@ -409,7 +409,7 @@ test("coming back to the page reads a stream that has gone quiet from the Turn i
   (globalThis as { document?: unknown }).document = page;
   try {
     start(slowly("The tide rises.", 120));
-    const id = await game.createSave();
+    const id = await app.createSave();
     const playing = playTurn(id, "I wade forward.", 0, () => {}, new AbortController().signal);
     await Bun.sleep(40);
 
@@ -428,7 +428,7 @@ test("a failure the stream delivered isn't told a second time", async () => {
   start(async () => {
     throw new ContentRefused();
   });
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await playTurn(id, "I wade forward.", 0, () => {}, new AbortController().signal);
   await Bun.sleep(20);
@@ -441,7 +441,7 @@ test("a Save deleted once its Turn has gone stops the page waiting", async () =>
   turnPolling.everyMs = 1;
   try {
     start(reply("Unused."));
-    const id = await game.createSave();
+    const id = await app.createSave();
     await deleteSave(id);
 
     const result = await resumeTurn(id, { input: "I wade forward.", narration: "", after: 0 }, () => {});

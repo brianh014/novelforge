@@ -34,7 +34,7 @@ export const openingState: State = {
 
 const stringList = z.array(z.string());
 
-/** What each Snapshot section must hold, for a Save that comes from outside the game. */
+/** What each Snapshot section must hold, for a Save that comes from outside the app. */
 export const StateSections = {
   inventory: z.object({ wearing: stringList, carrying: stringList }),
   status: z.object({ health: z.string(), injuries: stringList, conditions: stringList }),

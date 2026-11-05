@@ -3,28 +3,28 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ImageAdapter } from "../src/image-adapter";
-import { png, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
+import { png, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 type Journal = { npcs: string[]; portraits: { id: number; npc: string | null; redraws: number; messageId: number }[] };
 type Images = { images: { messageId: number }[]; pending: boolean; session: number };
 
 let folder: ReturnType<typeof tempFolder>;
-let game: ReturnType<typeof startGame>;
+let app: ReturnType<typeof startApp>;
 let images: ReturnType<typeof scriptedImages>;
 
 const play = (replies: (string | Error)[], ...imageReplies: Parameters<typeof scriptedImages>) => {
   images = scriptedImages(...imageReplies);
-  game = startGame(join(folder.path, "Saves"), scriptedTextProvider(...replies).textProvider, undefined, undefined, images.imageAdapter);
+  app = startApp(join(folder.path, "Saves"), scriptedTextProvider(...replies).textProvider, undefined, undefined, images.imageAdapter);
 };
 
-const enableImages = () => game.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
+const enableImages = () => app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
 
 beforeEach(() => {
   folder = tempFolder();
 });
 
 afterEach(async () => {
-  await game.stop();
+  await app.stop();
   folder.remove();
 });
 
@@ -36,7 +36,7 @@ const know = (name: string) => ({ op: "add_known_npc", name });
 const inView = (...visible_cast: string[]) => ({ op: "set_scene", location: "The ferry", visible_cast });
 const moveTo = (location: string, ...visible_cast: string[]) => ({ op: "set_scene", location, visible_cast });
 
-const imagesOf = async (id: string) => (await game.get(`/saves/${id}/images`).then((r) => r.json())) as Images;
+const imagesOf = async (id: string) => (await app.get(`/saves/${id}/images`).then((r) => r.json())) as Images;
 
 async function settled(id: string) {
   for (let tries = 0; tries < 200; tries++) {
@@ -47,8 +47,8 @@ async function settled(id: string) {
   throw new Error("The images never settled");
 }
 
-const journalOf = async (id: string) => (await game.get(`/saves/${id}/journal`).then((r) => r.json())) as Journal;
-const playTurn = (id: string) => game.post(`/saves/${id}/turns`, { input: "I look around." });
+const journalOf = async (id: string) => (await app.get(`/saves/${id}/journal`).then((r) => r.json())) as Journal;
+const playTurn = (id: string) => app.post(`/saves/${id}/turns`, { input: "I look around." });
 
 async function playSettled(id: string) {
   await playTurn(id);
@@ -67,7 +67,7 @@ test("an NPC gets a portrait on entering the visible cast, not on being added, a
     png(5),
   );
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await playSettled(id);
   expect(portraitPrompts()).toEqual([]);
@@ -84,11 +84,11 @@ test("a portrait is served as an image, read from its bytes", async () => {
   const jpeg = Uint8Array.of(0xff, 0xd8, 0xff, 0xe0, 0);
   play([turn(meet("Hesper"), know("Hesper"), inView("Hesper"))], jpeg, png(1));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playSettled(id);
 
   const [portrait] = (await journalOf(id)).portraits;
-  const served = await game.get(`/saves/${id}/portraits/${portrait!.id}`);
+  const served = await app.get(`/saves/${id}/portraits/${portrait!.id}`);
 
   expect(served.headers.get("content-type")).toBe("image/jpeg");
   expect(served.headers.get("x-content-type-options")).toBe("nosniff");
@@ -98,40 +98,40 @@ test("a portrait is served as an image, read from its bytes", async () => {
 test("a visible NPC the PC doesn't know yet has a portrait no route will show", async () => {
   play([turn(meet("MARKER-STRANGER", "MARKER-LOOKS"), inView("MARKER-STRANGER")), turn(know("MARKER-STRANGER"))], png(1), png(2));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playSettled(id);
 
   expect((await journalOf(id)).portraits).toEqual([]);
-  expect((await game.get(`/saves/${id}/portraits/1`)).status).toBe(404);
+  expect((await app.get(`/saves/${id}/portraits/1`)).status).toBe(404);
 
   await playSettled(id);
   const { portraits } = await journalOf(id);
   expect(portraits).toEqual([{ id: 1, npc: "MARKER-STRANGER", redraws: 0, messageId: expect.any(Number) }]);
-  expect(await game.get(`/saves/${id}/portraits/1`).then((r) => r.bytes())).toEqual(png(1));
+  expect(await app.get(`/saves/${id}/portraits/1`).then((r) => r.bytes())).toEqual(png(1));
 });
 
 test.each(["__proto__", "constructor", "../../secret", "Mara/mara?#", "mara"])("the name %s is only ever data", async (name) => {
   // A portrait for one spelling must never answer for another, so "Mara" stays unknown and undrawn in the Journal.
   play([turn(meet("Mara"), meet(name), know(name), inView(name))], png(1), png(2));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playSettled(id);
 
   const { portraits, npcs } = await journalOf(id);
   expect(npcs).toEqual([name]);
   expect(portraits).toEqual([{ id: 1, npc: name, redraws: 0, messageId: expect.any(Number) }]);
-  expect(await game.get(`/saves/${id}/portraits/1`).then((r) => r.status)).toBe(200);
+  expect(await app.get(`/saves/${id}/portraits/1`).then((r) => r.status)).toBe(200);
 });
 
 test.each(["abc", "1.5", "-1", "999"])("asking for portrait %s finds nothing", async (portrait) => {
   play([]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
-  expect((await game.get(`/saves/${id}/portraits/${portrait}`)).status).toBe(404);
+  expect((await app.get(`/saves/${id}/portraits/${portrait}`)).status).toBe(404);
 });
 
 const createPc = async (details: object = { physicalTraits: "Grey-eyed, with a salt-white scar" }) => {
-  const response = await game.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", ...details } });
+  const response = await app.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", ...details } });
   return ((await response.json()) as { id: string }).id;
 };
 
@@ -151,7 +151,7 @@ test("a new PC gets a portrait from their physical traits alone, which never hol
   expect(images.payloads[0]!.prompt).not.toContain("A lapsed ferryman");
   expect(images.payloads[0]!.prompt).not.toContain("Ash");
   expect((await journalOf(id)).portraits).toEqual([{ id: 1, npc: null, redraws: 0, messageId: expect.any(Number) }]);
-  expect(await game.get(`/saves/${id}/portraits/1`).then((r) => r.bytes())).toEqual(png(1));
+  expect(await app.get(`/saves/${id}/portraits/1`).then((r) => r.bytes())).toEqual(png(1));
 });
 
 test("a PC with no description gets no portrait", async () => {
@@ -182,7 +182,7 @@ test("a failed portrait doesn't touch play, tells the client nothing, and the ne
   const restore = allowLogged();
   play([turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn(), turn(moveTo("The pier", "Hesper"))], new Error("SECRET-API-FAILURE"), png(1), png(2), png(3));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   expect((await playTurn(id)).status).toBe(201);
   const failed = await settled(id);
@@ -210,13 +210,13 @@ test("portraits count toward the session's images", async () => {
 test("with images off nobody is drawn, and once they're on the next move of the Scene draws whoever was missed", async () => {
   play([turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn(), turn(moveTo("The pier", "Hesper"))], png(1), png(2), png(3));
   await enableImages();
-  await game.patch("/settings", { imagesEnabled: false });
+  await app.patch("/settings", { imagesEnabled: false });
   const id = await createPc();
 
   await playSettled(id);
   expect(images.payloads).toEqual([]);
 
-  await game.patch("/settings", { imagesEnabled: true });
+  await app.patch("/settings", { imagesEnabled: true });
   await playSettled(id);
   expect(images.payloads).toEqual([]);
 
@@ -232,7 +232,7 @@ test("turning images off stops a waiting portrait", async () => {
   const id = await createPc();
   await playTurn(id);
 
-  await game.patch("/settings", { imagesEnabled: false });
+  await app.patch("/settings", { imagesEnabled: false });
   resolve(png(1));
 
   expect(await settled(id)).toMatchObject({ session: 1 });
@@ -241,7 +241,7 @@ test("turning images off stops a waiting portrait", async () => {
 
 test("an unfinished Local setup makes no portrait calls, and the OpenRouter adapter isn't used", async () => {
   play([turn(meet("Hesper"), inView("Hesper"))]);
-  await game.patch("/settings", { imageProvider: "local", imageModel: "local/model", imageApiKey: "image-key" });
+  await app.patch("/settings", { imageProvider: "local", imageModel: "local/model", imageApiKey: "image-key" });
   const id = await createPc();
 
   await playSettled(id);
@@ -304,7 +304,7 @@ test("quick Turns keep every portrait, even though only the newest scene waits",
     png(3),
   );
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   for (let turns = 0; turns < 4; turns++) await playTurn(id);
 
   resolve(png(4));
@@ -329,12 +329,12 @@ test("Revert counts and deletes a portrait from a Reverted first appearance, and
   await playSettled(id);
   const before = (await journalOf(id)).portraits;
 
-  expect(await game.get(`/saves/${id}/messages/2/revert`).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 1 });
-  expect(await game.post(`/saves/${id}/messages/2/revert`, {}).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 1 });
+  expect(await app.get(`/saves/${id}/messages/2/revert`).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 1 });
+  expect(await app.post(`/saves/${id}/messages/2/revert`, {}).then((r) => r.json())).toEqual({ messages: 2, images: 1, portraits: 1 });
 
   // The PC's stays: no Message drew it.
   expect((await journalOf(id)).portraits).toEqual([{ id: before[0]!.id, npc: null, redraws: 0, messageId: expect.any(Number) }]);
-  expect((await game.get(`/saves/${id}/portraits/${before[1]!.id}`)).status).toBe(404);
+  expect((await app.get(`/saves/${id}/portraits/${before[1]!.id}`)).status).toBe(404);
 
   await playSettled(id);
   const after = (await journalOf(id)).portraits;
@@ -346,35 +346,35 @@ test("Revert counts and deletes a portrait from a Reverted first appearance, and
 test("Regenerate takes the portrait with the old response and draws one for the new response", async () => {
   play([turn(meet("Hesper", "First looks"), know("Hesper"), inView("Hesper")), turn(meet("Hesper", "Second looks"), know("Hesper"), inView("Hesper"))], png(1), png(2), png(3), png(4));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playSettled(id);
 
-  await game.post(`/saves/${id}/messages/2/regenerate`, {});
+  await app.post(`/saves/${id}/messages/2/regenerate`, {});
   await settled(id);
 
   expect(portraitPrompts()).toEqual([expect.stringContaining("First looks"), expect.stringContaining("Second looks")]);
   const { portraits } = await journalOf(id);
   expect(portraits).toHaveLength(1);
-  expect(await game.get(`/saves/${id}/portraits/${portraits[0]!.id}`).then((r) => r.bytes())).toEqual(png(3));
+  expect(await app.get(`/saves/${id}/portraits/${portraits[0]!.id}`).then((r) => r.bytes())).toEqual(png(3));
 });
 
 test("a Revert cancels a portrait in flight and drops a waiting one, and neither writes", async () => {
   play([turn(meet("Hesper"), meet("Orin"), inView("Hesper", "Orin"))], new Promise<Uint8Array>(() => {}), png(1));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playTurn(id);
-  await game.post(`/saves/${id}/messages/1/revert`, {});
+  await app.post(`/saves/${id}/messages/1/revert`, {});
 
   expect(await settled(id)).toMatchObject({ session: 0 });
   expect(images.aborted).toEqual([1]);
   expect(images.payloads).toHaveLength(1);
-  expect(await game.get(`/saves/${id}/messages/1/revert`).then((r) => r.json())).toEqual({ messages: 0, images: 0, portraits: 0 });
+  expect(await app.get(`/saves/${id}/messages/1/revert`).then((r) => r.json())).toEqual({ messages: 0, images: 0, portraits: 0 });
 });
 
 test("a portrait that finishes after its response was replaced writes nothing, even if it ignores the cancel", async () => {
   const late = Promise.withResolvers<Uint8Array>();
   const adapter: ImageAdapter = () => late.promise;
-  game = startGame(
+  app = startApp(
     join(folder.path, "Saves"),
     scriptedTextProvider(turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn()).textProvider,
     undefined,
@@ -382,9 +382,9 @@ test("a portrait that finishes after its response was replaced writes nothing, e
     adapter,
   );
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playTurn(id);
-  await game.post(`/saves/${id}/messages/2/regenerate`, {});
+  await app.post(`/saves/${id}/messages/2/regenerate`, {});
 
   late.resolve(png(1));
 
@@ -398,7 +398,7 @@ test("deleting a Save aborts its PC's portrait, and nothing brings the file back
   await enableImages();
   const id = await createPc();
 
-  await game.delete(`/saves/${id}`);
+  await app.delete(`/saves/${id}`);
   await Bun.sleep(20);
 
   expect(images.aborted).toEqual([1]);
@@ -413,14 +413,14 @@ test("a Duplicate from here keeps the PC and the portraits up to that Message", 
   await playSettled(id);
   await playSettled(id);
 
-  const { id: copy } = (await game.post(`/saves/${id}/duplicate`, { fromMessage: 2 }).then((r) => r.json())) as { id: string };
+  const { id: copy } = (await app.post(`/saves/${id}/duplicate`, { fromMessage: 2 }).then((r) => r.json())) as { id: string };
 
   expect((await journalOf(copy)).portraits.map(({ npc }) => npc)).toEqual([null, "Hesper"]);
   expect((await journalOf(id)).portraits.map(({ npc }) => npc)).toEqual([null, "Hesper", "Orin"]);
 });
 
 const importSave = async (bytes: Uint8Array<ArrayBuffer>) => {
-  const response = await fetch(game.url("/saves/import"), {
+  const response = await fetch(app.url("/saves/import"), {
     method: "POST",
     headers: { "Content-Type": "application/octet-stream" },
     body: bytes,
@@ -432,24 +432,24 @@ test("export and import carry portraits, and an NPC isn't drawn twice afterwards
   const jpeg = Uint8Array.of(0xff, 0xd8, 0xff, 0xe0, 0);
   play([turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn(moveTo("The pier", "Hesper"))], jpeg, png(1), png(2), png(3));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playSettled(id);
 
-  const imported = await importSave(await (await game.get(`/saves/${id}/export`)).bytes());
+  const imported = await importSave(await (await app.get(`/saves/${id}/export`)).bytes());
   const { portraits } = await journalOf(imported);
 
   expect(portraits).toEqual([{ id: 1, npc: "Hesper", redraws: 0, messageId: expect.any(Number) }]);
-  expect((await game.get(`/saves/${imported}/portraits/1`)).headers.get("content-type")).toBe("image/jpeg");
+  expect((await app.get(`/saves/${imported}/portraits/1`)).headers.get("content-type")).toBe("image/jpeg");
   await playSettled(imported);
   expect(portraitPrompts()).toHaveLength(1);
 });
 
 test("a Save from before portraits opens at the new version with none, and draws them from then on", async () => {
   play([turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn(moveTo("The pier", "Hesper"))], png(1), png(2), png(3));
-  await game.patch("/settings", { imagesEnabled: false });
-  const id = await game.createSave();
+  await app.patch("/settings", { imagesEnabled: false });
+  const id = await app.createSave();
   await playSettled(id);
-  await game.patch("/settings", { imagesEnabled: true, imageModel: "fake/image", imageApiKey: "image-key" });
+  await app.patch("/settings", { imagesEnabled: true, imageModel: "fake/image", imageApiKey: "image-key" });
   {
     using db = new Database(join(folder.path, "Saves", `${id}.sqlite`));
     db.run("DROP TABLE portraits; PRAGMA user_version = 5");
@@ -468,7 +468,7 @@ test("no route shows an NPC's appearance text or a PC description given to the i
   await playSettled(id);
 
   for (const route of ["/images", "/journal", "/messages", "", "/messages/2/snapshot", "/messages/2/revert"]) {
-    const body = await game.get(`/saves/${id}${route}`).then((r) => r.text());
+    const body = await app.get(`/saves/${id}${route}`).then((r) => r.text());
     expect(body).not.toContain("SECRET-LOOKS");
     expect(body).not.toContain("SECRET-TRAITS");
   }
@@ -476,8 +476,8 @@ test("no route shows an NPC's appearance text or a PC description given to the i
 
 test("the Narrator is asked to give each NPC appearance text fit for an image prompt", async () => {
   const script = scriptedTextProvider(turn());
-  game = startGame(join(folder.path, "Saves"), script.textProvider);
-  const id = await game.createSave();
+  app = startApp(join(folder.path, "Saves"), script.textProvider);
+  const id = await app.createSave();
 
   await playTurn(id);
 
@@ -492,24 +492,24 @@ test("a portrait belongs to the first appearance, so a Revert past a later draw 
     png(3),
   );
   await enableImages();
-  await game.patch("/settings", { imagesEnabled: false });
-  const id = await game.createSave();
+  await app.patch("/settings", { imagesEnabled: false });
+  const id = await app.createSave();
   await playSettled(id);
-  await game.patch("/settings", { imagesEnabled: true });
+  await app.patch("/settings", { imagesEnabled: true });
   await playSettled(id);
   await playSettled(id);
   expect((await journalOf(id)).portraits.map(({ npc }) => npc)).toEqual(["Hesper"]);
 
   // Message 4 stands after this, drawn at 6 or not, and Hesper first appeared at 2.
-  const preview = (await game.get(`/saves/${id}/messages/4/revert`).then((r) => r.json())) as { portraits: number };
+  const preview = (await app.get(`/saves/${id}/messages/4/revert`).then((r) => r.json())) as { portraits: number };
   expect(preview.portraits).toBe(0);
-  await game.post(`/saves/${id}/messages/4/revert`, {});
+  await app.post(`/saves/${id}/messages/4/revert`, {});
   await playSettled(id);
 
   expect(portraitPrompts()).toHaveLength(1);
   expect((await journalOf(id)).portraits.map(({ npc }) => npc)).toEqual(["Hesper"]);
 
-  await game.post(`/saves/${id}/messages/1/revert`, {});
+  await app.post(`/saves/${id}/messages/1/revert`, {});
   expect((await journalOf(id)).portraits).toEqual([]);
 });
 
@@ -518,7 +518,7 @@ test("settings that can't be read mid-queue fail that image, not the Save", asyn
   const { promise, resolve } = Promise.withResolvers<Uint8Array>();
   play([turn(meet("Hesper"), meet("Orin"), inView("Hesper", "Orin"))], promise);
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playTurn(id);
 
   const settings = join(folder.path, "settings.json");
@@ -535,7 +535,7 @@ test("settings that can't be read mid-queue fail that image, not the Save", asyn
 test("an NPC the PC comes to know gets a portrait without being in view, and one who is only in the state doesn't", async () => {
   play([turn(meet("Stranger")), turn(meet("Jenny"), know("Jenny"))], png(1), png(2));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await playSettled(id);
   expect(images.payloads).toEqual([]);
@@ -548,22 +548,22 @@ test("an NPC the PC comes to know gets a portrait without being in view, and one
 test("a Revert past the Turn an NPC became known takes their portrait with that knowledge", async () => {
   play([turn(), turn(meet("Jenny"), know("Jenny"))], png(1), png(2));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
   await playSettled(id);
-  const { messages } = (await game.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { id: number }[] };
+  const { messages } = (await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { id: number }[] };
   await playSettled(id);
   expect((await journalOf(id)).portraits).toHaveLength(1);
 
-  await game.post(`/saves/${id}/messages/${messages.at(-1)!.id}/revert`, {});
+  await app.post(`/saves/${id}/messages/${messages.at(-1)!.id}/revert`, {});
 
   expect((await journalOf(id)).portraits).toEqual([]);
-  expect((await game.get(`/saves/${id}/gallery`).then((r) => r.json())) as object).toMatchObject({ images: [] });
+  expect((await app.get(`/saves/${id}/gallery`).then((r) => r.json())) as object).toMatchObject({ images: [] });
 });
 
 test("someone already known with no portrait is drawn when the Scene next moves, and a failure isn't retried every Turn", async () => {
   play([turn(meet("Jenny"), know("Jenny")), turn(), turn(moveTo("The pier"))], new Error("image model down"), png(1), png(2));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await playSettled(id);
   await playSettled(id);
@@ -581,7 +581,7 @@ const person = (name: string, appearance = "Tall, in oilskins") => ({ name, appe
 test("someone the response names but the Narrator never added becomes a known NPC with a portrait", async () => {
   play([naming([person("Priya", "Short, with a green scarf")])], png(1));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await playSettled(id);
 
@@ -594,7 +594,7 @@ test("someone the response names but the Narrator never added becomes a known NP
 test("someone with a portrait who was never made known appears once named, with no second drawing", async () => {
   play([turn(meet("Marcus"), inView("Marcus")), naming([person("Marcus")])], png(1), png(2));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await playSettled(id);
   expect((await journalOf(id)).portraits).toEqual([]);
@@ -614,21 +614,21 @@ test("the Narrator doing the same work in its operations costs nothing, and a su
     png(2),
   );
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const response = await playTurn(id);
   await settled(id);
 
   expect(response.status).toBe(201);
   expect((await journalOf(id)).npcs).toEqual(["Priya"]);
-  expect((await game.get(`/saves/${id}/journal`).then((r) => r.json())).npcSummaries).toEqual({ Priya: "A ferry hand." });
-  expect((await game.get(`/saves/${id}/journal`).then((r) => r.json())).recentNpcs).toEqual(["Priya"]);
+  expect((await app.get(`/saves/${id}/journal`).then((r) => r.json())).npcSummaries).toEqual({ Priya: "A ferry hand." });
+  expect((await app.get(`/saves/${id}/journal`).then((r) => r.json())).recentNpcs).toEqual(["Priya"]);
 });
 
 test("the PC, someone with no looks to draw, and a repeat in the list add no NPC", async () => {
   play([naming([person("Ash"), person("Nobody", " "), person("Priya"), person("Priya", "Someone else")])], png(1));
   await enableImages();
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   await playSettled(id);
 
@@ -638,7 +638,7 @@ test("the PC, someone with no looks to draw, and a repeat in the list add no NPC
 
 test("a malformed list of people doesn't cost the Turn", async () => {
   play([naming("nobody in particular")]);
-  const id = await game.createSave();
+  const id = await app.createSave();
 
   const response = await playTurn(id);
 
@@ -650,10 +650,10 @@ test("older responses show who they named, so that the Narrator has a filled lis
   const named = JSON.stringify({ check: null, narration: "Priya waves.", state_operations: [], people: [person("Priya")], scene_changed: false, visual_description: "" });
   const provider = scriptedTextProvider(named, turn());
   images = scriptedImages();
-  game = startGame(join(folder.path, "Saves"), provider.textProvider, undefined, undefined, images.imageAdapter);
-  const id = await game.createSave();
+  app = startApp(join(folder.path, "Saves"), provider.textProvider, undefined, undefined, images.imageAdapter);
+  const id = await app.createSave();
   await playTurn(id);
-  await game.post(`/saves/${id}/turns`, { input: "I wait." });
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
 
   const older = provider.prompts[1]!.find(({ role }) => role === "assistant")!;
   expect(JSON.parse(older.content as string).people).toEqual([person("Priya")]);

@@ -67,7 +67,7 @@ const blank = {
   world: undefined as { overview: string; choices: WorldChoices; form: string } | undefined,
 };
 
-const STORAGE_KEY = "novelforge-new-game";
+const STORAGE_KEY = "novelforge-new-story";
 
 // Kept for the tab, so a reload or a trip to Settings to fix a failure doesn't lose what the player wrote. It only ever holds player-facing text.
 const stored = () => ({ ...blank, ...(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") as Partial<typeof blank>) });
@@ -188,7 +188,7 @@ function Heading({ step, title, busy }: { step: number; title: string; busy: boo
 }
 
 /** Steps live in the hash like screens, so the browser's back button walks them. `step` is the part after `#/new/`. */
-export function NewGame({ step }: { step?: string }) {
+export function NewStory({ step }: { step?: string }) {
   const [draft, setDraft] = useState(stored);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -532,7 +532,7 @@ export function NewGame({ step }: { step?: string }) {
         ) : (
           <p className="muted">{ART_STYLES[draft.artStyle]}</p>
         )}
-        <p className="muted">You can change this in game. It affects new images only.</p>
+        <p className="muted">You can change this during the story. It affects new images only.</p>
       </div>
       {imageSection("cover", "Cover", theme && title.trim() && worldBrief.trim() ? "" : "Fill in the Title, theme and World Brief to draw this.", {
         kind: "cover",
