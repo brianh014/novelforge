@@ -8,13 +8,15 @@
 
 ## Criteria
 
-- [x] The portrait, name, message and Open the book are centered on one page
-- [x] Everything fits without scrolling at 1546 by 1180, 1366 by 800 and phone width
+- [x] The cover, title, World Brief, message, Open the book and PC portrait present on one page
+- [x] Everything fits without scrolling at 1546 by 1180, 1366 by 800 and 1024 by 700, and stacks in order at phone width
 
 ## Comments
 
 The user asked for this directly, which replaces the earlier decision to keep this screen two-page.
 
-The portrait now sits above the name and button, and is capped at 72% of the window height, down from 80%, to leave them room.
-
 Checked on a copy of the user's Save, so the portrait-still-being-painted state and a Save with no portrait weren't seen.
+
+Later the user asked for a full presentation of the cover art, title, brief, then PC art. It reads left to right on one screen, and stacks in that order at phone width, where the page scrolls to Open the book. Without art, the text fills the page alone.
+
+Limit: the page reads the Save again only while the portrait paints, so a cover that lands after the portrait needs a reload. Recorded as a `shortcut:` comment in `src/web/wizard.tsx`.

@@ -2,6 +2,7 @@ import { type FormEvent, Fragment, type ReactNode, useEffect, useRef, useState }
 import { ART_EXAMPLES } from "./art-examples";
 import { ART_STYLES } from "./art-styles";
 import {
+  coverUrl,
   createSave,
   type EnhanceField,
   enhance,
@@ -9,6 +10,7 @@ import {
   getImages,
   getJournal,
   getSave,
+  type OpenSave,
   getSettings,
   type PcDraft,
   pickForMe,
@@ -463,16 +465,18 @@ export function NewGame({ step }: { step?: string }) {
 
 /** The finished PC, whose portrait starts drawing as the Save is made. */
 export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean }) {
-  const [name, setName] = useState("");
+  const [save, setSave] = useState<OpenSave>();
   const [portrait, setPortrait] = useState<Portrait>();
   const [drawing, setDrawing] = useState(true);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     let leaving = false;
+    // shortcut: read again only while the portrait paints, so a cover that lands after it needs a reload, track the cover if that shows up.
     const look = () =>
       getImages(id).then(async ({ pending }) => {
         if (leaving) return;
+        getSave(id).then(setSave, () => {});
         if (pending) {
           timer = setTimeout(look, IMAGE_CHECK_MS);
           return;
@@ -481,7 +485,7 @@ export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean
         setPortrait(portraits.find(({ npc }) => npc === null));
         setDrawing(false);
       }, () => setDrawing(false));
-    getSave(id).then(({ pc }) => setName(pc.name), () => {});
+    getSave(id).then(setSave, () => {});
     look();
     return () => {
       leaving = true;
@@ -489,20 +493,31 @@ export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean
     };
   }, [id]);
 
+  const name = save?.pc.name ?? "";
+
   return (
     <main className="desk">
       <div className="book ready">
+        {save?.hasCover && (
+          <figure className="plate reveal">
+            <Zoomable src={coverUrl(id)} alt={`Cover of ${save.title || name}`} />
+          </figure>
+        )}
+        <div className="presented">
+          <h1 className="big">{save?.title || name}</h1>
+          <p>{save?.worldBrief}</p>
+          <p className="muted">Your story is ready.</p>
+          {drawing && <p role="status" className="waiting">Your portrait is being painted…</p>}
+          <a className="action" href={`#/play/${id}${worldChanged ? "/world-changed" : ""}`}>
+            Open the book
+          </a>
+        </div>
         {portrait && (
           <figure className="plate reveal">
             <Zoomable src={portraitUrl(id, portrait)} alt={`Portrait of ${name}`} />
+            <figcaption>{name}</figcaption>
           </figure>
         )}
-        <h1 className="big">{name}</h1>
-        <p className="muted">Your story is ready.</p>
-        {drawing && <p role="status" className="waiting">Your portrait is being painted…</p>}
-        <a className="action" href={`#/play/${id}${worldChanged ? "/world-changed" : ""}`}>
-          Open the book
-        </a>
       </div>
     </main>
   );
