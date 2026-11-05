@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { networkInterfaces } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { openRouterImages } from "./image-adapter";
@@ -20,6 +21,14 @@ const server = startServer({
   dice: () => randomInt(1, 21),
   nearMissMargin: z.coerce.number().int().min(0).parse(process.env.NEAR_MISS_MARGIN ?? 2),
   port: Number(process.env.PORT ?? 4600),
+  // shortcut: anyone on the network can play, change Settings and spend the saved keys, add accounts if the app leaves a trusted LAN.
+  hostname: process.env.HOST ?? "0.0.0.0",
 });
 
-console.log(`NovelForge is running at ${server.url}`);
+// A listening address of 0.0.0.0 is no use in a browser.
+console.log(`NovelForge is running at ${server.url.href.replace("0.0.0.0", "127.0.0.1")}`);
+if (server.hostname === "0.0.0.0") {
+  for (const address of Object.values(networkInterfaces()).flat()) {
+    if (address?.family === "IPv4" && !address.internal) console.log(`On your network: http://${address.address}:${server.port}/`);
+  }
+}

@@ -27,7 +27,7 @@ import {
   type TurnResult,
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
-import { DecideIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
+import { DecideIcon, DownIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs, Fold } from "./menu";
 import { Person, Zoomable } from "./zoom";
 
@@ -65,6 +65,7 @@ export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
 
 export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }) {
   const [save, setSave] = useState<OpenSave>();
+  const [topOpen, setTopOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>();
   const [images, setImages] = useState<SceneImages>({ images: [], pending: false, session: 0 });
@@ -257,6 +258,8 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
     </figure>
   );
 
+  const picture = !staged && (sceneImage() || cover);
+
   const line = (beat: Beat, key: number) => {
     const portrait = portraitOf(beat.speaker);
     return <BeatLine key={key} beat={beat} style={chatStyle} pc={pc} face={portrait && portraitUrl(id, portrait)} />;
@@ -314,7 +317,19 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
               <h1 className="title">{save.title || pc}</h1>
               {save.title && <p className="muted">{pc}</p>}
             </div>
-            {!staged && (sceneImage() || cover)}
+            {picture && (
+              <button
+                type="button"
+                className="icon story-toggle"
+                title={topOpen ? "Hide the picture" : "Show the picture"}
+                aria-label="Picture"
+                aria-expanded={topOpen}
+                onClick={() => setTopOpen(!topOpen)}
+              >
+                {DownIcon}
+              </button>
+            )}
+            <div className={topOpen ? "story-top open" : "story-top"}>{picture}</div>
             <div className="story-card">
               {pcPortrait && <Zoomable lazy src={portraitUrl(id, pcPortrait)} alt={`Portrait of ${pc}`} />}
               <div className="condition">

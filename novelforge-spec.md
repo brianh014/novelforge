@@ -273,7 +273,7 @@ Every Turn saves automatically, so there is no manual save. Players branch a sto
 
 # Tech
 
-NovelForge is a single-player app that runs on one person's machine. The server binds to localhost, with no accounts, hosting or cloud.
+NovelForge is a single-player app that runs on one person's machine. The server listens on the LAN as well as localhost, so other devices at home can play, with no accounts, hosting or cloud. Anyone on that network can reach everything the player can, and setting `HOST=127.0.0.1` keeps it to this machine.
 
 The game is a web based SPA with a local RESTful API server. Being API based, the coding agent building the game can easily test on its own and build its own testing harness.
 
@@ -345,7 +345,7 @@ A fake LLM provider and a controllable dice roller let Turns be tested determini
 
 An old book, open on a desk: aged paper, ink browns and bottle green, the story on the right page, and bookmarks hanging from the top right. It is responsive to screen size. The dark theme is the same book on charcoal laid paper.
 
-World creation, Settings, Load Game, Inventory and the Gallery use the Index Sheet layout from the layout options report: one sheet with a side index, a column that fills the rest of the sheet, and a pinned bottom bar, plus a down arrow whenever a page runs past the fold. Settings shows one section at a time. The Ready page, from its options report, runs down one scrolling page: the cover, the title and World Brief, then the PC's portrait, with Open the book pinned at the bottom. Everything else stays a two-page book.
+World creation, Settings, Load Game, Inventory and the Gallery use the Index Sheet layout from the layout options report: one sheet with a side index, a column that fills the rest of the sheet, and a pinned bottom bar, plus a down arrow whenever a page runs past the fold. Settings shows one section at a time. The Ready page, from its options report, runs down one scrolling page: the cover, the title and World Brief, then the PC's portrait, with Open the book pinned at the bottom. Everything else stays a two-page book. On a phone, the Story's picture folds away behind a toggle by the title and starts folded, and its Condition is left to the Inventory.
 
 **An HTML report of UI options is only made when the user asks for one, for a large visual change.** Other UI changes are built directly. The first report showed 3 distinct visual directions, each mocking up the main game screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story, plus the Chat style options. The mockups are throwaway, and the user can pick one direction or mix parts. The player-facing UI contains no Check elements.
 

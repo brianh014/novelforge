@@ -155,6 +155,8 @@ export function startServer(options: {
   savesDir: string;
   textProvider: TextProvider;
   imageAdapter: ImageAdapter;
+  /** Loopback unless the caller opens the app to the network, which has no accounts to protect it. */
+  hostname?: string;
   dice: Dice;
   nearMissMargin: number;
   settings: SettingsStore;
@@ -261,7 +263,7 @@ export function startServer(options: {
   };
 
   return Bun.serve({
-    hostname: "127.0.0.1",
+    hostname: options.hostname ?? "127.0.0.1",
     port: options.port,
     // A Turn can stay silent past Bun's default, which would drop the client while the Turn went on to commit.
     idleTimeout: 0,

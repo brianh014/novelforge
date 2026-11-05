@@ -354,6 +354,15 @@ h2 {
 
 /* The story's left page */
 
+/* Only a phone folds this away. */
+.story-top {
+  display: contents;
+}
+
+.icon.story-toggle {
+  display: none;
+}
+
 .page .sheet-scroll,
 .book:has(.tabs) .page .sheet-scroll {
   padding: 0 0 24px;
@@ -1501,28 +1510,30 @@ dialog blockquote {
     flex-basis: 100%;
   }
 
-  /* A line under the name and menu link, as the left page has no room for its heading here. */
-  .condition {
-    order: 1;
-    flex-basis: 100%;
-    max-height: 4.4em;
-    overflow-y: auto;
-  }
-
-  .condition h2 {
+  .story-top:not(.open) {
     display: none;
   }
 
-  /* The Journal holds all of this, and the story needs the room. */
-  .story-card .zoom,
+  .icon.story-toggle {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
+  }
+
+  .story-toggle[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+
+  /* The Journal and Inventory hold all of this, and the story needs the room. */
+  .story-card,
   .story-recap {
     display: none;
   }
 
   .narrow-left .sheet-view,
   .narrow-left .sheet-scroll,
-  .narrow-left .sheet-body,
-  .story-card {
+  .narrow-left .sheet-body {
     display: contents;
   }
 

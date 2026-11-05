@@ -66,7 +66,7 @@ test("the compiled app serves the SPA from inside itself", async () => {
   expect(script).toContain("Main Menu");
 });
 
-test("the compiled app listens on localhost only", async () => {
+test("the compiled app listens on the LAN as well as on localhost", async () => {
   const { app, url } = await launch();
   const lanAddress = Object.values(networkInterfaces())
     .flat()
@@ -78,10 +78,10 @@ test("the compiled app listens on localhost only", async () => {
     );
 
   const local = await reachable("127.0.0.1");
-  const lan = lanAddress ? await reachable(lanAddress) : false;
+  const lan = lanAddress ? await reachable(lanAddress) : true;
   app.kill();
   await app.exited;
 
   expect(local).toBe(true);
-  expect(lan).toBe(false);
+  expect(lan).toBe(true);
 });
