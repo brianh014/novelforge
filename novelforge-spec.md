@@ -15,7 +15,7 @@ It can create images. Images created based on the current scene in the game, and
 
 The first step in a new game is creating the world, the player selects from lists or provides a free form answer
 
-* Theme  
+* Theme: each has a short description, shown to the player once chosen and sent to the Narrator with its name  
   * High Fantasy  
   * Dark Fantasy  
   * Cyberpunk  

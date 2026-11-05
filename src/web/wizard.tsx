@@ -26,17 +26,18 @@ import { Book, Sheet } from "./menu";
 import { IMAGE_CHECK_MS } from "./play";
 import { Zoomable } from "./zoom";
 
-const THEMES = [
-  "High Fantasy",
-  "Dark Fantasy",
-  "Cyberpunk",
-  "Sci Fi Fantasy",
-  "Sci Fi",
-  "Modern Day",
-  "Steampunk",
-  "Realistic medieval",
-  "Western",
-];
+/** Each description is shown to the player and sent to the Narrator with the theme's name. */
+const THEMES: Record<string, string> = {
+  "High Fantasy": "Wondrous realms of magic, ancient kingdoms and epic quests, where good and evil are clearly drawn.",
+  "Dark Fantasy": "Grim lands where magic comes at a cost, monsters are real and heroes rarely stay clean.",
+  Cyberpunk: "Neon megacities run by corporations, where chrome implants and stolen data are the way to get ahead.",
+  "Sci Fi Fantasy": "Starships and ancient magic side by side, with mystic orders and galactic struggles.",
+  "Sci Fi": "Plausible futures of space travel, advanced technology and first contact, with no magic.",
+  "Modern Day": "The world as it is now, with today's technology, cities and everyday stakes.",
+  Steampunk: "A Victorian age of brass, steam and clockwork, with airships, inventors and rigid class lines.",
+  "Realistic medieval": "Feudal life without magic, shaped by lords, faith, plague and the sword.",
+  Western: "The American frontier, with dusty towns, outlaws, lawmen and land worth killing for.",
+};
 const STEPS = [
   { href: "#/new", name: "Of the World" },
   { href: "#/new/overview", name: "The World Overview" },
@@ -48,7 +49,7 @@ const OWN_THEME = "Create your own";
 const OWN_ART_STYLE = "Describe your own art style";
 
 const blank = {
-  theme: THEMES[0]!,
+  theme: "High Fantasy",
   ownTheme: "",
   worldBrief: "",
   title: "",
@@ -151,6 +152,8 @@ export function NewGame({ step }: { step?: string }) {
   }, []);
 
   const theme = draft.theme === OWN_THEME ? draft.ownTheme.trim() : draft.theme;
+  const description = THEMES[draft.theme];
+  const themeForNarrator = description ? `${theme}: ${description}` : theme;
   const artStyle = draft.artStyle === OWN_ART_STYLE ? draft.ownArtStyle : `${draft.artStyle}: ${ART_STYLES[draft.artStyle]}`;
 
   /** A failure changes nothing here, so everything the player wrote stays on the page to retry. */
@@ -168,12 +171,12 @@ export function NewGame({ step }: { step?: string }) {
     setBusy("");
   }
 
-  const worldChoices = { title: draft.title, theme, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "" };
+  const worldChoices = { title: draft.title, theme: themeForNarrator, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "" };
 
   const fillWorld = () =>
     run("The Narrator is thinking…", async (signal) => {
       const { title, worldBrief, startingHook } = draft;
-      set(await pickForMe(theme, { title, worldBrief, ...(draft.hookOn && { startingHook }) }, signal));
+      set(await pickForMe(themeForNarrator, { title, worldBrief, ...(draft.hookOn && { startingHook }) }, signal));
     });
 
   function generate(event: FormEvent) {
@@ -387,10 +390,11 @@ export function NewGame({ step }: { step?: string }) {
         </div>
         <Choices
           legend="Theme"
-          options={[...THEMES, OWN_THEME]}
+          options={[...Object.keys(THEMES), OWN_THEME]}
           value={draft.theme}
           onChange={(theme) => set({ theme })}
         />
+        {description && <p className="muted">{description}</p>}
         {draft.theme === OWN_THEME && (
           <label>
             Your theme
