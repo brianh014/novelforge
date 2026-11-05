@@ -17,6 +17,12 @@ import {
 import { BookTabs, Sheet } from "./menu";
 
 const SECTIONS = ["Text", "Images", "Reading"];
+const RESOLUTIONS = [
+  ["480p", "480p (848 × 480)"],
+  ["720p", "720p (1280 × 720)"],
+  ["1080p", "1080p (1920 × 1088)"],
+  ["4k", "4K (3840 × 2160)"],
+];
 const THIS_GAME = "This game";
 
 export const applyLook = ({ fontSize, theme }: Settings) => {
@@ -182,13 +188,14 @@ function WorkflowGuide() {
 function ComfyTest() {
   const [prompt, setPrompt] = useState("");
   const [drawing, setDrawing] = useState(false);
-  const [image, setImage] = useState("");
+  const [drawn, setDrawn] = useState<Awaited<ReturnType<typeof drawComfyTest>>>();
+  const [size, setSize] = useState("");
   const [error, setError] = useState("");
   const job = useRef<AbortController>(null);
 
   // Leaving Settings stops the job, so it doesn't hold up the GPU for a picture nobody will see.
   useEffect(() => () => job.current?.abort(), []);
-  useEffect(() => () => URL.revokeObjectURL(image), [image]);
+  useEffect(() => () => URL.revokeObjectURL(drawn?.url ?? ""), [drawn]);
 
   async function draw() {
     if (drawing || !prompt.trim()) return;
@@ -196,11 +203,12 @@ function ComfyTest() {
     const { signal } = job.current;
     setDrawing(true);
     setError("");
-    setImage("");
+    setDrawn(undefined);
+    setSize("");
     try {
-      const url = await drawComfyTest(prompt, signal);
-      if (signal.aborted) return URL.revokeObjectURL(url);
-      setImage(url);
+      const result = await drawComfyTest(prompt, signal);
+      if (signal.aborted) return URL.revokeObjectURL(result.url);
+      setDrawn(result);
     } catch (failure) {
       if (!signal.aborted) setError((failure as Error).message);
     }
@@ -219,7 +227,34 @@ function ComfyTest() {
       </button>
       <p className="muted">Uses your saved Settings. The image isn't kept.</p>
       {error && <p className="notice">{error}</p>}
-      {image && <img src={image} alt={`Test image: ${prompt}`} />}
+      {drawn && (
+        <>
+          <img
+            src={drawn.url}
+            alt={`Test image: ${prompt}`}
+            onLoad={({ currentTarget: { naturalWidth, naturalHeight } }) => setSize(`${naturalWidth} × ${naturalHeight}, `)}
+          />
+          <dl className="comfy-stats">
+            <dt>Time</dt>
+            <dd>{drawn.seconds.toFixed(1)}s</dd>
+            <dt>Size</dt>
+            <dd>
+              {size}
+              {(drawn.fileSize / 1e6).toFixed(1)} MB
+            </dd>
+            {drawn.model && (
+              <>
+                <dt>Model</dt>
+                <dd>{drawn.model}</dd>
+                <dt>Steps</dt>
+                <dd>{drawn.steps}</dd>
+                <dt>Seed</dt>
+                <dd>{drawn.seed}</dd>
+              </>
+            )}
+          </dl>
+        </>
+      )}
     </fieldset>
   );
 }
@@ -236,6 +271,13 @@ function ComfySettings({
   const [models, setModels] = useState<ComfyModels>();
   const [refreshes, setRefreshes] = useState(0);
   const addLora = useRef<HTMLButtonElement>(null);
+  const { comfySdBase, imageResolution } = draft;
+  const tooBig =
+    comfySdBase === "sd15" && imageResolution !== "480p"
+      ? "SD 1.5 models are trained for small images, so this resolution may double faces and figures. 480p suits them best."
+      : comfySdBase === "sdxl" && imageResolution === "4k"
+        ? "SDXL models are trained for about 1024 pixels, so 4K may repeat subjects. 1080p or lower suits them best."
+        : "";
 
   useEffect(() => {
     setModels(undefined);
@@ -346,6 +388,7 @@ function ComfySettings({
                   <option value="sd15">SD 1.5</option>
                 </select>
               </label>
+              {tooBig && <p className="notice">{tooBig}</p>}
             </>
           )}
           <fieldset>
@@ -607,8 +650,25 @@ function InstallSettings({
           <option value="local">Local (ComfyUI)</option>
         </select>
       </label>
+      <label>
+        Resolution
+        <select
+          value={draft.imageResolution}
+          onChange={(e) => set({ imageResolution: e.target.value as Settings["imageResolution"] })}
+        >
+          {RESOLUTIONS.map(([value, name]) => (
+            <option key={value} value={value}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </label>
       {draft.imageProvider === "openrouter" ? (
         <>
+          <p className="muted">
+            OpenRouter uses the nearest size your model offers, so the image may not match exactly. Larger sizes can cost
+            more, and some models have no size choice, so this changes nothing for them.
+          </p>
           <label>
             Image model
             <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />

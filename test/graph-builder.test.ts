@@ -4,6 +4,7 @@ import { buildGraph, type GraphChoices, type GraphRequest, type Graph, usableRef
 const sd: GraphChoices = {
   comfyFamily: "sd",
   comfySdBase: "sdxl",
+  imageResolution: "720p",
   comfyCheckpoint: "dream.safetensors",
   comfyDiffusionModel: "",
   comfyTextEncoder: "",
@@ -54,7 +55,7 @@ test("SD draws from an empty latent with the checkpoint's own model, CLIP and VA
   expect(slot(positive.inputs.clip)).toBe(1);
 
   const latent = source(graph, sampler.inputs.latent_image);
-  expect(latent).toEqual({ class_type: "EmptyLatentImage", inputs: { width: 1360, height: 768, batch_size: 1 } });
+  expect(latent).toEqual({ class_type: "EmptyLatentImage", inputs: { width: 1280, height: 720, batch_size: 1 } });
 
   const decode = only(graph, "VAEDecode");
   expect(source(graph, decode.inputs.samples).class_type).toBe("KSampler");
@@ -63,13 +64,23 @@ test("SD draws from an empty latent with the checkpoint's own model, CLIP and VA
 });
 
 test.each([
-  ["sdxl", "1:1", 1024, 1024],
-  ["sd15", "1:1", 512, 512],
-  ["sd15", "16:9", 688, 384],
-] as const)("SD base %s at %s is %i by %i", (comfySdBase, aspect_ratio, width, height) => {
-  const graph = buildGraph({ ...sd, comfySdBase }, { ...request, aspect_ratio });
+  ["480p", "16:9", 848, 480],
+  ["720p", "16:9", 1280, 720],
+  ["1080p", "16:9", 1920, 1088],
+  ["4k", "16:9", 3840, 2160],
+  ["720p", "1:1", 960, 960],
+] as const)("%s at %s is %i by %i, whichever the family", (imageResolution, aspect_ratio, width, height) => {
+  const graph = buildGraph({ ...sd, imageResolution }, { ...request, aspect_ratio });
+  const flux = buildGraph({ ...flux2, imageResolution }, { ...request, aspect_ratio });
 
   expect(only(graph, "EmptyLatentImage").inputs).toMatchObject({ width, height });
+  expect(only(flux, "EmptyFlux2LatentImage").inputs).toMatchObject({ width, height });
+});
+
+test("the Checkpoint type doesn't change the size", () => {
+  const graph = buildGraph({ ...sd, comfySdBase: "sd15" }, request);
+
+  expect(only(graph, "EmptyLatentImage").inputs).toMatchObject({ width: 1280, height: 720 });
 });
 
 test("SD uses the previous Scene Image through img2img, at the output size and part denoised", () => {
@@ -84,7 +95,7 @@ test("SD uses the previous Scene Image through img2img, at the output size and p
   expect(encode.class_type).toBe("VAEEncode");
   expect(slot(encode.inputs.vae)).toBe(2);
   const scale = source(graph, encode.inputs.pixels);
-  expect(scale).toMatchObject({ class_type: "ImageScale", inputs: { width: 1360, height: 768, crop: "center" } });
+  expect(scale).toMatchObject({ class_type: "ImageScale", inputs: { width: 1280, height: 720, crop: "center" } });
   expect(source(graph, scale.inputs.image)).toEqual({ class_type: "LoadImage", inputs: { image: "scene.png [temp]" } });
 });
 
@@ -134,11 +145,11 @@ test("FLUX.2 wires ComfyUI's own recipe, with no negative prompt as its guider h
   expect(source(graph, sampler.inputs.sampler)).toEqual({ class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } });
   expect(source(graph, sampler.inputs.sigmas)).toEqual({
     class_type: "Flux2Scheduler",
-    inputs: { steps: 20, width: 1360, height: 768 },
+    inputs: { steps: 20, width: 1280, height: 720 },
   });
   expect(source(graph, sampler.inputs.latent_image)).toEqual({
     class_type: "EmptyFlux2LatentImage",
-    inputs: { width: 1360, height: 768, batch_size: 1 },
+    inputs: { width: 1280, height: 720, batch_size: 1 },
   });
 
   const guider = source(graph, sampler.inputs.guider);

@@ -4,7 +4,7 @@ import type { SettingsStore } from "./settings-store";
 type Settings = ReturnType<SettingsStore["read"]>;
 export type GraphChoices = Pick<
   Settings,
-  "comfyFamily" | "comfySdBase" | "comfyCheckpoint" | "comfyDiffusionModel" | "comfyTextEncoder" | "comfyVae" | "comfyLoras"
+  "comfyFamily" | "comfySdBase" | "imageResolution" | "comfyCheckpoint" | "comfyDiffusionModel" | "comfyTextEncoder" | "comfyVae" | "comfyLoras"
 >;
 /** `references` are the names ComfyUI gave the uploaded images, in the order of `usableReferences`. */
 export type GraphRequest = Omit<ImagePayload, "reference_images"> & { references: string[]; seed: number };
@@ -16,14 +16,18 @@ type Add = (classType: string, inputs: Record<string, unknown>) => Link;
 // ComfyUI's FLUX.2 page gives this as the most references the model keeps consistent.
 const MOST_FLUX2_REFERENCES = 10;
 
-// The output side of a square image each base is trained for.
-const SQUARE = { sd15: 512, sdxl: 1024, flux2: 1024 };
+// The side of a square with each resolution's pixels, so every shape of image gets the same area.
+const SQUARE = { "480p": 640, "720p": 960, "1080p": 1440, "4k": 2880 };
 
 // Keeps the previous Scene's layout and palette but leaves room for what has changed in it.
 const IMG2IMG_DENOISE = 0.65;
 
 // shortcut: a model is only known by its filename, so a renamed Klein 9B draws at 20 steps, add a setting if that matters.
 const fluxSteps = (model: string) => (/klein.*9b/i.test(model) && !/base/i.test(model) ? 8 : 20);
+
+/** How many steps Simple Mode draws these choices in. */
+export const drawSteps = ({ comfyFamily, comfyDiffusionModel }: GraphChoices) =>
+  comfyFamily === "flux2" ? fluxSteps(comfyDiffusionModel) : 25;
 
 /** What a family needs chosen before it can draw. */
 export const chosenModels = (choices: GraphChoices) =>
@@ -42,8 +46,9 @@ export function usableReferences({ comfyFamily }: GraphChoices, references: Imag
     : references.filter(({ role }) => role === "previous_scene").slice(0, 1);
 }
 
-/** The same area as the square at any aspect ratio, in multiples of 16, which suits every family's latent. */
-export function dimensions(aspectRatio: string, square: number) {
+/** The resolution's area at any aspect ratio, in multiples of 16, which suits every family's latent. */
+export function dimensions(aspectRatio: string, resolution: GraphChoices["imageResolution"]) {
+  const square = SQUARE[resolution];
   const [wide = 1, tall = 1] = aspectRatio.split(":").map(Number);
   const snapped = (side: number) => Math.round(side / 16) * 16;
   return { width: snapped(square * Math.sqrt(wide / tall)), height: snapped(square * Math.sqrt(tall / wide)) };
@@ -66,7 +71,7 @@ function sdImage(add: Add, choices: GraphChoices, request: GraphRequest, text: s
     clip = [lora[0], 1];
   }
 
-  const size = dimensions(request.aspect_ratio, SQUARE[choices.comfySdBase]);
+  const size = dimensions(request.aspect_ratio, choices.imageResolution);
   const [previous] = request.references;
   const latent_image = previous
     ? add("VAEEncode", {
@@ -86,7 +91,7 @@ function sdImage(add: Add, choices: GraphChoices, request: GraphRequest, text: s
     negative: add("CLIPTextEncode", { text: request.negative_prompt ?? "", clip }),
     latent_image,
     seed: request.seed,
-    steps: 25,
+    steps: drawSteps(choices),
     cfg: 7,
     sampler_name: "dpmpp_2m",
     scheduler: "karras",
@@ -115,12 +120,12 @@ function flux2Image(add: Add, choices: GraphChoices, request: GraphRequest, text
     conditioning = add("ReferenceLatent", { conditioning, latent: add("VAEEncode", { pixels, vae }) });
   }
 
-  const size = dimensions(request.aspect_ratio, SQUARE.flux2);
+  const size = dimensions(request.aspect_ratio, choices.imageResolution);
   const samples = add("SamplerCustomAdvanced", {
     noise: add("RandomNoise", { noise_seed: request.seed }),
     guider: add("BasicGuider", { model, conditioning }),
     sampler: add("KSamplerSelect", { sampler_name: "euler" }),
-    sigmas: add("Flux2Scheduler", { steps: fluxSteps(choices.comfyDiffusionModel), ...size }),
+    sigmas: add("Flux2Scheduler", { steps: drawSteps(choices), ...size }),
     latent_image: add("EmptyFlux2LatentImage", { ...size, batch_size: 1 }),
   });
   return add("VAEDecode", { samples, vae });

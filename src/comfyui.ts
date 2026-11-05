@@ -28,6 +28,8 @@ type Inputs = Record<string, unknown>;
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
+export const randomSeed = () => Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+
 /** Every call to ComfyUI. The address is what the player typed, so a redirect from it is an error, not a new destination. */
 const ask = (url: string, path: string, signal: AbortSignal, init?: RequestInit) =>
   fetch(`${url}${path}`, { ...init, signal, redirect: "error", timeout: false });
@@ -162,10 +164,10 @@ export function comfyImages(
     const limited = AbortSignal.any([signal, AbortSignal.timeout(silenceMs)]);
 
     try {
-      const seed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+      const seed = payload.seed ?? randomSeed();
       const store = (image: { bytes: Uint8Array; mediaType: string }) => upload(url, image, limited);
       const graph = advanced
-        ? await fillWorkflow(choices.comfyWorkflow, payload, seed, store)
+        ? await fillWorkflow(choices.comfyWorkflow, payload, seed, store, choices.imageResolution)
         : buildGraph(choices, {
             ...payload,
             references: await Promise.all(usableReferences(choices, payload.reference_images).map(store)),

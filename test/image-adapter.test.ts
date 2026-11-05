@@ -119,6 +119,32 @@ test("a ratio the model doesn't list is dropped too", async () => {
   expect(sent().body.aspect_ratio).toBeUndefined();
 });
 
+test.each([
+  ["480p", ["768", "1K", "2K"], "768"],
+  ["480p", ["1K", "2K"], "1K"],
+  ["720p", ["768", "1K", "1.5K", "2K", "4K"], "1K"],
+  ["1080p", ["1K", "1.5K", "2K", "4K"], "2K"],
+  ["4k", ["1K", "2K", "4K"], "4K"],
+  ["4k", ["1K", "2K"], "2K"],
+  ["720p", ["2K", "4K"], "2K"],
+] as const)("%s on a model with %j asks for %s", async (imageResolution, values, resolution) => {
+  settings.update({ imageResolution });
+  const adapter = adapterFor(listing(["text"], { resolution: { type: "enum", values } }));
+
+  await adapter(payload(), never);
+
+  expect(sent().body.resolution).toBe(resolution);
+});
+
+test("a model without sizes, or with none this can read, is sent no resolution", async () => {
+  await adapterFor(listing(["text"], {}))(payload(), never);
+  expect(sent().body.resolution).toBeUndefined();
+
+  provider.stop();
+  await adapterFor(listing(["text"], { resolution: { type: "enum", values: ["auto"] } }))(payload(), never);
+  expect(sent().body.resolution).toBeUndefined();
+});
+
 test("without a model listing the image still generates plainly, and the listing is asked for again", async () => {
   const adapter = adapterFor(new Response("down", { status: 503 }));
 

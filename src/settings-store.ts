@@ -13,9 +13,10 @@ export const SettingsUpdate = z
     imageModel: z.string(),
     imageApiKey: z.string(),
     imagesEnabled: z.boolean(),
+    imageResolution: z.enum(["480p", "720p", "1080p", "4k"]),
     comfyUrl: z.url({ protocol: /^https?$/ }),
     comfyFamily: z.enum(["sd", "flux2"]),
-    // A checkpoint file doesn't say which it is, and each needs its own image size.
+    // A checkpoint file doesn't say which it is, and Settings warns when the resolution is too big for it.
     comfySdBase: z.enum(["sdxl", "sd15"]),
     comfyCheckpoint: z.string(),
     comfyDiffusionModel: z.string(),
@@ -45,6 +46,7 @@ const defaults = {
   comfyUrl: "http://127.0.0.1:8188",
   comfyFamily: "sd",
   comfySdBase: "sdxl",
+  imageResolution: "720p",
   comfyCheckpoint: "",
   comfyDiffusionModel: "",
   comfyTextEncoder: "",

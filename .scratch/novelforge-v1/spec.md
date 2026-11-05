@@ -138,7 +138,7 @@ Scene Images appear above the chat, visual novel style. The Journal, inventory a
 
 ### UI
 
-92. As the product owner, I want an HTML report of UI options before any UI code, so that I choose the direction before it's built.
+92. As the product owner, I want an HTML report of UI options when I ask for one for a large visual change, so that I choose the direction before it's built.
 93. As the product owner, I want 3 distinct directions covering the game screen, a wizard step, the Journal and inventory at desktop and phone widths, so that I can compare them properly.
 94. As a player, I want a clean, story-focused interface that works at any screen size, so that the game feels like a visual novel.
 
@@ -248,7 +248,7 @@ Scene Images appear above the chat, visual novel style. The Journal, inventory a
 ## Further Notes
 
 - **Build order:** 1) fake provider, minimal game creation, Turns, Snapshots, Checks, Revert and OpenRouter text, with no UI; 2) UI options report, then the user chooses; 3) Journal, inventory, status, and Rewrite, Regenerate and Director's Notes; 4) full wizard and World Bible generation; 5) OpenRouter images; 6) ComfyUI and local text; 7) UI polish.
-- **UI gate:** no UI code may be written until the user has chosen from the UI options report. Slice 1 is deliberately REST-only.
+- **UI reports:** a report of UI options is only made when the user asks for one, for a large visual change (changed 2026-11-04). Slice 1 was deliberately REST-only.
 - **Playtesting risks:** the Narrator may rarely request Checks or set everything to Easy, which the server can't judge. Keyword activation can miss paraphrases, so Lore Entries need several keywords.
 - **Unverified:** ComfyUI reference workflows and FLUX.2 limits haven't been tested against a live server. Bun packaging hasn't been tried. Storage figures came from a simulation using Node's SQLite and synthetic data.
 - **Repo setup:** add a `.gitattributes` before code is written, because Git warns about LF and CRLF conversion.

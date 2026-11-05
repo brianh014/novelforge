@@ -65,11 +65,18 @@ export const saveSettings = (change: SettingsChange) =>
 export type ComfyModels = Awaited<ReturnType<typeof comfyModels>>;
 export const getComfyModels = () => request<ComfyModels>("/settings/comfy-models");
 
-/** Resolves to an object URL of the drawn image. */
+/** `model`, `steps` and `seed` are left out for an Advanced workflow, which decides those itself. */
+export type ComfyTestStats = { seconds: number; model?: string; steps?: number; seed?: number };
+
+/** Resolves to an object URL of the drawn image, its file size and how it was drawn. */
 export async function drawComfyTest(prompt: string, signal: AbortSignal) {
   const response = await fetch("/settings/comfy-test", { ...jsonBody({ prompt }), signal });
+  // The page updates on a refresh but the server doesn't, so an older server has no such route.
+  if (response.status === 404) throw new Error("The running app is older than this page. Restart NovelForge, then try again.");
   if (!response.ok) throw new Error(await errorMessage(response));
-  return URL.createObjectURL(await response.blob());
+  const blob = await response.blob();
+  const stats = JSON.parse(decodeURIComponent(response.headers.get("X-Draw-Stats") ?? "")) as ComfyTestStats;
+  return { url: URL.createObjectURL(blob), fileSize: blob.size, ...stats };
 }
 
 export const getTextModels = () => request<{ models: string[] }>("/settings/text-models").then(({ models }) => models);

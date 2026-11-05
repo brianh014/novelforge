@@ -1,4 +1,4 @@
-import { dimensions, type Graph } from "./graph-builder";
+import { dimensions, type Graph, type GraphChoices } from "./graph-builder";
 import type { ImagePayload } from "./image-adapter";
 
 /** A workflow the player can paste as it is, once it names one of their checkpoints. */
@@ -103,6 +103,7 @@ export async function fillWorkflow(
   { prompt, negative_prompt = "", aspect_ratio, reference_images, style_preset }: ImagePayload,
   seed: number,
   store: (image: { bytes: Uint8Array; mediaType: string }) => Promise<string>,
+  resolution: GraphChoices["imageResolution"],
 ) {
   const workflow = parseWorkflow(text);
   const values: Values = {
@@ -111,7 +112,7 @@ export async function fillWorkflow(
     art_style: style_preset,
     aspect_ratio,
     seed,
-    ...dimensions(aspect_ratio, 1024),
+    ...dimensions(aspect_ratio, resolution),
   };
   await Promise.all(
     namesIn(workflow)

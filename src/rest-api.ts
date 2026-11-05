@@ -1,8 +1,8 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
 import { InvalidWorkflow, parseWorkflow } from "./comfy-workflow";
-import { comfyImages, comfyModels } from "./comfyui";
-import { localIsSetUp } from "./graph-builder";
+import { comfyImages, comfyModels, randomSeed } from "./comfyui";
+import { chosenModels, drawSteps, localIsSetUp } from "./graph-builder";
 import type { ImageAdapter } from "./image-adapter";
 import { imagePipeline } from "./image-pipeline";
 import {
@@ -192,6 +192,7 @@ export function startServer(options: {
       comfyUrl,
       comfyFamily,
       comfySdBase,
+      imageResolution,
       comfyCheckpoint,
       comfyDiffusionModel,
       comfyTextEncoder,
@@ -215,6 +216,7 @@ export function startServer(options: {
       comfyUrl,
       comfyFamily,
       comfySdBase,
+      imageResolution,
       comfyCheckpoint,
       comfyDiffusionModel,
       comfyTextEncoder,
@@ -263,10 +265,19 @@ export function startServer(options: {
       "/settings/comfy-test": {
         POST: async (req) => {
           const { prompt } = await parseBody(req, ComfyTestRequest);
-          if (!localIsSetUp(settings.read())) return Response.json({ error: "Choose your models and save first." }, { status: 422 });
+          const choices = settings.read();
+          if (!localIsSetUp(choices)) return Response.json({ error: "Choose your models and save first." }, { status: 422 });
           try {
-            const payload = { prompt, aspect_ratio: "16:9", reference_images: [], style_preset: "" };
-            return imageResponse((await local(payload, req.signal)) as Uint8Array<ArrayBuffer>);
+            const seed = randomSeed();
+            const started = performance.now();
+            const payload = { prompt, aspect_ratio: "16:9", reference_images: [], style_preset: "", seed };
+            const image = imageResponse((await local(payload, req.signal)) as Uint8Array<ArrayBuffer>);
+            // A workflow names its own model and steps, and may ignore the seed.
+            const simple = choices.comfyMode === "simple" && { model: chosenModels(choices)[0], steps: drawSteps(choices), seed };
+            const stats = { seconds: (performance.now() - started) / 1000, ...simple };
+            // Encoded because a model's filename may not be valid in a header.
+            image.headers.set("X-Draw-Stats", encodeURIComponent(JSON.stringify(stats)));
+            return image;
           } catch (error) {
             console.error(error);
             // The adapter's messages are written to be shown, but a failed connection is Bun's own, which has a `code`.

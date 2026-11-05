@@ -296,7 +296,9 @@ ComfyUI is the only Local image backend in v1, and the user runs it themselves.
 
 **Simple Mode** is the default, and the user never sees a workflow. They enter the ComfyUI address, choose a model family, and pick their model from a dropdown listing what ComfyUI has installed. They can add as many LoRAs as they like, each with a strength and optional trigger words that are added to prompts automatically. NovelForge builds the graph. Model files must be in ComfyUI's model folders, and a refresh button updates the lists.
 
-At the bottom of the ComfyUI settings, a Test image box and button draw one image from a prompt with the saved Settings, in either mode. The image shows there and goes into no Save.
+A Resolution setting of 480p, 720p (the default), 1080p or 4K sizes every image, for both providers. On ComfyUI, in both modes, these are 848 x 480, 1280 x 720, 1920 x 1088 and 3840 x 2160 at 16:9, and other shapes keep the same area. On OpenRouter they ask for the size the model lists nearest to 768, 1K, 2K or 4K, and a model that lists no sizes is left to its own. Checkpoint type no longer sets the size: Settings warns when the resolution is too big for it.
+
+At the bottom of the ComfyUI settings, a Test image box and button draw one image from a prompt with the saved Settings, in either mode. The image shows there with its time, size and file size, plus its model, steps and seed in Simple Mode, and goes into no Save.
 
 The LoRA list applies to every image. Character LoRAs aren't in v1, and could be supported later through Advanced workflows.
 
@@ -338,7 +340,7 @@ An old book, open on a desk: aged paper, ink browns and bottle green, the story 
 
 World creation, Settings, Load Game and Inventory use the Index Sheet layout from the layout options report: one sheet with a side index, a column that fills the rest of the sheet, and a pinned bottom bar, plus a down arrow whenever a page runs past the fold. Settings shows one section at a time. The Ready page, from its options report, runs down one scrolling page: the cover, the title and World Brief, then the PC's portrait, with Open the book pinned at the bottom. Everything else stays a two-page book.
 
-**Before any UI code is written, the agent must create an HTML report of UI options.** It shows 3 distinct visual directions, each mocking up the main game screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story. It also shows the Chat style options. The player-facing UI contains no Check elements. The mockups are throwaway, and the user can pick one direction or mix parts.
+**An HTML report of UI options is only made when the user asks for one, for a large visual change.** Other UI changes are built directly. The first report showed 3 distinct visual directions, each mocking up the main game screen, a wizard step, the Journal and the inventory at desktop and phone widths using a sample story, plus the Chat style options. The mockups are throwaway, and the user can pick one direction or mix parts. The player-facing UI contains no Check elements.
 
 # Build order
 

@@ -539,6 +539,23 @@ input {
   width: 100%;
 }
 
+.comfy-stats {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 18px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.comfy-stats dt {
+  color: var(--muted);
+}
+
+.comfy-stats dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .lora {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 5.5em;

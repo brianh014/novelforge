@@ -372,7 +372,7 @@ test("an Advanced workflow draws a Scene Image into the Save, and it counts", as
   const graph = comfy.jobs.prompts.at(-1)!;
   expect(nodes(graph, "CLIPTextEncode")[0]!.inputs.text).toEndWith("A flooded street");
   expect(nodes(graph, "CLIPTextEncode")[1]!.inputs.text).toBe("text, captions, letters, numbers, dice");
-  expect(nodes(graph, "EmptyLatentImage")[0]!.inputs).toMatchObject({ width: 1360, height: 768 });
+  expect(nodes(graph, "EmptyLatentImage")[0]!.inputs).toMatchObject({ width: 1280, height: 720 });
   expect(nodes(graph, "KSampler")[0]!.inputs.seed).toBeNumber();
   // The Simple Mode LoRA list and trigger words are the workflow's business here.
   expect(nodes(graph, "LoraLoader")).toEqual([]);
@@ -641,6 +641,29 @@ test("the Settings test draws the prompt with the saved choices and returns the 
   const [encoded] = nodes(comfy.jobs.prompts[0]!, "CLIPTextEncode");
   expect(encoded!.inputs.text).toBe("A harbour at dusk");
   expect(await (await game!.get("/saves")).json()).toEqual({ saves: [] });
+});
+
+const statsOf = (response: Response) => JSON.parse(decodeURIComponent(response.headers.get("x-draw-stats")!));
+
+test("the Settings test reports how the image was drawn, with the seed the job really used", async () => {
+  await play().patch("/settings", sdSetup());
+
+  const stats = statsOf(await testImage("A harbour at dusk"));
+
+  expect(stats.seconds).toBeGreaterThanOrEqual(0);
+  expect(stats).toMatchObject({ model: "dream_xl.safetensors", steps: 25 });
+  expect(stats.seed).toBe(nodes(comfy.jobs.prompts[0]!, "KSampler")[0]!.inputs.seed);
+});
+
+test("the Settings test reports only the time for a workflow, which picks its own model, steps and seed", async () => {
+  await play().patch("/settings", {
+    imageProvider: "local",
+    comfyUrl: comfy.url,
+    comfyMode: "advanced",
+    comfyWorkflow: WORKFLOW_EXAMPLE.replace("your_model", "dream_xl"),
+  });
+
+  expect(Object.keys(statsOf(await testImage("A harbour at dusk")))).toEqual(["seconds"]);
 });
 
 test("the Settings test says why it failed", async () => {

@@ -14,4 +14,4 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 
 ## Project rules
 
-Before writing any UI code, create the HTML report of UI options described in `novelforge-spec.md` and wait for the user's choice.
+Create an HTML report of UI options only when the user asks for one, for a large visual change. Otherwise build UI changes directly.
