@@ -32,10 +32,10 @@ const THEMES: Record<string, string> = {
   "Dark Fantasy": "Grim lands where magic comes at a cost, monsters are real and heroes rarely stay clean.",
   Cyberpunk: "Neon megacities run by corporations, where chrome implants and stolen data are the way to get ahead.",
   "Sci Fi Fantasy": "Starships and ancient magic side by side, with mystic orders and galactic struggles.",
-  "Sci Fi": "Plausible futures of space travel, advanced technology and first contact, with no magic.",
+  "Sci Fi": "Plausible futures of space travel, advanced technology and first contact.",
   "Modern Day": "The world as it is now, with today's technology, cities and everyday stakes.",
   Steampunk: "A Victorian age of brass, steam and clockwork, with airships, inventors and rigid class lines.",
-  "Realistic medieval": "Feudal life without magic, shaped by lords, faith, plague and the sword.",
+  "Realistic medieval": "Feudal life shaped by lords, faith, plague and the sword.",
   Western: "The American frontier, with dusty towns, outlaws, lawmen and land worth killing for.",
 };
 const STEPS = [
