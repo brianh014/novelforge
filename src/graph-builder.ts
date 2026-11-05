@@ -22,6 +22,9 @@ const SQUARE = { sd15: 512, sdxl: 1024, flux2: 1024 };
 // Keeps the previous Scene's layout and palette but leaves room for what has changed in it.
 const IMG2IMG_DENOISE = 0.65;
 
+// shortcut: a model is only known by its filename, so a renamed Klein 9B draws at 20 steps, add a setting if that matters.
+const fluxSteps = (model: string) => (/klein.*9b/i.test(model) && !/base/i.test(model) ? 8 : 20);
+
 /** What a family needs chosen before it can draw. */
 export const chosenModels = (choices: GraphChoices) =>
   choices.comfyFamily === "flux2"
@@ -117,7 +120,7 @@ function flux2Image(add: Add, choices: GraphChoices, request: GraphRequest, text
     noise: add("RandomNoise", { noise_seed: request.seed }),
     guider: add("BasicGuider", { model, conditioning }),
     sampler: add("KSamplerSelect", { sampler_name: "euler" }),
-    sigmas: add("Flux2Scheduler", { steps: 20, ...size }),
+    sigmas: add("Flux2Scheduler", { steps: fluxSteps(choices.comfyDiffusionModel), ...size }),
     latent_image: add("EmptyFlux2LatentImage", { ...size, batch_size: 1 }),
   });
   return add("VAEDecode", { samples, vae });

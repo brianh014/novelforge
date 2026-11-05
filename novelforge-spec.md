@@ -296,6 +296,8 @@ ComfyUI is the only Local image backend in v1, and the user runs it themselves.
 
 **Simple Mode** is the default, and the user never sees a workflow. They enter the ComfyUI address, choose a model family, and pick their model from a dropdown listing what ComfyUI has installed. They can add as many LoRAs as they like, each with a strength and optional trigger words that are added to prompts automatically. NovelForge builds the graph. Model files must be in ComfyUI's model folders, and a refresh button updates the lists.
 
+At the bottom of the ComfyUI settings, a Test image box and button draw one image from a prompt with the saved Settings, in either mode. The image shows there and goes into no Save.
+
 The LoRA list applies to every image. Character LoRAs aren't in v1, and could be supported later through Advanced workflows.
 
 | Family | Model selection | Reference images in Simple Mode |

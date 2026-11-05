@@ -242,3 +242,13 @@ test("FLUX.2 keeps the first ten references, in their order of priority", () => 
   expect(kept).toHaveLength(10);
   expect(kept[9]!.bytes).toEqual(Uint8Array.of(9));
 });
+
+test("Klein 9B draws in 8 steps, and its base model and FLUX.2 Dev keep 20", () => {
+  const steps = (comfyDiffusionModel: string) =>
+    only(buildGraph({ ...flux2, comfyDiffusionModel }, request), "Flux2Scheduler").inputs.steps;
+
+  expect(steps("flux-2-klein-9b.safetensors")).toBe(8);
+  expect(steps("flux-2-klein-9b-Q4_K_M.gguf")).toBe(8);
+  expect(steps("flux-2-klein-base-9b.safetensors")).toBe(20);
+  expect(steps("flux2_dev_fp8mixed.safetensors")).toBe(20);
+});

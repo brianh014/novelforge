@@ -530,8 +530,13 @@ input {
   color: var(--accent);
 }
 
-.settings .quiet {
+.settings .quiet,
+.comfy-test .action {
   justify-self: start;
+}
+
+.comfy-test img {
+  width: 100%;
 }
 
 .lora {

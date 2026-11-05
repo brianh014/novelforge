@@ -65,6 +65,13 @@ export const saveSettings = (change: SettingsChange) =>
 export type ComfyModels = Awaited<ReturnType<typeof comfyModels>>;
 export const getComfyModels = () => request<ComfyModels>("/settings/comfy-models");
 
+/** Resolves to an object URL of the drawn image. */
+export async function drawComfyTest(prompt: string, signal: AbortSignal) {
+  const response = await fetch("/settings/comfy-test", { ...jsonBody({ prompt }), signal });
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return URL.createObjectURL(await response.blob());
+}
+
 export const getTextModels = () => request<{ models: string[] }>("/settings/text-models").then(({ models }) => models);
 
 /** What stops the Narrator replying, if anything. */

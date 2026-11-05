@@ -627,3 +627,48 @@ test("a job stopped by a Revert isn't a problem with the workflow", async () => 
   await settled(id);
   expect((await settingsNow()).workflowProblem).toBe("");
 });
+
+const testImage = (prompt: string) => game!.post("/settings/comfy-test", { prompt });
+
+test("the Settings test draws the prompt with the saved choices and returns the image, without a Save", async () => {
+  await play().patch("/settings", sdSetup());
+
+  const response = await testImage("A harbour at dusk");
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("content-type")).toBe("image/png");
+  expect(new Uint8Array(await response.arrayBuffer())).toEqual(comfy.control.image);
+  const [encoded] = nodes(comfy.jobs.prompts[0]!, "CLIPTextEncode");
+  expect(encoded!.inputs.text).toBe("A harbour at dusk");
+  expect(await (await game!.get("/saves")).json()).toEqual({ saves: [] });
+});
+
+test("the Settings test says why it failed", async () => {
+  await play().patch("/settings", sdSetup());
+  comfy.installed.checkpoints = [];
+
+  const response = await testImage("A harbour at dusk");
+
+  expect(response.status).toBe(502);
+  expect(((await response.json()) as { error: string }).error).toContain("ComfyUI refused the job");
+});
+
+test("the Settings test says when ComfyUI can't be reached", async () => {
+  await play().patch("/settings", { ...sdSetup(), comfyUrl: "http://127.0.0.1:9" });
+
+  const response = await testImage("A harbour at dusk");
+
+  expect(response.status).toBe(502);
+  expect(((await response.json()) as { error: string }).error).toBe("ComfyUI can't be reached at this address. Make sure it's running.");
+});
+
+test("the Settings test asks for models before it draws, and refuses an empty prompt", async () => {
+  await play().patch("/settings", { ...sdSetup(), comfyCheckpoint: "" });
+
+  const unset = await testImage("A harbour at dusk");
+  expect(unset.status).toBe(422);
+  expect(((await unset.json()) as { error: string }).error).toBe("Choose your models and save first.");
+
+  expect((await testImage("   ")).status).toBe(400);
+  expect(comfy.jobs.prompts).toHaveLength(0);
+});

@@ -4,6 +4,7 @@ import { WORKFLOW_EXAMPLE } from "../comfy-workflow";
 import { chosenModels } from "../graph-builder";
 import {
   type ComfyModels,
+  drawComfyTest,
   getComfyModels,
   getSave,
   getSettings,
@@ -174,6 +175,52 @@ function WorkflowGuide() {
       </p>
       <pre>{WORKFLOW_EXAMPLE}</pre>
     </details>
+  );
+}
+
+/** Draws one image with the saved Settings, so a player can check their setup without playing. */
+function ComfyTest() {
+  const [prompt, setPrompt] = useState("");
+  const [drawing, setDrawing] = useState(false);
+  const [image, setImage] = useState("");
+  const [error, setError] = useState("");
+  const job = useRef<AbortController>(null);
+
+  // Leaving Settings stops the job, so it doesn't hold up the GPU for a picture nobody will see.
+  useEffect(() => () => job.current?.abort(), []);
+  useEffect(() => () => URL.revokeObjectURL(image), [image]);
+
+  async function draw() {
+    if (drawing || !prompt.trim()) return;
+    job.current = new AbortController();
+    const { signal } = job.current;
+    setDrawing(true);
+    setError("");
+    setImage("");
+    try {
+      const url = await drawComfyTest(prompt, signal);
+      if (signal.aborted) return URL.revokeObjectURL(url);
+      setImage(url);
+    } catch (failure) {
+      if (!signal.aborted) setError((failure as Error).message);
+    }
+    setDrawing(false);
+  }
+
+  return (
+    <fieldset className="comfy-test">
+      <legend>Test image</legend>
+      <label>
+        Prompt
+        <textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+      </label>
+      <button type="button" className="action" aria-disabled={drawing || !prompt.trim()} onClick={draw}>
+        {drawing ? "Drawing…" : "Test"}
+      </button>
+      <p className="muted">Uses your saved Settings. The image isn't kept.</p>
+      {error && <p className="notice">{error}</p>}
+      {image && <img src={image} alt={`Test image: ${prompt}`} />}
+    </fieldset>
   );
 }
 
@@ -395,9 +442,10 @@ function ComfySettings({
         {advanced
           ? "Your workflow decides which references it uses, and which models and LoRAs."
           : flux2
-            ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev, so a Klein model may need an Advanced workflow."
+            ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev and Klein 9B, so other Klein models may need an Advanced workflow."
             : "Uses the previous Scene Image as a reference. NPC references need FLUX.2 or an Advanced workflow."}
       </p>
+      <ComfyTest />
     </>
   );
 }

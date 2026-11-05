@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Dice } from "./check-resolver";
 import { InvalidWorkflow, parseWorkflow } from "./comfy-workflow";
 import { comfyImages, comfyModels } from "./comfyui";
+import { localIsSetUp } from "./graph-builder";
 import type { ImageAdapter } from "./image-adapter";
 import { imagePipeline } from "./image-pipeline";
 import {
@@ -69,6 +70,8 @@ const NewTurnRequest = z.object({ input: z.string().min(1) });
 const NoFields = z.object({});
 
 const RewriteRequest = z.object({ feedback: z.string().trim().min(1) });
+
+const ComfyTestRequest = z.object({ prompt: z.string().trim().min(1) });
 
 const NoteRequest = z.object({ text: z.string().trim().min(1) });
 
@@ -255,6 +258,22 @@ export function startServer(options: {
       // Only ever the saved address, never one still being typed.
       "/settings/comfy-models": {
         GET: async (req) => Response.json(await comfyModels(settings, req.signal)),
+      },
+      // Draws straight to the client, so a test image reaches no Save and no session count.
+      "/settings/comfy-test": {
+        POST: async (req) => {
+          const { prompt } = await parseBody(req, ComfyTestRequest);
+          if (!localIsSetUp(settings.read())) return Response.json({ error: "Choose your models and save first." }, { status: 422 });
+          try {
+            const payload = { prompt, aspect_ratio: "16:9", reference_images: [], style_preset: "" };
+            return imageResponse((await local(payload, req.signal)) as Uint8Array<ArrayBuffer>);
+          } catch (error) {
+            console.error(error);
+            // The adapter's messages are written to be shown, but a failed connection is Bun's own, which has a `code`.
+            const { code, message } = error as Error & { code?: string };
+            return Response.json({ error: code ? "ComfyUI can't be reached at this address. Make sure it's running." : message }, { status: 502 });
+          }
+        },
       },
       "/saves": {
         GET: () => Response.json({ saves: saves.list() }),
