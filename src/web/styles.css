@@ -844,6 +844,10 @@ a.action {
   border-left: 0;
 }
 
+.chat-bubbles .message.player p {
+  color: inherit;
+}
+
 .chat-bubbles .told {
   padding-inline: 28px;
   color: var(--muted);

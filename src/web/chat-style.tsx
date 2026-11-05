@@ -7,13 +7,14 @@ export type Beat = { speaker?: string; player?: boolean; text: string };
 export type TurnInProgress = { input: string; narration: string; replaces?: Message };
 export type StageBeat = { beat: Beat; message?: Message; number: number; of: number };
 
-const SPOKEN_LINE = /^\[([^[\]]+)\]:\s*(.*)$/;
+// shortcut: a bare name is any capitalized words before a colon and a quote, so "Sign: “Closed”" gets a speaker and "Jan van Dijk" doesn't, match against the state's names if that shows up.
+const SPOKEN_LINE = /^(?:\[([^[\]]+)\]|(\p{Lu}[\p{L}'’.-]*(?: \p{Lu}[\p{L}'’.-]*){0,3})(?=:\s*["“])):\s*(.*)$/u;
 
 /** The story as the player reads it, without the stored Message that opened it. */
 export const readable = (messages: Message[]) =>
   messages.filter(({ id, role, text }) => !(id === messages[0]?.id && role === "player" && text === OPENING_INPUT));
 
-/** Anything that isn't a whole `[Name]:` tag, including one still streaming, is narration. */
+/** The Narrator is told to write `[Name]:`, but real models also drop the brackets. Anything else, including a tag still streaming, is narration. */
 export function messageBeats({ role, text }: Pick<Message, "role" | "text">): Beat[] {
   if (role === "player") return [{ player: true, text }];
   return text
@@ -21,7 +22,8 @@ export function messageBeats({ role, text }: Pick<Message, "role" | "text">): Be
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => {
-      const [, speaker, words] = line.match(SPOKEN_LINE) ?? [];
+      const [, tagged, bare, words] = line.match(SPOKEN_LINE) ?? [];
+      const speaker = tagged ?? bare;
       return speaker?.trim() ? { speaker: speaker.trim(), text: words! } : { text: line };
     });
 }

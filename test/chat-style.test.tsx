@@ -12,6 +12,19 @@ test("each spoken line and each line of description is its own beat", () => {
   ]);
 });
 
+test("a spoken line without the brackets still has its speaker", () => {
+  expect(narrator("Dov Marchetti: “Sure. That's fair.”\nMary O'Neil-Vance: \"Well?\"")).toEqual([
+    { speaker: "Dov Marchetti", text: "“Sure. That's fair.”" },
+    { speaker: "Mary O'Neil-Vance", text: "\"Well?\"" },
+  ]);
+});
+
+test("a colon in narration doesn't make a speaker", () => {
+  for (const line of ["He says one thing: “Run.”", "Dov Marchetti: he never answers.", "The sign reads: “Closed”"]) {
+    expect(narrator(line)).toEqual([{ text: line }]);
+  }
+});
+
 test("text with no spoken lines is plain narration", () => {
   expect(narrator("The tide rises.\n\nNobody speaks.")).toEqual([{ text: "The tide rises." }, { text: "Nobody speaks." }]);
 });
