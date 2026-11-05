@@ -3,7 +3,7 @@ import type { ImageKind } from "../image-pipeline";
 import type { FailedTurn, LiveTurn } from "../live-turns";
 import type { ImageTarget, Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
-import type { State } from "../state-applier";
+import type { State, VisibleEdit } from "../state-applier";
 import type { EnhanceField, PcDraft, WorldChoices, WorldField, WorldPc } from "../world-creation";
 
 export type { EnhanceField, ImageKind, Message, PcDraft, Save, WorldChoices, WorldField };
@@ -175,6 +175,11 @@ export const enhance = (
   choices: Omit<WorldChoices, "artStyle"> & { pc?: PcDraft },
   signal?: AbortSignal,
 ) => request<{ text: string }>("/enhance", { ...jsonBody({ ...choices, field, text }), signal }).then(({ text }) => text);
+
+export const editJournal = (id: string, edit: VisibleEdit) => request<object>(`/saves/${id}/edits`, jsonBody(edit));
+
+/** Answers only that it was done, as what changed is hidden from the player. */
+export const tellNarrator = (id: string, change: string) => request<object>(`/saves/${id}/world-change`, jsonBody({ change }));
 
 export const previewRevert = (id: string, messageId: number) =>
   request<{ messages: number; images: number; portraits: number }>(`/saves/${id}/messages/${messageId}/revert`);

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { basename, join } from "node:path";
 import { z } from "zod";
 import { type Check, StoredCheck } from "./check-resolver";
-import { openingState, type State, StateSections } from "./state-applier";
+import { applyEdit, openingState, type State, StateSections, WorldEdit } from "./state-applier";
 
 /**
  * The PC as the player wrote them, apart from the name. Each field is optional, as Saves from before these fields have
@@ -29,6 +29,7 @@ export class MessageNotFound extends Error {}
 export class StaleTurn extends Error {}
 export class NoteNotFound extends Error {}
 export class PortraitNotFound extends Error {}
+export class EditNotFound extends Error {}
 export class InvalidSave extends Error {}
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
@@ -91,14 +92,20 @@ const latestSections = (db: Database) =>
 const toState = (sections: SectionRow[]) =>
   Object.fromEntries(sections.map(({ name, content }) => [name, JSON.parse(content)])) as State;
 
-/** The latest Snapshot with any pending Director's Notes applied, which is the state the next Message starts from. */
+const parseEdits = (edits: string | null) => (edits ? (JSON.parse(edits) as WorldEdit[]) : []);
+
+const pendingEdits = (db: Database) =>
+  parseEdits(db.query<{ pending_edits: string | null }, []>("SELECT pending_edits FROM save").get()!.pending_edits);
+
+/** The latest Snapshot with any pending Director's Notes and edits applied, which is the state the next Message starts from. */
 function currentState(db: Database) {
   const state = toState(latestSections(db));
   const { pending_notes } = db.query<{ pending_notes: string | null }, []>("SELECT pending_notes FROM save").get()!;
-  return pending_notes ? { ...state, directorsNotes: JSON.parse(pending_notes) as string[] } : state;
+  const noted = pending_notes ? { ...state, directorsNotes: JSON.parse(pending_notes) as string[] } : state;
+  return pendingEdits(db).reduce(applyEdit, noted);
 }
 
-const clearPendingNotes = (db: Database) => db.run("UPDATE save SET pending_notes = NULL");
+const clearPending = (db: Database) => db.run("UPDATE save SET pending_notes = NULL, pending_edits = NULL");
 
 /** Links a section the latest Snapshot already holds rather than storing it again, and never rewrites one. */
 function writeSnapshot(db: Database, messageId: number, state: State) {
@@ -149,7 +156,7 @@ function deleteAfter(db: Database, messageId: number) {
   db.run("DELETE FROM scene_images WHERE message_id > ?", [messageId]);
   db.run("DELETE FROM portraits WHERE message_id > ?", [messageId]);
   sweepSections(db);
-  clearPendingNotes(db);
+  clearPending(db);
 }
 
 const hasColumn = (db: Database, table: string, column: string) =>
@@ -234,8 +241,23 @@ const toVersion11 = (db: Database) => {
   if (!hasColumn(db, "scene_images", "pictured")) db.run("ALTER TABLE scene_images ADD COLUMN pictured TEXT");
 };
 
+/**
+ * `pending_edits` are edits since the latest Message. A replacement can't store those in the player Message's Snapshot, which is older than
+ * they are, so `edits` carries them on the Narrator Message for the next replacement, as `hidden_check` does its Check.
+ * `world_brief` stays as the World Brief the Save began with: a Snapshot now holds it, one row shared by all, so that a Revert undoes an edit.
+ */
+function toVersion12(db: Database) {
+  if (!hasColumn(db, "save", "pending_edits")) db.run("ALTER TABLE save ADD COLUMN pending_edits TEXT");
+  if (!hasColumn(db, "messages", "edits")) db.run("ALTER TABLE messages ADD COLUMN edits TEXT");
+  addMissingSections(db);
+  db.run(
+    `UPDATE sections SET content = (SELECT json_quote(world_brief) FROM save)
+     WHERE EXISTS (SELECT 1 FROM save) AND id IN (SELECT section_id FROM snapshot_sections WHERE name = 'worldBrief')`,
+  );
+}
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -308,6 +330,7 @@ function assertValidSave(db: Database) {
     world_brief: z.string().min(1),
     pc_name: z.string().min(1),
     pending_notes: jsonText(StateSections.directorsNotes).nullable(),
+    pending_edits: jsonText(z.array(WorldEdit)).nullable(),
     art_style: z.string(),
     starting_hook: z.string(),
     pc_details: jsonText(PcDetails),
@@ -318,6 +341,7 @@ function assertValidSave(db: Database) {
     role: z.enum(["player", "narrator"]),
     text: z.string(),
     hidden_check: jsonText(StoredCheck).nullable(),
+    edits: jsonText(z.array(WorldEdit)).nullable(),
     created_at: z.iso.datetime().nullable(),
   });
   const content = new Map(
@@ -385,15 +409,17 @@ export type Message = { id: number; role: "player" | "narrator"; text: string };
 /** The latest Turn, if its Narrator Message is still `messageId`, so a page behind the story can't replace what it never showed. */
 function latestTurn(db: Database, messageId: number) {
   const [narrator, player] = db
-    .query<Message & { hidden_check: string | null }, []>(
-      "SELECT id, role, text, hidden_check FROM messages ORDER BY id DESC LIMIT 2",
+    .query<Message & { hidden_check: string | null; edits: string | null }, []>(
+      "SELECT id, role, text, hidden_check, edits FROM messages ORDER BY id DESC LIMIT 2",
     )
     .all();
   // After a Revert to a player Message, the latest Message has no response to replace.
   if (narrator!.id !== messageId || narrator!.role !== "narrator") throw new StaleTurn();
-  // Director's Notes changed since the player Message must carry across, or the replacement would undo them.
+  // Director's Notes changed since the player Message must carry across, or the replacement would undo them. So must edits.
   const { directorsNotes } = currentState(db);
-  return { narrator: narrator!, player: player!, state: { ...toState(sectionsAt(db, player!.id)), directorsNotes } };
+  const edits = [...parseEdits(narrator!.edits), ...pendingEdits(db)];
+  const state = edits.reduce(applyEdit, { ...toState(sectionsAt(db, player!.id)), directorsNotes });
+  return { narrator: narrator!, player: player!, state, edits };
 }
 
 // shortcut: room for a few hundred images, and import holds several copies in memory, so a longer game can export but not import until import streams.
@@ -449,7 +475,7 @@ export function saveStore(savesDir: string) {
           title,
         ]);
         // No Message has this Snapshot yet, and the file isn't a Save until the rename below.
-        for (const [name, value] of Object.entries(opening ?? {})) {
+        for (const [name, value] of Object.entries({ ...opening, worldBrief })) {
           db.run(
             `UPDATE sections SET content = ? WHERE id =
              (SELECT section_id FROM snapshot_sections WHERE message_id = ${OPENING_SNAPSHOT} AND name = ?)`,
@@ -482,12 +508,12 @@ export function saveStore(savesDir: string) {
     read(id: string): Save & { artStyle: string; startingHook: string; title: string; hasCover: boolean; coverRedraws: number } {
       using db = open(id);
       const save = db
-        .query<{ world_brief: string; pc_name: string; art_style: string; starting_hook: string; pc_details: string; title: string }, []>(
-          "SELECT world_brief, pc_name, art_style, starting_hook, pc_details, title FROM save",
+        .query<{ pc_name: string; art_style: string; starting_hook: string; pc_details: string; title: string }, []>(
+          "SELECT pc_name, art_style, starting_hook, pc_details, title FROM save",
         )
         .get()!;
       return {
-        worldBrief: save.world_brief,
+        worldBrief: currentState(db).worldBrief,
         pc: { ...(JSON.parse(save.pc_details) as PcDetails), name: save.pc_name },
         artStyle: save.art_style,
         startingHook: save.starting_hook,
@@ -743,7 +769,7 @@ export function saveStore(savesDir: string) {
         const state = currentState(db);
         const player = insert.get("player", input, null)!;
         writeSnapshot(db, player.id, state);
-        clearPendingNotes(db);
+        clearPending(db);
         const narrator = insert.get("narrator", narration, check ? JSON.stringify(check) : null)!;
         writeSnapshot(db, narrator.id, advance(state));
         return [player, narrator];
@@ -756,6 +782,19 @@ export function saveStore(savesDir: string) {
         const notes = change(currentState(db).directorsNotes);
         db.run("UPDATE save SET pending_notes = ?", [JSON.stringify(notes)]);
         return notes;
+      })();
+    },
+
+    /** Throws EditNotFound if a page behind the story, or a player who can't see it, names something the Journal doesn't show. */
+    addEdit(id: string, edit: WorldEdit) {
+      using db = open(id);
+      db.transaction(() => {
+        const { pcKnown } = currentState(db);
+        const missing =
+          (edit.edit === "fact" && edit.old !== null && !pcKnown.facts.includes(edit.old)) ||
+          (edit.edit === "npcSummary" && !pcKnown.npcs.includes(edit.name));
+        if (missing) throw new EditNotFound();
+        db.run("UPDATE save SET pending_edits = ?", [JSON.stringify([...pendingEdits(db), edit])]);
       })();
     },
 
@@ -780,13 +819,13 @@ export function saveStore(savesDir: string) {
     replaceTurn(id: string, messageId: number, narration: string, advance: (state: State) => State) {
       using db = open(id);
       return db.transaction(() => {
-        const { narrator, player, state } = latestTurn(db, messageId);
+        const { narrator, player, state, edits } = latestTurn(db, messageId);
         deleteAfter(db, player.id);
         const replacement = db
-          .query<Message, [string, string | null]>(
-            `INSERT INTO messages (role, text, hidden_check, created_at) VALUES ('narrator', ?, ?, ${NOW}) RETURNING id, role, text`,
+          .query<Message, [string, string | null, string | null]>(
+            `INSERT INTO messages (role, text, hidden_check, edits, created_at) VALUES ('narrator', ?, ?, ?, ${NOW}) RETURNING id, role, text`,
           )
-          .get(narration, narrator.hidden_check)!;
+          .get(narration, narrator.hidden_check, edits.length > 0 ? JSON.stringify(edits) : null)!;
         writeSnapshot(db, replacement.id, advance(state));
         return [replacement];
       })();

@@ -14,6 +14,8 @@ export type State = {
   plotThreads: string[];
   summary: string;
   directorsNotes: string[];
+  /** Here rather than on the Save, so a Revert undoes an edit to it. */
+  worldBrief: string;
 };
 
 export const openingState: State = {
@@ -27,6 +29,7 @@ export const openingState: State = {
   plotThreads: [],
   summary: "",
   directorsNotes: [],
+  worldBrief: "",
 };
 
 const stringList = z.array(z.string());
@@ -45,6 +48,7 @@ export const StateSections = {
   plotThreads: stringList,
   summary: z.string(),
   directorsNotes: stringList,
+  worldBrief: z.string(),
 } satisfies { [Section in keyof State]: z.ZodType<State[Section]> };
 
 const nonEmpty = z.string().min(1);
@@ -156,6 +160,79 @@ export function applyOperations(state: State, operations: StateOperation[]) {
   const next = structuredClone(state);
   const refused = operations.filter((operation) => !apply(next, operation));
   return { next, refused };
+}
+
+export type World = Pick<State, "worldBible" | "worldRules" | "plotThreads">;
+
+const words = z.string().trim().min(1);
+// Untrimmed, as a quote must match what a Turn stored, and Turns store text as it came.
+const quote = z.string().min(1);
+const namesSomething = (change: { old: string | null; new: string | null }) => change.old !== null || change.new !== null;
+
+export const LoreEntryReply = z.object({ title: words, keywords: z.array(words).min(3), content: words });
+
+/** One entry of a list: replaces `old`, or adds when `old` is null, or removes it when `new` is null. */
+const ListChange = z.object({ old: quote.nullable(), new: words.nullable() }).refine(namesSomething);
+type ListChange = z.infer<typeof ListChange>;
+
+/** A change to a world already written, holding only what changes, so a reply can't lose an entry by leaving it out. Each Lore Entry is added, or replaces the one with its exact title. */
+export const WorldUpdate = z.object({
+  lore_entries: z.array(LoreEntryReply),
+  removed_lore: z.array(quote),
+  world_rules: z.array(ListChange),
+  plot_threads: z.array(ListChange),
+});
+export type WorldUpdate = z.infer<typeof WorldUpdate>;
+
+/** An edit can outlive the entry it names, when a replaced response took that entry away, so a missing `old` adds rather than failing. */
+function changeList(list: string[], change: ListChange) {
+  const at = change.old === null ? -1 : list.indexOf(change.old);
+  const added = change.new === null ? [] : [change.new];
+  return [...new Set(at < 0 ? [...list, ...added] : list.toSpliced(at, 1, ...added))];
+}
+
+export function mergeWorldUpdate(world: World, update: WorldUpdate): World {
+  const written = new Map(update.lore_entries.map((entry) => [entry.title, entry]));
+  const kept = world.worldBible.filter(({ title }) => !update.removed_lore.includes(title));
+  const added = update.lore_entries.filter(({ title }) => !kept.some((entry) => entry.title === title));
+  return {
+    worldBible: [
+      ...kept.map((entry) => ({ ...entry, ...written.get(entry.title) })),
+      // Always-on entries bypass the token budget, so the Narrator can only add keyword-activated ones.
+      ...added.map((entry) => ({ ...entry, alwaysOn: false })),
+    ],
+    worldRules: update.world_rules.reduce(changeList, world.worldRules),
+    plotThreads: update.plot_threads.reduce(changeList, world.plotThreads),
+  };
+}
+
+/** What the player can change directly, which is all text they can already read. */
+export const VisibleEdit = z.discriminatedUnion("edit", [
+  z.object({ edit: z.literal("worldBrief"), text: words }),
+  z.object({ edit: z.literal("summary"), text: words }),
+  z.object({ edit: z.literal("fact"), old: quote.nullable(), new: words.nullable() }).refine(namesSomething),
+  z.object({ edit: z.literal("npcSummary"), name: words, text: words }),
+]);
+
+export type VisibleEdit = z.infer<typeof VisibleEdit>;
+
+/** A change made between Messages. Snapshots are immutable, so these wait on the Save for the next Message to store. */
+export const WorldEdit = z.discriminatedUnion("edit", [...VisibleEdit.options, z.object({ edit: z.literal("world"), update: WorldUpdate })]);
+export type WorldEdit = z.infer<typeof WorldEdit>;
+
+export function applyEdit(state: State, edit: WorldEdit): State {
+  switch (edit.edit) {
+    case "worldBrief":
+      return { ...state, worldBrief: edit.text };
+    case "summary":
+      return { ...state, summary: edit.text };
+    case "fact":
+      return { ...state, pcKnown: { ...state.pcKnown, facts: changeList(state.pcKnown.facts, edit) } };
+    case "npcSummary":
+      return { ...state, pcKnown: { ...state.pcKnown, summaries: { ...state.pcKnown.summaries, [edit.name]: edit.text } } };
+    case "world":
+      return { ...state, ...mergeWorldUpdate(state, edit.update) };
+  }
 }
 
 export const Person = z.object({ name: z.string().trim().min(1), appearance: z.string() });

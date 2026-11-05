@@ -1201,6 +1201,37 @@ a.action {
   padding-left: 1.1em;
 }
 
+.editable {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.editable > :first-child:not(button) {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.editable > button {
+  flex: none;
+}
+
+.edit-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-box textarea {
+  width: 100%;
+}
+
+.journal .edit-box > h2 {
+  margin-top: 10px;
+}
+
 .journal .people {
   display: flex;
   flex-direction: column;

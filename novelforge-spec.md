@@ -130,7 +130,7 @@ Ashley takes the spanners from you
 
 The Narrator must not take instructions from the player in the main chat, ie no prompt/instruction injection. Player text is always passed as clearly delimited in-character data. The player can only say what the PC is saying or doing, and they cannot “break the game”/do something that doesn't fit the world. For example, in a modern day theme strictly based on the current 2026 world, a PC would not be able to cast magic if it hasn't somehow been introduced into the story.
 
-Rewrite and Model Instructions are the only out-of-character inputs. Director's Notes are out of the game for now: Rewrite covers correcting the Narrator. Their code stays, as they may come back (ticket 31).
+Rewrite, Model Instructions and Tell the Narrator in the Journal are the only out-of-character inputs. A World Change is a deliberate instruction about the world, so it reaches the Narrator as JSON data in a call of its own, never in the main chat, and the Narrator treats it only as what should be true of the world, never as instructions about anything else. Director's Notes are out of the game for now: Rewrite covers correcting the Narrator. Their code stays, as they may come back (ticket 31).
 
 ### Turns
 
@@ -207,17 +207,27 @@ A failed Turn writes nothing and keeps the player's text in the input box.
 
 ### State Snapshots
 
-Game state (Inventory, Status, World Bible, Plot Threads, NPC lists, PC-known information, summary, Director's Notes) is stored as a logically complete, immutable Snapshot linked to every Message `ID`. Reverting to Message `N` restores Snapshot `N` instantly without re-summarization or API calls.
+Game state (Inventory, Status, World Bible, world rules, Plot Threads, NPC lists, PC-known information, summary, World Brief, Director's Notes) is stored as a logically complete, immutable Snapshot linked to every Message `ID`. Reverting to Message `N` restores Snapshot `N` instantly without re-summarization or API calls.
+
+Snapshots never change, so an edit made in the Journal waits on the Save, is laid over the latest Snapshot for everything that reads the state, and goes into the Snapshot of the next Message. A Revert to any Message from before an edit undoes it, for hidden and visible edits alike, and so does Duplicate from a Message from before it. A Rewrite or Regenerate of the latest response keeps every edit made since that response's player Message, however many times it runs, by replaying them over that Message's Snapshot. An edit to something only the replaced response wrote stands as an addition. The World Brief the Save began with stays on the Save, and the Snapshots hold the one in use.
 
 ### Journal
 
-The journal has multiple sections
+The Journal has multiple sections
 
+* World Brief \- the player's own description of the world
 * Recent summary \- summary of recent events
+* What the PC knows \- facts the PC has learned
 * Full log \- a full history of exactly the story along with images
 * NPCs \- a list of NPCs the PC knows about. Images next to their name
 
-The Journal is built only from the PC-known section of the Snapshot, which the Narrator updates through state operations. The server never sends the World Bible or Plot Threads to the SPA.
+The Journal is built only from the PC-known section of the Snapshot and the summary and World Brief, which the Narrator's state operations and the player's edits update. The server never sends the World Bible, world rules or Plot Threads to the SPA.
+
+**Editing:** The World Brief, Recent summary, each fact and each known NPC's summary have an Edit button that changes the text in place, facts can also be added and removed, and each edit reaches the next Turn. NPC names can't be edited, as portraits and Image Prompt marks find people by name. Inventory and status keep their own tab, and the Full Log can't be edited. An edit can only name a fact or NPC the Journal shows, and an NPC the PC doesn't know gets the same answer as someone who doesn't exist.
+
+**Tell the Narrator:** A box in the Journal takes plain words for a World Change, such as “the mayor is secretly a smuggler”. One Narrator call, not streamed, gets the whole World Bible, the world rules and the Plot Threads and replies with only what changes: Lore Entries to add or to rewrite by exact title, Lore Entries to remove, and changes to single world rules and Plot Threads, each quoting the old text exactly. What a reply leaves out stays, so it can't lose an entry. A reply that misquotes, or changes nothing, is unusable and gets the same retries as a Turn. The player sees only that it was done or that it failed: the reply is never sent to the SPA, the server logs only how many entries changed, and a failure's log line leaves out the provider's detail, which can echo the prompt.
+
+Edits and World Changes are refused while a Turn runs. A Turn or edit is refused during a World Change, and a Revert during one wins, failing the change.
 
 ### Images
 

@@ -12,6 +12,7 @@ export type LiveTurn = {
 export type FailedTurn = { status: number; error: string; input: string; replaces?: number };
 
 export class TurnRunning extends Error {}
+export class WorldChanging extends Error {}
 
 /**
  * The Turns being played, which outlive the requests that started them, so a player can leave and come back.
@@ -20,10 +21,26 @@ export class TurnRunning extends Error {}
 export function liveTurns() {
   const running = new Map<string, LiveTurn>();
   const failed = new Map<string, FailedTurn>();
+  const changing = new Set<string>();
+
+  function assertIdle(id: string) {
+    if (running.has(id)) throw new TurnRunning();
+    if (changing.has(id)) throw new WorldChanging();
+  }
+
   return {
+    assertIdle,
+
+    /** Keeps Turns and edits out while the Narrator changes the world. It's no Turn, so a page has nothing to show. The returned function ends it. */
+    hold(id: string) {
+      assertIdle(id);
+      changing.add(id);
+      return () => changing.delete(id);
+    },
+
     /** Only one per Save, as a second would fail at the end anyway, after the model was paid for it. */
     begin(id: string, after: number, input: string, replaces?: number) {
-      if (running.has(id)) throw new TurnRunning();
+      assertIdle(id);
       failed.delete(id);
       const turn: LiveTurn = { input, narration: "", after, ...(replaces !== undefined && { replaces }) };
       running.set(id, turn);

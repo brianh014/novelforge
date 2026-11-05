@@ -58,7 +58,7 @@ _Avoid_: Roll, skill check, saving throw
 ### World
 
 **World Brief**:
-The player's input on the new game form that seeds the World Bible.
+The player's description of the world: written on the new game form, where it seeds the World Bible, and editable in the Journal. A Snapshot holds the one in use.
 _Avoid_: World details
 
 **World Bible**:
@@ -91,6 +91,10 @@ _Avoid_: Edit
 Replacing the latest Narrator response without feedback, or a world before play begins, which keeps the PC and every image already drawn.
 _Avoid_: Retry, swipe
 
+**World Change**:
+A change to the hidden world in the player's own plain words, given through Tell the Narrator in the Journal. The Narrator applies it to the World Bible, world rules and Plot Threads, and the player sees only that it was done.
+_Avoid_: Edit (that is a change to text the player can read)
+
 **Director's Note** (retired from play, see ticket 31):
 A standing out-of-character instruction to the Narrator for one Save, such as correcting a fact without Reverting.
 _Avoid_: Author's Note, edit
@@ -112,7 +116,7 @@ The complete, immutable game state belonging to a Message. Reverting to a Messag
 _Avoid_: Save (a Snapshot is not a player-facing save)
 
 **Journal**:
-The player-facing record of only what the PC knows or has encountered.
+The player-facing record of only what the PC knows or has encountered, where the player can edit that text. An edit lasts until a Revert to before it.
 _Avoid_: Log (the Full Log is one section of the Journal)
 
 **Gallery**:

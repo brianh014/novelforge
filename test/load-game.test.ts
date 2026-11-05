@@ -505,6 +505,8 @@ const TAMPERED: [string, (db: Database) => void][] = [
     db.run(`INSERT INTO portraits (npc, message_id, bytes) VALUES (NULL, 0, ${PNG_SQL}), (NULL, 0, ${PNG_SQL})`);
   }],
   ["malformed pending Notes", (db) => db.run("UPDATE save SET pending_notes = '[1]'")],
+  ["malformed pending edits", (db) => db.run(`UPDATE save SET pending_edits = '[{"edit":"nothing"}]'`)],
+  ["pending edits that aren't JSON", (db) => db.run("UPDATE save SET pending_edits = 'oops'")],
   ["a world brief that isn't text", (db) => db.run("UPDATE save SET world_brief = x'00ff'")],
   ["no save row", (db) => db.run("DELETE FROM save")],
   ["an extra table", (db) => db.run("CREATE TABLE extra (x)")],
@@ -552,15 +554,15 @@ test("a Message can follow a player Message that a Revert left unanswered", asyn
 const TABLE_TRICKS: [string, (db: Database) => void][] = [
   ["a CHECK that stops new Messages", (db) => {
     db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, text TEXT, hidden_check TEXT, created_at TEXT, CHECK (id < 1))");
+    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, created_at TEXT, CHECK (id < 1))");
   }],
   ["Message ids with no primary key", (db) => {
     db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER, role TEXT, text TEXT, hidden_check TEXT, created_at TEXT)");
+    db.run("CREATE TABLE messages (id INTEGER, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, created_at TEXT)");
   }],
   ["a generated column", (db) => {
     db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, hidden_check TEXT, created_at TEXT, text TEXT AS ('x'))");
+    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, hidden_check TEXT, edits TEXT, created_at TEXT, text TEXT AS ('x'))");
   }],
   ["an exhausted id sequence", (db) => {
     db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello')");

@@ -7,6 +7,7 @@ import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
 import { coverPrompt, type EarlyImage, type ImageKind, imagePipeline, shownFailure } from "./image-pipeline";
 import {
+  EditNotFound,
   imageType,
   InvalidSave,
   MAX_IMPORT_BYTES,
@@ -21,10 +22,11 @@ import {
 } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textModels } from "./text-provider";
-import { type BegunTurn, liveTurns, TurnRunning } from "./live-turns";
+import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-turns";
+import { VisibleEdit, type World } from "./state-applier";
 import { ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
-import { decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type World, type WorldChoices, type WorldPc } from "./world-creation";
+import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type WorldChoices, type WorldPc } from "./world-creation";
 
 const NamedPc = PcDetails.extend({ name: z.string().trim().min(1) });
 
@@ -121,6 +123,8 @@ function spliceNote(notes: string[], index: string, ...replacement: string[]) {
   return notes.toSpliced(position, 1, ...replacement);
 }
 
+const WorldChangeRequest = z.object({ change: someWords });
+
 const ArtStyleRequest = z.object({ artStyle: z.string() });
 
 const DuplicateRequest = z.object({ fromMessage: z.number().optional() });
@@ -140,11 +144,13 @@ function errorResponse(error: unknown) {
   if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
   if (error instanceof PortraitNotFound) return Response.json({ error: "Portrait not found" }, { status: 404 });
   if (error instanceof NoteNotFound) return Response.json({ error: "Note not found" }, { status: 404 });
+  if (error instanceof EditNotFound) return Response.json({ error: "That's no longer in the Journal" }, { status: 404 });
   if (error instanceof WorldNotFound) {
     return Response.json({ error: "This world is no longer held. Go back to your choices and generate it again." }, { status: 404 });
   }
   if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
   if (error instanceof TurnRunning) return Response.json({ error: "A Turn is still running for this story" }, { status: 409 });
+  if (error instanceof WorldChanging) return Response.json({ error: "The Narrator is still changing the world" }, { status: 409 });
   if (error instanceof TurnFailed) {
     const { message, failure, input } = error;
     // Not the error itself, as its `input` is the story.
@@ -626,6 +632,46 @@ export function startServer(options: {
         },
         DELETE: (req) =>
           Response.json({ notes: saves.changeNotes(req.params.id, (notes) => spliceNote(notes, req.params.index)) }),
+      },
+      "/saves/:id/edits": {
+        POST: async (req) => {
+          const edit = await parseBody(req, VisibleEdit);
+          const { id } = req.params;
+          turns.assertIdle(id);
+          saves.addEdit(id, edit);
+          return Response.json({});
+        },
+      },
+      // Answers with nothing but whether it was done, as the reply holds the hidden world, and so can any error that quotes the provider.
+      "/saves/:id/world-change": {
+        POST: async (req) => {
+          const { change } = await parseBody(req, WorldChangeRequest);
+          const { id } = req.params;
+          const basedOn = saves.latestMessageId(id);
+          const release = turns.hold(id);
+          try {
+            const update = await changeWorld(options, saves.latestState(id), change, req.signal);
+            if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
+            saves.addEdit(id, { edit: "world", update });
+            // Counts only, so that the log never repeats the world.
+            console.log(
+              `World Change applied: ${JSON.stringify({
+                lore: update.lore_entries.length,
+                removed: update.removed_lore.length,
+                rules: update.world_rules.length,
+                threads: update.plot_threads.length,
+              })}`,
+            );
+            return Response.json({});
+          } catch (error) {
+            if (!(error instanceof TurnFailed)) throw error;
+            // Not `errorResponse`, which logs the cause, and a provider's can echo the prompt.
+            console.error(`A World Change failed (${error.failure}): ${error.message}`);
+            return Response.json({ error: error.message }, { status: error.failure === "refused" ? 422 : 502 });
+          } finally {
+            release();
+          }
+        },
       },
       "/saves/:id/duplicate": {
         POST: async (req) => {

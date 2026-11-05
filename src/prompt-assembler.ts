@@ -67,7 +67,7 @@ Bring this Plot Thread into play at the next natural moment, through a person or
 export function assemblePrompt({
   save: { worldBrief, pc, startingHook },
   // Director's Notes are taken out so that any left in a Save can't steer the story now the player can't see them.
-  state: { worldBible, worldRules, plotThreads, summary, directorsNotes: _retired, ...currentState },
+  state: { worldBible, worldRules, plotThreads, summary, directorsNotes: _retired, worldBrief: _fromSave, ...currentState },
   messages,
   modelInstructions,
   input,

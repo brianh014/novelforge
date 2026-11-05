@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
-import { mergeWorldUpdate } from "../src/world-creation";
 import { narration, png, scriptedDice, scriptedImages, scriptedTextProvider, startGame, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
@@ -411,22 +410,3 @@ test.each([
   expect(JSON.parse(user!.content)).toEqual(setup);
 });
 
-test("a change to the hidden world merges by Lore Entry title, and replaces the lists whole", () => {
-  const entry = (title: string, content: string) => ({ title, keywords: ["a", "b", "c"], content, alwaysOn: false });
-  const world = { worldBible: [entry("Magic", "A myth."), entry("Court", "Judges.")], worldRules: ["Old rule."], plotThreads: ["Old thread."] };
-
-  const merged = mergeWorldUpdate(world, {
-    world_rules: ["New rule."],
-    lore_entries: [
-      { title: "Magic", keywords: ["a", "b", "c"], content: "Real." },
-      { title: "Embers", keywords: ["a", "b", "c"], content: "An order." },
-    ],
-    plot_threads: ["New thread."],
-  });
-
-  expect(merged).toEqual({
-    worldBible: [entry("Court", "Judges."), entry("Magic", "Real."), entry("Embers", "An order.")],
-    worldRules: ["New rule."],
-    plotThreads: ["New thread."],
-  });
-});
