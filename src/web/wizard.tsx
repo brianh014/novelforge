@@ -22,7 +22,7 @@ import {
   worldCoverUrl,
 } from "./api";
 import { DecideIcon } from "./icons";
-import { Book, Sheet } from "./menu";
+import { Sheet } from "./menu";
 import { IMAGE_CHECK_MS } from "./play";
 import { Zoomable } from "./zoom";
 
@@ -490,23 +490,20 @@ export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean
   }, [id]);
 
   return (
-    <Book
-      left={
-        <>
-          <h1 className="big">{name}</h1>
-          <p className="muted">Your story is ready.</p>
-          {drawing && <p role="status" className="waiting">Your portrait is being painted…</p>}
-          <a className="action begin" href={`#/play/${id}${worldChanged ? "/world-changed" : ""}`}>
-            Open the book
-          </a>
-        </>
-      }
-    >
-      {portrait && (
-        <figure className="plate reveal">
-          <Zoomable src={portraitUrl(id, portrait)} alt={`Portrait of ${name}`} />
-        </figure>
-      )}
-    </Book>
+    <main className="desk">
+      <div className="book ready">
+        {portrait && (
+          <figure className="plate reveal">
+            <Zoomable src={portraitUrl(id, portrait)} alt={`Portrait of ${name}`} />
+          </figure>
+        )}
+        <h1 className="big">{name}</h1>
+        <p className="muted">Your story is ready.</p>
+        {drawing && <p role="status" className="waiting">Your portrait is being painted…</p>}
+        <a className="action" href={`#/play/${id}${worldChanged ? "/world-changed" : ""}`}>
+          Open the book
+        </a>
+      </div>
+    </main>
   );
 }
