@@ -320,7 +320,6 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
               <div className="condition">
                 <h2>Condition</h2>
                 <p className="status">{statusWords(status)}</p>
-                <p className="muted">{plural(images.session, "image")} this session</p>
               </div>
             </div>
             {journal?.summary && (

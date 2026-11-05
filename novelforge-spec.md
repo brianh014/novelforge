@@ -207,7 +207,7 @@ The Journal is built only from the PC-known section of the Snapshot, which the N
 
 A Scene Image is displayed whole on the left page of the book, beside the story, and any image opens larger when clicked. In the Stage box Chat style it sits behind the story instead. Previous Scene Images can be used as a reference for the new image, like maybe a character in the image changed, but we want the background to be the same.
 
-The user may be using a paid API, so need to respect the volume of images created. Settings has a toggle to disable generating images at any time, and the game shows a running count of images generated this session. There is no hard limit.
+The user may be using a paid API, so need to respect the volume of images created. Settings has a toggle to disable generating images at any time. There is no hard limit.
 
 Images generate in the background, so a Turn never waits for one.
 
