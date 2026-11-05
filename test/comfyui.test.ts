@@ -182,7 +182,7 @@ test("the next SD scene uploads the previous Scene Image and uses it through img
 });
 
 test("FLUX.2 sends the previous scene and the PC's portrait, each under its own name", async () => {
-  const running = play(newScene("One"), newScene("Two"));
+  const running = play(newScene("[Ash] on the quay"), newScene("[Ash] by the water"));
   await running.patch("/settings", flux2Setup());
   const created = await running.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "Tall" } });
   const { id } = (await created.json()) as { id: string };

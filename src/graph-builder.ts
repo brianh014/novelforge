@@ -29,6 +29,15 @@ const fluxSteps = (model: string) => (/klein.*9b/i.test(model) && !/base/i.test(
 export const drawSteps = ({ comfyFamily, comfyDiffusionModel }: GraphChoices) =>
   comfyFamily === "flux2" ? fluxSteps(comfyDiffusionModel) : 25;
 
+/** How an Image Prompt is worded. Only Simple Mode knows its family, so OpenRouter and a workflow get prose, which every model can read. */
+export type PromptStyle = "prose" | "keywords";
+export const promptStyle = ({ imageProvider, comfyMode, comfyFamily }: Pick<Settings, "imageProvider" | "comfyMode" | "comfyFamily">): PromptStyle =>
+  imageProvider === "local" && comfyMode === "simple" && comfyFamily === "sd" ? "keywords" : "prose";
+
+/** Whether a portrait is sure to reach the model. OpenRouter's models and a workflow may ignore one, so those need the words. */
+export const usesPortraits = ({ imageProvider, comfyMode, comfyFamily }: Pick<Settings, "imageProvider" | "comfyMode" | "comfyFamily">) =>
+  imageProvider === "local" && comfyMode === "simple" && comfyFamily === "flux2";
+
 /** What a family needs chosen before it can draw. */
 export const chosenModels = (choices: GraphChoices) =>
   choices.comfyFamily === "flux2"
@@ -141,7 +150,9 @@ export function buildGraph(choices: GraphChoices, request: GraphRequest) {
   };
 
   const triggerWords = choices.comfyLoras.map(({ triggerWords }) => triggerWords.trim()).filter(Boolean).join(", ");
-  const text = [triggerWords, request.style_preset, request.prompt].filter(Boolean).join("\n");
+  // FLUX.2 cuts a long prompt from the end and weighs the start most, so what the image shows goes before how it's drawn.
+  const written = choices.comfyFamily === "flux2" ? [request.prompt, request.style_preset] : [request.style_preset, request.prompt];
+  const text = [triggerWords, ...written].filter(Boolean).join("\n");
   const draw = choices.comfyFamily === "flux2" ? flux2Image : sdImage;
   // Preview, not Save: the Save keeps the image, so it shouldn't also pile up in the player's ComfyUI output folder.
   add("PreviewImage", { images: draw(add, choices, request, text) });

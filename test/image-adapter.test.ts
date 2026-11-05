@@ -79,7 +79,7 @@ test("a request carries the image key, the model and one prompt with the Art Sty
   ]);
   expect(sent().body).toEqual({
     model: "fake/image",
-    prompt: "Woodcut\nA flooded street\nAvoid: text.",
+    prompt: "A flooded street\nWoodcut\nAvoid: text.",
     aspect_ratio: "16:9",
   });
 });

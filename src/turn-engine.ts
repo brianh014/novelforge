@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
-import { type ImagePipeline, movedScene, portraitsDue, type Scene, visibleNpcs } from "./image-pipeline";
+import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
+import { promptStyle } from "./graph-builder";
 import { assemblePrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
@@ -129,6 +130,7 @@ export async function playTurn(
     modelInstructions: settings.read().modelInstructions,
     input,
     responseSchema: JSON.stringify(responseSchema),
+    promptStyle: images.ready() ? promptStyle(settings.read()) : null,
   });
   return narrate(textProvider, signal, emit, {
     prompt,
@@ -171,6 +173,7 @@ export async function replaceResponse(
     modelInstructions: settings.read().modelInstructions,
     input,
     responseSchema: JSON.stringify(responseSchema),
+    promptStyle: images.ready() ? promptStyle(settings.read()) : null,
   });
   return narrate(textProvider, signal, emit, {
     prompt: [...prompt, replacementInstruction(feedback === undefined ? undefined : { narration, feedback })],
@@ -224,7 +227,8 @@ async function narrate(
       const { narration, state_operations, people, summary, scene_changed, visual_description } = response;
       let moved = false;
       let location = "";
-      let visible: Scene["visible"] = [];
+      let npcs: Scene["npcs"] = [];
+      let wearing: Scene["wearing"] = [];
       let portraits: Scene["portraits"] = [];
       const messages = commit(narration, check, (state) => {
         const introduced = introduce(state, people, pcName, state_operations);
@@ -234,16 +238,18 @@ async function narrate(
         if (summary.trim()) next.summary = summary.trim();
         moved = movedScene(state, next);
         location = next.scene.location;
-        visible = visibleNpcs(next);
+        npcs = next.npcs;
+        wearing = next.inventory.wearing;
         portraits = portraitsDue(state, next);
         return next;
       });
       committed(messages.at(-1)!.id, {
         changed: moved || !!scene_changed,
         moved,
-        description: visual_description || location,
+        description: visual_description?.trim() ?? "",
         location,
-        visible,
+        npcs,
+        wearing,
         portraits,
       });
       // Counts and names only, so that the log never repeats the story.

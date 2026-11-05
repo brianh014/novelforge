@@ -43,6 +43,10 @@ A generated image showing the current moment of a Scene.
 The main text an image was drawn from, which the player can read and change. Art Style and other drawing choices are not part of it.
 _Avoid_: Visual description (that is only the Narrator's part of a Scene Image's prompt)
 
+**Prompt Style**:
+How an Image Prompt is worded for the kind of image model drawing it: prose or keywords. It decides the wording, never what the image shows.
+_Avoid_: Model family (that is the Settings choice of which models to load)
+
 **Redraw**:
 Drawing one existing image again from its Image Prompt, replacing that image and changing nothing else in the story.
 _Avoid_: Regenerate (that redoes a Turn or a whole world)

@@ -1,13 +1,13 @@
-import { localIsSetUp } from "./graph-builder";
+import { localIsSetUp, promptStyle, type PromptStyle, usesPortraits } from "./graph-builder";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
-import { type ImageTarget, OPENING_SNAPSHOT, type Save, SaveNotFound, type SaveStore } from "./save-store";
+import { type ImageTarget, OPENING_SNAPSHOT, type Pictured, type Save, SaveNotFound, type SaveStore } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import type { State } from "./state-applier";
 
 export type ImagePipeline = ReturnType<typeof imagePipeline>;
 
 type Npc = State["npcs"][number];
-export type Scene = { changed: boolean; moved: boolean; description: string; location: string; visible: Npc[]; portraits: Npc[] };
+export type Scene = { changed: boolean; moved: boolean; description: string; location: string; npcs: Npc[]; wearing: string[]; portraits: Npc[] };
 /** A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. */
 type Job = { messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string };
 type Cover = { title: string; theme: string; overview: string };
@@ -43,8 +43,52 @@ export function portraitsDue(before: State, after: State) {
   return [...new Set(due)].flatMap((name) => after.npcs.filter((npc) => npc.name === name));
 }
 
-const pcDescription = ({ physicalTraits, background, personality, skills, other }: Save["pc"]) =>
-  [physicalTraits, background, personality, skills, other].filter(Boolean).join("\n");
+const pcLooks = ({ name, physicalTraits = "" }: Save["pc"], wearing: string[]) =>
+  [physicalTraits.trim().replace(/\s*\n\s*/g, " ").replace(/\.$/, "").replaceAll(name, "this person"), wearing.length > 0 && `wearing ${wearing.join(", ")}`]
+    .filter(Boolean)
+    .join(", ");
+
+// Longer stored looks would crowd out the scene, as a player can write as much as they like for their PC.
+const MOST_LOOKS_WORDS = 60;
+
+const named = (full: string, mark: string) =>
+  full.toLowerCase() === mark.toLowerCase() || full.toLowerCase().split(" ").includes(mark.toLowerCase());
+
+/** Narrators shorten names, so part of one counts when it can only mean one person. */
+function findPerson(npcs: Npc[], mark: string) {
+  const exact = npcs.find(({ name }) => name === mark);
+  if (exact) return exact;
+  const partly = npcs.filter(({ name }) => named(name, mark));
+  return partly.length === 1 ? partly[0] : undefined;
+}
+
+/**
+ * Turns the Narrator's [Name: phrase] marks into what the model reads, so what a person does stays beside who they are
+ * and no name reaches a model that might letter it into the picture. A portrait carries a face better than words, and
+ * words that repeat it only cost length, so someone with a reference keeps the Narrator's short phrase and anyone else
+ * gets their stored looks, which draw them the same every time.
+ */
+export function expandMarks(text: string, npcs: Npc[], pc: { name: string; looks: string }, hasReference: (person: string | null) => boolean = () => false) {
+  const pictured: Pictured = [];
+  const prompt = text.replace(/\[([^[\]:]+)(?::([^[\]]*))?\]/g, (_, mark: string, phrase = "") => {
+    const brief = phrase.trim();
+    const isPc = named(pc.name, mark.trim());
+    const npc = isPc ? undefined : findPerson(npcs, mark.trim());
+    if (!isPc && !npc) return brief || "a person";
+    const person = isPc ? null : npc!.name;
+    if (pictured.includes(person)) return "the same person";
+    pictured.push(person);
+    const looks = (isPc ? pc.looks : npc!.appearance).trim();
+    const tooLong = looks.split(/\s+/).length > MOST_LOOKS_WORDS;
+    return brief && (hasReference(person) || tooLong) ? brief : looks || brief || "a person";
+  });
+  return { prompt, pictured };
+}
+
+const portraitPrompt = (looks: string, style: PromptStyle) =>
+  style === "keywords"
+    ? `head and shoulders portrait, one person, plain background, ${looks}`
+    : `A head and shoulders portrait of one person, ${looks}, facing the viewer against a plain neutral background in soft even light.`;
 
 type Role = ImagePayload["reference_images"][number]["role"];
 
@@ -100,38 +144,38 @@ export function imagePipeline(
     return current.imagesEnabled && setUp;
   }
 
-  /** Identity comes first when a model takes few references. A Scene Image is what the PC sees, so the PC is rarely in it. */
-  const references = (id: string, messageId: number, location: string, visible: Npc[]) => [
-    ...visible.flatMap(({ name }) => reference("npc", saves.portraitOf(id, name))),
+  /** Identity comes first when a model takes few references. A portrait of someone not in the picture can get pasted into it. */
+  const references = (id: string, messageId: number, location: string, pictured: Pictured) => [
+    ...pictured.flatMap((name) => (name === null ? [] : reference("npc", saves.portraitOf(id, name)))),
     ...reference("previous_scene", saves.previousSceneImage(id, messageId, location)),
-    ...reference("pc", saves.portraitOf(id, null)),
+    ...(pictured.includes(null) ? reference("pc", saves.portraitOf(id, null)) : []),
   ];
 
-  const scenePayload = (id: string, messageId: number, prompt: string, location: string, visible: Npc[]): ImagePayload => ({
+  const scenePayload = (id: string, messageId: number, prompt: string, location: string, pictured: Pictured): ImagePayload => ({
     prompt,
     negative_prompt: AVOID,
     aspect_ratio: "16:9",
-    reference_images: references(id, messageId, location, visible),
+    reference_images: references(id, messageId, location, pictured),
     style_preset: saves.read(id).artStyle,
   });
 
-  async function drawScene(id: string, messageId: number, { description, location, visible }: Scene, signal: AbortSignal) {
-    const looks = visible.map(({ appearance }) => appearance).filter(Boolean);
-    // Looks without names, as a model may letter a name into the picture.
-    const prompt = looks.length > 0 ? `${description}\nPeople in view: ${looks.join("; ")}` : description;
-    const bytes = await adapter(scenePayload(id, messageId, prompt, location, visible), signal);
+  async function drawScene(id: string, messageId: number, { description, location, npcs, wearing }: Scene, signal: AbortSignal) {
+    const { pc } = saves.read(id);
+    const hasReference = (person: string | null) => usesPortraits(settings.read()) && !!saves.portraitOf(id, person);
+    const { prompt, pictured } = expandMarks(description, npcs, { name: pc.name, looks: pcLooks(pc, wearing) }, hasReference);
+    const bytes = await adapter(scenePayload(id, messageId, prompt, location, pictured), signal);
     // Counted before storing, as the player has paid for it whether or not its Message is still there.
     session++;
-    saves.addSceneImage(id, messageId, location, bytes, prompt);
+    saves.addSceneImage(id, messageId, location, bytes, prompt, pictured);
   }
 
   async function drawPortrait(id: string, messageId: number, npc: Npc | undefined, signal: AbortSignal) {
     // shortcut: a person keeps their first portrait when update_npc changes their looks, redraw if that shows in play.
     const name = npc?.name ?? null;
     const { pc, artStyle } = saves.read(id);
-    const description = npc ? npc.appearance : pcDescription(pc);
-    if (!description || saves.portraitOf(id, name)) return;
-    const prompt = `A head and shoulders portrait of one person against a plain background.\n${description}`;
+    const looks = npc ? npc.appearance : pc.physicalTraits?.trim() && pcLooks(pc, saves.latestState(id).inventory.wearing);
+    if (!looks || saves.portraitOf(id, name)) return;
+    const prompt = portraitPrompt(looks, promptStyle(settings.read()));
     const bytes = await adapter(portraitPayload(prompt, artStyle), signal);
     session++;
     saves.addPortrait(id, messageId, name, bytes, prompt);
@@ -141,7 +185,9 @@ export function imagePipeline(
   function redrawPayload(id: string, { kind, ref }: ImageTarget, prompt: string) {
     if (kind === "scene") {
       const state = saves.snapshot(id, ref);
-      return scenePayload(id, ref, prompt, state.scene.location, visibleNpcs(state));
+      // An image from before this kept no record, and was drawn from the cast and the PC.
+      const pictured = saves.scenePictured(id, ref) ?? [...visibleNpcs(state).map(({ name }) => name), null];
+      return scenePayload(id, ref, prompt, state.scene.location, pictured);
     }
     return (kind === "cover" ? coverPayload : portraitPayload)(prompt, saves.read(id).artStyle);
   }

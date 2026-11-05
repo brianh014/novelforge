@@ -158,7 +158,7 @@ test("FLUX.2 wires ComfyUI's own recipe, with no negative prompt as its guider h
   const guidance = source(graph, guider.inputs.conditioning);
   expect(guidance).toMatchObject({ class_type: "FluxGuidance", inputs: { guidance: 4 } });
   const text = source(graph, guidance.inputs.conditioning);
-  expect(text.inputs.text).toBe("Ink wash\nA harbour at dusk");
+  expect(text.inputs.text).toBe("A harbour at dusk\nInk wash");
   expect(source(graph, text.inputs.clip).class_type).toBe("CLIPLoader");
 
   const decode = only(graph, "VAEDecode");
@@ -212,7 +212,7 @@ test("FLUX.2 LoRAs chain on the model only, and trigger words open the prompt", 
   const first = source(graph, last.inputs.model);
   expect(first.inputs).toMatchObject({ lora_name: "ink.safetensors", strength_model: 0.8 });
   expect(source(graph, first.inputs.model).class_type).toBe("UNETLoader");
-  expect(only(graph, "CLIPTextEncode").inputs.text).toBe("inkstyle\nInk wash\nA harbour at dusk");
+  expect(only(graph, "CLIPTextEncode").inputs.text).toBe("inkstyle\nA harbour at dusk\nInk wash");
 });
 
 test("every link in a graph points at a node's real output", () => {

@@ -63,6 +63,10 @@ const SCHEMA = `
 // Message ids start at 1, so this Snapshot holds the state before the first Message.
 export const OPENING_SNAPSHOT = 0;
 
+/** Who a Scene Image shows, by name, with null for the PC as in the portraits table. */
+const Pictured = z.array(z.string().nullable());
+export type Pictured = z.infer<typeof Pictured>;
+
 /** One image of a Save: `ref` is the Cover's row, a portrait's id, or a Scene Image's Message. */
 export type ImageTarget = { kind: "cover" | "portrait" | "scene"; ref: number };
 
@@ -225,8 +229,13 @@ const toVersion10 = (db: Database) => {
   if (!hasColumn(db, "messages", "created_at")) db.run("ALTER TABLE messages ADD COLUMN created_at TEXT");
 };
 
+/** Null for an image from before this, whose references went by the Scene's cast. */
+const toVersion11 = (db: Database) => {
+  if (!hasColumn(db, "scene_images", "pictured")) db.run("ALTER TABLE scene_images ADD COLUMN pictured TEXT");
+};
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -319,6 +328,7 @@ function assertValidSave(db: Database) {
     message_id: rowId,
     caption: z.string(),
     bytes: storedImage,
+    pictured: jsonText(Pictured).nullable(),
     ...redrawable,
   });
   const portraits = rowsOf(db, "portraits", {
@@ -567,15 +577,23 @@ export function saveStore(savesDir: string) {
     },
 
     /** Stores nothing if the Message has gone, so a generation can't outlive a Revert or a replaced response. */
-    addSceneImage(id: string, messageId: number, caption: string, bytes: Uint8Array, prompt: string | null = null) {
+    addSceneImage(id: string, messageId: number, caption: string, bytes: Uint8Array, prompt: string | null = null, pictured: Pictured = []) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       using db = open(id);
-      db.run("INSERT INTO scene_images (message_id, caption, bytes, prompt) SELECT id, ?, ?, ? FROM messages WHERE id = ?", [
+      db.run("INSERT INTO scene_images (message_id, caption, bytes, prompt, pictured) SELECT id, ?, ?, ?, ? FROM messages WHERE id = ?", [
         caption,
         bytes,
         prompt,
+        JSON.stringify(pictured),
         messageId,
       ]);
+    },
+
+    /** Who a Scene Image shows, or null if it's from before that was kept. */
+    scenePictured(id: string, messageId: number) {
+      using db = open(id);
+      const row = db.query<{ pictured: string | null }, [number]>("SELECT pictured FROM scene_images WHERE message_id = ?").get(messageId);
+      return row?.pictured ? (JSON.parse(row.pictured) as Pictured) : null;
     },
 
     /** Every portrait without its bytes, including those of NPCs the player must not see yet. */

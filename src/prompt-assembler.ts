@@ -2,6 +2,7 @@ import type { Check } from "./check-resolver";
 import { activateLore, estimateTokens } from "./lore-activation";
 import type { Message, Save } from "./save-store";
 import type { State } from "./state-applier";
+import type { PromptStyle } from "./graph-builder";
 
 export type Prompt = { role: "system" | "user" | "assistant"; content: string }[];
 
@@ -24,6 +25,23 @@ export const OPENING_INPUT = "Begin the story.";
 
 const FULL_OPENING =
   "Write this opening at length, so that a player who knows nothing is fully up to speed: what the world is like and what anyone living there knows, who the PC is and how they got here, where they are now, and what is happening around them. Keep every Lore Entry and Plot Thread secret. End with the PC free to act.";
+
+const LOOKS =
+  'with their looks as one phrase of 40 to 60 words with no name, starting like "a woman in her thirties" so that it reads on inside a sentence: apparent age, build, skin, hair, face and the clothing they have on now, with its colours and materials';
+
+const SELF_CONTAINED =
+  "The image model knows nothing of this story, so someone who has never read it must be able to draw this moment correctly from this text alone. Frame the moment as a storyteller would. The PC may be in the picture when they are part of it. Show nothing hidden from the PC, no names of people or places, and no writing, and describe anything invented for this story by what it physically looks like, never by its name. Never name an art medium, camera or lens, as the player's Art Style decides those.";
+
+const IMAGE_PROMPT: Record<PromptStyle, string> = {
+  prose: `Write connected sentences, at most 150 words before the looks are added: first the people, what each is doing and where they are in the frame, then the place from foreground to background with its era and named materials and surfaces, then the time of day and the light, with its source, direction, quality and colour. ${SELF_CONTAINED} Mark each person you picture as [Name: phrase], with the name exactly as the state has it or the PC's name, and a phrase of at most 15 words, with no name, giving their build, hair and what they have on right now, such as [Name: a heavyset man with a grey beard in a torn yellow raincoat]. Mark at most four people, once each, using a pronoun after that. The image model also gets that person's portrait or stored looks, so describe them nowhere else, and if someone's appearance is thinner than asked for above, or their clothing has changed, use update_npc in this Turn. Describe anyone else in a short phrase with no mark. The image model has no way to exclude anything, so say what is there instead, such as bare stone walls, and never write no, not or without.`,
+  keywords: `Write comma-separated keyword phrases, about 40 words, most important first: the people and what they are doing, the place and its era, the time of day and the light, the mood. ${SELF_CONTAINED} Picture at most two people, each as a short phrase of looks, with no square brackets.`,
+};
+
+/** Asked for only with a Scene Image coming, as a prompt on every Turn would cost the player for nothing. */
+const imageInstruction = (style: PromptStyle | null) =>
+  style
+    ? `Set scene_changed to true only when the picture should be redrawn, such as on the first Turn or a clear change of place, time or what is happening. Images can cost the player money, so leave it false for anything smaller. When scene_changed is true, set visual_description to the prompt for that picture, otherwise set it to null. ${IMAGE_PROMPT[style]}`
+    : "Images are off, so set scene_changed to false and visual_description to null.";
 
 /** Goes by the Narrator's replies, because a Revert can leave a player Message that nothing answered. */
 function firstTurnInstruction(startingHook: string, messages: Message[]) {
@@ -54,6 +72,7 @@ export function assemblePrompt({
   modelInstructions,
   input,
   responseSchema,
+  promptStyle,
 }: {
   save: Save & { startingHook: string };
   state: State;
@@ -61,6 +80,8 @@ export function assemblePrompt({
   modelInstructions: string;
   input: string;
   responseSchema: string;
+  /** Null when no image will be drawn. */
+  promptStyle: PromptStyle | null;
 }): Prompt {
   const recent = messages.slice(-RECENT_MESSAGES);
   const activeEntries = activateLore(
@@ -80,12 +101,12 @@ Change the state only through state_operations, naming things exactly as the cur
 If the PC attempts something risky, do not narrate it yet. Reply with a check instead, naming the action and one difficulty that already accounts for the PC's skills, condition and the situation. Safe actions need no check. Never mention dice, numbers or Checks.
 Put each spoken line of the narration on its own line as [Name]: “the words”, with the speaker's name as the state has it and nothing else on that line. Put actions and description on separate lines, with no square brackets.
 Older Messages leave this prompt, so in every finished Turn set summary to the whole story so far in under 300 words, covering only what the PC has experienced. Keep what still matters from the current summary, including plans, appointments and invitations still open, and add what just happened.
-In every finished Turn, list in people everyone the narration names, other than the PC, even someone only mentioned, by the name the state has for them, with their looks in a few concrete words with no name. Anyone listed joins the state and becomes known to the PC, with no need for add_npc or add_known_npc.
+In every finished Turn, list in people everyone the narration names, other than the PC, even someone only mentioned, by the name the state has for them, ${LOOKS}. Anyone listed joins the state and becomes known to the PC, with no need for add_npc or add_known_npc.
 Record what the PC learns through add_known_fact, and each unnamed NPC the PC comes to know of through add_known_npc, using add_npc first only for an NPC not yet in the state. Never repeat a known fact or NPC. Whenever the PC first comes to know an NPC, use set_known_npc_summary to say in one short sentence who that NPC is, as the PC understands them, and use it again when that understanding changes. Give one now to any known NPC in the state that has none. The player reads these too, so never put Lore Entry or Plot Thread secrets in them. The player reads the summary and known facts in the Journal, so write them as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
 The player reads the inventory and status too, so write them as the PC would, with no Lore Entry or Plot Thread secrets. Keep the inventory realistic for this world: add only what the PC could really wear or carry there, and narrate anything too heavy or bulky being left behind instead of adding it. Use remove_item only for an item the state lists, and to move an item between wearing and carrying use remove_item and then add_item. Describe health, injuries and conditions in words with no digits, never as points or percentages. Use remove_status only for an entry the state lists under that kind, and never add_status one it already lists.
 The Lore Entries and Plot Threads are secret. Let them shape the story and reveal them only through play. When play goes somewhere they do not cover, add a Lore Entry with several keywords so that paraphrases still activate it. Resolve a Plot Thread once play has exhausted it, and add a new one when none remain.
-Keep the scene in the state current. Whenever the PC reaches a new location or the NPCs they can see change, use set_scene with a short name for the location, repeated exactly while they stay there, and visible_cast listing the NPCs in view by their names in the state, using add_npc first for a new one. An NPC's appearance is used to paint them, so give their looks in a few concrete words with no name, and use update_npc when their looks change. The player reads the location as a caption, so write it as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
-In a finished Turn, set visual_description to what the PC can see right now, concretely enough to paint: the place, the light and each visible person's looks, with no names, no writing, and nothing the PC can't see. Set scene_changed to true only when the picture should be redrawn, such as on the first Turn or a clear change of place, time or what is happening. Images can cost the player money, so leave it false for anything smaller.
+Keep the scene in the state current. Whenever the PC reaches a new location or the NPCs they can see change, use set_scene with a short name for the location, repeated exactly while they stay there, and visible_cast listing the NPCs in view by their names in the state, using add_npc first for a new one. An NPC's appearance is used to paint them, so give it ${LOOKS}, and use update_npc when their looks change. The player reads the location as a caption, so write it as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
+${imageInstruction(promptStyle)}
 Lore Entries: ${JSON.stringify(activeEntries.map(({ title, content }) => ({ title, content })))}
 Plot Threads: ${JSON.stringify(plotThreads)}
 Summary of the story so far: ${summary}

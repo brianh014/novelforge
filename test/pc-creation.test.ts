@@ -66,7 +66,7 @@ test("the wizard's PC gets a portrait without holding up the Save", async () => 
   const response = await postPc(await newWorld());
 
   expect(response.status).toBe(201);
-  expect(images.payloads.map(({ prompt }) => prompt).join()).toContain("Tall, one grey eye.");
+  expect(images.payloads.map(({ prompt }) => prompt).join()).toContain("Tall, one grey eye");
   await game.delete(`/saves/${((await response.json()) as { id: string }).id}`);
 });
 

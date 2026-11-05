@@ -77,7 +77,7 @@ export function openRouterImages(settings: SettingsStore, baseUrl: string): Imag
       body: JSON.stringify({
         model: imageModel,
         // The Image API has no fields for these, so the model reads them as part of the prompt.
-        prompt: [style_preset, prompt, negative_prompt && `Avoid: ${negative_prompt}.`].filter(Boolean).join("\n"),
+        prompt: [prompt, style_preset, negative_prompt && `Avoid: ${negative_prompt}.`].filter(Boolean).join("\n"),
         ...(takesRatio && { aspect_ratio }),
         ...(resolution && { resolution }),
         ...(references.length > 0 && {

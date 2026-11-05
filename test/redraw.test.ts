@@ -65,7 +65,7 @@ const find = (gallery: Gallery, kind: string) => gallery.images.find((item) => i
 
 test("the Gallery lists the PC, known NPCs and Scene Images with their prompts, and hides NPCs the PC doesn't know", async () => {
   await play(
-    [turn("A wet street", meet("Hesper"), meet("Stranger"), know("Hesper"), scene("The ferry", "Hesper", "Stranger"))],
+    [turn("[Hesper] on a wet street", meet("Hesper"), meet("Stranger"), know("Hesper"), scene("The ferry", "Hesper", "Stranger"))],
     png(1),
     png(2),
     png(3),
@@ -80,14 +80,14 @@ test("the Gallery lists the PC, known NPCs and Scene Images with their prompts, 
     ["portrait", "Hesper"],
     ["scene", "The ferry"],
   ]);
-  expect(gallery.images[1]!.prompt).toBe("A head and shoulders portrait of one person against a plain background.\nTall, in oilskins");
-  expect(gallery.images[2]!.prompt).toBe("A wet street\nPeople in view: Tall, in oilskins; Tall, in oilskins");
+  expect(gallery.images[1]!.prompt).toContain("A head and shoulders portrait of one person, Tall, in oilskins, facing");
+  expect(gallery.images[2]!.prompt).toBe("Tall, in oilskins on a wet street");
   expect(gallery.images.every(({ redraws, redrawing, failure }) => redraws === 0 && !redrawing && failure === "")).toBe(true);
 });
 
 test("redrawing a Scene Image replaces only it, with its shape, references and the current Art Style", async () => {
   await play(
-    [turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("A dry street", scene("The ferry", "Hesper"))],
+    [turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("[Hesper] and [Ash] on a dry street", scene("The ferry", "Hesper"))],
     png(1),
     png(2),
     png(3),
@@ -121,7 +121,7 @@ test("redrawing a Scene Image replaces only it, with its shape, references and t
 
 test("a redrawn portrait is what later Scene Images use, while the NPC's stored looks stay", async () => {
   await play(
-    [turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("A pier", scene("The pier", "Hesper"))],
+    [turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("[Hesper] on a pier", scene("The pier", "Hesper"))],
     png(1),
     png(2),
     png(3),

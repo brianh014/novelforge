@@ -140,7 +140,7 @@ const allowLogged = () => {
   return () => logged.mockRestore();
 };
 
-test("a new PC gets a portrait from their description, which never holds their name", async () => {
+test("a new PC gets a portrait from their physical traits alone, which never holds their name", async () => {
   play([], png(1));
   await enableImages();
 
@@ -148,7 +148,7 @@ test("a new PC gets a portrait from their description, which never holds their n
 
   expect(await settled(id)).toMatchObject({ pending: false, session: 1 });
   expect(images.payloads[0]!.prompt).toContain("Grey-eyed");
-  expect(images.payloads[0]!.prompt).toContain("A lapsed ferryman");
+  expect(images.payloads[0]!.prompt).not.toContain("A lapsed ferryman");
   expect(images.payloads[0]!.prompt).not.toContain("Ash");
   expect((await journalOf(id)).portraits).toEqual([{ id: 1, npc: null, redraws: 0, messageId: expect.any(Number) }]);
   expect(await game.get(`/saves/${id}/portraits/1`).then((r) => r.bytes())).toEqual(png(1));
@@ -249,12 +249,21 @@ test("an unfinished Local setup makes no portrait calls, and the OpenRouter adap
   expect(images.payloads).toEqual([]);
 });
 
-test("a Scene Image gets visible NPCs' portraits first, then the previous scene, then the PC, and their looks without names", async () => {
+test("a Scene Image gets the portraits of those marked in it, then the previous scene, then the PC, and their looks without names", async () => {
+  const pictured = (visual_description: string, ...state_operations: object[]) =>
+    JSON.stringify({ check: null, narration: "The tide rises.", state_operations, scene_changed: true, visual_description });
   play(
     [
-      turn(moveTo("The street")),
-      turn(meet("Hesper", "Tall, in oilskins"), meet("Orin", "Stooped, red scarf"), meet("Tobin", "Unseen"), moveTo("The street", "Orin", "Hesper")),
-      turn(moveTo("The pier", "Orin")),
+      pictured("An empty street", moveTo("The street")),
+      pictured(
+        "[Orin] nods to [Hesper] while [Ash] waits",
+        meet("Hesper", "Tall, in oilskins"),
+        meet("Orin", "Stooped, red scarf"),
+        meet("Tobin", "Unseen"),
+        { op: "add_item", slot: "wearing", item: "a tin badge" },
+        moveTo("The street", "Orin", "Hesper"),
+      ),
+      pictured("[Orin] alone on the pier", moveTo("The pier", "Orin", "Hesper")),
     ],
     png(1),
     png(2),
@@ -277,11 +286,12 @@ test("a Scene Image gets visible NPCs' portraits first, then the previous scene,
     { role: "previous_scene", bytes: png(2), mediaType: "image/png" },
     { role: "pc", bytes: png(1), mediaType: "image/png" },
   ]);
-  expect(second.prompt).toContain("Stooped, red scarf; Tall, in oilskins");
+  expect(second.prompt).toContain("Stooped, red scarf nods to Tall, in oilskins while");
+  expect(second.prompt).toContain("wearing a tin badge");
   expect(second.prompt).not.toContain("Orin");
   expect(second.prompt).not.toContain("Unseen");
-  // Hesper has left, so only the visible portrait goes along.
-  expect(scenes[2]!.reference_images.filter(({ role }) => role === "npc")).toEqual([{ role: "npc", bytes: png(3), mediaType: "image/png" }]);
+  // Hesper is still in the cast, but only the marked portrait goes along, and the PC's stays out of a picture without them.
+  expect(scenes[2]!.reference_images).toEqual([{ role: "npc", bytes: png(3), mediaType: "image/png" }]);
 });
 
 test("quick Turns keep every portrait, even though only the newest scene waits", async () => {
@@ -342,7 +352,7 @@ test("Regenerate takes the portrait with the old response and draws one for the 
   await game.post(`/saves/${id}/messages/2/regenerate`, {});
   await settled(id);
 
-  expect(portraitPrompts().map((prompt) => prompt.split("\n").at(-1))).toEqual(["First looks", "Second looks"]);
+  expect(portraitPrompts()).toEqual([expect.stringContaining("First looks"), expect.stringContaining("Second looks")]);
   const { portraits } = await journalOf(id);
   expect(portraits).toHaveLength(1);
   expect(await game.get(`/saves/${id}/portraits/${portraits[0]!.id}`).then((r) => r.bytes())).toEqual(png(3));

@@ -150,15 +150,15 @@ test("a visible cast name the state lacks is left out, and the Turn stands on it
   expect(script.prompts).toHaveLength(2);
 });
 
-test("a move with a blank description still draws, from the location", async () => {
+test("a move with no description draws nothing, as a location alone leaves the model guessing", async () => {
   play([turn({ scene_changed: false, visual_description: "", state_operations: moveTo("The ferry") })], PNG);
   await enableImages();
   const id = await game.createSave();
 
   await playTurn(id);
 
-  expect((await settled(id)).images).toHaveLength(1);
-  expect(images.payloads[0]!.prompt).toBe("The ferry");
+  expect((await settled(id)).images).toHaveLength(0);
+  expect(images.payloads).toHaveLength(0);
 });
 
 test("a scene change with nothing to draw asks for no image", async () => {
