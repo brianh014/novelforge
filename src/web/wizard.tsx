@@ -30,13 +30,17 @@ import { Zoomable } from "./zoom";
 const THEMES: Record<string, string> = {
   "High Fantasy": "Wondrous realms of magic, ancient kingdoms and epic quests, where good and evil are clearly drawn.",
   "Dark Fantasy": "Grim lands where magic comes at a cost, monsters are real and heroes rarely stay clean.",
+  "Urban Fantasy": "Vampires, witches and hidden courts live unseen in the cities of today.",
   Cyberpunk: "Neon megacities run by corporations, where chrome implants and stolen data are the way to get ahead.",
-  "Sci Fi Fantasy": "Starships and ancient magic side by side, with mystic orders and galactic struggles.",
+  "Space Opera": "Starships, galactic empires and mystic powers, in sweeping struggles across the stars.",
   "Sci Fi": "Plausible futures of space travel, advanced technology and first contact.",
   "Modern Day": "The world as it is now, with today's technology, cities and everyday stakes.",
   Steampunk: "A Victorian age of brass, steam and clockwork, with airships, inventors and rigid class lines.",
   "Realistic medieval": "Feudal life shaped by lords, faith, plague and the sword.",
   Western: "The American frontier, with dusty towns, outlaws, lawmen and land worth killing for.",
+  "Post-Apocalyptic": "The ruins of a fallen world, where survivors fight over what's left.",
+  Horror: "Ordinary lives unravel as something terrible closes in, and safety never lasts.",
+  Noir: "Rain-slick streets, crooked cops and secrets that someone will kill to keep.",
 };
 const STEPS = [
   { href: "#/new", name: "Of the World" },

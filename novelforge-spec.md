@@ -18,13 +18,17 @@ The first step in a new game is creating the world, the player selects from list
 * Theme: each has a short description, shown to the player once chosen and sent to the Narrator with its name  
   * High Fantasy  
   * Dark Fantasy  
+  * Urban Fantasy  
   * Cyberpunk  
-  * Sci Fi Fantasy (ie Star Wars, Sci Fi with magic)  
+  * Space Opera (ie Star Wars, Sci Fi with magic)  
   * Sci Fi (ie The Expanse, Star Trek)  
   * Modern Day  
   * Steampunk  
   * Realistic medieval  
   * Western  
+  * Post-Apocalyptic  
+  * Horror  
+  * Noir  
   * Create your own  
 * World Brief \- free form field to describe the world  
 * Title - free form field for the story's title, lettered into the Cover  
