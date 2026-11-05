@@ -1,6 +1,6 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { coverUrl, deleteSave, duplicateSave, importSave, type ListedSave, listSaves, storyName } from "./api";
-import { Sheet } from "./menu";
+import { DeleteDialog, Sheet } from "./menu";
 import { Zoomable } from "./zoom";
 
 const lastChanged = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -115,8 +115,9 @@ export function LoadStory() {
       </ul>
       {deleting && (
         <DeleteDialog
-          id={deleting.id}
           name={"unreadable" in deleting ? "this unreadable Save" : storyName(deleting)}
+          warning="This permanently deletes the whole Save. It can't be undone."
+          onDelete={() => deleteSave(deleting.id)}
           onClose={() => setDeleting(undefined)}
           onDeleted={(name) => {
             // The button that opened the dialog went with the Save, and focus must not fall back to the page.
@@ -126,44 +127,5 @@ export function LoadStory() {
         />
       )}
     </Sheet>
-  );
-}
-
-function DeleteDialog(props: { id: string; name: string; onClose: () => void; onDeleted: (name: string) => void }) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => dialog.current!.showModal(), []);
-
-  async function confirmDelete() {
-    setBusy(true);
-    setError("");
-    try {
-      await deleteSave(props.id);
-      // Gone if the player pressed Escape while this was in flight, and the delete happened all the same.
-      dialog.current?.close();
-      props.onDeleted(props.name);
-    } catch (failure) {
-      setError((failure as Error).message);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <dialog ref={dialog} onClose={props.onClose} aria-labelledby="delete-title">
-      <h2 id="delete-title">Delete {props.name}?</h2>
-      <p>This permanently deletes the whole Save. It can't be undone.</p>
-      {error && <p role="alert" className="error">{error}</p>}
-      {/* Cancel comes first because a modal focuses its first control, and that must not be the deleting one. */}
-      <div className="row">
-        <button className="quiet" onClick={() => dialog.current!.close()}>
-          Cancel
-        </button>
-        <button className="action" disabled={busy} onClick={confirmDelete}>
-          Delete
-        </button>
-      </div>
-    </dialog>
   );
 }

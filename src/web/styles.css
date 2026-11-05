@@ -964,6 +964,14 @@ a.action {
   width: 100%;
 }
 
+.gallery-section + .gallery-section {
+  margin-top: 22px;
+}
+
+.gallery-section h2 {
+  margin-bottom: 8px;
+}
+
 .gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -985,6 +993,11 @@ a.action {
 
 .gallery span {
   display: block;
+  font-size: 0.8em;
+}
+
+.gallery li > .quiet {
+  padding-block: 6px;
   font-size: 0.8em;
 }
 

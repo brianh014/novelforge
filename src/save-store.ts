@@ -606,16 +606,19 @@ export function saveStore(savesDir: string) {
         .all();
     },
 
-    /** Every image without its bytes, in Gallery order, including those of NPCs the player must not see yet. */
+    /**
+     * Every image without its bytes, in Gallery order, including those of NPCs the player must not see yet: the Cover, the PC, then NPCs and
+     * images of moments, each newest first by their Message, which a Redraw leaves alone. On one Message a Scene Image is drawn before any Requested Image.
+     */
     gallery(id: string) {
       using db = open(id);
       return db
         .query<ImageTarget & { npc: string | null; messageId: number; caption: string; prompt: string | null; redraws: number }, []>(
-          `SELECT 'cover' AS kind, id AS ref, NULL AS npc, 0 AS messageId, '' AS caption, prompt, redraws, 0 AS place, 0 AS story FROM cover
-           UNION ALL SELECT 'portrait', id, npc, message_id, '', prompt, redraws, npc IS NOT NULL, id FROM portraits
-           UNION ALL SELECT 'scene', message_id, NULL, message_id, caption, prompt, redraws, 2, message_id FROM scene_images
-           UNION ALL SELECT 'requested', id, NULL, message_id, caption, prompt, redraws, 2, message_id FROM requested_images
-           ORDER BY place, story, kind DESC, ref`,
+          `SELECT 'cover' AS kind, id AS ref, NULL AS npc, 0 AS messageId, '' AS caption, prompt, redraws, 0 AS place FROM cover
+           UNION ALL SELECT 'portrait', id, npc, message_id, '', prompt, redraws, 1 + (npc IS NOT NULL) FROM portraits
+           UNION ALL SELECT 'scene', message_id, NULL, message_id, caption, prompt, redraws, 3 FROM scene_images
+           UNION ALL SELECT 'requested', id, NULL, message_id, caption, prompt, redraws, 3 FROM requested_images
+           ORDER BY place, messageId DESC, kind, ref DESC`,
         )
         .all();
     },
@@ -626,6 +629,13 @@ export function saveStore(savesDir: string) {
       const [table, key] = REDRAWABLE[kind];
       using db = open(id);
       db.run(`UPDATE ${table} SET bytes = ?, prompt = ?, redraws = redraws + 1 WHERE ${key} = ?`, [bytes, prompt, ref]);
+    },
+
+    /** Only an image of a moment, as the Cover and portraits stay. Its Message and Snapshot hold no image, so they are untouched. */
+    deleteImage(id: string, { kind, ref }: ImageTarget & { kind: "scene" | "requested" }) {
+      const [table, key] = REDRAWABLE[kind];
+      using db = open(id);
+      db.run(`DELETE FROM ${table} WHERE ${key} = ?`, [ref]);
     },
 
     sceneImage(id: string, messageId: number) {

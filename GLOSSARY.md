@@ -128,7 +128,7 @@ The player-facing record of only what the PC knows or has encountered, where the
 _Avoid_: Log (the Full Log is one section of the Journal)
 
 **Gallery**:
-The part of the book holding every image the player may see: the Cover, the portraits of the PC and known NPCs, the Scene Images and the Requested Images.
+The part of the book holding every image the player may see, in three sections: Cover, Characters (the PC's portrait, then those of known NPCs) and Scenes (the Scene Images and the Requested Images). The player can delete an image in Scenes, and never the Cover or a portrait. Only the image goes: its Message and Snapshot stay, and a Revert doesn't bring it back.
 
 **Revert**:
 Returning to an earlier Message and permanently deleting everything after it.

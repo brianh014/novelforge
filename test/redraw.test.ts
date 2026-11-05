@@ -99,7 +99,7 @@ test("redrawing a Scene Image replaces only it, with its shape, references and t
   const before = await playTurn(id);
   const state = await app.get(`/saves/${id}/journal`).then((r) => r.text());
   await app.patch(`/saves/${id}`, { artStyle: "Ink wash" });
-  const newest = before.images.at(-1)!;
+  const newest = find(before, "scene");
 
   expect((await redraw(id, newest, "A sunny street")).status).toBe(202);
   const after = await settled(id);
@@ -110,7 +110,7 @@ test("redrawing a Scene Image replaces only it, with its shape, references and t
   expect(payload.negative_prompt).toContain("dice");
   expect(payload.style_preset).toBe("Ink wash");
   expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc", "previous_scene", "pc"]);
-  expect(after.images.at(-1)).toMatchObject({ prompt: "A sunny street", redraws: 1 });
+  expect(find(after, "scene")).toMatchObject({ prompt: "A sunny street", redraws: 1 });
   expect(await bytesOf(`/saves/${id}/messages/${newest.ref}/image`)).toEqual(png(5));
   expect(await app.get(`/saves/${id}/journal`).then((r) => r.text())).toBe(state);
   expect(await app.get(`/saves/${id}/images`).then((r) => r.json())).toMatchObject({
@@ -207,7 +207,7 @@ test("a Revert past a Scene Image stops its Redraw, and a replaced Turn loses it
   );
   const id = await newSave();
   const first = find(await playTurn(id), "scene");
-  const second = (await playTurn(id)).images.at(-1)!;
+  const second = find(await playTurn(id), "scene");
 
   await redraw(id, second, "Lost");
   await app.post(`/saves/${id}/messages/${first.ref}/revert`, {});

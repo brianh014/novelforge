@@ -96,8 +96,8 @@ test("a request draws from the text call's prompt, joins the latest Message and 
   expect(await bytesOf(`/saves/${id}/messages/2/image`)).toEqual(png(2));
   expect(gallery.images.map(({ kind, label, prompt }) => [kind, label, prompt?.slice(0, 20)])).toEqual([
     ["portrait", "Ash", "A head and shoulders"],
-    ["scene", "The ferry", "A wet street"],
     ["requested", "the woman in the corner", "A woman on a bench"],
+    ["scene", "The ferry", "A wet street"],
   ]);
 });
 
@@ -123,7 +123,7 @@ test("a Message can have several, and the Gallery keeps them in story order", as
     [2, "second"],
     [4, "third"],
   ]);
-  expect(gallery.images.map(({ label }) => label)).toEqual(["Ash", "The ferry", "first", "second", "The pier", "third"]);
+  expect(gallery.images.map(({ label }) => label)).toEqual(["Ash", "third", "The pier", "second", "first", "The ferry"]);
 });
 
 test("the text call gets the recent story and the Scene's people with their looks, and nothing hidden", async () => {
@@ -256,13 +256,13 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
     ["pc", png(1)],
   ]);
 
-  const item = gallery.images.at(-1)!;
+  const item = gallery.images.find(({ kind }) => kind === "requested")!;
   expect((await app.post(`/saves/${id}/gallery/redraw`, { kind: item.kind, ref: item.ref, prompt: "Redrawn" })).status).toBe(202);
   const after = await settled(id);
 
   expect(drawn.payloads.at(-1)).toMatchObject({ prompt: "Redrawn", aspect_ratio: "16:9" });
   expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["npc", "previous_scene", "pc"]);
-  expect(after.images.at(-1)).toMatchObject({ kind: "requested", prompt: "Redrawn", redraws: 1 });
+  expect(after.images.find(({ kind }) => kind === "requested")).toMatchObject({ prompt: "Redrawn", redraws: 1 });
   expect(await requestedOf(id)).toMatchObject({ images: [{ redraws: 1 }] });
   expect(await bytesOf(`/saves/${id}/requested-images/${item.ref}/image`)).toEqual(png(5));
   expect(await bytesOf(`/saves/${id}/messages/2/image`)).toEqual(png(3));
@@ -326,7 +326,7 @@ test("a failed Redraw of a requested image keeps it, says why, and keeps the pro
   await play([turn("A wet street", scene("The ferry")), written_("A woman")], png(1), png(2), png(3), new Error("Image API error: A sunny bench"));
   const id = await newSave();
   await playTurn(id);
-  const item = (await asked(id, "the woman")).images.at(-1)!;
+  const item = (await asked(id, "the woman")).images.find(({ kind }) => kind === "requested")!;
   const logged = spyOn(console, "error").mockImplementation(() => {});
 
   await app.post(`/saves/${id}/gallery/redraw`, { kind: item.kind, ref: item.ref, prompt: "A sunny bench" });
@@ -334,7 +334,7 @@ test("a failed Redraw of a requested image keeps it, says why, and keeps the pro
 
   const lines = JSON.stringify(logged.mock.calls);
   logged.mockRestore();
-  expect(after.images.at(-1)).toMatchObject({ prompt: "A woman", redraws: 0, failure: "Image API error: A sunny bench" });
+  expect(after.images.find(({ kind }) => kind === "requested")).toMatchObject({ prompt: "A woman", redraws: 0, failure: "Image API error: A sunny bench" });
   expect(await bytesOf(`/saves/${id}/requested-images/${item.ref}/image`)).toEqual(png(3));
   expect(lines).not.toContain("sunny bench");
 });
@@ -446,7 +446,7 @@ test("a Revert past its Message removes it and counts it, one to its Message kee
 
   expect(drawn.aborted).toHaveLength(1);
   expect((await requestedOf(id)).images.map(({ caption }) => caption)).toEqual(["kept"]);
-  expect(gallery.images.map(({ label }) => label)).toEqual(["Ash", "The ferry", "kept"]);
+  expect(gallery.images.map(({ label }) => label)).toEqual(["Ash", "kept", "The ferry"]);
   expect(await failureOf(id)).toEqual({});
   expect((await app.get(`/saves/${id}/requested-images/2/image`)).status).toBe(404);
 });
@@ -492,7 +492,7 @@ test("export, import and duplicate carry it, and a duplicate from an earlier Mes
   await play([turn("A wet street", scene("The ferry")), written_("[Ash] on a bench"), quiet], png(1), png(2), png(3), png(4));
   const id = await newSave();
   await playTurn(id);
-  const item = (await asked(id, "the bench")).images.at(-1)!;
+  const item = (await asked(id, "the bench")).images.find(({ kind }) => kind === "requested")!;
   await playTurn(id);
 
   const exported = await bytesOf(`/saves/${id}/export`);
@@ -504,7 +504,7 @@ test("export, import and duplicate carry it, and a duplicate from an earlier Mes
   for (const save of [imported, copy]) {
     expect((await requestedOf(save)).images).toEqual([{ ref: item.ref, messageId: 2, caption: "the bench", redraws: 0 }]);
     expect(await bytesOf(`/saves/${save}/requested-images/${item.ref}/image`)).toEqual(png(3));
-    expect((await galleryOf(save)).images.at(-1)).toMatchObject({ kind: "requested", prompt: item.prompt });
+    expect((await galleryOf(save)).images.find(({ kind }) => kind === "requested")).toMatchObject({ prompt: item.prompt });
     expect(saveStore(savesDir).pictured(save, { kind: "requested", ref: item.ref })).toEqual([null]);
   }
   expect((await requestedOf(early)).images).toEqual([]);

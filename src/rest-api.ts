@@ -114,6 +114,9 @@ const HeldRedrawRequest = PromptRequest.extend({ artStyle: z.string().optional()
 
 const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene", "requested"]), ref: z.number().int().nonnegative() });
 
+// An allowlist, as the Cover and portraits are never the player's to delete.
+const DeleteImageRequest = z.object({ kind: z.enum(["scene", "requested"]), ref: z.number().int().nonnegative() });
+
 const ImageRequest = z.object({ words: someWords.max(300) });
 
 const NoteRequest = z.object({ text: z.string().trim().min(1) });
@@ -770,6 +773,20 @@ export function startServer(options: {
             return Response.json({ error: "This image is already being redrawn." }, { status: 409 });
           }
           return Response.json({}, { status: 202 });
+        },
+      },
+      "/saves/:id/gallery/delete": {
+        POST: async (req) => {
+          const { id } = req.params;
+          const { kind, ref } = await parseBody(req, DeleteImageRequest);
+          if (!visibleImages(id).some((candidate) => candidate.kind === kind && candidate.ref === ref)) {
+            return Response.json({ error: "Image not found" }, { status: 404 });
+          }
+          if (images.redrawState(id, { kind, ref }).redrawing) {
+            return Response.json({ error: "This image is being redrawn. Try again when it's done." }, { status: 409 });
+          }
+          saves.deleteImage(id, { kind, ref });
+          return Response.json({});
         },
       },
       "/saves/:id/messages/:messageId/image": {

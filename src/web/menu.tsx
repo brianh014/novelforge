@@ -91,6 +91,46 @@ export function Sheet(props: { rail: ReactNode; children: ReactNode; foot?: Reac
   );
 }
 
+/** Asks before anything permanent goes. `onDelete` does it, and its failure stays in the dialog. */
+export function DeleteDialog(props: { name: string; warning: string; onDelete: () => Promise<unknown>; onClose: () => void; onDeleted: (name: string) => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => dialog.current!.showModal(), []);
+
+  async function confirmDelete() {
+    setBusy(true);
+    setError("");
+    try {
+      await props.onDelete();
+      // Gone if the player pressed Escape while this was in flight, and the delete happened all the same.
+      dialog.current?.close();
+      props.onDeleted(props.name);
+    } catch (failure) {
+      setError((failure as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <dialog ref={dialog} onClose={props.onClose} aria-labelledby="delete-title">
+      <h2 id="delete-title">Delete {props.name}?</h2>
+      <p>{props.warning}</p>
+      {error && <p role="alert" className="error">{error}</p>}
+      {/* Cancel comes first because a modal focuses its first control, and that must not be the deleting one. */}
+      <div className="row">
+        <button className="quiet" onClick={() => dialog.current!.close()}>
+          Cancel
+        </button>
+        <button className="action" disabled={busy} onClick={confirmDelete}>
+          Delete
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Gallery" | "Inventory" | "Settings" }) {
   const here = (tab: typeof current) => (tab === current ? "page" : undefined);
   return (

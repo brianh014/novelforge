@@ -149,6 +149,8 @@ export const galleryUrl = (id: string, { kind, ref, redraws }: GalleryImage) => 
 export const redrawImage = (id: string, { kind, ref }: GalleryImage, prompt: string) =>
   request<object>(`/saves/${id}/gallery/redraw`, jsonBody({ kind, ref, prompt }));
 
+export const deleteImage = (id: string, { kind, ref }: GalleryImage) => request<object>(`/saves/${id}/gallery/delete`, jsonBody({ kind, ref }));
+
 /** Answers only once the image is done. */
 export const getHeldImage = (id: string, kind: ImageKind) => request<HeldImage>(`/worlds/${id}/${kind}/details`);
 

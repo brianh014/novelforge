@@ -1,23 +1,35 @@
 import { useEffect, useRef, useState } from "react";
-import { type Gallery as GalleryContent, getGallery } from "./api";
-import { BookTabs, Sheet } from "./menu";
+import { deleteImage, type Gallery as GalleryContent, type GalleryImage, getGallery } from "./api";
+import { BookTabs, DeleteDialog, Sheet } from "./menu";
 import { IMAGE_CHECK_MS } from "./play";
 import { RedrawableImage } from "./zoom";
+
+/** The server sends each kind in its order, with the PC first, so a section only keeps it. */
+const SECTIONS: { name: string; kinds: GalleryImage["kind"][]; deletable?: boolean }[] = [
+  { name: "Cover", kinds: ["cover"] },
+  { name: "Characters", kinds: ["portrait"] },
+  { name: "Scenes", kinds: ["scene", "requested"], deletable: true },
+];
 
 export function Gallery({ id }: { id: string }) {
   const [gallery, setGallery] = useState<GalleryContent>();
   const [redraws, setRedraws] = useState(0);
   const [loadError, setLoadError] = useState("");
+  const [deleting, setDeleting] = useState<GalleryImage>();
   const loaded = useRef(false);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const reload = () => setRedraws((count) => count + 1);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     let leaving = false;
     const load = () =>
       getGallery(id).then((gallery) => {
+        // A look begun before a delete mustn't bring its image back as a broken link.
+        if (leaving) return;
         setGallery(gallery);
         loaded.current = true;
-        if (gallery.pending && !leaving) timer = setTimeout(load, IMAGE_CHECK_MS);
+        if (gallery.pending) timer = setTimeout(load, IMAGE_CHECK_MS);
       }, (failure: Error) => {
         // A failed look for a finished Redraw mustn't take away a Gallery already on the page.
         if (!loaded.current) setLoadError(failure.message);
@@ -33,7 +45,7 @@ export function Gallery({ id }: { id: string }) {
     <Sheet
       rail={
         <>
-          <h1 className="big">Gallery</h1>
+          <h1 className="big" ref={heading} tabIndex={-1}>Gallery</h1>
           <a className="quiet" href="#/">Main Menu</a>
         </>
       }
@@ -41,23 +53,58 @@ export function Gallery({ id }: { id: string }) {
     >
       {loadError && <p role="alert" className="error">{loadError}</p>}
       {gallery && gallery.images.length === 0 && <p className="muted">No pictures yet.</p>}
-      {gallery && gallery.images.length > 0 && (
-        <ul className="gallery">
-          {gallery.images.map((image) => (
-            <li key={`${image.kind}${image.ref}`}>
-              <RedrawableImage
-                id={id}
-                image={image}
-                alt={image.label || "Scene Image"}
-                canRedraw={gallery.canRedraw}
-                onRedrawn={() => setRedraws((count) => count + 1)}
-              />
-              <span>{image.label}</span>
-              {image.redrawing && <span className="waiting">Redrawing…</span>}
-              {image.failure && <span className="error">Redraw failed</span>}
-            </li>
-          ))}
-        </ul>
+      {SECTIONS.map(({ name, kinds, deletable }) => {
+        const images = gallery?.images.filter(({ kind }) => kinds.includes(kind)) ?? [];
+        return images.length > 0 && (
+          <section key={name} className="gallery-section">
+            <h2>{name}</h2>
+            <ul className="gallery">
+              {images.map((image) => (
+                <li key={`${image.kind}${image.ref}`}>
+                  <RedrawableImage
+                    id={id}
+                    image={image}
+                    alt={image.label || "Scene Image"}
+                    canRedraw={gallery!.canRedraw}
+                    onRedrawn={reload}
+                  />
+                  <span>{image.label}</span>
+                  {image.redrawing && <span className="waiting">Redrawing…</span>}
+                  {image.failure && <span className="error">Redraw failed</span>}
+                  {deletable && (
+                    <button
+                      className="quiet"
+                      aria-label={`Delete ${image.label || "Scene Image"}`}
+                      aria-haspopup="dialog"
+                      disabled={image.redrawing}
+                      onClick={() => setDeleting(image)}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+      {deleting && (
+        <DeleteDialog
+          name="this image"
+          warning="This permanently deletes the image, and a Revert won't bring it back. The story stays as it is."
+          onDelete={() => deleteImage(id, deleting)}
+          onClose={() => {
+            setDeleting(undefined);
+            // Whatever the answer was, as a refusal can mean this page is behind.
+            reload();
+          }}
+          onDeleted={() => {
+            // The button that opened the dialog goes with the image, and focus must not fall back to the page.
+            heading.current!.focus();
+            // Again, as Escape can close the dialog before the delete has finished.
+            reload();
+          }}
+        />
       )}
     </Sheet>
   );
