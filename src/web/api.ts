@@ -22,6 +22,9 @@ export type Journal = { summary: string; facts: string[]; npcs: string[]; npcSum
 export type Portrait = ReturnType<SaveStore["portraits"]>[number];
 export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];
 export type SceneImages = { images: SceneImageInfo[]; pending: boolean; session: number };
+export type RequestedImage = ReturnType<SaveStore["requestedImages"]>[number];
+/** `drawing` counts those still on the way. */
+export type RequestedImages = { images: RequestedImage[]; drawing: number };
 export type GalleryImage = ImageTarget & { label: string; prompt: string | null; redraws: number; redrawing: boolean; failure: string };
 export type Gallery = { images: GalleryImage[]; pending: boolean; canRedraw: boolean };
 export type HeldImage = { prompt: string; hasImage: boolean; failure: string; canRedraw: boolean };
@@ -115,15 +118,28 @@ export const getImages = (id: string) => request<SceneImages>(`/saves/${id}/imag
 export const imageUrl = (id: string, { messageId, redraws }: Pick<SceneImageInfo, "messageId" | "redraws">) =>
   `/saves/${id}/messages/${messageId}/image?v=${redraws}`;
 
+export const requestedImageUrl = (id: string, { ref, redraws }: Pick<RequestedImage, "ref" | "redraws">) =>
+  `/saves/${id}/requested-images/${ref}/image?v=${redraws}`;
+
 export const coverUrl = (id: string, redraws: number) => `/saves/${id}/cover?v=${redraws}`;
 
 /** Answers only once the image is done. The version makes a redrawn image a new address. */
 export const heldImageUrl = (id: string, kind: ImageKind, version: number) => `/worlds/${id}/${kind}?v=${version}`;
 
+export const getRequestedImages = (id: string) => request<RequestedImages>(`/saves/${id}/requested-images`);
+
+/** Answers at once, as the picture is written and drawn in the background. */
+export const requestImage = (id: string, words: string) => request<object>(`/saves/${id}/requested-images`, jsonBody({ words }));
+
+/** Why the last requested image wasn't drawn, if it wasn't. Reading a failure takes it. */
+export const takeImageFailure = (id: string) =>
+  request<{ failure?: { error: string; words: string } }>(`/saves/${id}/requested-images/failure`).then(({ failure }) => failure);
+
 export const getGallery = (id: string) => request<Gallery>(`/saves/${id}/gallery`);
 
 export const galleryUrl = (id: string, { kind, ref, redraws }: GalleryImage) => {
   if (kind === "cover") return coverUrl(id, redraws);
+  if (kind === "requested") return requestedImageUrl(id, { ref, redraws });
   return kind === "portrait" ? portraitUrl(id, { id: ref, redraws }) : imageUrl(id, { messageId: ref, redraws });
 };
 

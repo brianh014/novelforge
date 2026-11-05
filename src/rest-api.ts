@@ -2,10 +2,10 @@ import { z } from "zod";
 import type { Dice } from "./check-resolver";
 import { InvalidWorkflow, parseWorkflow } from "./comfy-workflow";
 import { comfyImages, comfyModels, randomSeed } from "./comfyui";
-import { chosenModels, drawSteps, localIsSetUp } from "./graph-builder";
+import { chosenModels, drawSteps, localIsSetUp, promptStyle } from "./graph-builder";
 import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
-import { coverPrompt, type EarlyImage, type ImageKind, imagePipeline, shownFailure } from "./image-pipeline";
+import { coverPrompt, type EarlyImage, type ImageKind, imagePipeline, shownFailure, visibleNpcs } from "./image-pipeline";
 import {
   EditNotFound,
   imageType,
@@ -26,7 +26,7 @@ import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-tu
 import { VisibleEdit, type World } from "./state-applier";
 import { ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
-import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type WorldChoices, type WorldPc } from "./world-creation";
+import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type WorldChoices, type WorldPc, writeImagePrompt } from "./world-creation";
 
 const NamedPc = PcDetails.extend({ name: z.string().trim().min(1) });
 
@@ -112,7 +112,9 @@ const PromptRequest = z.object({ prompt: z.string().trim().min(1) });
 // The form's Art Style can change after a first draw.
 const HeldRedrawRequest = PromptRequest.extend({ artStyle: z.string().optional() });
 
-const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene"]), ref: z.number().int().nonnegative() });
+const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene", "requested"]), ref: z.number().int().nonnegative() });
+
+const ImageRequest = z.object({ words: someWords.max(300) });
 
 const NoteRequest = z.object({ text: z.string().trim().min(1) });
 
@@ -714,6 +716,30 @@ export function startServer(options: {
       "/saves/:id/images": {
         // shortcut: the caption is Narrator free text, kept clean only by its prompt, screen it if models leak.
         GET: (req) => Response.json({ images: saves.sceneImages(req.params.id), ...images.status(req.params.id) }),
+      },
+      "/saves/:id/requested-images": {
+        GET: (req) => Response.json({ images: saves.requestedImages(req.params.id), drawing: images.drawing(req.params.id) }),
+        // Answers at once, as the player can go on while it's written and drawn. What it's drawn from is read now, as this moment is the one they meant.
+        POST: async (req) => {
+          const { words } = await parseBody(req, ImageRequest);
+          const { id } = req.params;
+          if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
+          turns.assertIdle(id);
+          const messageId = saves.latestMessageId(id);
+          if (messageId === 0) return Response.json({ error: "There's no story to draw from yet." }, { status: 409 });
+          const story = { save: saves.read(id), state: saves.latestState(id), messages: saves.messages(id) };
+          const style = promptStyle(settings.read());
+          // Only those in the Scene, so a mark can't put anyone else's stored looks in a prompt the player reads.
+          const moment = { location: story.state.scene.location, npcs: visibleNpcs(story.state), wearing: story.state.inventory.wearing };
+          images.drawRequested(id, messageId, words, moment, (signal) => writeImagePrompt(options, story, words, style, signal));
+          return Response.json({}, { status: 202 });
+        },
+      },
+      "/saves/:id/requested-images/failure": {
+        GET: (req) => Response.json({ failure: images.takeRequestFailure(req.params.id) }),
+      },
+      "/saves/:id/requested-images/:ref/image": {
+        GET: (req) => imageResponse(saves.requestedImage(req.params.id, Number(req.params.ref))),
       },
       "/saves/:id/gallery": {
         // An allowlist of fields too, so nothing added to an image reaches the player by default.

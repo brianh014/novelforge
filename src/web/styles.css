@@ -382,6 +382,20 @@ h2 {
   height: 120px;
 }
 
+.inline-image.requested img {
+  display: block;
+  max-width: 100%;
+  max-height: 60vh;
+}
+
+.stage-box .inline-image .zoom {
+  height: auto;
+}
+
+.stage-box .inline-image.requested img {
+  max-height: 30vh;
+}
+
 .narrow-left .page.left {
   position: relative;
 }
@@ -398,7 +412,7 @@ h2 {
 }
 
 @media (width > 760px) {
-  .book:not(.left-folded) .inline-image {
+  .book:not(.left-folded) .inline-image:not(.requested) {
     display: none;
   }
 

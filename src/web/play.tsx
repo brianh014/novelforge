@@ -10,6 +10,7 @@ import {
   type TurnStatus,
   getImages,
   getJournal,
+  getRequestedImages,
   getSave,
   imageUrl,
   type OpenSave,
@@ -22,16 +23,21 @@ import {
   portraitUrl,
   previewRevert,
   replaceResponse,
+  type RequestedImage,
+  type RequestedImages,
+  requestedImageUrl,
+  requestImage,
   revert,
   type SceneImageInfo,
   type SceneImages,
   setupProblem,
   type Status,
   statusWords,
+  takeImageFailure,
   type TurnResult,
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
-import { DecideIcon, DownIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
+import { DecideIcon, DownIcon, DrawIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
@@ -56,6 +62,17 @@ export function SceneImage({ id, image, onLoad }: { id: string; image: SceneImag
     <figure className="plate">
       <Zoomable lazy src={imageUrl(id, image)} alt={image.caption ? `Scene Image: ${image.caption}` : "Scene Image"} onLoad={onLoad} />
       {image.caption && <figcaption aria-hidden="true">{image.caption}</figcaption>}
+    </figure>
+  );
+}
+
+const requestedAlt = ({ caption }: RequestedImage) => `Picture: ${caption}`;
+
+export function RequestedPicture({ id, image }: { id: string; image: RequestedImage }) {
+  return (
+    <figure className="plate">
+      <Zoomable lazy src={requestedImageUrl(id, image)} alt={requestedAlt(image)} />
+      <figcaption aria-hidden="true">{image.caption}</figcaption>
     </figure>
   );
 }
@@ -148,6 +165,10 @@ export function Play({ id }: { id: string }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<Status>();
   const [images, setImages] = useState<SceneImages>({ images: [], pending: false, session: 0 });
+  const [requested, setRequested] = useState<RequestedImages>({ images: [], drawing: 0 });
+  const [imagesReady, setImagesReady] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [words, setWords] = useState("");
   const [setupNotice, setSetupNotice] = useState<string>();
   const [chatStyle, setChatStyle] = useState<ChatStyle>("prose");
   const [journal, setJournal] = useState<Journal>();
@@ -165,9 +186,10 @@ export function Play({ id }: { id: string }) {
   const [reverting, setReverting] = useState<Message>();
   const inputBox = useRef<HTMLTextAreaElement>(null);
   const story = useRef<HTMLDivElement>(null);
-  const inlineCount = images.images.length + (journal?.portraits.length ?? 0);
+  const inlineCount = images.images.length + requested.images.length + (journal?.portraits.length ?? 0);
   const { more, room, onScroll, refit } = useTurnScroll(story, turn, messages.at(-1)?.id, inlineCount, folded);
   const rewriteButton = useRef<HTMLButtonElement>(null);
+  const drawButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(new AbortController());
   const unwatchTurn = useRef(() => {});
   const imageCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -186,6 +208,7 @@ export function Play({ id }: { id: string }) {
       if (settings) {
         setSetupNotice(setupProblem(settings));
         setChatStyle(settings.chatStyle);
+        setImagesReady(settings.imagesReady);
       }
       setSave(save);
       setMessages(messages);
@@ -222,11 +245,22 @@ export function Play({ id }: { id: string }) {
   // Images draw in the background, so the page looks for them apart from the Turn, for as long as any are on the way.
   function checkImages() {
     clearTimeout(imageCheck.current);
-    getImages(id).then((next) => {
+    Promise.all([getImages(id), getRequestedImages(id)]).then(([next, asked]) => {
       setImages(next);
+      setRequested(asked);
       if (next.pending && !leaving.current.signal.aborted) imageCheck.current = setTimeout(checkImages, IMAGE_CHECK_MS);
-      // Once, when drawing stops, as this holds the whole Full Log.
-      else getJournal(id).then(setJournal, () => {});
+      else {
+        // Once, when drawing stops, as this holds the whole Full Log.
+        getJournal(id).then(setJournal, () => {});
+        // Not on the way out, as nothing would be left to tell the player.
+        if (leaving.current.signal.aborted) return;
+        takeImageFailure(id).then((failure) => {
+          if (!failure) return;
+          setError(failure.error);
+          setWords((typed) => typed || failure.words);
+          setAsking(true);
+        }, () => {});
+      }
     }, () => {});
   }
 
@@ -268,6 +302,7 @@ export function Play({ id }: { id: string }) {
     if (rewriting === message.id) return;
     setRewriting(message.id);
     setFeedback("");
+    setAsking(false);
   }
 
   function cancelRewrite() {
@@ -275,6 +310,31 @@ export function Play({ id }: { id: string }) {
     setFeedback("");
     // Back in a Stage box can have taken the button away.
     (rewriteButton.current ?? story.current)?.focus();
+  }
+
+  function toggleAsking() {
+    if (!drawable) return;
+    setAsking(!asking);
+    setRewriting(undefined);
+  }
+
+  function cancelAsking() {
+    setAsking(false);
+    setWords("");
+    drawButton.current?.focus();
+  }
+
+  async function askForPicture(event: FormEvent) {
+    event.preventDefault();
+    if (!drawable || !words.trim()) return;
+    setError("");
+    try {
+      await requestImage(id, words);
+      cancelAsking();
+      checkImages();
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
   }
 
   async function duplicateHere(message: Message) {
@@ -337,6 +397,9 @@ export function Play({ id }: { id: string }) {
     checkImages();
   }
 
+  // Before the story opens there's no Message for a picture to join.
+  const drawable = imagesReady && !turn && messages.length > 0;
+
   if (loadError) {
     return (
       <Book left={<h1 className="big">NovelForge</h1>}>
@@ -364,6 +427,17 @@ export function Play({ id }: { id: string }) {
 
   const picture = !staged && (sceneImage() || cover);
 
+  /** Pictures the player asked for, which have no other place in the story, so these stay whatever the left page shows. */
+  const requestedRows = (message: Message) =>
+    requested.images
+      .filter(({ messageId }) => messageId === message.id)
+      .map((image) => (
+        <details key={image.ref} className="inline-image requested" onToggle={refit}>
+          <summary>Picture: {image.caption}</summary>
+          <Zoomable lazy src={requestedImageUrl(id, image)} alt={requestedAlt(image)} onLoad={refit} />
+        </details>
+      ));
+
   /** Folded in the story under the response they came with, for when the left page is out of sight. */
   const inlineImages = (message: Message) => {
     const image = images.images.find(({ messageId }) => messageId === message.id);
@@ -384,6 +458,7 @@ export function Play({ id }: { id: string }) {
               <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={portrait.npc!} onLoad={refit} />
             </details>
           ))}
+        {requestedRows(message)}
       </>
     );
   };
@@ -511,6 +586,7 @@ export function Play({ id }: { id: string }) {
           onChoose={setChosenBeat}
           line={line}
           controls={controls}
+          rows={requestedRows}
           waiting={!!turn && !turn.narration}
         >
           {/* Back should show what that moment looked like, not the newest image. */}
@@ -581,6 +657,7 @@ export function Play({ id }: { id: string }) {
           <button type="button" className="quiet" aria-label="Dismiss this error" onClick={() => setError("")}>×</button>
         </div>
       )}
+      {requested.drawing > 0 && <p role="status" className="waiting">Drawing {plural(requested.drawing, "picture")}…</p>}
       {replaceable && rewriting === replaceable.id && (
         <form className="ask" onSubmit={sendFeedback}>
           <label>
@@ -603,6 +680,30 @@ export function Play({ id }: { id: string }) {
           </div>
         </form>
       )}
+      {asking && drawable && (
+        <form className="ask" onSubmit={askForPicture}>
+          <label>
+            What should the picture show?
+            <textarea
+              autoFocus
+              rows={2}
+              maxLength={300}
+              placeholder="The woman in the corner"
+              value={words}
+              onChange={(e) => setWords(e.target.value)}
+              onKeyDown={sendOnEnter}
+            />
+          </label>
+          <div className="row">
+            <button type="button" className="quiet" onClick={cancelAsking}>
+              Cancel
+            </button>
+            <button className="action" aria-disabled={!words.trim()}>
+              Draw
+            </button>
+          </div>
+        </form>
+      )}
       <form className="compose" onSubmit={send}>
         <label>
           <span className="visually-hidden">What does {pc} say or do?</span>
@@ -617,6 +718,18 @@ export function Play({ id }: { id: string }) {
           />
         </label>
         <div className="compose-actions">
+          <button
+            ref={drawButton}
+            type="button"
+            className="icon"
+            title={drawable ? "Draw a picture" : `Draw a picture: ${imagesReady ? "wait for the story" : "images are off in Settings"}`}
+            aria-label="Draw a picture"
+            aria-expanded={asking && drawable}
+            aria-disabled={!drawable}
+            onClick={toggleAsking}
+          >
+            {DrawIcon}
+          </button>
           <button
             type="button"
             className="icon"
@@ -661,6 +774,7 @@ function StageBox(props: {
   onChoose: (beat: number) => void;
   line: (beat: Beat, key: number) => ReactNode;
   controls: (message: Message) => ReactNode;
+  rows: (message: Message) => ReactNode;
   waiting: boolean;
   children: (message?: Message) => ReactNode;
 }) {
@@ -686,6 +800,7 @@ function StageBox(props: {
           ),
         )}
         {waiting && <p className="waiting">{WRITING}</p>}
+        {current.message && props.rows(current.message)}
         <div className="row stage-foot">
           <span className="muted">
             Beat {current.number} of {current.of}
@@ -748,7 +863,7 @@ function RevertDialog(props: { id: string; message: Message; onClose: () => void
       {preview && (
         <p>
           This permanently deletes the {plural(preview.messages, "Message")} after it
-          {preview.images > 0 && ` and ${plural(preview.images, "Scene Image")}`}
+          {preview.images > 0 && ` and ${plural(preview.images, "image")}`}
           {preview.portraits > 0 && ` and ${plural(preview.portraits, "portrait")}`}.
         </p>
       )}

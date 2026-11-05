@@ -32,9 +32,21 @@ const LOOKS =
 const SELF_CONTAINED =
   "The image model knows nothing of this story, so someone who has never read it must be able to draw this moment correctly from this text alone. Frame the moment as a storyteller would. The PC may be in the picture when they are part of it. Show nothing hidden from the PC, no names of people or places, and no writing, and describe anything invented for this story by what it physically looks like, never by its name. Never name an art medium, camera or lens, as the player's Art Style decides those.";
 
+/** `names` is where the names to mark are, and `thinLooks` what to do about looks too thin to draw. */
+const proseRules = (names: string, thinLooks: string) =>
+  `Write connected sentences, at most 150 words before the looks are added: first the people, what each is doing and where they are in the frame, then the place from foreground to background with its era and named materials and surfaces, then the time of day and the light, with its source, direction, quality and colour. ${SELF_CONTAINED} Mark each person you picture as [Name: phrase], with the name exactly as ${names} has it or the PC's name, and a phrase of at most 15 words, with no name, giving their build, hair and what they have on right now, such as [Name: a heavyset man with a grey beard in a torn yellow raincoat]. Mark at most four people, once each, using a pronoun after that. The image model also gets that person's portrait or stored looks, so describe them nowhere else${thinLooks}. Describe anyone else in a short phrase with no mark. The image model has no way to exclude anything, so say what is there instead, such as bare stone walls, and never write no, not or without.`;
+
+const KEYWORD_RULES = `Write comma-separated keyword phrases, about 40 words, most important first: the people and what they are doing, the place and its era, the time of day and the light, the mood. ${SELF_CONTAINED} Picture at most two people, each as a short phrase of looks, with no square brackets.`;
+
 const IMAGE_PROMPT: Record<PromptStyle, string> = {
-  prose: `Write connected sentences, at most 150 words before the looks are added: first the people, what each is doing and where they are in the frame, then the place from foreground to background with its era and named materials and surfaces, then the time of day and the light, with its source, direction, quality and colour. ${SELF_CONTAINED} Mark each person you picture as [Name: phrase], with the name exactly as the state has it or the PC's name, and a phrase of at most 15 words, with no name, giving their build, hair and what they have on right now, such as [Name: a heavyset man with a grey beard in a torn yellow raincoat]. Mark at most four people, once each, using a pronoun after that. The image model also gets that person's portrait or stored looks, so describe them nowhere else, and if someone's appearance is thinner than asked for above, or their clothing has changed, use update_npc in this Turn. Describe anyone else in a short phrase with no mark. The image model has no way to exclude anything, so say what is there instead, such as bare stone walls, and never write no, not or without.`,
-  keywords: `Write comma-separated keyword phrases, about 40 words, most important first: the people and what they are doing, the place and its era, the time of day and the light, the mood. ${SELF_CONTAINED} Picture at most two people, each as a short phrase of looks, with no square brackets.`,
+  prose: proseRules("the state", ", and if someone's appearance is thinner than asked for above, or their clothing has changed, use update_npc in this Turn"),
+  keywords: KEYWORD_RULES,
+};
+
+/** The same rules for the one Image Prompt written outside a Turn, which can't change the state. */
+export const REQUESTED_IMAGE_PROMPT: Record<PromptStyle, string> = {
+  prose: proseRules("people", ""),
+  keywords: KEYWORD_RULES,
 };
 
 /** Asked for only with a Scene Image coming, as a prompt on every Turn would cost the player for nothing. */

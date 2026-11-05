@@ -39,6 +39,10 @@ The Narrator's first Message, which brings the player up to speed before they ac
 **Scene Image**:
 A generated image showing the current moment of a Scene.
 
+**Requested Image**:
+An extra picture drawn on the spot from the player's own words and the recent story, which joins the latest Message beside any Scene Image. It is not a Turn, so the Narrator never hears about it.
+_Avoid_: Scene Image (that is what a Turn draws)
+
 **Image Prompt**:
 The main text an image was drawn from, which the player can read and change. Art Style and other drawing choices are not part of it.
 _Avoid_: Visual description (that is only the Narrator's part of a Scene Image's prompt)
@@ -120,7 +124,7 @@ The player-facing record of only what the PC knows or has encountered, where the
 _Avoid_: Log (the Full Log is one section of the Journal)
 
 **Gallery**:
-The part of the book holding every image the player may see: the Cover, the portraits of the PC and known NPCs, and the Scene Images.
+The part of the book holding every image the player may see: the Cover, the portraits of the PC and known NPCs, the Scene Images and the Requested Images.
 
 **Revert**:
 Returning to an earlier Message and permanently deleting everything after it.

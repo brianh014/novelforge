@@ -68,10 +68,15 @@ export const OPENING_SNAPSHOT = 0;
 const Pictured = z.array(z.string().nullable());
 export type Pictured = z.infer<typeof Pictured>;
 
-/** One image of a Save: `ref` is the Cover's row, a portrait's id, or a Scene Image's Message. */
-export type ImageTarget = { kind: "cover" | "portrait" | "scene"; ref: number };
+/** One image of a Save: `ref` is the Cover's row, a portrait's id, a Scene Image's Message, or a requested image's id. */
+export type ImageTarget = { kind: "cover" | "portrait" | "scene" | "requested"; ref: number };
 
-const REDRAWABLE = { cover: ["cover", "id"], portrait: ["portraits", "id"], scene: ["scene_images", "message_id"] } as const;
+const REDRAWABLE = {
+  cover: ["cover", "id"],
+  portrait: ["portraits", "id"],
+  scene: ["scene_images", "message_id"],
+  requested: ["requested_images", "id"],
+} as const;
 
 type SectionRow = { name: string; id: number; content: string };
 
@@ -138,7 +143,10 @@ function countAfter(db: Database, messageId: number) {
     .query<{ messages: number }, [number]>("SELECT count(*) AS messages FROM messages WHERE id > ?")
     .get(messageId)!;
   const { images } = db
-    .query<{ images: number }, [number]>("SELECT count(*) AS images FROM scene_images WHERE message_id > ?")
+    .query<{ images: number }, [number]>(
+      `SELECT (SELECT count(*) FROM scene_images WHERE message_id > ?1)
+       + (SELECT count(*) FROM requested_images WHERE message_id > ?1) AS images`,
+    )
     .get(messageId)!;
   const { portraits } = db
     .query<{ portraits: number }, [number]>("SELECT count(*) AS portraits FROM portraits WHERE message_id > ?")
@@ -154,6 +162,7 @@ function deleteAfter(db: Database, messageId: number) {
   db.run("DELETE FROM messages WHERE id > ?", [messageId]);
   db.run("DELETE FROM snapshot_sections WHERE message_id > ?", [messageId]);
   db.run("DELETE FROM scene_images WHERE message_id > ?", [messageId]);
+  db.run("DELETE FROM requested_images WHERE message_id > ?", [messageId]);
   db.run("DELETE FROM portraits WHERE message_id > ?", [messageId]);
   sweepSections(db);
   clearPending(db);
@@ -256,8 +265,25 @@ function toVersion12(db: Database) {
   );
 }
 
+/**
+ * Apart from `scene_images`, as a Message can have several and they never stand in for its Scene Image. Ids are what
+ * the client sees and are never reused, as with portraits, and `caption` is the player's own words.
+ */
+const toVersion13 = (db: Database) =>
+  db.run(
+    `CREATE TABLE IF NOT EXISTS requested_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id INTEGER NOT NULL,
+      caption TEXT NOT NULL,
+      bytes BLOB NOT NULL,
+      prompt TEXT NOT NULL,
+      pictured TEXT NOT NULL,
+      redraws INTEGER NOT NULL DEFAULT 0
+    )`,
+  );
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -277,7 +303,7 @@ function migrate(db: Database) {
 
 const NOT_A_SAVE = "This file isn't a valid Save.";
 
-const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images", "portraits", "cover"];
+const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images", "requested_images", "portraits", "cover"];
 
 /** Anything in an imported file that could act while it is migrated, so it must be refused first. */
 function assertSafeToMigrate(db: Database) {
@@ -355,6 +381,15 @@ function assertValidSave(db: Database) {
     pictured: jsonText(Pictured).nullable(),
     ...redrawable,
   });
+  const requested = rowsOf(db, "requested_images", {
+    id: rowId.positive(),
+    message_id: rowId,
+    caption: z.string(),
+    bytes: storedImage,
+    pictured: jsonText(Pictured),
+    ...redrawable,
+    prompt: z.string(),
+  });
   const portraits = rowsOf(db, "portraits", {
     id: rowId.positive(),
     npc: z.string().nullable(),
@@ -384,10 +419,12 @@ function assertValidSave(db: Database) {
   const complete = linked.size === links.length && links.length === snapshots.size * schemas.size;
   const narrators = new Set(messages.filter(({ role }) => role === "narrator").map(({ id }) => id));
   const imagesPlaced = images.every(({ message_id }) => narrators.has(message_id));
+  // Any Message, as a Revert can leave a player Message latest.
+  const requestedPlaced = requested.every(({ message_id }) => message_id !== OPENING_SNAPSHOT && snapshots.has(message_id));
   const portraitsPlaced =
     new Set(portraits.map(({ npc }) => npc)).size === portraits.length &&
     portraits.every(({ npc, message_id }) => (npc === null ? message_id === OPENING_SNAPSHOT : narrators.has(message_id)));
-  if (save.length !== 1 || !answered || !complete || !imagesPlaced || !portraitsPlaced) throw new InvalidSave(NOT_A_SAVE);
+  if (save.length !== 1 || !answered || !complete || !imagesPlaced || !requestedPlaced || !portraitsPlaced) throw new InvalidSave(NOT_A_SAVE);
 }
 
 /** Fills a new Save with a file's rows, so its table definitions, id sequence and spare pages stay behind. */
@@ -559,15 +596,26 @@ export function saveStore(savesDir: string) {
         .all();
     },
 
+    /** Without the bytes, like `sceneImages`. */
+    requestedImages(id: string) {
+      using db = open(id);
+      return db
+        .query<{ ref: number; messageId: number; caption: string; redraws: number }, []>(
+          "SELECT id AS ref, message_id AS messageId, caption, redraws FROM requested_images ORDER BY id",
+        )
+        .all();
+    },
+
     /** Every image without its bytes, in Gallery order, including those of NPCs the player must not see yet. */
     gallery(id: string) {
       using db = open(id);
       return db
         .query<ImageTarget & { npc: string | null; messageId: number; caption: string; prompt: string | null; redraws: number }, []>(
-          `SELECT 'cover' AS kind, id AS ref, NULL AS npc, 0 AS messageId, '' AS caption, prompt, redraws, 0 AS place FROM cover
-           UNION ALL SELECT 'portrait', id, npc, message_id, '', prompt, redraws, npc IS NOT NULL FROM portraits
-           UNION ALL SELECT 'scene', message_id, NULL, message_id, caption, prompt, redraws, 2 FROM scene_images
-           ORDER BY place, ref`,
+          `SELECT 'cover' AS kind, id AS ref, NULL AS npc, 0 AS messageId, '' AS caption, prompt, redraws, 0 AS place, 0 AS story FROM cover
+           UNION ALL SELECT 'portrait', id, npc, message_id, '', prompt, redraws, npc IS NOT NULL, id FROM portraits
+           UNION ALL SELECT 'scene', message_id, NULL, message_id, caption, prompt, redraws, 2, message_id FROM scene_images
+           UNION ALL SELECT 'requested', id, NULL, message_id, caption, prompt, redraws, 2, message_id FROM requested_images
+           ORDER BY place, story, kind DESC, ref`,
         )
         .all();
     },
@@ -585,6 +633,13 @@ export function saveStore(savesDir: string) {
       const image = db
         .query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM scene_images WHERE message_id = ?")
         .get(messageId);
+      if (!image) throw new MessageNotFound();
+      return image.bytes;
+    },
+
+    requestedImage(id: string, ref: number) {
+      using db = open(id);
+      const image = db.query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM requested_images WHERE id = ?").get(ref);
       if (!image) throw new MessageNotFound();
       return image.bytes;
     },
@@ -615,10 +670,24 @@ export function saveStore(savesDir: string) {
       ]);
     },
 
-    /** Who a Scene Image shows, or null if it's from before that was kept. */
-    scenePictured(id: string, messageId: number) {
+    /** Stores nothing if the Message has gone, like `addSceneImage`. */
+    addRequestedImage(id: string, messageId: number, caption: string, bytes: Uint8Array, prompt: string, pictured: Pictured) {
+      if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       using db = open(id);
-      const row = db.query<{ pictured: string | null }, [number]>("SELECT pictured FROM scene_images WHERE message_id = ?").get(messageId);
+      db.run("INSERT INTO requested_images (message_id, caption, bytes, prompt, pictured) SELECT id, ?, ?, ?, ? FROM messages WHERE id = ?", [
+        caption,
+        bytes,
+        prompt,
+        JSON.stringify(pictured),
+        messageId,
+      ]);
+    },
+
+    /** Who an image of a moment shows, or null for a Scene Image from before that was kept. */
+    pictured(id: string, { kind, ref }: ImageTarget & { kind: "scene" | "requested" }) {
+      const [table, key] = REDRAWABLE[kind];
+      using db = open(id);
+      const row = db.query<{ pictured: string | null }, [number]>(`SELECT pictured FROM ${table} WHERE ${key} = ?`).get(ref);
       return row?.pictured ? (JSON.parse(row.pictured) as Pictured) : null;
     },
 

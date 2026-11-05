@@ -454,6 +454,14 @@ const withPortrait = (messageId: number, npc: string, bytesSql: string) => (db: 
   db.run(`INSERT INTO portraits (npc, message_id, bytes) VALUES (${npc}, ${messageId}, ${bytesSql})`);
 };
 
+/** Adds a Turn and an image the player asked for on `messageId`. */
+const withRequested = (messageId: number, bytesSql: string, pictured = "'[]'") => (db: Database) => {
+  db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello'), ('narrator', 'Hi')");
+  db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections WHERE message_id = 0");
+  db.run("INSERT INTO snapshot_sections SELECT 2, name, section_id FROM snapshot_sections WHERE message_id = 0");
+  db.run(`INSERT INTO requested_images (message_id, caption, bytes, prompt, pictured) VALUES (${messageId}, 'The bench', ${bytesSql}, 'A bench', ${pictured})`);
+};
+
 const TAMPERED: [string, (db: Database) => void][] = [
   ["a Save with no Art Style column", (db) => db.run("ALTER TABLE save DROP COLUMN art_style")],
   ["a Save with no Starting Hook column", (db) => db.run("ALTER TABLE save DROP COLUMN starting_hook")],
@@ -492,6 +500,12 @@ const TAMPERED: [string, (db: Database) => void][] = [
     withImage(2, PNG_SQL)(db);
     db.run("UPDATE scene_images SET caption = x'00ff'");
   }],
+  ["no requested image table", (db) => db.run("DROP TABLE requested_images")],
+  ["an extra requested image column", (db) => db.run("ALTER TABLE requested_images ADD COLUMN extra TEXT")],
+  ["a requested image that is really HTML", withRequested(2, "x'3c21646f63747970652068746d6c3e'")],
+  ["a requested image for no Message", withRequested(9, PNG_SQL)],
+  ["a requested image for before the story", withRequested(0, PNG_SQL)],
+  ["a requested image with malformed people", withRequested(2, PNG_SQL, "'[1]'")],
   ["no portrait table", (db) => db.run("DROP TABLE portraits")],
   ["an extra portrait column", (db) => db.run("ALTER TABLE portraits ADD COLUMN extra TEXT")],
   ["a portrait that is really HTML", withPortrait(2, "'Hesper'", "x'3c21646f63747970652068746d6c3e'")],

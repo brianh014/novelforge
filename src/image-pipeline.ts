@@ -20,6 +20,8 @@ export type EarlyImage = { prompt: string; bytes?: Uint8Array<ArrayBuffer> };
  * their turn, as each was asked for once. Of the scenes only the newest waits, so a run of quick Turns pays for two images.
  */
 type Work = { running?: Job & { controller: AbortController }; queue: Job[]; waiting?: Job };
+/** What one image of a moment is drawn from, with `description` as the prompt before its marks are expanded. */
+type Moment = Pick<Scene, "description" | "location" | "npcs" | "wearing">;
 
 // Sent as the negative prompt, because a Scene Image must not show the player a Check's numbers or dice either.
 const AVOID = "text, captions, letters, numbers, dice";
@@ -47,7 +49,7 @@ export function portraitsDue(before: State, after: State) {
   return [...new Set(due)].flatMap((name) => after.npcs.filter((npc) => npc.name === name));
 }
 
-function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: string[]) {
+export function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: string[]) {
   const traits = physicalTraits.trim().replace(/\s*\n\s*/g, " ").replace(/\.$/, "");
   // A PC on the form may have no name yet, and an empty search would match between every letter.
   return [name ? traits.replaceAll(name, "this person") : traits, wearing.length > 0 && `wearing ${wearing.join(", ")}`].filter(Boolean).join(", ");
@@ -97,6 +99,9 @@ const portraitPrompt = (looks: string, style: PromptStyle) =>
 
 type Role = ImagePayload["reference_images"][number]["role"];
 
+// A requested image follows its Message's own Scene Image, which may be the background to carry on from.
+const afterItsScene = (messageId: number) => messageId + 1;
+
 export const coverPrompt = ({ title, theme, world }: Cover) =>
   `The front cover of a novel, one striking image of its world's mood and subject, not a moment from the story. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly, and it must be the only lettering on the cover: ${JSON.stringify(title)}\nTheme: ${theme}\nThe world: ${world}`;
 
@@ -137,6 +142,8 @@ export function imagePipeline(
   const work = new Map<string, Work>();
   // shortcut: in memory, so a restart forgets a failed Redraw, which leaves the old image anyway.
   const failures = new Map<string, string>();
+  // shortcut: in memory and one per Save, so a restart or a second failure loses it, and that picture was never drawn anyway.
+  const requestFailures = new Map<string, { error: string; words: string }>();
   let session = 0;
 
   const adapter: ImageAdapter = (payload, signal) => adapters[settings.read().imageProvider](payload, signal);
@@ -164,14 +171,20 @@ export function imagePipeline(
     style_preset: saves.read(id).artStyle,
   });
 
-  async function drawScene(id: string, messageId: number, { description, location, npcs, wearing }: Scene, signal: AbortSignal) {
+  /** `before` is the Message whose earlier Scene Image, if any, can carry its background into this one. */
+  async function drawMoment(id: string, before: number, { description, location, npcs, wearing }: Moment, signal: AbortSignal) {
     const { pc } = saves.read(id);
     const hasReference = (person: string | null) => usesPortraits(settings.read()) && !!saves.portraitOf(id, person);
     const { prompt, pictured } = expandMarks(description, npcs, { name: pc.name, looks: pcLooks(pc, wearing) }, hasReference);
-    const bytes = await adapter(scenePayload(id, messageId, prompt, location, pictured), signal);
+    const bytes = await adapter(scenePayload(id, before, prompt, location, pictured), signal);
     // Counted before storing, as the player has paid for it whether or not its Message is still there.
     session++;
-    saves.addSceneImage(id, messageId, location, bytes, prompt, pictured);
+    return { prompt, pictured, bytes };
+  }
+
+  async function drawScene(id: string, messageId: number, scene: Scene, signal: AbortSignal) {
+    const { prompt, pictured, bytes } = await drawMoment(id, messageId, scene, signal);
+    saves.addSceneImage(id, messageId, scene.location, bytes, prompt, pictured);
   }
 
   async function drawPortrait(id: string, messageId: number, npc: Npc | undefined, signal: AbortSignal, early?: Promise<EarlyImage>) {
@@ -189,17 +202,18 @@ export function imagePipeline(
   }
 
   /** The same kind of request that made the image, so only the prompt, the Art Style and the Settings can differ. */
-  function redrawPayload(id: string, { kind, ref }: ImageTarget, prompt: string) {
-    if (kind === "scene") {
-      const state = saves.snapshot(id, ref);
+  function redrawPayload(id: string, { kind, ref }: ImageTarget, messageId: number, prompt: string) {
+    if (kind === "scene" || kind === "requested") {
+      const state = saves.snapshot(id, messageId);
       // An image from before this kept no record, and was drawn from the cast and the PC.
-      const pictured = saves.scenePictured(id, ref) ?? [...visibleNpcs(state).map(({ name }) => name), null];
-      return scenePayload(id, ref, prompt, state.scene.location, pictured);
+      const pictured = saves.pictured(id, { kind, ref }) ?? [...visibleNpcs(state).map(({ name }) => name), null];
+      return scenePayload(id, kind === "scene" ? messageId : afterItsScene(messageId), prompt, state.scene.location, pictured);
     }
     return (kind === "cover" ? coverPayload : portraitPayload)(prompt, saves.read(id).artStyle);
   }
 
   const redrawKey = (id: string, { kind, ref }: ImageTarget) => `${id}/${kind}/${ref}`;
+  const requestKey = (id: string) => `${id}/requested`;
 
   function isRedrawing(id: string, key: string) {
     const jobs = work.get(id);
@@ -262,12 +276,13 @@ export function imagePipeline(
       failures.delete(key);
       const draw = async (signal: AbortSignal) => {
         try {
-          const bytes = await adapter(redrawPayload(id, target, prompt), signal);
+          const bytes = await adapter(redrawPayload(id, target, messageId, prompt), signal);
           session++;
           saves.replaceImage(id, target, prompt, bytes);
         } catch (error) {
           if (!signal.aborted && !(error instanceof SaveNotFound)) failures.set(key, shownFailure(error));
-          throw error;
+          // Kept from the log below, as the error can repeat the prompt, and the player is told.
+          if (target.kind !== "requested") throw error;
         }
       };
       enqueue(id, (jobs) => jobs.queue.push({ messageId, draw, redraw: key }));
@@ -277,6 +292,42 @@ export function imagePipeline(
     redrawState(id: string, target: ImageTarget) {
       const key = redrawKey(id, target);
       return { redrawing: isRedrawing(id, key), failure: failures.get(key) ?? "" };
+    },
+
+    /**
+     * An image the player asked for by hand, which joins `messageId` and waits its turn, as their one press must not be dropped.
+     * `write` makes the Image Prompt, so the player needn't wait for it. A failure is held for the player, and only the step that failed
+     * reaches the log, as a provider's error can repeat the prompt and the story.
+     */
+    drawRequested(id: string, messageId: number, words: string, moment: Omit<Moment, "description">, write: (signal: AbortSignal) => Promise<string>) {
+      requestFailures.delete(id);
+      const draw = async (signal: AbortSignal) => {
+        let step = "writing its prompt";
+        try {
+          const description = await write(signal);
+          step = "drawing it";
+          const { prompt, pictured, bytes } = await drawMoment(id, afterItsScene(messageId), { ...moment, description }, signal);
+          saves.addRequestedImage(id, messageId, words, bytes, prompt, pictured);
+        } catch (error) {
+          if (signal.aborted || error instanceof SaveNotFound) return;
+          console.error(`A requested image failed ${step}.`);
+          requestFailures.set(id, { error: `The picture wasn't drawn. ${shownFailure(error).replace(/\.?$/, ".")}`, words });
+        }
+      };
+      enqueue(id, (jobs) => jobs.queue.push({ messageId, draw, redraw: requestKey(id) }));
+    },
+
+    /** Reading a failure takes it, so it's told once. */
+    takeRequestFailure(id: string) {
+      const failure = requestFailures.get(id);
+      requestFailures.delete(id);
+      return failure;
+    },
+
+    /** How many requested images are on the way. */
+    drawing(id: string) {
+      const jobs = work.get(id);
+      return jobs ? [...jobs.queue, jobs.running].filter((job) => job?.redraw === requestKey(id)).length : 0;
     },
 
     /**

@@ -1,8 +1,8 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { editJournal, getImages, getJournal, getSave, type Journal as JournalContent, type Save, type SceneImageInfo, tellNarrator } from "./api";
+import { editJournal, getImages, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, tellNarrator } from "./api";
 import { readable } from "./chat-style";
 import { Book, BookTabs } from "./menu";
-import { IMAGE_CHECK_MS, SceneImage } from "./play";
+import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./play";
 import { Person } from "./zoom";
 
 /** Text the player can change where it stands. A failure keeps what they typed, and the server's refusal during a Turn shows here. */
@@ -116,6 +116,7 @@ export function Journal({ id }: { id: string }) {
   const [save, setSave] = useState<Save>();
   const [journal, setJournal] = useState<JournalContent>();
   const [images, setImages] = useState<SceneImageInfo[]>([]);
+  const [requested, setRequested] = useState<RequestedImage[]>([]);
   const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
@@ -123,10 +124,11 @@ export function Journal({ id }: { id: string }) {
     let leaving = false;
     let loaded = false;
     const load = () =>
-      Promise.all([getSave(id), getJournal(id), getImages(id)]).then(([save, journal, { images, pending }]) => {
+      Promise.all([getSave(id), getJournal(id), getImages(id), getRequestedImages(id)]).then(([save, journal, { images, pending }, asked]) => {
         setSave(save);
         setJournal(journal);
         setImages(images);
+        setRequested(asked.images);
         loaded = true;
         if (pending && !leaving) timer = setTimeout(load, IMAGE_CHECK_MS);
       }, (failure: Error) => {
@@ -227,6 +229,11 @@ export function Journal({ id }: { id: string }) {
           return (
             <div key={message.id} className={`message ${message.role}`}>
               {image && <SceneImage id={id} image={image} />}
+              {requested
+                .filter(({ messageId }) => messageId === message.id)
+                .map((image) => (
+                  <RequestedPicture key={image.ref} id={id} image={image} />
+                ))}
               <p>{message.text}</p>
             </div>
           );
