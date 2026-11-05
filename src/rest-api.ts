@@ -132,6 +132,7 @@ const imageResponse = (bytes: Uint8Array<ArrayBuffer>) =>
   });
 
 // A Turn outlives its request, so the player can switch away. The Text Provider's silence limit still ends a stuck one.
+// shortcut: nothing can stop a running Turn, so one the player abandons is still paid for, add a Stop button if that adds up.
 const NEVER = new AbortController().signal;
 
 /** Answers with the committed Messages, as one JSON body or, if the client asks, as a stream of the Turn. */
@@ -157,7 +158,7 @@ async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvent
         const response = errorResponse(error);
         const body = (await response.json()) as { error: string };
         // A plain JSON client gets its answer here, and has no page to come back to.
-        turn.end(streaming ? { input: turn.input, replaces: turn.replaces, status: response.status, ...body } : undefined);
+        turn.end(streaming ? { ...body, input: turn.input, replaces: turn.replaces, status: response.status } : undefined);
         return { status: response.status, body };
       },
     );
@@ -165,18 +166,26 @@ async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvent
     const result = await played;
     return "messages" in result ? Response.json(result, { status: 201 }) : Response.json(result.body, { status: result.status });
   }
+  let gone = false;
   const stream = new ReadableStream({
     async start(controller) {
-      // A client that leaves stops hearing the Turn, and its stream takes no more events.
+      // A client that leaves stops hearing the Turn. A write to a closed stream throws, and that must never reach the Turn.
+      const there = () => !gone && !req.signal.aborted;
       const send = (event: string, data: object) => {
-        if (!req.signal.aborted) controller.enqueue(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        if (there()) controller.enqueue(`event: ${event}
+data: ${JSON.stringify(data)}
+
+`);
       };
       client = send;
       const result = await played;
-      if (req.signal.aborted) console.log("A Turn ended after its client left.");
+      if (!there()) console.log("A Turn ended after its client left.");
       if ("messages" in result) send("done", result);
       else send("error", { status: result.status, ...result.body });
-      if (!req.signal.aborted) controller.close();
+      if (there()) controller.close();
+    },
+    cancel() {
+      gone = true;
     },
   });
   return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });

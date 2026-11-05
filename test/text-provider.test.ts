@@ -519,6 +519,7 @@ test("a broken line in the stream retries the Turn, and the log shows why", asyn
   expect((await storedMessages(id)).at(-1)!.text).toBe("The tide rises.");
   expect(log).toContain("attempt 1 of 3");
   expect(log).toContain('"last":{"chars":');
+  expect(log).not.toContain("The ti");
 });
 
 test("a stream that stays broken fails the Turn as retryable once the retries run out", async () => {
@@ -680,4 +681,74 @@ test("a second Turn is allowed once the first has finished", async () => {
   const events = await streamTurn(id, "Second.").then(turnEvents);
 
   expect(events.at(-1)!.event).toBe("done");
+});
+
+test("a client that cancels its stream doesn't fail the Turn, which is saved", async () => {
+  play([
+    async function* () {
+      yield delta('{"check":null,"narration":"The tide ');
+      await Bun.sleep(100);
+      yield delta("rises");
+      await Bun.sleep(100);
+      yield delta('"}');
+    },
+  ]);
+  const id = await game.createSave();
+
+  const log = await logOf(async () => {
+    const reader = (await streamTurn(id, "I wade forward.")).body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await Bun.sleep(400);
+  });
+
+  expect((await storedMessages(id)).at(-1)?.text).toBe("The tide rises");
+  expect(log).not.toContain("A Turn failed");
+});
+
+test("an Opening that fails with nobody there hands back no input", async () => {
+  play([
+    async function* () {
+      yield delta('{"check":null,"narration":"The ti');
+      await Bun.sleep(50);
+      throw new Error("The stream broke");
+    },
+  ]);
+  const id = await game.createSave();
+  const client = new AbortController();
+
+  await logOf(async () => {
+    const response = await fetch(game.url(`/saves/${id}/opening`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: "{}",
+      signal: client.signal,
+    });
+    await response.body!.getReader().read();
+    client.abort();
+    await Bun.sleep(150);
+  });
+
+  expect(await liveTurn(id)).toMatchObject({ failed: { input: "" } });
+});
+
+test("a reply that isn't JSON leaves none of its words in the log", async () => {
+  const prose = [delta("Marcus waits by the door."), "data: [DONE]\n\n"];
+  play([prose, prose, prose]);
+  const id = await game.createSave();
+
+  const log = await logOf(() => streamTurn(id, "I wade forward.").then(turnEvents));
+
+  expect(log).toContain("attempt 3 of 3");
+  expect(log).not.toContain("Marcus");
+});
+
+test("a provider's error is cut short in the log, as it may echo the story", async () => {
+  play([httpError({ message: "x".repeat(1000) }, 500)()]);
+  const id = await game.createSave();
+
+  const log = await logOf(() => streamTurn(id, "I wade forward.").then(turnEvents));
+
+  expect(log).toContain("x".repeat(100));
+  expect(log).not.toContain("x".repeat(400));
 });

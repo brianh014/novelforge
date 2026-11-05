@@ -258,13 +258,13 @@ async function awaitTurn(
   for (let misses = 0; misses < turnPolling.tries; ) {
     try {
       const { running, failed } = await getTurn(id);
-      misses = 0;
       if (failed) return { error: withHint(failed.error, failed.status, retryHint), input: failed.input };
       if (!running) {
         const messages = (await getMessages(id)).filter((message) => message.id > after);
         if (messages.length > 0) return { messages };
         return { error: `The connection dropped and this wasn't saved. ${retryHint}`, input };
       }
+      misses = 0;
       show(running.narration);
     } catch {
       misses++;

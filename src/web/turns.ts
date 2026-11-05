@@ -1,7 +1,7 @@
 import type { TurnResult } from "./api";
 import type { TurnInProgress } from "./chat-style";
 
-type Failure = Extract<TurnResult, { error: string }>;
+type Failure = Extract<TurnResult, { error: string }> & { replaces?: number };
 type Play = (show: (narration: string) => void, signal: AbortSignal) => Promise<TurnResult>;
 
 export type RunningTurn = {
@@ -38,7 +38,7 @@ export function startTurn(id: string, started: TurnInProgress, play: Play) {
   // Never aborted, as leaving the screen doesn't end a Turn.
   entry.finished = play(show, new AbortController().signal).then((result) => {
     running.delete(id);
-    if ("error" in result && !watcher) missed.set(id, result);
+    if ("error" in result && !watcher) missed.set(id, { ...result, replaces: started.replaces?.id });
     return result;
   });
   return entry;
@@ -49,4 +49,12 @@ export function takeMissedFailure(id: string) {
   const failure = missed.get(id);
   missed.delete(id);
   return failure;
+}
+
+/** What a story page does once loaded. A failure waits for the player, as going on would pay again and clear the error. */
+export function firstMove(page: { running: boolean; failure: boolean; action: boolean; unopened: boolean }) {
+  if (page.running) return "follow";
+  if (page.failure) return "wait";
+  if (page.action) return "play";
+  return page.unopened ? "open" : "wait";
 }

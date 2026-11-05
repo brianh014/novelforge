@@ -33,7 +33,7 @@ import {
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { DecideIcon, DownIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs, Fold, MoreBelow } from "./menu";
-import { type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
+import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
 
 // An item's action, which the Story plays as a Turn once it has loaded, so it streams like any other.
@@ -178,10 +178,6 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
     // Taken now, as it may finish while the page loads, and its Messages must not be missed.
     const inProgress = runningTurn(id);
     const missed = takeMissedFailure(id);
-    if (missed) {
-      setError(missed.error);
-      setDraft(missed.input);
-    }
     // Without Settings the story still reads, in Prose.
     const reading = getSettings().catch(() => undefined);
     const live: Promise<TurnStatus> = inProgress ? Promise.resolve({}) : getTurn(id).catch(() => ({}));
@@ -193,20 +189,26 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       setSave(save);
       setMessages(messages);
       setStatus(status);
-      if (failed) {
-        setError(failureMessage(failed));
-        if (failed.replaces === undefined) setDraft(failed.input);
+      const failure = missed ?? (failed && { ...failed, error: failureMessage(failed) });
+      if (failure) {
+        setError(failure.error);
+        giveBack(failure.input, failure.replaces);
       }
       const replaces = messages.find((message) => message.id === running?.replaces);
       const resumed =
         running && startTurn(id, { input: running.input, narration: running.narration, replaces }, (show) => resumeTurn(id, running, show));
-      if (inProgress || resumed) {
-        // One Turn at a time, so an item used meanwhile waits in the box.
-        if (action) setDraft(action);
-        follow(inProgress ?? resumed!);
-      } else if (action) playInput(action, messages);
-      // Without a working Narrator this would only fail, and the page already says what to fix.
-      else if (messages.length === 0 && settings && !setupProblem(settings)) openStory();
+      const move = firstMove({
+        running: !!(inProgress || resumed),
+        failure: !!failure,
+        action: !!action,
+        // Without a working Narrator this would only fail, and the page already says what to fix.
+        unopened: messages.length === 0 && !!settings && !setupProblem(settings),
+      });
+      // One Turn at a time, so an item used meanwhile waits in the box.
+      if (action && move !== "play" && !failure?.input) setDraft(action);
+      if (move === "follow") follow(inProgress ?? resumed!);
+      else if (move === "play") playInput(action!, messages);
+      else if (move === "open") openStory();
     }, (failure: Error) => setLoadError(failure.message));
     checkImages();
     return () => {
@@ -241,7 +243,6 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   async function decide() {
     if (turn || deciding || draft.trim()) return;
     setDeciding(true);
-    setError("");
     try {
       setDraft(await decideForMe(id, leaving.current.signal));
       inputBox.current?.focus();
@@ -278,13 +279,21 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
   async function duplicateHere(message: Message) {
     if (duplicating.current) return;
     duplicating.current = true;
-    setError("");
     try {
       location.hash = `/play/${(await duplicateFrom(id, message.id)).id}`;
     } catch (failure) {
       setError((failure as Error).message);
     }
     duplicating.current = false;
+  }
+
+  /** A failed Turn's text goes back where it was written, as feedback must never be sent as the PC's words. */
+  function giveBack(input: string, replaces?: number) {
+    if (replaces === undefined) setDraft(input);
+    else if (input) {
+      setRewriting(replaces);
+      setFeedback(input);
+    }
   }
 
   // `before` is passed in because the load effect runs this before `messages` is set.
@@ -318,8 +327,7 @@ export function Play({ id, worldChanged }: { id: string; worldChanged: boolean }
       if (!narration) setAnnouncement(result.messages.at(-1)!.text);
     } else {
       setTurn(undefined);
-      if (replaces) setRewriting(result.input ? replaces.id : undefined);
-      else setDraft(result.input);
+      giveBack(result.input, replaces?.id);
       setError(result.error);
       // A stale Turn means the story moved on without this page.
       getMessages(id).then(setMessages, () => {});

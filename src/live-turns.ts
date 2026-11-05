@@ -14,8 +14,8 @@ export type FailedTurn = { status: number; error: string; input: string; replace
 export class TurnRunning extends Error {}
 
 /**
- * The Turns being played, which outlive the requests that started them, so a player can leave and come back. Held in
- * memory: a restart ends them all, and a Turn it ended was never saved.
+ * The Turns being played, which outlive the requests that started them, so a player can leave and come back.
+ * shortcut: held in memory, so a restart ends them unsaved, keep them in the Save if restarts mid-Turn become common.
  */
 export function liveTurns() {
   const running = new Map<string, LiveTurn>();

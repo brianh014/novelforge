@@ -90,8 +90,8 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
     if (!textModel) throw new TextProviderFailed("No text model is set, so choose one in Settings");
     const url = textBaseUrl.replace(/\/$/, "");
     const headers = keyHeader(textApiKey);
-    // A provider may echo what it was sent, and this text goes to the server log.
-    const redacted = (detail: string) => (textApiKey ? detail.replaceAll(textApiKey, "[key]") : detail);
+    // A provider may echo what it was sent, and this text goes to the server log, so no key and only a little of any story.
+    const redacted = (detail: string) => (textApiKey ? detail.replaceAll(textApiKey, "[key]") : detail).slice(0, 300);
     const failure = (error: ProviderError | undefined, status: number) =>
       isRefusal(error)
         ? new ContentRefused()
@@ -155,8 +155,8 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
       for await (const data of whole ? [await response.text()] : eventData(response.body, heardFrom)) {
         if (data === "[DONE]") break;
         seen.lines = ((seen.lines as number) ?? 0) + 1;
-        // Long enough to tell cut-off JSON from an HTML page, and too short to hold much of the story.
-        seen.last = { chars: data.length, start: redacted(data.slice(0, 20)) };
+        // Enough to tell cut-off JSON from an HTML page, and it can't hold a word of the story.
+        seen.last = { chars: data.length, first: data[0], final: data.at(-1) };
         const { id, provider, usage, error, choices } = JSON.parse(data) as Chunk;
         delete seen.last;
         if (error) throw failure(error, response.status);

@@ -270,7 +270,8 @@ async function narrate(
 function whyInvalid({ cause }: InvalidResponse) {
   if (cause instanceof z.ZodError) return cause.issues.map(({ path, code }) => `${path.join(".")}: ${code}`).join(", ");
   if (Array.isArray(cause)) return `refused operations: ${cause.map(({ op }) => op).join(", ")}`;
-  return cause instanceof Error ? cause.message : "a Check request where none is allowed";
+  // Not the parser's message, which quotes the reply.
+  return cause instanceof SyntaxError ? "not JSON" : "a Check request where none is allowed";
 }
 
 /** Returns if another attempt should run. Anything but an invalid reply goes on up. */

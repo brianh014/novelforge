@@ -437,3 +437,20 @@ test("a failure the stream delivered isn't told a second time", async () => {
 
   expect(await getTurn(id)).toEqual({});
 });
+
+test("a Save deleted once its Turn has gone stops the page waiting", async () => {
+  const realEvery = turnPolling.everyMs;
+  turnPolling.everyMs = 1;
+  try {
+    start(reply("Unused."));
+    const id = await game.createSave();
+    await deleteSave(id);
+
+    const result = await resumeTurn(id, { input: "I wade forward.", narration: "", after: 0 }, () => {});
+
+    expect(result).toMatchObject({ input: "I wade forward." });
+    expect((result as { error: string }).error).toContain("can't be reached");
+  } finally {
+    turnPolling.everyMs = realEvery;
+  }
+});

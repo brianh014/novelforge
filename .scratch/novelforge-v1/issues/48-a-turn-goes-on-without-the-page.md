@@ -9,7 +9,9 @@
 - [x] A dropped stream follows the Turn on the server until it ends
 - [x] A page that opens on a running Turn picks it up
 - [x] A page coming back replaces a stream that went quiet without failing
-- [x] A Turn that fails with nobody there is told once on return
+- [x] A Turn that fails with nobody there is told once on return, and isn't tried again by itself
+- [x] A failed Rewrite gives its feedback back to the Rewrite box, even after a reload
+- [x] A stream the client cancels doesn't fail the Turn
 - [x] A failure the stream delivered isn't told twice
 - [x] A second Turn on the same Save is refused before it reaches the model
 - [x] Seen in a real browser: reload mid-Turn and pick it up

@@ -10,7 +10,7 @@
 - [x] Each committed Turn logs attempts, summary length, people and operations
 - [x] Each unusable reply logs why, by field name
 - [x] A client that leaves is logged as that, not as a failed Turn
-- [x] No log line holds narration or the player's text
+- [x] No log line holds narration or the player's text, apart from up to 300 characters of what a provider's own error echoes
 - [x] Each new Message stores when it was written, and older Messages stay null
 - [x] Every line of the server log has a time
 - [x] The error above the input box can be dismissed, seen in a real browser at phone width
