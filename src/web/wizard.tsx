@@ -24,7 +24,7 @@ import {
   worldCoverUrl,
 } from "./api";
 import { DecideIcon } from "./icons";
-import { Sheet } from "./menu";
+import { Fold, Sheet } from "./menu";
 import { IMAGE_CHECK_MS } from "./play";
 import { Zoomable } from "./zoom";
 
@@ -498,26 +498,34 @@ export function Reveal({ id, worldChanged }: { id: string; worldChanged: boolean
   return (
     <main className="desk">
       <div className="book ready">
-        {save?.hasCover && (
-          <figure className="plate reveal">
-            <Zoomable src={coverUrl(id)} alt={`Cover of ${save.title || name}`} />
-          </figure>
-        )}
-        <div className="presented">
-          <h1 className="big">{save?.title || name}</h1>
-          <p>{save?.worldBrief}</p>
-          <p className="muted">Your story is ready.</p>
-          {drawing && <p role="status" className="waiting">Your portrait is being painted…</p>}
-          <a className="action" href={`#/play/${id}${worldChanged ? "/world-changed" : ""}`}>
-            Open the book
-          </a>
-        </div>
-        {portrait && (
-          <figure className="plate reveal">
-            <Zoomable src={portraitUrl(id, portrait)} alt={`Portrait of ${name}`} />
-            <figcaption>{name}</figcaption>
-          </figure>
-        )}
+        <section className="sheet-main">
+          <Fold>
+            <div className="presented">
+              {save?.hasCover && (
+                <figure className="plate reveal">
+                  <Zoomable src={coverUrl(id)} alt={`Cover of ${save.title || name}`} />
+                </figure>
+              )}
+              <h1 className="big">{save?.title || name}</h1>
+              <p>{save?.worldBrief}</p>
+              {portrait && (
+                <figure className="plate reveal">
+                  <Zoomable src={portraitUrl(id, portrait)} alt={`Portrait of ${name}`} />
+                  <figcaption>{name}</figcaption>
+                </figure>
+              )}
+            </div>
+          </Fold>
+          <div className="sheet-foot">
+            <div className="row">
+              {drawing && <span role="status" className="waiting">Your portrait is being painted…</span>}
+              <span className="muted">Your story is ready.</span>
+              <a className="action" href={`#/play/${id}${worldChanged ? "/world-changed" : ""}`}>
+                Open the book
+              </a>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );

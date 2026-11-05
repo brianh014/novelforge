@@ -748,35 +748,30 @@ a.action {
   max-height: 58vh;
 }
 
-/* Reads left to right as cover, title and brief, then the PC. */
+/* Reads down the page as cover, title and brief, then the PC. */
 .book.ready {
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: safe center;
-  gap: 28px;
-  overflow: auto;
-}
-
-.book.ready > * {
-  flex: 1 1 0;
-  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .presented {
-  max-height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  overflow: auto;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
   text-align: center;
-  overflow-wrap: anywhere;
+}
+
+.presented p {
+  max-width: 40em;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.plate.reveal {
+  width: min(100%, 480px);
 }
 
 .plate.reveal img {
-  max-height: calc(100dvh - 72px);
+  max-height: none;
 }
 
 .full-log .plate {
@@ -1336,25 +1331,8 @@ dialog blockquote {
     max-height: 26dvh;
   }
 
-  .plate.cover img,
-  .plate.reveal img {
+  .plate.cover img {
     max-height: 60dvh;
-  }
-
-  .book.ready {
-    padding: 16px;
-    flex-direction: column;
-    justify-content: start;
-  }
-
-  .book.ready > * {
-    flex: none;
-    width: 100%;
-    max-height: none;
-  }
-
-  .book.ready .plate img {
-    max-height: none;
   }
 
   /* The sheet's index folds into a strip, and the column keeps its pinned foot. */

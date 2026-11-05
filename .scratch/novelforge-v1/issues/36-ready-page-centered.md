@@ -8,8 +8,8 @@
 
 ## Criteria
 
-- [x] The cover, title, World Brief, message, Open the book and PC portrait present on one page
-- [x] Everything fits without scrolling at 1546 by 1180, 1366 by 800 and 1024 by 700, and stacks in order at phone width
+- [x] The cover, title, World Brief and PC portrait run down one centered page, in that order
+- [x] Open the book stays pinned at the bottom while the page scrolls, on desktop and at phone width
 
 ## Comments
 
@@ -17,6 +17,6 @@ The user asked for this directly, which replaces the earlier decision to keep th
 
 Checked on a copy of the user's Save, so the portrait-still-being-painted state and a Save with no portrait weren't seen.
 
-Later the user asked for a full presentation of the cover art, title, brief, then PC art. It reads left to right on one screen, and stacks in that order at phone width, where the page scrolls to Open the book. Without art, the text fills the page alone.
+Later the user asked for a full presentation of the cover art, title, brief, then PC art. The user rejected a left-to-right version, then chose C, One long page, from `ready-page-options.html` (https://claude.ai/artifact/XjFkakBAEcyeNJDDdhY2MT).
 
 Limit: the page reads the Save again only while the portrait paints, so a cover that lands after the portrait needs a reload. Recorded as a `shortcut:` comment in `src/web/wizard.tsx`.
