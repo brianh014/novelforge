@@ -125,7 +125,7 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
     };
 
     try {
-      const useSchema = await supportsSchema(url, textModel, headers, signal);
+      const useSchema = schema !== undefined && (await supportsSchema(url, textModel, headers, signal));
       let response = await send(useSchema);
       // A listing can claim schema support that the routed provider then rejects, and that must not fail every Turn.
       if (useSchema && (response.status === 400 || response.status === 404)) {

@@ -436,3 +436,60 @@ test("a streamed Turn survives a silence longer than Bun's default idle timeout"
 
   expect(events.at(-1)!.event).toBe("done");
 }, 20_000);
+
+const textTest = (prompt: string) => game.post("/settings/text-test", { prompt });
+const body = (response: Response) => response.json() as Promise<Record<string, any>>;
+
+test("with no Model Instructions the Settings text test sends just the prompt, and returns the reply with how it went", async () => {
+  play([[delta("Hello "), delta("there."), "data: [DONE]\n\n"]], schemaModel);
+
+  const response = await textTest("Say hello");
+
+  expect(response.status).toBe(200);
+  const { seconds, firstSeconds, ...rest } = await body(response);
+  expect(rest).toEqual({ reply: "Hello there.", tokens: 3, model: "fake/model" });
+  expect(firstSeconds).toBeGreaterThanOrEqual(0);
+  expect(seconds).toBeGreaterThanOrEqual(firstSeconds);
+  const sent = provider.requests[0]!.body;
+  expect(sent.messages).toEqual([{ role: "user", content: "Say hello" }]);
+  expect(sent.response_format).toBeUndefined();
+  expect(sent.provider).toBeUndefined();
+});
+
+test("the Settings text test sends the Model Instructions as the system prompt", async () => {
+  play([[delta("Aye."), "data: [DONE]\n\n"]]);
+  await game.patch("/settings", { modelInstructions: "Answer like a sailor." });
+
+  await textTest("Say hello");
+
+  expect(provider.requests[0]!.body.messages).toEqual([
+    { role: "system", content: "Answer like a sailor." },
+    { role: "user", content: "Say hello" },
+  ]);
+});
+
+test("the Settings text test refuses an empty prompt without calling the model", async () => {
+  play([]);
+
+  expect((await textTest("   ")).status).toBe(400);
+  expect(provider.requests).toHaveLength(0);
+});
+
+test("the Settings text test says when the model refused", async () => {
+  play([[`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "content_filter" }] })}\n\n`]]);
+
+  const response = await textTest("Say hello");
+
+  expect(response.status).toBe(422);
+  expect((await body(response)).error).toBe("The model refused this prompt.");
+});
+
+test("the Settings text test says when the server can't be reached", async () => {
+  play([]);
+  provider.stop();
+
+  const response = await textTest("Say hello");
+
+  expect(response.status).toBe(502);
+  expect((await body(response)).error).toContain("can't be reached");
+});

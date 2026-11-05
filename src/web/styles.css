@@ -531,15 +531,21 @@ input {
 }
 
 .settings .quiet,
-.comfy-test .action {
+.settings-test .action {
   justify-self: start;
 }
 
-.comfy-test img {
+.settings-test img {
   width: 100%;
 }
 
-.comfy-stats {
+.test-reply {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.test-stats {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 2px 18px;
@@ -547,11 +553,11 @@ input {
   font-variant-numeric: tabular-nums;
 }
 
-.comfy-stats dt {
+.test-stats dt {
   color: var(--muted);
 }
 
-.comfy-stats dd {
+.test-stats dd {
   margin: 0;
   overflow-wrap: anywhere;
 }

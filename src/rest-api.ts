@@ -3,6 +3,7 @@ import type { Dice } from "./check-resolver";
 import { InvalidWorkflow, parseWorkflow } from "./comfy-workflow";
 import { comfyImages, comfyModels, randomSeed } from "./comfyui";
 import { chosenModels, drawSteps, localIsSetUp } from "./graph-builder";
+import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
 import { imagePipeline } from "./image-pipeline";
 import {
@@ -20,7 +21,7 @@ import {
 } from "./save-store";
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textModels } from "./text-provider";
-import { playOpening, playTurn, replaceResponse, type TextProvider, TurnFailed, type TurnEvents } from "./turn-engine";
+import { ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
 import { decideForPc, ENHANCE_FIELDS, enhance, fitPc, generateWorld, PC_FIELDS, pickForMe, pickPc, type World, type WorldChoices } from "./world-creation";
 
@@ -71,7 +72,7 @@ const NoFields = z.object({});
 
 const RewriteRequest = z.object({ feedback: z.string().trim().min(1) });
 
-const ComfyTestRequest = z.object({ prompt: z.string().trim().min(1) });
+const TestRequest = z.object({ prompt: z.string().trim().min(1) });
 
 const NoteRequest = z.object({ text: z.string().trim().min(1) });
 
@@ -257,6 +258,34 @@ export function startServer(options: {
       "/settings/text-models": {
         GET: async (req) => Response.json({ models: await textModels(settings, req.signal) }),
       },
+      // The prompt and Model Instructions alone, with no schema, so a failure points at the model and not at the game.
+      "/settings/text-test": {
+        POST: async (req) => {
+          const { prompt } = await parseBody(req, TestRequest);
+          const started = performance.now();
+          const elapsed = () => (performance.now() - started) / 1000;
+          let firstSeconds: number | undefined;
+          try {
+            const onText = () => (firstSeconds ??= elapsed());
+            const { modelInstructions: content } = settings.read();
+            const system = content.trim() ? [{ role: "system" as const, content }] : [];
+            const reply = await options.textProvider([...system, { role: "user", content: prompt }], { onText, signal: req.signal });
+            const seconds = elapsed();
+            return Response.json({
+              reply,
+              seconds,
+              firstSeconds: firstSeconds ?? seconds,
+              tokens: estimateTokens(reply),
+              model: settings.read().textModel,
+            });
+          } catch (error) {
+            console.error(error);
+            if (error instanceof ContentRefused) return Response.json({ error: "The model refused this prompt." }, { status: 422 });
+            const message = error instanceof TextProviderFailed ? error.message : "The Text Provider request failed";
+            return Response.json({ error: message }, { status: 502 });
+          }
+        },
+      },
       // Only ever the saved address, never one still being typed.
       "/settings/comfy-models": {
         GET: async (req) => Response.json(await comfyModels(settings, req.signal)),
@@ -264,7 +293,7 @@ export function startServer(options: {
       // Draws straight to the client, so a test image reaches no Save and no session count.
       "/settings/comfy-test": {
         POST: async (req) => {
-          const { prompt } = await parseBody(req, ComfyTestRequest);
+          const { prompt } = await parseBody(req, TestRequest);
           const choices = settings.read();
           if (!localIsSetUp(choices)) return Response.json({ error: "Choose your models and save first." }, { status: 422 });
           try {

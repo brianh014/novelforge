@@ -3,6 +3,7 @@ import { flushSync } from "react-dom";
 import { WORKFLOW_EXAMPLE } from "../comfy-workflow";
 import { chosenModels } from "../graph-builder";
 import {
+  askTextTest,
   type ComfyModels,
   drawComfyTest,
   getComfyModels,
@@ -13,6 +14,7 @@ import {
   saveArtStyle,
   saveSettings,
   type Settings,
+  type TextTest,
 } from "./api";
 import { BookTabs, Sheet } from "./menu";
 
@@ -184,78 +186,117 @@ function WorkflowGuide() {
   );
 }
 
-/** Draws one image with the saved Settings, so a player can check their setup without playing. */
-function ComfyTest() {
+/** Tries the saved Settings without playing. `run` takes the prompt, and `children` shows what it returned. */
+function TestBox<T>({
+  title,
+  hint,
+  working,
+  run,
+  children,
+}: {
+  title: string;
+  hint: string;
+  working: string;
+  run: (prompt: string, signal: AbortSignal) => Promise<T>;
+  children: (result: T, prompt: string) => ReactNode;
+}) {
   const [prompt, setPrompt] = useState("");
-  const [drawing, setDrawing] = useState(false);
-  const [drawn, setDrawn] = useState<Awaited<ReturnType<typeof drawComfyTest>>>();
-  const [size, setSize] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ value: T }>();
   const [error, setError] = useState("");
   const job = useRef<AbortController>(null);
 
-  // Leaving Settings stops the job, so it doesn't hold up the GPU for a picture nobody will see.
+  // Leaving Settings stops the job, so it doesn't hold up the GPU or run up a bill for something nobody will see.
   useEffect(() => () => job.current?.abort(), []);
-  useEffect(() => () => URL.revokeObjectURL(drawn?.url ?? ""), [drawn]);
 
-  async function draw() {
-    if (drawing || !prompt.trim()) return;
-    job.current = new AbortController();
-    const { signal } = job.current;
-    setDrawing(true);
+  async function start() {
+    if (busy || !prompt.trim()) return;
+    const { signal } = (job.current = new AbortController());
+    setBusy(true);
     setError("");
-    setDrawn(undefined);
-    setSize("");
+    setResult(undefined);
     try {
-      const result = await drawComfyTest(prompt, signal);
-      if (signal.aborted) return URL.revokeObjectURL(result.url);
-      setDrawn(result);
+      setResult({ value: await run(prompt, signal) });
     } catch (failure) {
       if (!signal.aborted) setError((failure as Error).message);
     }
-    setDrawing(false);
+    setBusy(false);
   }
 
   return (
-    <fieldset className="comfy-test">
-      <legend>Test image</legend>
+    <fieldset className="settings-test">
+      <legend>{title}</legend>
       <label>
         Prompt
         <textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} />
       </label>
-      <button type="button" className="action" aria-disabled={drawing || !prompt.trim()} onClick={draw}>
-        {drawing ? "Drawing…" : "Test"}
+      <button type="button" className="action" aria-disabled={busy || !prompt.trim()} onClick={start}>
+        {busy ? working : "Test"}
       </button>
-      <p className="muted">Uses your saved Settings. The image isn't kept.</p>
+      <p className="muted">{hint}</p>
       {error && <p className="notice">{error}</p>}
-      {drawn && (
-        <>
-          <img
-            src={drawn.url}
-            alt={`Test image: ${prompt}`}
-            onLoad={({ currentTarget: { naturalWidth, naturalHeight } }) => setSize(`${naturalWidth} × ${naturalHeight}, `)}
-          />
-          <dl className="comfy-stats">
-            <dt>Time</dt>
-            <dd>{drawn.seconds.toFixed(1)}s</dd>
-            <dt>Size</dt>
-            <dd>
-              {size}
-              {(drawn.fileSize / 1e6).toFixed(1)} MB
-            </dd>
-            {drawn.model && (
-              <>
-                <dt>Model</dt>
-                <dd>{drawn.model}</dd>
-                <dt>Steps</dt>
-                <dd>{drawn.steps}</dd>
-                <dt>Seed</dt>
-                <dd>{drawn.seed}</dd>
-              </>
-            )}
-          </dl>
-        </>
-      )}
+      {result && children(result.value, prompt)}
     </fieldset>
+  );
+}
+
+function ComfyResult({ drawn, alt }: { drawn: Awaited<ReturnType<typeof drawComfyTest>>; alt: string }) {
+  const [size, setSize] = useState("");
+  useEffect(() => () => URL.revokeObjectURL(drawn.url), [drawn]);
+
+  return (
+    <>
+      <img
+        src={drawn.url}
+        alt={alt}
+        onLoad={({ currentTarget: { naturalWidth, naturalHeight } }) => setSize(`${naturalWidth} × ${naturalHeight}, `)}
+      />
+      <dl className="test-stats">
+        <dt>Time</dt>
+        <dd>{drawn.seconds.toFixed(1)}s</dd>
+        <dt>Size</dt>
+        <dd>
+          {size}
+          {(drawn.fileSize / 1e6).toFixed(1)} MB
+        </dd>
+        {drawn.model && (
+          <>
+            <dt>Model</dt>
+            <dd>{drawn.model}</dd>
+            <dt>Steps</dt>
+            <dd>{drawn.steps}</dd>
+            <dt>Seed</dt>
+            <dd>{drawn.seed}</dd>
+          </>
+        )}
+      </dl>
+    </>
+  );
+}
+
+function TextResult({ reply, seconds, firstSeconds, tokens, model }: TextTest) {
+  // A server that sends the reply whole gives no writing time to measure.
+  const writing = seconds - firstSeconds;
+  return (
+    <>
+      {reply ? <p className="test-reply">{reply}</p> : <p className="notice">The model sent an empty reply.</p>}
+      <dl className="test-stats">
+        <dt>Time</dt>
+        <dd>{seconds.toFixed(1)}s</dd>
+        <dt>First word</dt>
+        <dd>{firstSeconds.toFixed(1)}s</dd>
+        <dt>Length</dt>
+        <dd>About {tokens} tokens</dd>
+        {writing >= 0.1 && (
+          <>
+            <dt>Speed</dt>
+            <dd>About {Math.round(tokens / writing)} tokens/s</dd>
+          </>
+        )}
+        <dt>Model</dt>
+        <dd>{model}</dd>
+      </dl>
+    </>
   );
 }
 
@@ -488,7 +529,14 @@ function ComfySettings({
             ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev and Klein 9B, so other Klein models may need an Advanced workflow."
             : "Uses the previous Scene Image as a reference. NPC references need FLUX.2 or an Advanced workflow."}
       </p>
-      <ComfyTest />
+      <TestBox
+        title="Test image"
+        hint="Uses your saved Settings. The image isn't kept."
+        working="Drawing…"
+        run={drawComfyTest}
+      >
+        {(drawn, prompt) => <ComfyResult drawn={drawn} alt={`Test image: ${prompt}`} />}
+      </TestBox>
     </>
   );
 }
@@ -619,7 +667,7 @@ function InstallSettings({
         </p>
       )}
       <label>
-        Model Instructions
+        Pre-History / System Prompt / Main Prompt
         <textarea
           rows={5}
           value={draft.modelInstructions}
@@ -627,6 +675,14 @@ function InstallSettings({
         />
       </label>
       <p className="muted">Your own guidance to the Narrator, for every Save.</p>
+      <TestBox
+        title="Test text"
+        hint="Sends this prompt to your saved model, with the saved system prompt above. OpenRouter may charge for each test."
+        working="Asking…"
+        run={askTextTest}
+      >
+        {(result) => <TextResult {...result} />}
+      </TestBox>
       </div>
 
       <div data-section="Images" className="fields" hidden={section !== "Images"}>

@@ -246,7 +246,8 @@ Per install:
   * ComfyUI setup and LoRAs
   * API keys
   * Toggle images on and off, current images are kept and displayed, just no new images created
-  * Model Instructions \- allows the user to add an [agents.md](http://agents.md) style instruction. Blank by default
+  * Model Instructions, labelled Pre-History / System Prompt / Main Prompt \- allows the user to add an [agents.md](http://agents.md) style instruction. Blank by default
+  * Test text \- a prompt box and Test button at the bottom of the Text settings send that prompt to the saved model, with the Model Instructions as the system prompt and no schema. The reply shows there with its time, time to the first word, approximate length and speed, and the model
 * UI Settings
   * Chat style \- Script, Prose (the default), Bubbles or Stage box, from the UI options report. It changes how the Story shows Messages, not the Full Log, which stays exactly as written
   * Theme - Match this device (the default), Light or Dark

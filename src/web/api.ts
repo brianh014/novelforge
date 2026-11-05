@@ -27,8 +27,12 @@ const jsonBody = (body: object): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-const errorMessage = async (response: Response) =>
-  ((await response.json().catch(() => ({}))) as { error?: string }).error ?? `Request failed (${response.status})`;
+async function errorMessage(response: Response) {
+  const { error } = (await response.json().catch(() => ({}))) as { error?: string };
+  // The page updates on a refresh but the server doesn't, so an older server won't have a newer route.
+  if (error === "Not found") return "The running app is older than this page. Restart NovelForge, then try again.";
+  return error ?? `Request failed (${response.status})`;
+}
 
 async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(path, init);
@@ -65,14 +69,16 @@ export const saveSettings = (change: SettingsChange) =>
 export type ComfyModels = Awaited<ReturnType<typeof comfyModels>>;
 export const getComfyModels = () => request<ComfyModels>("/settings/comfy-models");
 
+export type TextTest = { reply: string; seconds: number; firstSeconds: number; tokens: number; model: string };
+export const askTextTest = (prompt: string, signal: AbortSignal) =>
+  request<TextTest>("/settings/text-test", { ...jsonBody({ prompt }), signal });
+
 /** `model`, `steps` and `seed` are left out for an Advanced workflow, which decides those itself. */
 export type ComfyTestStats = { seconds: number; model?: string; steps?: number; seed?: number };
 
 /** Resolves to an object URL of the drawn image, its file size and how it was drawn. */
 export async function drawComfyTest(prompt: string, signal: AbortSignal) {
   const response = await fetch("/settings/comfy-test", { ...jsonBody({ prompt }), signal });
-  // The page updates on a refresh but the server doesn't, so an older server has no such route.
-  if (response.status === 404) throw new Error("The running app is older than this page. Restart NovelForge, then try again.");
   if (!response.ok) throw new Error(await errorMessage(response));
   const blob = await response.blob();
   const stats = JSON.parse(decodeURIComponent(response.headers.get("X-Draw-Stats") ?? "")) as ComfyTestStats;

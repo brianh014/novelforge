@@ -9,7 +9,7 @@ import { applyOperations, type State, StateOperation } from "./state-applier";
 /** Throws ContentRefused when the content is refused. Anything else it throws is a network or API error. */
 export type TextProvider = (
   prompt: Prompt,
-  request: { schema: object; onText: (text: string) => void; signal: AbortSignal },
+  request: { schema?: object; onText: (text: string) => void; signal: AbortSignal },
 ) => Promise<string>;
 
 export type TurnEvents = (event: "narration" | "restart", data: object) => void;
