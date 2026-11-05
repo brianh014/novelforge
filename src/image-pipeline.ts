@@ -9,7 +9,7 @@ export type ImagePipeline = ReturnType<typeof imagePipeline>;
 type Npc = State["npcs"][number];
 export type Scene = { changed: boolean; moved: boolean; description: string; location: string; npcs: Npc[]; wearing: string[]; portraits: Npc[] };
 /** A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. */
-type Job = { messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string };
+type Job = { messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string; scene?: boolean };
 /** `world` is what the player can read of it: the World Overview, or the World Brief before there is one. */
 type Cover = { title: string; theme: string; world: string };
 export type ImageKind = "cover" | "portrait";
@@ -347,9 +347,15 @@ export function imagePipeline(
         if (scene.moved) jobs.queue.push(portraitJob(id, OPENING_SNAPSHOT));
         jobs.queue.push(...scene.portraits.map((npc) => portraitJob(id, messageId, npc)));
         if (scene.changed && scene.description) {
-          jobs.waiting = { messageId, draw: (signal) => drawScene(id, messageId, scene, signal) };
+          jobs.waiting = { messageId, scene: true, draw: (signal) => drawScene(id, messageId, scene, signal) };
         }
       });
+    },
+
+    /** Whether `messageId`'s Scene Image is still on the way. */
+    sceneDrawing(id: string, messageId: number) {
+      const jobs = work.get(id);
+      return [jobs?.waiting, jobs?.running].some((job) => job?.scene && job.messageId === messageId);
     },
 
     /**

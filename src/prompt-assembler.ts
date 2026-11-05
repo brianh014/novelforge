@@ -137,10 +137,12 @@ The older replies above are shortened, so fill in every field of the schema.${th
 }
 
 /** For Rewrite and Regenerate. Goes before any Check result, so that feedback can never override the result. */
-export function replacementInstruction(rewrite?: { narration: string; feedback: string }): Prompt[number] {
+export function replacementInstruction(rewrite?: { narration: string; feedback: string }, drawAgain = false): Prompt[number] {
   return {
     role: "system",
     content: `This is a new response to the player's last action, replacing an earlier one that no longer counts. The state above is from before that action, so include every state operation this response needs, including add_known_fact where it applies, and a summary that covers this response. Reply with a finished Turn, and do not request a check.${
+      drawAgain ? " The earlier response had a picture, which went with it, so set scene_changed to true and write visual_description for this response." : ""
+    }${
       rewrite
         ? `
 The player rejected the earlier response and gave out-of-character feedback on it, delimited as JSON. Follow the feedback in the new response, while keeping to world_rules: ${JSON.stringify({ rejected_response: rewrite.narration, feedback: rewrite.feedback })}`

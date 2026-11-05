@@ -165,7 +165,9 @@ export async function replaceResponse(
   signal: AbortSignal,
   emit: TurnEvents = () => {},
 ) {
-  const { input, narration, check, state, messages } = saves.turnToReplace(id, messageId);
+  const { input, narration, check, state, messages, sceneImage } = saves.turnToReplace(id, messageId);
+  // The old picture goes with its response, so the new one always gets its own, whatever the Narrator decides.
+  const hadPicture = !!sceneImage || images.sceneDrawing(id, messageId);
   const prompt = assemblePrompt({
     save: saves.read(id),
     state,
@@ -176,7 +178,7 @@ export async function replaceResponse(
     promptStyle: images.ready() ? promptStyle(settings.read()) : null,
   });
   return narrate(textProvider, signal, emit, {
-    prompt: [...prompt, replacementInstruction(feedback === undefined ? undefined : { narration, feedback })],
+    prompt: [...prompt, replacementInstruction(feedback === undefined ? undefined : { narration, feedback }, hadPicture && images.ready())],
     input: feedback ?? "",
     refusal: "The Narrator refused this, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
@@ -184,7 +186,9 @@ export async function replaceResponse(
     commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
     committed: (replacement, scene) => {
       images.forget(id, messageId - 1);
-      images.sceneChanged(id, replacement, scene);
+      // shortcut: a Narrator that writes no prompt gets the old one, which shows the old moment and draws with no portraits. Retry the reply if real models do this.
+      const description = scene.description || (sceneImage?.prompt ?? "");
+      images.sceneChanged(id, replacement, hadPicture ? { ...scene, changed: true, description } : scene);
     },
   });
 }

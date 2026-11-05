@@ -888,6 +888,7 @@ export function saveStore(savesDir: string) {
         check: narrator.hidden_check ? (JSON.parse(narrator.hidden_check) as Check) : undefined,
         state,
         messages: db.query<Message, [number]>("SELECT id, role, text FROM messages WHERE id < ? ORDER BY id").all(player.id),
+        sceneImage: db.query<{ prompt: string | null }, [number]>("SELECT prompt FROM scene_images WHERE message_id = ?").get(messageId),
       };
     },
 

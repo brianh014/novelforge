@@ -409,17 +409,75 @@ test("Regenerate takes the old image with the old response and draws for the new
   expect(images.payloads[1]!.reference_images).toEqual([]);
 });
 
-test("a Rewrite cancels the replaced response's generation, and a response with no change gets no image", async () => {
-  play([newScene(), stay()], new Promise<Uint8Array>(() => {}));
+test("a Rewrite cancels the replaced response's generation and draws for the new one", async () => {
+  play([newScene(), stay()], new Promise<Uint8Array>(() => {}), png(2));
   await enableImages();
   const id = await app.createSave();
   await playTurn(id);
 
   await app.post(`/saves/${id}/messages/2/rewrite`, { feedback: "Shorter." });
 
-  expect((await settled(id)).images).toEqual([]);
+  expect((await settled(id)).images).toHaveLength(1);
   expect(images.aborted).toEqual([1]);
-  expect(images.payloads).toHaveLength(1);
+  expect(images.payloads[1]!.prompt).toBe("A different picture entirely");
+});
+
+test("a Rewrite of a response with a picture draws one, even if the Narrator calls it no change", async () => {
+  play([newScene("Old", "The pier"), stay()], png(1), png(2));
+  await enableImages();
+  const id = await app.createSave();
+  await playTurn(id);
+  await settled(id);
+
+  const { messages } = (await app.post(`/saves/${id}/messages/2/rewrite`, { feedback: "Shorter." }).then((r) => r.json())) as {
+    messages: { id: number }[];
+  };
+
+  expect(await settled(id)).toMatchObject({ images: [{ messageId: messages[0]!.id }] });
+  expect(images.payloads[1]!.prompt).toBe("A different picture entirely");
+});
+
+test("the Narrator is told to draw again only when the replaced response had a picture", async () => {
+  const text = scriptedTextProvider(newScene("Old", "The pier"), stay(), stay());
+  images = scriptedImages(png(1), png(2));
+  app = startApp(join(folder.path, "Saves"), text.textProvider, undefined, undefined, images.imageAdapter);
+  await enableImages();
+  const id = await app.createSave();
+  const told = (at: number) => JSON.stringify(text.prompts[at]).includes("had a picture");
+  await playTurn(id);
+  await settled(id);
+  await app.post(`/saves/${id}/messages/2/regenerate`, {});
+  await settled(id);
+  expect(told(1)).toBe(true);
+
+  await app.post(`/saves/${id}/gallery/delete`, { kind: "scene", ref: 3 });
+  await app.post(`/saves/${id}/messages/3/regenerate`, {});
+  expect(told(2)).toBe(false);
+});
+
+test("a replacement with no prompt of its own draws from the old image's prompt", async () => {
+  play([newScene("Old", "The pier"), turn({ scene_changed: false, visual_description: null })], png(1), png(2));
+  await enableImages();
+  const id = await app.createSave();
+  await playTurn(id);
+  await settled(id);
+
+  await app.post(`/saves/${id}/messages/2/regenerate`, {});
+
+  expect((await settled(id)).images).toHaveLength(1);
+  expect(images.payloads[1]!.prompt).toBe("Old");
+});
+
+test("a replacement of a response with no picture stays without one", async () => {
+  play([stay(), stay()]);
+  await enableImages();
+  const id = await app.createSave();
+  await playTurn(id);
+  await settled(id);
+
+  await app.post(`/saves/${id}/messages/2/regenerate`, {});
+
+  expect((await settled(id)).images).toEqual([]);
 });
 
 test("a generation that finishes after its response was replaced writes nothing, even if it ignores the cancel", async () => {
@@ -433,7 +491,8 @@ test("a generation that finishes after its response was replaced writes nothing,
 
   late.resolve(PNG);
 
-  expect(await settled(id)).toMatchObject({ images: [], session: 1 });
+  // The fresh draw lands on the new response, and the late one has no Message to land on.
+  expect(await settled(id)).toMatchObject({ images: [{ messageId: 3 }], session: 2 });
 });
 
 test("deleting a Save cancels its generation and nothing brings the file back", async () => {

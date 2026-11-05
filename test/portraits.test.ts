@@ -388,7 +388,8 @@ test("a portrait that finishes after its response was replaced writes nothing, e
 
   late.resolve(png(1));
 
-  expect(await settled(id)).toMatchObject({ session: 1 });
+  // The second is the fresh Scene Image for the new response.
+  expect(await settled(id)).toMatchObject({ session: 2 });
   expect((await journalOf(id)).portraits).toEqual([]);
 });
 
