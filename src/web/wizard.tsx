@@ -27,7 +27,8 @@ import { IMAGE_CHECK_MS } from "./play";
 import { Zoomable } from "./zoom";
 
 const THEMES = [
-  "Fantasy",
+  "High Fantasy",
+  "Dark Fantasy",
   "Cyberpunk",
   "Sci Fi Fantasy",
   "Sci Fi",

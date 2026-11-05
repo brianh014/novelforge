@@ -16,7 +16,8 @@ It can create images. Images created based on the current scene in the game, and
 The first step in a new game is creating the world, the player selects from lists or provides a free form answer
 
 * Theme  
-  * Fantasy  
+  * High Fantasy  
+  * Dark Fantasy  
   * Cyberpunk  
   * Sci Fi Fantasy (ie Star Wars, Sci Fi with magic)  
   * Sci Fi (ie The Expanse, Star Trek)  
