@@ -172,8 +172,8 @@ const namesSomething = (change: { old: string | null; new: string | null }) => c
 export const LoreEntryReply = z.object({ title: words, keywords: z.array(words).min(3), content: words });
 
 /** One entry of a list: replaces `old`, or adds when `old` is null, or removes it when `new` is null. */
-const ListChange = z.object({ old: quote.nullable(), new: words.nullable() }).refine(namesSomething);
-type ListChange = z.infer<typeof ListChange>;
+export const ListChange = z.object({ old: quote.nullable(), new: words.nullable() }).refine(namesSomething);
+export type ListChange = z.infer<typeof ListChange>;
 
 /** A change to a world already written, holding only what changes, so a reply can't lose an entry by leaving it out. Each Lore Entry is added, or replaces the one with its exact title. */
 export const WorldUpdate = z.object({

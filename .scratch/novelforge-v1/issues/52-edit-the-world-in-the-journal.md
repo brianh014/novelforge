@@ -46,3 +46,11 @@
 - Left unticked: "One Narrator call applies it... changing only what it touches". The merge is proven, but that a real model picks the right entries and quotes rules exactly has only been faked. No real model was called, as that costs money. Try "the mayor is secretly a smuggler" on a real Save and see that the next Turns reflect it. If it often fails with "no usable response", the model is misquoting.
 - Not checked: a real Save upgrading to 12 (only a hand-made older Save in a test); iOS Safari; leaving the Journal during a hidden change. That still applies, but nothing says so afterwards, and the player can't see the result. The Journal shows a refusal during a Turn only after Save is pressed, as it doesn't know a Turn is running.
 - shortcut noted: a change to the hidden world only reaches a Turn through a Lore Entry's keywords, as ever, so one with poor keywords may stay asleep.
+- **User request (2026-11-05):** "For 52s world edits, make the button a pencil icon and add a button on the top right (top right of the left pane on desktop) 'Tell Narrator what to change' that takes a prompt for the model to change the world overall".
+- **User (2026-11-05):** "This covers changing the hidden world info too. Its a way for the player to nudge the story as they want or correct a mistake".
+- Built (agent, 2026-11-05). Defaults, for the user to review:
+  - The Edit buttons are pencils. Add a fact stays as words, as it adds rather than edits.
+  - The box moved from the bottom of the Journal into a dialog opened by the new button. Escape and Cancel do nothing while the Narrator works.
+  - "Overall" is read as hidden and visible alike: a World Change may now also change the World Brief, Recent summary, facts and NPC summaries where they no longer hold, and the Journal rereads when it's done. This replaces the earlier default that a hidden change never touches the Journal's text.
+  - The Save version stays 13: the Journal's changes are stored as the ordinary visible edits, so Revert, Regenerate and Rewrite treat them as before.
+  - shortcut noted: nothing but the prompt keeps a secret out of the Journal's text, so "the mayor is secretly a smuggler" could reach it on a poor model.

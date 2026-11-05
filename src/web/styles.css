@@ -1212,6 +1212,18 @@ a.action {
   color: var(--muted);
 }
 
+.journal-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.journal-head > button {
+  flex: 0 1 auto;
+  text-align: right;
+}
+
 .journal {
   display: flex;
   flex-direction: column;
@@ -1253,10 +1265,6 @@ a.action {
 
 .edit-box textarea {
   width: 100%;
-}
-
-.journal .edit-box > h2 {
-  margin-top: 10px;
 }
 
 .journal .people {

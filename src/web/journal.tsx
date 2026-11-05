@@ -1,13 +1,14 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { editJournal, getImages, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, tellNarrator } from "./api";
 import { readable } from "./chat-style";
+import { EditIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./play";
 import { Person } from "./zoom";
 
 /** Text the player can change where it stands. A failure keeps what they typed, and the server's refusal during a Turn shows here. */
 function Editable(props: { label: string; text: string; opener?: string; onSave: (text: string) => Promise<unknown>; onRemove?: () => Promise<unknown>; children?: ReactNode }) {
-  const { label, text, opener = "Edit", onSave, onRemove, children } = props;
+  const { label, text, opener, onSave, onRemove, children } = props;
   const [draft, setDraft] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -29,8 +30,8 @@ function Editable(props: { label: string; text: string; opener?: string; onSave:
     return (
       <div className="editable">
         {children}
-        <button className="quiet" aria-label={`${opener}: ${label}`} onClick={() => setDraft(text)}>
-          {opener}
+        <button className={opener ? "quiet" : "icon"} aria-label={`${opener ?? "Edit"}: ${label}`} title={opener ?? "Edit"} onClick={() => setDraft(text)}>
+          {opener ?? EditIcon}
         </button>
       </div>
     );
@@ -65,12 +66,15 @@ function Editable(props: { label: string; text: string; opener?: string; onSave:
   );
 }
 
-/** Words about the hidden world, which the player never sees changed, so all this can show is that it was done or that it failed. */
-function TellTheNarrator({ id }: { id: string }) {
+/** Words about the world, hidden parts included, so the reply can only say that it was done or that it failed. Stays open until it's answered, as nothing else would tell the player. */
+function TellTheNarrator({ id, onDone, onClose }: { id: string; onDone: () => Promise<unknown>; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => dialog.current!.showModal(), []);
 
   const tell = async () => {
     setBusy(true);
@@ -80,6 +84,7 @@ function TellTheNarrator({ id }: { id: string }) {
       await tellNarrator(id, text);
       setText("");
       setDone(true);
+      await onDone();
     } catch (failure) {
       setError((failure as Error).message);
     } finally {
@@ -88,27 +93,32 @@ function TellTheNarrator({ id }: { id: string }) {
   };
 
   return (
-    <form
-      className="edit-box"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void tell();
-      }}
-    >
-      <h2>Tell the Narrator</h2>
-      <label>
-        <span className="muted">Change what's hidden from you, such as “the mayor is secretly a smuggler”. You won't see what changes.</span>
-        <textarea rows={3} value={text} disabled={busy} onChange={(event) => setText(event.target.value)} />
-      </label>
-      {busy && <p role="status" className="waiting">The Narrator is changing the world…</p>}
-      {done && <p role="status" className="muted">Done. The next Turn uses it.</p>}
-      {error && <p role="alert" className="error">{error}</p>}
-      <div className="row">
-        <button type="submit" className="action" disabled={busy || !text.trim()}>
-          Tell the Narrator
-        </button>
-      </div>
-    </form>
+    <dialog ref={dialog} onClose={onClose} onCancel={(event) => busy && event.preventDefault()} aria-labelledby="tell-title">
+      <form
+        className="edit-box"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void tell();
+        }}
+      >
+        <h2 id="tell-title">Tell Narrator what to change</h2>
+        <label>
+          <span className="muted">Nudge the story or correct a mistake, such as “the mayor is secretly a smuggler”. This can change anything in the world, and secrets stay hidden from you.</span>
+          <textarea rows={4} value={text} autoFocus disabled={busy} onChange={(event) => setText(event.target.value)} />
+        </label>
+        {busy && <p role="status" className="waiting">The Narrator is changing the world…</p>}
+        {done && <p role="status" className="muted">Done. The next Turn uses it.</p>}
+        {error && <p role="alert" className="error">{error}</p>}
+        <div className="row">
+          <button type="submit" className="action" disabled={busy || !text.trim()}>
+            Tell Narrator
+          </button>
+          <button type="button" className="quiet" disabled={busy} onClick={() => dialog.current!.close()}>
+            {done ? "Close" : "Cancel"}
+          </button>
+        </div>
+      </form>
+    </dialog>
   );
 }
 
@@ -118,6 +128,7 @@ export function Journal({ id }: { id: string }) {
   const [images, setImages] = useState<SceneImageInfo[]>([]);
   const [requested, setRequested] = useState<RequestedImage[]>([]);
   const [loadError, setLoadError] = useState("");
+  const [telling, setTelling] = useState(false);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -151,11 +162,14 @@ export function Journal({ id }: { id: string }) {
     );
   }
   if (!save || !journal) return <Book left={null}>{null}</Book>;
-  const edit = async (change: Parameters<typeof editJournal>[1]) => {
-    await editJournal(id, change);
+  const reread = async () => {
     const [save, journal] = await Promise.all([getSave(id), getJournal(id)]);
     setSave(save);
     setJournal(journal);
+  };
+  const edit = async (change: Parameters<typeof editJournal>[1]) => {
+    await editJournal(id, change);
+    await reread();
   };
   const pcPortrait = journal.portraits.find(({ npc }) => npc === null);
   const log = readable(journal.fullLog);
@@ -164,7 +178,13 @@ export function Journal({ id }: { id: string }) {
     <Book
       left={
         <>
-          <h1 className="big">Journal</h1>
+          <div className="journal-head">
+            <h1 className="big">Journal</h1>
+            <button className="quiet" onClick={() => setTelling(true)}>
+              Tell Narrator what to change
+            </button>
+          </div>
+          {telling && <TellTheNarrator id={id} onDone={reread} onClose={() => setTelling(false)} />}
           <div className="journal">
             {pcPortrait && (
               <p className="person">
@@ -215,7 +235,6 @@ export function Journal({ id }: { id: string }) {
             ) : (
               <p className="muted">No one yet.</p>
             )}
-            <TellTheNarrator id={id} />
           </div>
         </>
       }

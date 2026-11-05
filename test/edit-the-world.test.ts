@@ -334,7 +334,7 @@ test("import refuses malformed edits carried on a Message", async () => {
 
 const change = (id: string, text = "the mayor is secretly a smuggler") => app.post(`/saves/${id}/world-change`, { change: text });
 const update = (fields: object = {}) =>
-  JSON.stringify({ lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [], ...fields });
+  JSON.stringify({ lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [], world_brief: null, summary: null, facts: [], npc_summaries: [], ...fields });
 const SMUGGLER = { title: "The Mayor", keywords: ["mayor", "harbour", "smuggler"], content: `${SECRET} the mayor smuggles.` };
 const hidden = (id: string) => {
   const { worldBible, worldRules, plotThreads } = store().latestState(id);
@@ -391,6 +391,37 @@ test("one Narrator call applies a hidden change, and the player hears only that 
   expect(await journal(id)).toEqual(before);
 });
 
+test("a World Change can change the Journal's text as well as the hidden world", async () => {
+  play(
+    update({
+      plot_threads: [{ old: WORLD.plotThreads[0], new: "A new plot." }],
+      world_brief: "A drowned city.",
+      summary: "The city sank.",
+      facts: [{ old: null, new: "The city sank." }],
+    }),
+  );
+  const id = createSave();
+
+  const response = await change(id, "the city is under water");
+
+  expect(await response.text()).toBe("{}");
+  const { worldBrief, summary, pcKnown, plotThreads } = store().latestState(id);
+  expect(worldBrief).toBe("A drowned city.");
+  expect(summary).toBe("The city sank.");
+  expect(pcKnown.facts).toContain("The city sank.");
+  expect(plotThreads[0]).toBe("A new plot.");
+});
+
+test("a World Change that only changes the Journal counts as a change", async () => {
+  play(update({ world_brief: "A drowned city." }));
+  const id = createSave();
+
+  expect((await change(id)).status).toBe(200);
+
+  expect(store().latestState(id).worldBrief).toBe("A drowned city.");
+  expect(hidden(id)).toEqual(WORLD);
+});
+
 test("the player's words reach the Narrator as JSON data, after the world and the rules for changing it", async () => {
   play(update({ removed_lore: ["The Tide"] }));
   const id = createSave();
@@ -418,6 +449,8 @@ test.each([
   ["removing a Lore Entry that doesn't exist", update({ removed_lore: [`${SECRET} misquoted`] })],
   ["a Lore Entry without enough keywords", update({ lore_entries: [{ title: SECRET, keywords: [], content: SECRET }] })],
   ["a list change with nothing in it", update({ world_rules: [{ old: null, new: null }] })],
+  ["a change to a fact the Journal doesn't show", update({ facts: [{ old: `${SECRET} misquoted`, new: "x" }] })],
+  ["a summary for an NPC the PC doesn't know", update({ npc_summaries: [{ name: `${SECRET} stranger`, summary: "x" }] })],
   ["a reply that changes nothing", update()],
 ])("%s changes nothing and shows the player no hidden text", async (_, reply) => {
   play(reply, reply, reply);

@@ -100,7 +100,7 @@ Replacing the latest Narrator response without feedback, or a world before play 
 _Avoid_: Retry, swipe
 
 **World Change**:
-A change to the hidden world in the player's own plain words, given through Tell the Narrator in the Journal. The Narrator applies it to the World Bible, world rules and Plot Threads, and the player sees only that it was done.
+A change to the world in the player's own plain words, to nudge the story or correct a mistake, given through Tell the Narrator in the Journal. The Narrator applies it to the World Bible, world rules and Plot Threads, and to the Journal's text where that no longer holds. The player sees only that it was done, and any change to the Journal.
 _Avoid_: Edit (that is a change to text the player can read)
 
 **Director's Note** (retired from play, see ticket 31):

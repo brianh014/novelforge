@@ -23,7 +23,7 @@ import {
 import { type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textModels } from "./text-provider";
 import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-turns";
-import { VisibleEdit, type World } from "./state-applier";
+import { VisibleEdit, type World, type WorldEdit } from "./state-applier";
 import { ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import spa from "./web/index.html";
 import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type WorldChoices, type WorldPc, writeImagePrompt } from "./world-creation";
@@ -655,9 +655,15 @@ export function startServer(options: {
           const basedOn = saves.latestMessageId(id);
           const release = turns.hold(id);
           try {
-            const update = await changeWorld(options, saves.latestState(id), change, req.signal);
+            const { world_brief, summary, facts, npc_summaries, ...update } = await changeWorld(options, saves.latestState(id), change, req.signal);
             if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
-            saves.addEdit(id, { edit: "world", update });
+            const journal: WorldEdit[] = [
+              ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),
+              ...(summary === null ? [] : [{ edit: "summary" as const, text: summary }]),
+              ...facts.map((fact) => ({ edit: "fact" as const, ...fact })),
+              ...npc_summaries.map(({ name, summary }) => ({ edit: "npcSummary" as const, name, text: summary })),
+            ];
+            for (const edit of [{ edit: "world" as const, update }, ...journal]) saves.addEdit(id, edit);
             // Counts only, so that the log never repeats the world.
             console.log(
               `World Change applied: ${JSON.stringify({
@@ -665,6 +671,7 @@ export function startServer(options: {
                 removed: update.removed_lore.length,
                 rules: update.world_rules.length,
                 threads: update.plot_threads.length,
+                journal: journal.length,
               })}`,
             );
             return Response.json({});
