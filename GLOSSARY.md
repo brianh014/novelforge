@@ -81,6 +81,10 @@ _Avoid_: Hook (alone)
 A secret storyline held by the Narrator that play can reveal.
 _Avoid_: Hook (alone), plot
 
+**Loose End**:
+Something the PC knows is still unresolved, such as an unanswered question, a promise, a plan, an invitation or someone still missing. It stays on the list until play settles it, and the player can read and edit it in the Journal.
+_Avoid_: Open thread, Plot Thread (that is secret, and says where the story could go)
+
 **World Overview**:
 A short, spoiler-free description of the world as the PC would plausibly know it.
 _Avoid_: World Bible, World Brief

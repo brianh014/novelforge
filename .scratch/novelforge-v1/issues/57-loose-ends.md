@@ -2,7 +2,7 @@
 
 **What to build:** The state gains a list of Loose Ends: what the PC knows is still unresolved, such as unanswered questions, promises, plans, invitations and people still missing. Every finished Turn can add to it, and an item leaves only when play resolves it. The Narrator gets the whole list on every Turn, so these can no longer fall out of the 500-word summary.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 **Blocked by:** none
 
@@ -33,19 +33,30 @@ The summary has to hold the whole story and every open question in one piece of 
 
 ## Acceptance
 
-- [ ] `looseEnds` is in `State` and `openingState`, and survives a Revert, Rewrite, Regenerate, export and import
-- [ ] An old Save upgrades and opens with an empty list
-- [ ] `add_loose_end` ignores an exact repeat, with a count at Info and no story text
-- [ ] `resolve_loose_end` on an item not in the list is refused without costing a Turn, and logs its reason at the usual level
-- [ ] The operations are in the response schema, and a Check request can't change the list
-- [ ] The prompt carries the list and the new rules, and an empty list on a started story asks for it to be filled
-- [ ] The summary rule no longer asks for every open question
-- [ ] The Journal section can add, edit and remove items, and is empty-safe
-- [ ] Hidden text can't reach the list through any route other than the Narrator's own operations, and the prompt forbids that
-- [ ] `novelforge-spec.md` and `GLOSSARY.md` describe Loose Ends
-- [ ] Tests cover each operation, an upgrade, a Revert and the prompt text
+- [x] `looseEnds` is in `State` and `openingState`, and survives a Revert, Rewrite, Regenerate, export and import
+- [x] An old Save upgrades and opens with an empty list
+- [x] `add_loose_end` ignores an exact repeat, with a count at Info and no story text
+- [x] `resolve_loose_end` on an item not in the list is refused without costing a Turn, and logs its reason at the usual level
+- [x] The operations are in the response schema, and a Check request can't change the list
+- [x] The prompt carries the list and the new rules, and an empty list on a started story asks for it to be filled
+- [x] The summary rule no longer asks for every open question
+- [x] The Journal section can add, edit and remove items, and is empty-safe
+- [x] Hidden text can't reach the list through any route other than the Narrator's own operations, and the prompt forbids that
+- [x] `novelforge-spec.md` and `GLOSSARY.md` describe Loose Ends
+- [x] Tests cover each operation, an upgrade, a Revert and the prompt text
 
 ## Not in this ticket
 
 - Hiding Loose Ends from the player
 - Reminding the Narrator of a Loose End by the clock, as the Plot Thread nudge does. Add that only if play shows they sit unused
+
+## Comments
+
+- Built (agent, 2026-11-05). The Save version goes to 14, so a Save opened on this branch no longer opens on `main`, which refuses a newer Save.
+- Decisions, for the user to review:
+  - "Refused without costing a Turn": `applyOperations` now returns `ignored` beside `refused`. A `resolve_loose_end` that misses changes nothing, the Turn commits, and the Server Log says why at Warning with no story text. Every other refusal still fails the reply as before.
+  - The operations' text field is `loose_end`. The Journal edit is `looseEnd` with `old` and `new`, like `fact`.
+  - The empty-list request goes in the last system message, like the Plot Thread nudge, and it repeats on every Turn until the list has an item. It says "if there are any", so a story with nothing open isn't pushed to invent one.
+- Left out: a World Change neither sees nor changes Loose Ends, to keep to "no route other than the Narrator's own operations". So a World Change can leave one out of date, and the player or a later Turn has to fix it. There's no `update_loose_end`, as the ticket names only two operations, so the Narrator rewords one by resolving it and adding another.
+- Checked: `test/loose-ends.test.ts`, with a hand-downgraded Save for the upgrade.
+- Not checked: the Journal section in a browser, as it's a copy of the facts markup and only types and the API are tested. A real Save upgrading to 14. Whether a real model fills, adds and resolves Loose Ends well, which only play can show.

@@ -9,6 +9,8 @@ export type State = {
   scene: { location: string; visibleCast: string[] };
   /** `summaries` says who each known NPC is, as the PC understands it. A Save from before them has none. */
   pcKnown: { facts: string[]; npcs: string[]; summaries?: Record<string, string> };
+  /** What the PC knows is still unresolved. Unlike a Plot Thread, the player reads these. */
+  looseEnds: string[];
   worldBible: LoreEntry[];
   worldRules: string[];
   plotThreads: string[];
@@ -24,6 +26,7 @@ export const openingState: State = {
   npcs: [],
   scene: { location: "", visibleCast: [] },
   pcKnown: { facts: [], npcs: [] },
+  looseEnds: [],
   worldBible: [],
   worldRules: [],
   plotThreads: [],
@@ -41,6 +44,7 @@ export const StateSections = {
   npcs: z.array(z.object({ name: z.string(), appearance: z.string() })),
   scene: z.object({ location: z.string(), visibleCast: stringList }),
   pcKnown: z.object({ facts: stringList, npcs: stringList, summaries: z.record(z.string(), z.string()).optional() }),
+  looseEnds: stringList,
   worldBible: z.array(
     z.object({ title: z.string(), keywords: stringList, content: z.string(), alwaysOn: z.boolean() }),
   ),
@@ -69,6 +73,8 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("remove_known_fact"), fact: nonEmpty }),
   z.object({ op: z.literal("add_known_npc"), name: nonEmpty }),
   z.object({ op: z.literal("set_known_npc_summary"), name: nonEmpty, summary: nonEmpty }),
+  z.object({ op: z.literal("add_loose_end"), loose_end: nonEmpty }),
+  z.object({ op: z.literal("resolve_loose_end"), loose_end: nonEmpty }),
   z.object({
     op: z.literal("add_lore_entry"),
     title: nonEmpty,
@@ -188,6 +194,11 @@ function apply(state: State, operation: StateOperation): string | undefined {
       if (!state.pcKnown.npcs.includes(operation.name)) return "NPC not known";
       state.pcKnown.summaries = { ...state.pcKnown.summaries, [operation.name]: operation.summary };
       return;
+    case "add_loose_end":
+      addOnce(state.looseEnds, operation.loose_end);
+      return;
+    case "resolve_loose_end":
+      return take(state.looseEnds, operation.loose_end) ? undefined : "not there";
     case "add_lore_entry": {
       const { title, keywords, content } = operation;
       // The Narrator only sees activated entries, so it can repeat a title innocently: keep the first, not fail the Turn.
@@ -221,20 +232,24 @@ function apply(state: State, operation: StateOperation): string | undefined {
   }
 }
 
-const isRepeat = ({ pcKnown }: State, operation: StateOperation) =>
+const isRepeat = ({ pcKnown, looseEnds }: State, operation: StateOperation) =>
   (operation.op === "add_known_fact" && pcKnown.facts.includes(operation.fact)) ||
-  (operation.op === "add_known_npc" && pcKnown.npcs.includes(operation.name));
+  (operation.op === "add_known_npc" && pcKnown.npcs.includes(operation.name)) ||
+  (operation.op === "add_loose_end" && looseEnds.includes(operation.loose_end));
+
+// A miscopied item just stays open, so it isn't worth a whole response.
+const isHarmless = ({ op }: { op: StateOperation["op"] }) => op === "resolve_loose_end";
 
 /** Applies operations in order, so each is judged against the ones before it. */
 export function applyOperations(state: State, operations: StateOperation[]) {
   const next = structuredClone(state);
   let repeats = 0;
-  const refused = operations.flatMap(({ ...operation }) => {
+  const refusals = operations.flatMap(({ ...operation }) => {
     if (isRepeat(next, operation)) repeats++;
     const reason = apply(next, operation);
     return reason ? [{ op: operation.op, reason }] : [];
   });
-  return { next, refused, repeats };
+  return { next, refused: refusals.filter((refusal) => !isHarmless(refusal)), ignored: refusals.filter(isHarmless), repeats };
 }
 
 export type World = Pick<State, "worldBible" | "worldRules" | "plotThreads">;
@@ -286,6 +301,7 @@ export const VisibleEdit = z.discriminatedUnion("edit", [
   z.object({ edit: z.literal("worldBrief"), text: words }),
   z.object({ edit: z.literal("summary"), text: words }),
   z.object({ edit: z.literal("fact"), old: quote.nullable(), new: words.nullable() }).refine(namesSomething),
+  z.object({ edit: z.literal("looseEnd"), old: quote.nullable(), new: words.nullable() }).refine(namesSomething),
   z.object({ edit: z.literal("npcSummary"), name: words, text: words }),
 ]);
 
@@ -303,6 +319,8 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, summary: edit.text };
     case "fact":
       return { ...state, pcKnown: { ...state.pcKnown, facts: changeList(state.pcKnown.facts, edit) } };
+    case "looseEnd":
+      return { ...state, looseEnds: changeList(state.looseEnds, edit) };
     case "npcSummary":
       return { ...state, pcKnown: { ...state.pcKnown, summaries: { ...state.pcKnown.summaries, [edit.name]: edit.text } } };
     case "world":

@@ -219,6 +219,26 @@ export function Journal({ id }: { id: string }) {
               <p className="muted">Nothing certain yet.</p>
             )}
             <Editable label={`New fact ${save.pc.name} knows`} text="" opener="Add a fact" onSave={(text) => edit({ edit: "fact", old: null, new: text })} />
+            <h2>Loose Ends</h2>
+            {journal.looseEnds.length > 0 ? (
+              <ul>
+                {journal.looseEnds.map((looseEnd) => (
+                  <li key={looseEnd}>
+                    <Editable
+                      label="Loose End"
+                      text={looseEnd}
+                      onSave={(text) => edit({ edit: "looseEnd", old: looseEnd, new: text })}
+                      onRemove={() => edit({ edit: "looseEnd", old: looseEnd, new: null })}
+                    >
+                      <span>{looseEnd}</span>
+                    </Editable>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">Nothing left open.</p>
+            )}
+            <Editable label="New Loose End" text="" opener="Add a Loose End" onSave={(text) => edit({ edit: "looseEnd", old: null, new: text })} />
             <h2>NPCs</h2>
             {journal.npcs.length > 0 ? (
               <ul className="people">

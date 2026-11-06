@@ -245,12 +245,14 @@ async function narrate(
       let wearing: Scene["wearing"] = [];
       let portraits: Scene["portraits"] = [];
       let repeated = 0;
+      let ignored: Refusal[] = [];
       const messages = commit(narration, check, (state) => {
         const introduced = introduce(state, people, pcName, state_operations);
-        const { next, refused, repeats } = applyOperations(introduced.state, introduced.operations);
+        const { next, refused, ignored: harmless, repeats } = applyOperations(introduced.state, introduced.operations);
         // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
         if (refused.length > 0) throw new InvalidResponse(undefined, { cause: refused });
         repeated = repeats;
+        ignored = harmless;
         if (summary.trim()) next.summary = summary.trim();
         moved = movedScene(state, next);
         location = next.scene.location;
@@ -269,6 +271,7 @@ async function narrate(
         portraits,
       });
       if (repeated > 0) log.info("turn", "Repeats ignored", { count: repeated });
+      if (ignored.length > 0) log.warning("turn", "Operations ignored", { reason: refusalText(ignored) });
       // Counts only, so that the log never repeats the story.
       log.info("turn", "Turn committed", () => ({
         kind,
@@ -288,10 +291,13 @@ async function narrate(
   }
 }
 
+type Refusal = { op: string; reason: string };
+const refusalText = (refusals: Refusal[]) => refusals.map(({ op, reason }) => `${op}: ${reason}`).join(", ");
+
 /** What was wrong with a reply, without any of its text. */
 function whyInvalid({ cause }: InvalidResponse) {
   if (cause instanceof z.ZodError) return cause.issues.map(({ path, code }) => `${path.join(".")}: ${code}`).join(", ");
-  if (Array.isArray(cause)) return `refused operations: ${cause.map(({ op, reason }) => `${op}: ${reason}`).join(", ")}`;
+  if (Array.isArray(cause)) return `refused operations: ${refusalText(cause)}`;
   // Not the parser's message, which quotes the reply.
   return cause instanceof SyntaxError ? "not JSON" : "a Check request where none is allowed";
 }

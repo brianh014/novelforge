@@ -691,11 +691,12 @@ export function startServer(options: {
       "/saves/:id/journal": {
         GET: (req) => {
           // An allowlist, so the World Bible, Plot Threads and NPC appearance text can never reach the player by default.
-          // shortcut: the summary and facts are Narrator free text, kept clean only by its prompt, screen them if models leak.
-          const { summary, pcKnown, scene } = saves.latestState(req.params.id);
+          // shortcut: the summary, facts and Loose Ends are Narrator free text, kept clean only by its prompt, screen them if models leak.
+          const { summary, pcKnown, looseEnds, scene } = saves.latestState(req.params.id);
           return Response.json({
             summary,
             facts: pcKnown.facts,
+            looseEnds,
             npcs: pcKnown.npcs,
             npcSummaries: pcKnown.summaries ?? {},
             // Those in the scene, then the latest met. The filter keeps a visible NPC the PC doesn't know yet hidden.

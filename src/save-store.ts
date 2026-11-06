@@ -283,8 +283,11 @@ const toVersion13 = (db: Database) =>
     )`,
   );
 
+/** Loose Ends, which start empty, as nothing could write to them yet. */
+const toVersion14 = addMissingSections;
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -879,9 +882,10 @@ export function saveStore(savesDir: string) {
     addEdit(id: string, edit: WorldEdit) {
       using db = open(id);
       db.transaction(() => {
-        const { pcKnown } = currentState(db);
+        const { pcKnown, looseEnds } = currentState(db);
         const missing =
           (edit.edit === "fact" && edit.old !== null && !pcKnown.facts.includes(edit.old)) ||
+          (edit.edit === "looseEnd" && edit.old !== null && !looseEnds.includes(edit.old)) ||
           (edit.edit === "npcSummary" && !pcKnown.npcs.includes(edit.name));
         if (missing) throw new EditNotFound();
         db.run("UPDATE save SET pending_edits = ?", [JSON.stringify([...pendingEdits(db), edit])]);
