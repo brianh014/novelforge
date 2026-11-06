@@ -1262,6 +1262,57 @@ test("repeating a Lore Entry title keeps the first entry and does not fail the T
   expect(contents(prompts[2]).join()).not.toContain("second-content");
 });
 
+test("a merged NPC is gone from the Journal and the next prompt, and a Revert brings them back", async () => {
+  const person = (name: string) => ({ op: "add_npc", name, appearance: `${name}-looks` });
+  const { app, prompts } = play(
+    narration("Two people.", person("Stranger"), person("Nadia"), { op: "add_known_npc", name: "Stranger" }, { op: "add_known_npc", name: "Nadia" }),
+    narration("They are one.", { op: "merge_npc", name: "Stranger", into: "Nadia" }),
+    narration("Silence."),
+    narration("Two again."),
+  );
+  const id = await app.createSave();
+  const wait = () => app.post(`/saves/${id}/turns`, { input: "I wait." });
+  const known = async () => ((await app.get(`/saves/${id}/journal`).then((r) => r.json())) as { npcs: string[] }).npcs;
+
+  await wait();
+  expect((await wait()).status).toBe(201);
+  await wait();
+
+  expect(await known()).toEqual(["Nadia"]);
+  expect(contents(prompts[2]).join()).not.toContain("Stranger-looks");
+
+  const { messages } = (await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { id: number }[] };
+  await app.post(`/saves/${id}/messages/${messages[1]!.id}/revert`, {});
+  expect(await known()).toEqual(["Stranger", "Nadia"]);
+});
+
+test("a Lore Entry and a Plot Thread the Narrator corrects go forward corrected, and a Revert undoes it", async () => {
+  const { app, prompts } = play(
+    narration("A horn.", { op: "add_lore_entry", title: "Ferrymen", keywords: ["ferry"], content: "old-lore" }, { op: "add_plot_thread", thread: "old-thread" }),
+    narration("It stops.", { op: "update_lore_entry", title: "Ferrymen", keywords: ["ferry"], content: "new-lore" }, { op: "update_plot_thread", thread: "old-thread", replacement: "new-thread" }),
+    narration("Silence."),
+    narration("A horn again."),
+  );
+  const id = await app.createSave();
+  const board = () => app.post(`/saves/${id}/turns`, { input: "I board the ferry." });
+
+  await board();
+  const corrected = await board();
+  await board();
+
+  expect(corrected.status).toBe(201);
+  expect(contents(prompts[2]).join()).toContain("new-lore");
+  expect(contents(prompts[2]).join()).toContain("new-thread");
+  expect(contents(prompts[2]).join()).not.toContain("old-lore");
+  expect(contents(prompts[2]).join()).not.toContain("old-thread");
+
+  const { messages } = (await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { id: number }[] };
+  await app.post(`/saves/${id}/messages/${messages[1]!.id}/revert`, {});
+  await board();
+  expect(contents(prompts[3]).join()).toContain("old-lore");
+  expect(contents(prompts[3]).join()).toContain("old-thread");
+});
+
 test("a resolved Plot Thread leaves later prompts, and only one that exists can be resolved", async () => {
   const unknown = narration("Done.", { op: "resolve_plot_thread", thread: "unknown-thread" });
   const { app, prompts } = play(

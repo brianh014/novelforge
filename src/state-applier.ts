@@ -62,8 +62,11 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("remove_status"), kind: statusKind, text: nonEmpty }),
   z.object({ op: z.literal("add_npc"), name: nonEmpty, appearance: nonEmpty }),
   z.object({ op: z.literal("update_npc"), name: nonEmpty, appearance: nonEmpty }),
+  z.object({ op: z.literal("merge_npc"), name: nonEmpty, into: nonEmpty }),
   z.object({ op: z.literal("set_scene"), location: nonEmpty, visible_cast: z.array(nonEmpty) }),
   z.object({ op: z.literal("add_known_fact"), fact: nonEmpty }),
+  z.object({ op: z.literal("update_known_fact"), fact: nonEmpty, replacement: nonEmpty }),
+  z.object({ op: z.literal("remove_known_fact"), fact: nonEmpty }),
   z.object({ op: z.literal("add_known_npc"), name: nonEmpty }),
   z.object({ op: z.literal("set_known_npc_summary"), name: nonEmpty, summary: nonEmpty }),
   z.object({
@@ -72,7 +75,15 @@ export const StateOperation = z.discriminatedUnion("op", [
     keywords: z.array(nonEmpty).min(1),
     content: nonEmpty,
   }),
+  z.object({
+    op: z.literal("update_lore_entry"),
+    title: nonEmpty,
+    keywords: z.array(nonEmpty).min(1),
+    content: nonEmpty,
+  }),
+  z.object({ op: z.literal("remove_lore_entry"), title: nonEmpty }),
   z.object({ op: z.literal("add_plot_thread"), thread: nonEmpty }),
+  z.object({ op: z.literal("update_plot_thread"), thread: nonEmpty, replacement: nonEmpty }),
   z.object({ op: z.literal("resolve_plot_thread"), thread: nonEmpty }),
   z.object({ op: z.literal("set_summary"), summary: nonEmpty }),
 ]);
@@ -95,6 +106,32 @@ function addOnce(list: string[], value: string) {
   if (list.includes(value)) return false;
   list.push(value);
   return true;
+}
+
+/**
+ * Puts `replacement` where `value` was, or on the end if `value` isn't there, as a long text is easily miscopied and
+ * that isn't worth a whole response. If `replacement` is already there, the two versions become one.
+ */
+function replaceOnce(list: string[], value: string, replacement: string) {
+  const index = list.indexOf(value);
+  take(list, value);
+  if (!list.includes(replacement)) list.splice(index === -1 ? list.length : index, 0, replacement);
+}
+
+/**
+ * Makes `name` and `into` one person, or renames `name` if `into` isn't in the state. Someone already gone is no reason to
+ * lose a response. Portraits stay as they are, so a Revert needs nothing undone: the known list hides the merged one's.
+ */
+function mergeNpc(state: State, name: string, into: string) {
+  const npc = findNpc(state, name);
+  if (!npc || name === into) return;
+  const { pcKnown, scene } = state;
+  if (findNpc(state, into)) state.npcs = state.npcs.filter((other) => other !== npc);
+  else npc.name = into;
+  if (pcKnown.npcs.includes(name)) replaceOnce(pcKnown.npcs, name, into);
+  if (scene.visibleCast.includes(name)) replaceOnce(scene.visibleCast, name, into);
+  const { [name]: summary, ...summaries } = pcKnown.summaries ?? {};
+  if (summary !== undefined) pcKnown.summaries = { [into]: summary, ...summaries };
 }
 
 /** Changes `state` and returns nothing, or returns why `operation` is disproved, having changed nothing. The reason goes to the Server Log, so it never quotes the operation. */
@@ -124,6 +161,9 @@ function apply(state: State, operation: StateOperation): string | undefined {
       npc.appearance = operation.appearance;
       return;
     }
+    case "merge_npc":
+      mergeNpc(state, operation.name, operation.into);
+      return;
     case "set_scene": {
       // The cast only steers images, so a name the state lacks is left out rather than failing the Turn.
       const visibleCast = [...new Set(operation.visible_cast)].filter((name) => findNpc(state, name));
@@ -133,6 +173,12 @@ function apply(state: State, operation: StateOperation): string | undefined {
     // A repeat is already true, so it costs nothing, and refusing one would throw away a whole response.
     case "add_known_fact":
       addOnce(state.pcKnown.facts, operation.fact);
+      return;
+    case "update_known_fact":
+      replaceOnce(state.pcKnown.facts, operation.fact, operation.replacement);
+      return;
+    case "remove_known_fact":
+      take(state.pcKnown.facts, operation.fact);
       return;
     case "add_known_npc":
       if (!findNpc(state, operation.name)) return "no such NPC";
@@ -150,8 +196,23 @@ function apply(state: State, operation: StateOperation): string | undefined {
       state.worldBible.push({ title, keywords, content, alwaysOn: false });
       return;
     }
+    case "update_lore_entry": {
+      const { title, keywords, content } = operation;
+      const entry = state.worldBible.find((lore) => lore.title === title);
+      // Always-on entries bypass the token budget, so the Narrator can't grow one.
+      if (entry?.alwaysOn) return;
+      if (entry) Object.assign(entry, { keywords, content });
+      else state.worldBible.push({ title, keywords, content, alwaysOn: false });
+      return;
+    }
+    case "remove_lore_entry":
+      state.worldBible = state.worldBible.filter(({ title, alwaysOn }) => alwaysOn || title !== operation.title);
+      return;
     case "add_plot_thread":
       return addOnce(state.plotThreads, operation.thread) ? undefined : "already there";
+    case "update_plot_thread":
+      replaceOnce(state.plotThreads, operation.thread, operation.replacement);
+      return;
     case "resolve_plot_thread":
       return take(state.plotThreads, operation.thread) ? undefined : "not there";
     case "set_summary":

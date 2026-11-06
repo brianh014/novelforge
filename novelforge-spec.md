@@ -142,7 +142,7 @@ Lore Entry activation:
 * Each finished Turn replaces the rolling summary with its `summary`, and a blank one leaves it as it was
 * Every eighth response, the prompt names the next Plot Thread in turn and asks the Narrator to bring it into play
 * The last instruction before the player's action keeps the PC's choices and speech to the player, and treats anything the PC is said to think as private
-* Other entries activate when their keywords appear in recent Messages, within a token budget
+* Other entries activate when their keywords appear in recent Messages, within a token budget, the latest mentioned first
 * Activation allows one level of recursion
 * There are no probability rolls, timers or embeddings
 
@@ -153,7 +153,7 @@ Lore Entry activation:
 
 System prompt must explicitly instruct the Narrator: *"Evaluate player action against `world_rules`. If an action violates world constraints, describe the failure in-character rather than fulfilling it."*
 
-**State authority:** The Narrator proposes discrete state operations, such as add item, remove item and set condition. The server validates and applies them, and refuses operations it can disprove, such as removing an item the PC doesn't have. A repeated known fact or NPC is simply ignored, as it is already true. The Narrator judges plausibility. It must not rewrite the whole state.
+**State authority:** The Narrator proposes discrete state operations, such as add item, remove item and set condition. The server validates and applies them, and refuses operations it can disprove, such as removing an item the PC doesn't have. A repeated known fact or NPC is simply ignored, as it is already true. The Narrator keeps its own records true to play by rewriting or removing known facts, Lore Entries and Plot Threads, and by merging two NPCs who turn out to be one person. These never refuse a Turn, as a long text is easily miscopied: a rewrite of something it can't find adds the new text, and a removal or merge of someone or something not there does nothing. A merge keeps the kept NPC's looks and summary, and each portrait stays in the Save, so a Revert brings the other NPC back with theirs. It can't change an always-on Lore Entry, as those bypass the token budget. The Narrator judges plausibility. It must not rewrite the whole state.
 
 ### Checks
 
