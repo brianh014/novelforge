@@ -36,6 +36,7 @@ test("the compiled app plays a Turn, keeps it through a kill, and stores the Sav
   const first = await launch();
   const created = await postJson(new URL("/saves", first.url), { worldBrief: "A drowned city", pc: { name: "Ash" } });
   const { id } = (await created.json()) as { id: string };
+  expect(await fetch(new URL("/settings", first.url)).then((r) => r.json())).toMatchObject({ defaultLogLevel: "warning", logLevel: null });
   await postJson(new URL(`/saves/${id}/turns`, first.url), { input: "I wade forward." });
   first.app.kill(9);
   await first.app.exited;

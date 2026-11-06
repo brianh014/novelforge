@@ -91,7 +91,8 @@ export function openRouterImages(settings: SettingsStore, baseUrl: string): Imag
     const reply = (await response.json().catch(() => ({}))) as { data?: { b64_json?: string }[]; error?: unknown };
     const encoded = reply.data?.[0]?.b64_json;
     if (!response.ok || !encoded) {
-      throw new Error(redacted(`Image API error: ${JSON.stringify({ status: response.status, error: reply.error })}`));
+      const message = redacted(`Image API error: ${JSON.stringify({ status: response.status, error: reply.error })}`);
+      throw Object.assign(new Error(message), { status: response.status });
     }
     return new Uint8Array(Buffer.from(encoded, "base64"));
   };

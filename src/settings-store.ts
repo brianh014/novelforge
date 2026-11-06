@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { z } from "zod";
+import { LOG_LEVELS } from "./logger";
 
 const Lora = z.object({ name: z.string().min(1), strength: z.number().min(-100).max(100), triggerWords: z.string() });
 
@@ -29,6 +30,8 @@ export const SettingsUpdate = z
     chatStyle: z.enum(["script", "prose", "bubbles", "stage"]),
     fontSize: z.enum(["small", "medium", "large"]),
     theme: z.enum(["system", "light", "dark"]),
+    // Null clears it. Left out of `defaults`, or the first save of anything would pin this build's default for good.
+    logLevel: z.enum(LOG_LEVELS).nullable(),
   })
   .partial();
 
@@ -63,8 +66,7 @@ export type SettingsStore = ReturnType<typeof settingsStore>;
 
 /** Per-install settings, including API keys. They live in one file outside the Saves folder, so no Save can carry them. */
 export function settingsStore(path: string) {
-  const read = () =>
-    existsSync(path) ? { ...defaults, ...SettingsUpdate.parse(JSON.parse(readFileSync(path, "utf8"))) } : defaults;
+  const read = () => ({ ...defaults, ...SettingsUpdate.parse(existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {}) });
 
   return {
     read,
@@ -74,6 +76,7 @@ export function settingsStore(path: string) {
       const next = { ...current, ...change };
       // A key must only ever reach the server it was entered for.
       if (next.textBaseUrl !== current.textBaseUrl && change.textApiKey === undefined) next.textApiKey = "";
+      if (next.logLevel === null) delete next.logLevel;
       // shortcut: mode does nothing on Windows, so the key has the folder's permissions there, tighten it if Settings ever hold more than local secrets.
       writeFileSync(`${path}.unfinished`, JSON.stringify(next, null, 2), { mode: 0o600 });
       renameSync(`${path}.unfinished`, path);

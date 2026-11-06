@@ -3,6 +3,7 @@ import type { Dice } from "./check-resolver";
 import { InvalidWorkflow, parseWorkflow } from "./comfy-workflow";
 import { comfyImages, comfyModels, randomSeed } from "./comfyui";
 import { chosenModels, drawSteps, localIsSetUp, promptStyle } from "./graph-builder";
+import { defaultLogLevel, errorFields, errorType, log, setLogLevel, withLogContext } from "./logger";
 import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
 import { coverPrompt, type EarlyImage, type ImageKind, imagePipeline, shownFailure, visibleNpcs } from "./image-pipeline";
@@ -20,7 +21,7 @@ import {
   saveStore,
   StaleTurn,
 } from "./save-store";
-import { type SettingsStore, SettingsUpdate } from "./settings-store";
+import { type SettingsChange, type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textModels } from "./text-provider";
 import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-turns";
 import { VisibleEdit, type World, type WorldEdit } from "./state-applier";
@@ -101,6 +102,43 @@ const IMAGES_OFF = "Images are turned off or not set up in Settings.";
 /** A failure falls back on the image before it, whose prompt stands too. */
 type DrawnImage = EarlyImage & { failure?: string };
 
+// What the page may say. Strict and numbers only, as the app listens on the network, so nothing the page holds can reach the log.
+const PAGE_EVENTS = {
+  "stream-lost": "info",
+  "polling-fallback": "verbose",
+  "turn-resumed": "info",
+  "polling-gave-up": "warning",
+  "narration-restarted": "info",
+  "page-error": "error",
+} as const;
+
+const pageNumber = z.number().finite().optional();
+
+// A Save's id isn't free text, and the line would be no use without it.
+const PageEvent = z.strictObject({
+  event: z.enum(Object.keys(PAGE_EVENTS) as (keyof typeof PAGE_EVENTS)[]),
+  save: z.uuid().optional(),
+  after: pageNumber,
+  misses: pageNumber,
+  returned: pageNumber,
+  line: pageNumber,
+  column: pageNumber,
+});
+
+const MOST_PAGE_EVENT_BYTES = 1024;
+
+/** Stops reading at the cap, as a Save's import needs the server's own limit to be huge. */
+async function cappedBody(req: Request) {
+  let bytes = 0;
+  const parts: Uint8Array[] = [];
+  for await (const part of req.body ?? []) {
+    bytes += part.byteLength;
+    if (bytes > MOST_PAGE_EVENT_BYTES) return undefined;
+    parts.push(part);
+  }
+  return new Request(req.url, { method: "POST", headers: req.headers, body: Buffer.concat(parts) });
+}
+
 const NewTurnRequest = z.object({ input: z.string().min(1) });
 
 const NoFields = z.object({});
@@ -143,6 +181,7 @@ async function parseBody<T>(req: Request, schema: z.ZodType<T>) {
 function errorResponse(error: unknown) {
   if (error instanceof z.ZodError) return Response.json({ error: z.prettifyError(error) }, { status: 400 });
   if (error instanceof InvalidSave || error instanceof InvalidWorkflow) {
+    if (error instanceof InvalidSave) log.error("saves", "A Save was refused", errorFields(error));
     return Response.json({ error: error.message }, { status: 422 });
   }
   if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
@@ -158,11 +197,11 @@ function errorResponse(error: unknown) {
   if (error instanceof WorldChanging) return Response.json({ error: "The Narrator is still changing the world" }, { status: 409 });
   if (error instanceof TurnFailed) {
     const { message, failure, input } = error;
-    // Not the error itself, as its `input` is the story.
-    console.error(`A Turn failed (${failure}): ${message}`, error.cause);
+    // Not the error itself, as its `input` is the story, and not its cause, as a provider's can echo the prompt.
+    (failure === "refused" ? log.warning : log.error)("turn", "A Turn failed", { failure, message });
     return Response.json({ error: message, failure, input }, { status: failure === "refused" ? 422 : 502 });
   }
-  console.error(error);
+  log.error("http", "A request failed", errorFields(error));
   return Response.json({ error: "Internal server error" }, { status: 500 });
 }
 
@@ -195,7 +234,7 @@ async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvent
       },
       async (error: unknown) => {
         // In this log, as the client's copy is gone once the page moves on.
-        if (!(error instanceof TurnFailed)) console.error("A Turn failed:", error);
+        if (!(error instanceof TurnFailed)) log.error("turn", "A Turn failed", errorFields(error));
         const response = errorResponse(error);
         const body = (await response.json()) as { error: string };
         // A plain JSON client gets its answer here, and has no page to come back to.
@@ -220,16 +259,40 @@ data: ${JSON.stringify(data)}
       };
       client = send;
       const result = await played;
-      if (!there()) console.log("A Turn ended after its client left.");
+      if (!there()) log.info("turn", "A Turn ended after its client left");
       if ("messages" in result) send("done", result);
       else send("error", { status: result.status, ...result.body });
       if (there()) controller.close();
     },
     cancel() {
       gone = true;
+      log.info("turn", "A Turn lost its client", { save: turn.id });
     },
   });
   return new Response(stream, { headers: { "Content-Type": "text/event-stream" } });
+}
+
+/**
+ * Every route, logged by its pattern as a real path holds ids and could hold anything. Each line a request causes,
+ * however long after, names its route and any Save, so a Save id needn't be passed down to everything that logs.
+ */
+function logged<Route extends string>(routes: Bun.Serve.Routes<undefined, Route>) {
+  const wrap = (route: string, method: string, handler: (req: Bun.BunRequest) => Response | Promise<Response>) => (req: Bun.BunRequest) => {
+    const { id } = req.params as { id?: string };
+    const save = z.uuid().safeParse(id).success ? id : undefined;
+    return withLogContext({ route, save }, async () => {
+      const started = performance.now();
+      const response = await Promise.resolve().then(() => handler(req)).catch(errorResponse);
+      log.verbose("http", "Request", () => ({ method, status: response.status, ms: Math.round(performance.now() - started) }));
+      return response;
+    });
+  };
+  const entries = Object.entries(routes).map(([route, methods]) => [
+    route,
+    // The page itself is a bundle, which has no methods to wrap.
+    route === "/" ? methods : Object.fromEntries(Object.entries(methods as object).map(([method, handler]) => [method, wrap(route, method, handler as never)])),
+  ]);
+  return Object.fromEntries(entries) as typeof routes;
 }
 
 export function startServer(options: {
@@ -246,6 +309,12 @@ export function startServer(options: {
   const saves = saveStore(options.savesDir);
   const turns = liveTurns();
   const { settings } = options;
+  try {
+    setLogLevel(settings.read().logLevel);
+  } catch (error) {
+    // Settings that won't read are every request's problem, not a reason not to start.
+    log.error("settings", "Settings won't read", errorFields(error));
+  }
   // Held here, not in Settings, as it's only how the last job went. It's safe to show, unlike the log.
   // shortcut: a restart clears it and an open Settings screen doesn't update, poll or store it if players miss failures.
   let workflowProblem = "";
@@ -265,11 +334,18 @@ export function startServer(options: {
   function drawHeld(kind: ImageKind, id: string, prompt: string, artStyle: string, before: DrawnImage | Promise<DrawnImage>) {
     held[kind].get(id)?.stop.abort();
     const stop = new AbortController();
+    log.verbose("images", "Image started", { kind });
     const drawn = images.drawEarly(kind, prompt, artStyle, stop.signal).then(
-      (bytes): DrawnImage => ({ prompt, bytes: bytes as Uint8Array<ArrayBuffer> | undefined }),
+      (bytes): DrawnImage => {
+        if (bytes) log.info("images", "Image drawn", { kind });
+        return { prompt, bytes: bytes as Uint8Array<ArrayBuffer> | undefined };
+      },
       async (error: unknown): Promise<DrawnImage> => {
-        if (stop.signal.aborted) return before;
-        console.error(error);
+        if (stop.signal.aborted) {
+          log.info("images", "Image dropped", { kind, reason: "replaced on the form" });
+          return before;
+        }
+        log.error("images", "Image failed", { kind, ...errorType(error) });
         return { ...(await before), failure: shownFailure(error) };
       },
     );
@@ -354,6 +430,7 @@ export function startServer(options: {
       chatStyle,
       fontSize,
       theme,
+      logLevel,
     } = settings.read();
     return {
       textBaseUrl,
@@ -380,17 +457,21 @@ export function startServer(options: {
       chatStyle,
       fontSize,
       theme,
+      logLevel: logLevel ?? null,
+      defaultLogLevel: defaultLogLevel(),
     };
   };
 
   return Bun.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port,
+    // Not hot reload, whose client copies an uncaught page error's words to the terminal, and they can quote the story.
+    development: process.env.NODE_ENV !== "production" && { hmr: false },
     // A Turn can stay silent past Bun's default, which would drop the client while the Turn went on to commit.
     idleTimeout: 0,
     // Bun's default of 128 MiB is less than a Save with images. It answers 413 itself past this, before any route runs.
     maxRequestBodySize: MAX_IMPORT_BYTES + 1,
-    routes: {
+    routes: logged({
       "/": spa,
       "/settings": {
         GET: () => Response.json(publicSettings()),
@@ -402,6 +483,10 @@ export function startServer(options: {
           if (next.imageProvider === "local" && next.comfyMode === "advanced") parseWorkflow(next.comfyWorkflow);
           settings.update(change);
           if (next.comfyWorkflow !== current.comfyWorkflow) workflowProblem = "";
+          if (change.logLevel !== undefined) setLogLevel(change.logLevel);
+          // Names only, as a value can be a key. The form sends every field, so only those that differ.
+          const same = (field: keyof SettingsChange) => JSON.stringify(current[field] ?? null) === JSON.stringify(change[field] ?? null);
+          log.info("settings", "Settings changed", () => ({ fields: (Object.keys(change) as (keyof SettingsChange)[]).filter((field) => !same(field)) }));
           return Response.json(publicSettings());
         },
       },
@@ -430,7 +515,8 @@ export function startServer(options: {
               model: settings.read().textModel,
             });
           } catch (error) {
-            console.error(error);
+            if (error instanceof ContentRefused) log.warning("text", "The model refused the test", errorType(error));
+            else log.error("text", "The text test failed", errorFields(error));
             if (error instanceof ContentRefused) return Response.json({ error: "The model refused this prompt." }, { status: 422 });
             const message = error instanceof TextProviderFailed ? error.message : "The Text Provider request failed";
             return Response.json({ error: message }, { status: 502 });
@@ -459,11 +545,20 @@ export function startServer(options: {
             image.headers.set("X-Draw-Stats", encodeURIComponent(JSON.stringify(stats)));
             return image;
           } catch (error) {
-            console.error(error);
+            log.error("images", "The image test failed", errorType(error));
             // The adapter's messages are written to be shown, but a failed connection is Bun's own, which has a `code`.
             const { code, message } = error as Error & { code?: string };
             return Response.json({ error: code ? "ComfyUI can't be reached at this address. Make sure it's running." : message }, { status: 502 });
           }
+        },
+      },
+      "/log": {
+        POST: async (req) => {
+          const capped = await cappedBody(req);
+          if (!capped) return Response.json({ error: "Too long" }, { status: 400 });
+          const { event, ...fields } = await parseBody(capped, PageEvent);
+          log[PAGE_EVENTS[event]]("page", event, fields);
+          return new Response(null, { status: 204 });
         },
       },
       "/saves": {
@@ -511,7 +606,7 @@ export function startServer(options: {
           worlds.delete(req.params.id);
           images.saveCreated(id, held.portrait.get(req.params.id)?.drawn);
           // Often still drawing. The Save may be gone by the time it lands, and a story without a cover loses nothing.
-          held.cover.get(req.params.id)?.drawn.then(({ bytes, prompt }) => bytes && saves.setCover(id, bytes, prompt)).catch(console.error);
+          held.cover.get(req.params.id)?.drawn.then(({ bytes, prompt }) => bytes && saves.setCover(id, bytes, prompt)).catch((error) => log.warning("images", "The Cover wasn't stored", { save: id, ...errorType(error) }));
           held.cover.delete(req.params.id);
           held.portrait.delete(req.params.id);
           return Response.json({ id }, { status: 201 });
@@ -562,6 +657,7 @@ export function startServer(options: {
         GET: (req) => {
           // An allowlist, so a secret added to the Save can never reach the player by default.
           const { title, worldBrief, pc, artStyle, startingHook, hasCover, coverRedraws } = saves.read(req.params.id);
+          log.info("saves", "Save opened");
           return Response.json({ title, worldBrief, pc: { name: pc.name }, artStyle, startingHook, hasCover, coverRedraws });
         },
         PATCH: async (req) => {
@@ -572,7 +668,7 @@ export function startServer(options: {
         DELETE: (req) => {
           saves.delete(req.params.id);
           // Below 0, because the PC's portrait belongs to no Message.
-          images.forget(req.params.id, -1);
+          images.forget(req.params.id, -1, "the Save was deleted");
           return new Response(null, { status: 204 });
         },
       },
@@ -665,20 +761,17 @@ export function startServer(options: {
             ];
             for (const edit of [{ edit: "world" as const, update }, ...journal]) saves.addEdit(id, edit);
             // Counts only, so that the log never repeats the world.
-            console.log(
-              `World Change applied: ${JSON.stringify({
-                lore: update.lore_entries.length,
-                removed: update.removed_lore.length,
-                rules: update.world_rules.length,
-                threads: update.plot_threads.length,
-                journal: journal.length,
-              })}`,
-            );
+            log.info("world", "World Change applied", () => ({
+              lore: update.lore_entries.length,
+              removed: update.removed_lore.length,
+              rules: update.world_rules.length,
+              threads: update.plot_threads.length,
+              journal: journal.length,
+            }));
             return Response.json({});
           } catch (error) {
             if (!(error instanceof TurnFailed)) throw error;
-            // Not `errorResponse`, which logs the cause, and a provider's can echo the prompt.
-            console.error(`A World Change failed (${error.failure}): ${error.message}`);
+            (error.failure === "refused" ? log.warning : log.error)("world", "A World Change failed", { failure: error.failure, message: error.message });
             return Response.json({ error: error.message }, { status: error.failure === "refused" ? 422 : 502 });
           } finally {
             release();
@@ -837,12 +930,15 @@ export function startServer(options: {
         POST: async (req) => {
           await parseBody(req, NoFields);
           const deleted = saves.revert(req.params.id, Number(req.params.messageId));
-          images.forget(req.params.id, Number(req.params.messageId));
+          images.forget(req.params.id, Number(req.params.messageId), "revert");
           return Response.json(deleted);
         },
       },
+    }),
+    fetch: () => {
+      log.verbose("http", "No such route");
+      return Response.json({ error: "Not found" }, { status: 404 });
     },
-    fetch: () => Response.json({ error: "Not found" }, { status: 404 }),
     error: errorResponse,
   });
 }

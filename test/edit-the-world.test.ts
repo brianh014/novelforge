@@ -1,10 +1,10 @@
 import { Database } from "bun:sqlite";
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
 import { mergeWorldUpdate } from "../src/state-applier";
 import { ContentRefused, TextProviderFailed } from "../src/turn-engine";
-import { narration, scriptedTextProvider, startApp, tempFolder } from "./support";
+import { logOf, narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
@@ -341,14 +341,7 @@ const hidden = (id: string) => {
   return { worldBible, worldRules, plotThreads };
 };
 
-/** Everything the server logs while `run` goes. */
-async function logged(run: () => Promise<void>) {
-  const spies = [spyOn(console, "log"), spyOn(console, "error")];
-  await run();
-  const lines = spies.flatMap((spy) => spy.mock.calls.flat());
-  for (const spy of spies) spy.mockRestore();
-  return lines.map((line) => (line instanceof Error ? `${line.message} ${line.stack} ${String(line.cause)}` : JSON.stringify(line))).join("\n");
-}
+const logged = logOf;
 
 test("a merge touches only what a change names, and an entry it leaves out stays", () => {
   const merged = mergeWorldUpdate(WORLD, {

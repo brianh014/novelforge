@@ -2,7 +2,7 @@
 
 **What to build:** Every part of the app logs through one logger, at one of four Log Levels, so a problem can be traced from the Server Log alone. The Log Level defaults to Warning, or Verbose on a debug build, and the player can change it in a new Advanced section of Settings. It takes effect at once, with no restart.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 **Blocked by:** none, but commit the uncommitted work on `main` first, as it touches the same files
 
@@ -23,66 +23,66 @@ The names and order follow the browser console's own levels (Verbose, Info, Warn
 
 ### Logger
 
-- [ ] `src/logger.ts` has `error`, `warning`, `info` and `verbose`, each taking an area, a message and optional fields, with no new dependency
-- [ ] Each line has the time, level, area, message and fields as JSON, in that order
-- [ ] A line below the current level costs almost nothing, as its fields are never built or serialized
-- [ ] Nothing the logger does can throw into a Turn or a request, including a value that won't serialize
-- [ ] A test fails on any `console.` call in `src/` outside `src/logger.ts`, so a new one can't slip in. The page's code is included, apart from anything already browser-only and deliberate
+- [x] `src/logger.ts` has `error`, `warning`, `info` and `verbose`, each taking an area, a message and optional fields, with no new dependency
+- [x] Each line has the time, level, area, message and fields as JSON, in that order
+- [x] A line below the current level costs almost nothing, as its fields are never built or serialized
+- [x] Nothing the logger does can throw into a Turn or a request, including a value that won't serialize
+- [x] A test fails on any `console.` call in `src/` outside `src/logger.ts`, so a new one can't slip in. The page's code is included, apart from anything already browser-only and deliberate
 
 ### Default level
 
-- [ ] The default is Verbose on a debug build and Warning on a compiled one, using the `isCompiled` check already in `src/main.ts`
-- [ ] A saved Log Level beats the default on either build
-- [ ] A build that has no saved level keeps following its default, so a later change to the default still reaches it
+- [x] The default is Verbose on a debug build and Warning on a compiled one, using the `isCompiled` check already in `src/main.ts`
+- [x] A saved Log Level beats the default on either build
+- [x] A build that has no saved level keeps following its default, so a later change to the default still reaches it
 
 ### Everything at the right level
 
-- [ ] All 18 current `console.log` and `console.error` calls move to the logger at the level in the table above
-- [ ] A refused operation logs its reason as well as its type, such as `remove_item: not held` or `add_known_npc: no such NPC`, with no story text
-- [ ] A repeated known fact or NPC logs at Info, with a count only
-- [ ] A Turn's commit line says if it was a new Turn, Rewrite or Regenerate
-- [ ] A replaced Turn logs if its Scene Image was forced, and if it fell back to the old image's prompt
-- [ ] Each image logs when it's queued, started, drawn, failed, or dropped by a Rewrite, Revert or Save deletion, with its kind and Message id
-- [ ] A Turn that loses its client logs when that happens, not only when the Turn ends
-- [ ] Each request logs at Verbose by route pattern, such as `/saves/:id/turn`, never the real path
-- [ ] Save upgrades, imports, exports, duplicates and deletions log at Info, and a failure at Error
-- [ ] Settings changes log field names only, never values
+- [x] All 18 current `console.log` and `console.error` calls move to the logger at the level in the table above
+- [x] A refused operation logs its reason as well as its type, such as `remove_item: not held` or `add_known_npc: no such NPC`, with no story text
+- [x] A repeated known fact or NPC logs at Info, with a count only
+- [x] A Turn's commit line says if it was a new Turn, Rewrite or Regenerate
+- [x] A replaced Turn logs if its Scene Image was forced, and if it fell back to the old image's prompt
+- [x] Each image logs when it's queued, started, drawn, failed, or dropped by a Rewrite, Revert or Save deletion, with its kind and Message id
+- [x] A Turn that loses its client logs when that happens, not only when the Turn ends
+- [x] Each request logs at Verbose by route pattern, such as `/saves/:id/turn`, never the real path
+- [x] Save upgrades, imports, exports, duplicates and deletions log at Info, and a failure at Error
+- [x] Settings changes log field names only, never values
 
 ### The page
 
-- [ ] The page reports a fixed list of events to a new `POST /log` route: stream lost, polling fallback, Turn resumed after a reload, polling gave up, narration restarted and uncaught page error
-- [ ] The route accepts only those event names and numeric fields, with no free text, so nothing the page holds can reach the log. Anything else gets a 400, and the body size is capped, as the app listens on the network
-- [ ] A failed report never bothers the player
-- [ ] These events land in the Server Log marked as coming from the page, so one Turn reads in order across both
+- [x] The page reports a fixed list of events to a new `POST /log` route: stream lost, polling fallback, Turn resumed after a reload, polling gave up, narration restarted and uncaught page error
+- [x] The route accepts only those event names and numeric fields, with no free text, so nothing the page holds can reach the log. Anything else gets a 400, and the body size is capped, as the app listens on the network
+- [x] A failed report never bothers the player
+- [x] These events land in the Server Log marked as coming from the page, so one Turn reads in order across both
 
 ### Log file
 
-- [ ] Lines also go to `logs/novelforge.log` beside `Saves`, at the same level as the console, so they outlive the terminal
-- [ ] It rotates at 10 MB and keeps one older file
-- [ ] It's created with the same owner-only mode as `settings.json`, and `logs/` is in `.gitignore`
-- [ ] If the file can't be written, the app carries on with the console, and warns once
+- [x] Lines also go to `logs/novelforge.log` beside `Saves`, at the same level as the console, so they outlive the terminal
+- [x] It rotates at 10 MB and keeps one older file
+- [x] It's created with the same owner-only mode as `settings.json`, and `logs/` is in `.gitignore`
+- [x] If the file can't be written, the app carries on with the console, and warns once
 
 ### Settings
 
-- [ ] Settings has a new Advanced section after Reading, on every screen Settings appears
-- [ ] It has a Log Level choice: Error, Warning, Info or Verbose, plus Default, which shows what the default is on this build
-- [ ] It saves with the Save button like the other sections, and applies at once, with no restart
-- [ ] It says in a line or two what the levels do, and that the log never holds story text
-- [ ] It works at phone width and by keyboard, like the other sections
+- [x] Settings has a new Advanced section after Reading, on every screen Settings appears
+- [x] It has a Log Level choice: Error, Warning, Info or Verbose, plus Default, which shows what the default is on this build
+- [x] It saves with the Save button like the other sections, and applies at once, with no restart
+- [x] It says in a line or two what the levels do, and that the log never holds story text
+- [x] It works at phone width and by keyboard, like the other sections
 
 ### Secrets
 
-- [ ] Every line about a Save gives its Save id, and its Message id or image where it has one, so the text can be found in the Save without being in the log
-- [ ] A retried or failed Narrator reply gives its generation id, as it's in no Save
-- [ ] At every level, including Verbose, the log holds no World Bible, Plot Thread, world rule, story text, player input, Image Prompt or API key
-- [ ] A test plays a Turn, Rewrite, World Change and Requested Image at Verbose with marked secrets, including failed provider calls, and finds none of them in the log
-- [ ] Error objects are logged by type, status and message only. `error.cause` and provider text are checked, as either can repeat the prompt, and provider text is logged at Verbose only, through `redacted`
+- [x] Every line about a Save gives its Save id, and its Message id or image where it has one, so the text can be found in the Save without being in the log
+- [x] A retried or failed Narrator reply gives its generation id, as it's in no Save
+- [x] At every level, including Verbose, the log holds no World Bible, Plot Thread, world rule, story text, player input, Image Prompt or API key
+- [x] A test plays a Turn, Rewrite, World Change and Requested Image at Verbose with marked secrets, including failed provider calls, and finds none of them in the log
+- [x] Error objects are logged by type, status and message only. `error.cause` and provider text are checked, as either can repeat the prompt, and provider text is logged at Verbose only, through `redacted`
 
 ### Docs
 
-- [ ] `novelforge-spec.md` has a section on the Server Log and Log Levels
-- [ ] `GLOSSARY.md` gains Server Log and Log Level, as the Full Log is the story's own record and the two must not blur
-- [ ] The spec's "stays in the server log" lines still hold, or are changed to match
+- [x] `novelforge-spec.md` has a section on the Server Log and Log Levels
+- [x] `GLOSSARY.md` gains Server Log and Log Level, as the Full Log is the story's own record and the two must not blur
+- [x] The spec's "stays in the server log" lines still hold, or are changed to match
 
 ## Comments
 
@@ -106,3 +106,16 @@ The names and order follow the browser console's own levels (Verbose, Info, Warn
   - Text in the `Text reply:` line includes the generation id, which is worth keeping, as it finds a call in the provider's own logs.
   - `POST /log` must not call `turns.status`, as reading a failure takes it.
   - Reproduce nothing on port 4600. Test on a scratch port with fake servers, as the rules in the handoffs say.
+- Built (2026-11-05). Decisions made while building:
+  - `POST /log` also takes a `save`, checked as a uuid. It's the one non-number the ticket didn't list, as "every line about a Save gives its Save id" needs it, and a checked uuid can't carry free text.
+  - The Save id and route pattern reach every line through `AsyncLocalStorage`, set in one wrapper round the routes, rather than a Save id passed through every function that logs. Background image work keeps the request's context.
+  - An image model's error text is never logged, even at Verbose, as it can lead with the Image Prompt, which `redacted`'s length cap doesn't help with. That line gives type and status. ComfyUI's own messages are safe by design, so `ComfyUI failed` logs them at Warning.
+  - `redacted` now also holds back provider text that repeats 16 or more characters of the prompt. A shorter echo passes, with a `shortcut:` comment.
+  - The commit line no longer has NPC names, only a count, as a name is story text. The ticket's rule beat the old line's "counts and names".
+  - A level isn't read from Settings on each line, as that's a file read. `PATCH /settings` and server start tell the logger.
+  - The file is opened for each line, so a second app sharing the folder doesn't block rotation on Windows.
+  - Save opened logs from `GET /saves/:id`, not from opening the database, which happens on every request.
+  - A request line per poll stays. Polling runs once a second, which at about 100 bytes a line is a day of nonstop polling per rotation.
+  - Hot reload is off when running from source, as Bun's client copied an uncaught page error's words to the terminal, which is where a debug build's Server Log goes.
+  - Checked: 837 tests, types, and headless Chrome on port 4602 with Advanced at desktop and phone width, by keyboard, and a level change applying at once. On Windows, Bun sends Info and Verbose to stdout, and Warning and Error to stderr.
+  - Not checked: a real model, a real provider's error text, a real Save upgrade line, two apps sharing one `logs` folder, and iOS Safari. `POST /log` has no rate limit, so a flood is held only by the rotation.

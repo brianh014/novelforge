@@ -18,7 +18,14 @@ import {
 } from "./api";
 import { BookTabs, Sheet } from "./menu";
 
-const SECTIONS = ["Text", "Images", "Reading"];
+const SECTIONS = ["Text", "Images", "Reading", "Advanced"];
+
+const LOG_LEVELS = [
+  ["error", "Error"],
+  ["warning", "Warning"],
+  ["info", "Info"],
+  ["verbose", "Verbose"],
+] as const;
 const RESOLUTIONS = [
   ["480p", "480p (848 × 480)"],
   ["720p", "720p (1280 × 720)"],
@@ -778,6 +785,28 @@ function InstallSettings({
           <option value="large">Large</option>
         </select>
       </label>
+      </div>
+
+      <div data-section="Advanced" className="fields" hidden={section !== "Advanced"}>
+      <h2>Advanced</h2>
+      <label>
+        Log Level
+        <select
+          value={draft.logLevel ?? ""}
+          onChange={(e) => set({ logLevel: (e.target.value || null) as Settings["logLevel"] })}
+        >
+          <option value="">Default ({LOG_LEVELS.find(([value]) => value === draft.defaultLogLevel)?.[1]})</option>
+          {LOG_LEVELS.map(([value, name]) => (
+            <option key={value} value={value}>
+              {name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="muted">
+        How much the app writes to its Server Log, from Error, only what failed, to Verbose, every step. It changes as soon as
+        you save, and the log never holds story text.
+      </p>
       </div>
     </form>,
     section !== THIS_STORY && (

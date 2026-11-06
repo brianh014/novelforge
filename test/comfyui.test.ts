@@ -493,8 +493,9 @@ test("Advanced with no workflow stored is an unfinished setup: no call and no no
   logged.mockRestore();
 });
 
-test("a job ComfyUI refuses shows the node in Settings, and never the prompt", async () => {
+test("a job ComfyUI refuses shows the node in Settings and the log, and never the prompt", async () => {
   const logged = spyOn(console, "error").mockImplementation(() => {});
+  const warned = spyOn(console, "warn").mockImplementation(() => {});
   const running = play(newScene("A secret door"));
   const workflow = WORKFLOW_EXAMPLE.replace('"ckpt_name": "your_model.safetensors"', '"ckpt_name": "gone.safetensors", "echo": "{{prompt}}"');
   await running.patch("/settings", advancedSetup(workflow));
@@ -507,8 +508,11 @@ test("a job ComfyUI refuses shows the node in Settings, and never the prompt", a
   expect(workflowProblem).toContain("value_not_in_list");
   expect(workflowProblem).toContain("node 1 (CheckpointLoaderSimple)");
   expect(workflowProblem).not.toContain("secret door");
-  expect(String(logged.mock.calls.at(-1)?.[0]?.cause)).toContain("secret door");
+  const log = JSON.stringify([...logged.mock.calls, ...warned.mock.calls]);
+  expect(log).toContain("value_not_in_list");
+  expect(log).not.toContain("secret door");
   logged.mockRestore();
+  warned.mockRestore();
 });
 
 test("a custom node that isn't installed is named in Settings", async () => {

@@ -127,6 +127,14 @@ _Avoid_: Save (a Snapshot is not a player-facing save)
 The player-facing record of only what the PC knows or has encountered, where the player can edit that text. An edit lasts until a Revert to before it.
 _Avoid_: Log (the Full Log is one section of the Journal)
 
+**Server Log**:
+The app's own record of what it did, for tracing a problem: the console and `logs/novelforge.log`. It never holds story text, only ids that lead to it in the Save. It's nothing to do with the Full Log, which is the story's own record.
+_Avoid_: Log (alone), debug log
+
+**Log Level**:
+How much goes in the Server Log: Error, Warning, Info or Verbose, each including the ones before it. A Default choice follows the build.
+_Avoid_: Debug level
+
 **Gallery**:
 The part of the book holding every image the player may see, in three sections: Cover, Characters (the PC's portrait, then those of known NPCs) and Scenes (the Scene Images and the Requested Images). The player can delete an image in Scenes, and never the Cover or a portrait. Only the image goes: its Message and Snapshot stay, and a Revert doesn't bring it back.
 

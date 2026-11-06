@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { settingsStore } from "../src/settings-store";
 import { textProvider } from "../src/text-provider";
-import { delta, fakeOpenAi, scriptedDice, startApp, tempFolder, turnEvents } from "./support";
+import { delta, fakeOpenAi, logOf, scriptedDice, startApp, tempFolder, turnEvents } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let app: ReturnType<typeof startApp>;
@@ -358,31 +358,26 @@ test("the model and Model Instructions can change between Turns of a Save", asyn
 });
 
 test("Settings survive a restart, and the API key never reaches a response, a Save or the log", async () => {
-  const realError = console.error;
-  const logged: unknown[] = [];
-  console.error = (...args) => void logged.push(...args);
-  try {
-    play([httpError({ message: "Bad key test-key" }, 401)()]);
-    const id = await app.createSave();
-    const failed = await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
-    await app.restart();
+  play([httpError({ message: "Bad key test-key" }, 401)()]);
+  const id = await app.createSave();
+  let failed = "";
+  const log = await logOf(async () => {
+    failed = await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+  });
+  await app.restart();
 
-    const settings = await app.get("/settings").then((r) => r.text());
+  const settings = await app.get("/settings").then((r) => r.text());
 
-    expect(JSON.parse(settings)).toMatchObject({
-      textBaseUrl: provider.baseUrl,
-      textModel: "fake/model",
-      hasTextApiKey: true,
-      modelInstructions: "",
-    });
-    expect(provider.requests[0]!.authorization).toBe("Bearer test-key");
-    const log = logged.map((entry) => Bun.inspect(entry)).join("\n");
-    expect(log).toContain("Bad key [key]");
-    const save = await Bun.file(join(folder.path, "Saves", `${id}.sqlite`)).text();
-    for (const place of [failed, settings, log, save]) expect(place).not.toContain("test-key");
-  } finally {
-    console.error = realError;
-  }
+  expect(JSON.parse(settings)).toMatchObject({
+    textBaseUrl: provider.baseUrl,
+    textModel: "fake/model",
+    hasTextApiKey: true,
+    modelInstructions: "",
+  });
+  expect(provider.requests[0]!.authorization).toBe("Bearer test-key");
+  expect(log).toContain("Bad key [key]");
+  const save = await Bun.file(join(folder.path, "Saves", `${id}.sqlite`)).text();
+  for (const place of [failed, settings, log, save]) expect(place).not.toContain("test-key");
 });
 
 test("changing the base URL drops a stored key unless a new one comes with it", async () => {
@@ -489,21 +484,6 @@ test("the Settings text test says when the server can't be reached", async () =>
   expect((await body(response)).error).toContain("can't be reached");
 });
 
-/** Everything the server logs while `run` plays, as one string. */
-async function logOf(run: () => Promise<unknown>) {
-  const lines: string[] = [];
-  const keep = (...args: unknown[]) => void lines.push(args.map((arg) => (typeof arg === "string" ? arg : Bun.inspect(arg))).join(" "));
-  const log = spyOn(console, "log").mockImplementation(keep);
-  const error = spyOn(console, "error").mockImplementation(keep);
-  try {
-    await run();
-    return lines.join("\n");
-  } finally {
-    log.mockRestore();
-    error.mockRestore();
-  }
-}
-
 const broken = ['data: {"choices":[{"delta":{"content":"The ti\n\n'];
 
 test("a broken line in the stream retries the Turn, and the log shows why", async () => {
@@ -517,7 +497,7 @@ test("a broken line in the stream retries the Turn, and the log shows why", asyn
 
   expect(provider.requests).toHaveLength(2);
   expect((await storedMessages(id)).at(-1)!.text).toBe("The tide rises.");
-  expect(log).toContain("attempt 1 of 3");
+  expect(log).toContain('"attempt":1,"of":3');
   expect(log).toContain('"last":{"chars":');
   expect(log).not.toContain("The ti");
 });
@@ -554,10 +534,10 @@ test("the log shows how each reply went, and none of the story", async () => {
   for (const fact of ['"generation":"gen-1"', '"provider":"FakeHost"', '"finish":"stop"', '"nativeFinish":"STOP"', '"completion_tokens":7']) {
     expect(log).toContain(fact);
   }
-  expect(log).toContain('"people":["Ada"]');
+  expect(log).toContain('"people":1');
   expect(log).toContain('"summary":10');
   expect(log).toContain('"attempts":1');
-  for (const story of ["The tide rises", "A wet day", "I wade forward"]) expect(log).not.toContain(story);
+  for (const story of ["The tide rises", "A wet day", "I wade forward", "Ada"]) expect(log).not.toContain(story);
 });
 
 test("a client that leaves is logged as that, not as a failed Turn", async () => {
@@ -578,7 +558,9 @@ test("a client that leaves is logged as that, not as a failed Turn", async () =>
     await Bun.sleep(300);
   });
 
-  expect(log).toContain("client left");
+  expect(log).toContain("A Turn lost its client");
+  expect(log).toContain("A Turn ended after its client left");
+  expect(log.indexOf("lost its client")).toBeLessThan(log.indexOf("ended after its client left"));
   expect(log).not.toContain("A Turn failed");
   expect(log).not.toContain("I wade forward");
 });
@@ -739,7 +721,7 @@ test("a reply that isn't JSON leaves none of its words in the log", async () => 
 
   const log = await logOf(() => streamTurn(id, "I wade forward.").then(turnEvents));
 
-  expect(log).toContain("attempt 3 of 3");
+  expect(log).toContain('"attempt":3,"of":3');
   expect(log).not.toContain("Marcus");
 });
 
@@ -751,4 +733,14 @@ test("a provider's error is cut short in the log, as it may echo the story", asy
 
   expect(log).toContain("x".repeat(100));
   expect(log).not.toContain("x".repeat(400));
+});
+
+test("a provider's error that repeats the prompt is held back from the log", async () => {
+  play([httpError({ message: "You sent: ZQX-the-words-of-the-player" }, 500)()]);
+  const id = await app.createSave();
+
+  const log = await logOf(() => streamTurn(id, "ZQX-the-words-of-the-player").then(turnEvents));
+
+  expect(log).toContain("it repeats the prompt");
+  expect(log).not.toContain("ZQX");
 });

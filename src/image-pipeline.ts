@@ -1,5 +1,6 @@
 import { localIsSetUp, promptStyle, type PromptStyle, usesPortraits } from "./graph-builder";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
+import { errorType, log } from "./logger";
 import { type ImageTarget, OPENING_SNAPSHOT, type Pictured, type Save, SaveNotFound, type SaveStore } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import type { State } from "./state-applier";
@@ -9,7 +10,7 @@ export type ImagePipeline = ReturnType<typeof imagePipeline>;
 type Npc = State["npcs"][number];
 export type Scene = { changed: boolean; moved: boolean; description: string; location: string; npcs: Npc[]; wearing: string[]; portraits: Npc[] };
 /** A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. */
-type Job = { messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string; scene?: boolean };
+type Job = { kind: string; messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string; scene?: boolean };
 /** `world` is what the player can read of it: the World Overview, or the World Brief before there is one. */
 type Cover = { title: string; theme: string; world: string };
 export type ImageKind = "cover" | "portrait";
@@ -146,6 +147,14 @@ export function imagePipeline(
   const requestFailures = new Map<string, { error: string; words: string }>();
   let session = 0;
 
+  // Below, only the error's type and status go to the Server Log, as an image model's message can repeat the Image Prompt.
+  const about = (id: string, { kind, messageId }: Pick<Job, "kind" | "messageId">) => ({ save: id, kind, message: messageId });
+  const queued = (id: string, job: Job) => {
+    log.verbose("images", "Image queued", () => about(id, job));
+    return job;
+  };
+  const dropped = (id: string, job: Job, reason: string) => log.info("images", "Image dropped", { ...about(id, job), reason });
+
   const adapter: ImageAdapter = (payload, signal) => adapters[settings.read().imageProvider](payload, signal);
 
   function ready() {
@@ -185,11 +194,15 @@ export function imagePipeline(
   async function drawScene(id: string, messageId: number, scene: Scene, signal: AbortSignal) {
     const { prompt, pictured, bytes } = await drawMoment(id, messageId, scene, signal);
     saves.addSceneImage(id, messageId, scene.location, bytes, prompt, pictured);
+    log.info("images", "Image drawn", about(id, { kind: "scene", messageId }));
   }
 
   async function drawPortrait(id: string, messageId: number, npc: Npc | undefined, signal: AbortSignal, early?: Promise<EarlyImage>) {
     const held = await early;
-    if (held?.bytes) return saves.addPortrait(id, messageId, null, held.bytes, held.prompt);
+    if (held?.bytes) {
+      saves.addPortrait(id, messageId, null, held.bytes, held.prompt);
+      return log.info("images", "Image drawn", about(id, { kind: "portrait", messageId }));
+    }
     // shortcut: a person keeps their first portrait when update_npc changes their looks, redraw if that shows in play.
     const name = npc?.name ?? null;
     const { pc, artStyle } = saves.read(id);
@@ -199,6 +212,7 @@ export function imagePipeline(
     const bytes = await adapter(portraitPayload(prompt, artStyle), signal);
     session++;
     saves.addPortrait(id, messageId, name, bytes, prompt);
+    log.info("images", "Image drawn", about(id, { kind: "portrait", messageId }));
   }
 
   /** The same kind of request that made the image, so only the prompt, the Art Style and the Settings can differ. */
@@ -230,10 +244,12 @@ export function imagePipeline(
       if (job === jobs.waiting) jobs.waiting = undefined;
       const controller = new AbortController();
       jobs.running = { ...job, controller };
-      // Image API errors stay in this log, as they may repeat the prompt, and the Turn already stands.
+      log.verbose("images", "Image started", () => about(id, job));
       await drawIfReady(job, controller.signal).catch((error) => {
-        if (!(error instanceof SaveNotFound) && !controller.signal.aborted) console.error(error);
+        if (error instanceof SaveNotFound) dropped(id, job, "the Save is gone");
+        else if (!controller.signal.aborted) log.error("images", "Image failed", { ...about(id, job), ...errorType(error) });
       });
+      log.verbose("images", "Image finished", () => about(id, job));
     }
     work.delete(id);
   }
@@ -247,10 +263,8 @@ export function imagePipeline(
     void drain(id, jobs);
   }
 
-  const portraitJob = (id: string, messageId: number, npc?: Npc, early?: Promise<EarlyImage>): Job => ({
-    messageId,
-    draw: (signal) => drawPortrait(id, messageId, npc, signal, early),
-  });
+  const portraitJob = (id: string, messageId: number, npc?: Npc, early?: Promise<EarlyImage>): Job =>
+    queued(id, { kind: "portrait", messageId, draw: (signal) => drawPortrait(id, messageId, npc, signal, early) });
 
   return {
     ready: () => Boolean(ready()),
@@ -274,18 +288,19 @@ export function imagePipeline(
       const key = redrawKey(id, target);
       if (isRedrawing(id, key)) return false;
       failures.delete(key);
+      const kind = `${target.kind} redraw`;
       const draw = async (signal: AbortSignal) => {
         try {
           const bytes = await adapter(redrawPayload(id, target, messageId, prompt), signal);
           session++;
           saves.replaceImage(id, target, prompt, bytes);
+          log.info("images", "Image drawn", about(id, { kind, messageId }));
         } catch (error) {
           if (!signal.aborted && !(error instanceof SaveNotFound)) failures.set(key, shownFailure(error));
-          // Kept from the log below, as the error can repeat the prompt, and the player is told.
-          if (target.kind !== "requested") throw error;
+          throw error;
         }
       };
-      enqueue(id, (jobs) => jobs.queue.push({ messageId, draw, redraw: key }));
+      enqueue(id, (jobs) => jobs.queue.push(queued(id, { kind, messageId, draw, redraw: key })));
       return true;
     },
 
@@ -308,13 +323,14 @@ export function imagePipeline(
           step = "drawing it";
           const { prompt, pictured, bytes } = await drawMoment(id, afterItsScene(messageId), { ...moment, description }, signal);
           saves.addRequestedImage(id, messageId, words, bytes, prompt, pictured);
+          log.info("images", "Image drawn", about(id, { kind: "requested", messageId }));
         } catch (error) {
           if (signal.aborted || error instanceof SaveNotFound) return;
-          console.error(`A requested image failed ${step}.`);
+          log.error("images", `A requested image failed ${step}.`, { ...about(id, { kind: "requested", messageId }), ...errorType(error) });
           requestFailures.set(id, { error: `The picture wasn't drawn. ${shownFailure(error).replace(/\.?$/, ".")}`, words });
         }
       };
-      enqueue(id, (jobs) => jobs.queue.push({ messageId, draw, redraw: requestKey(id) }));
+      enqueue(id, (jobs) => jobs.queue.push(queued(id, { kind: "requested", messageId, draw, redraw: requestKey(id) })));
     },
 
     /** Reading a failure takes it, so it's told once. */
@@ -347,7 +363,8 @@ export function imagePipeline(
         if (scene.moved) jobs.queue.push(portraitJob(id, OPENING_SNAPSHOT));
         jobs.queue.push(...scene.portraits.map((npc) => portraitJob(id, messageId, npc)));
         if (scene.changed && scene.description) {
-          jobs.waiting = { messageId, scene: true, draw: (signal) => drawScene(id, messageId, scene, signal) };
+          if (jobs.waiting) dropped(id, jobs.waiting, "a newer scene");
+          jobs.waiting = queued(id, { kind: "scene", messageId, scene: true, draw: (signal) => drawScene(id, messageId, scene, signal) });
         }
       });
     },
@@ -362,9 +379,11 @@ export function imagePipeline(
      * Drops every job for a Message after `messageId`, for when those Messages or the whole Save go. Cancelling is not
      * billed, and a job that finishes regardless finds its Message gone, as Message ids are never reused.
      */
-    forget(id: string, messageId: number) {
+    forget(id: string, messageId: number, reason: string) {
       const jobs = work.get(id);
       if (!jobs) return;
+      const gone = [...jobs.queue, jobs.waiting, jobs.running].filter((job) => job && job.messageId > messageId);
+      for (const job of gone) dropped(id, job!, reason);
       jobs.queue = jobs.queue.filter((job) => job.messageId <= messageId);
       if (jobs.waiting && jobs.waiting.messageId > messageId) jobs.waiting = undefined;
       if (jobs.running && jobs.running.messageId > messageId) jobs.running.controller.abort();

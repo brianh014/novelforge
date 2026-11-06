@@ -45,6 +45,7 @@ export function liveTurns() {
       const turn: LiveTurn = { input, narration: "", after, ...(replaces !== undefined && { replaces }) };
       running.set(id, turn);
       return {
+        id,
         input,
         replaces,
         heard: (...[event, data]: Parameters<TurnEvents>) => {

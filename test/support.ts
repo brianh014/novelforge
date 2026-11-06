@@ -1,12 +1,28 @@
+import { spyOn } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Dice } from "../src/check-resolver";
 import type { ImageAdapter, ImagePayload } from "../src/image-adapter";
+import { type LogLevel, setLogLevel } from "../src/logger";
 import { startServer } from "../src/rest-api";
 import type { Prompt } from "../src/prompt-assembler";
 import { settingsStore } from "../src/settings-store";
 import type { TextProvider } from "../src/turn-engine";
+
+/** Everything the Server Log writes while `run` goes, as one string, at Verbose unless told otherwise. */
+export async function logOf(run: () => Promise<unknown>, level: LogLevel = "verbose") {
+  const lines: string[] = [];
+  const spies = (["error", "warn", "info", "debug"] as const).map((method) => spyOn(console, method).mockImplementation((...args: unknown[]) => void lines.push(args.join(" "))));
+  setLogLevel(level);
+  try {
+    await run();
+    return lines.join("\n");
+  } finally {
+    setLogLevel(undefined);
+    for (const spy of spies) spy.mockRestore();
+  }
+}
 
 export const narration = (text: string, ...state_operations: unknown[]) =>
   JSON.stringify({ narration: text, state_operations });

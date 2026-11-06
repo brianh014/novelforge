@@ -45,6 +45,8 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     chatStyle: "prose",
     fontSize: "medium",
     theme: "system",
+    logLevel: null,
+    defaultLogLevel: "warning",
   });
 });
 
@@ -92,6 +94,8 @@ test("every setting survives a restart, and no key comes back", async () => {
     chatStyle: "prose",
     fontSize: "large",
     theme: "dark",
+    logLevel: null,
+    defaultLogLevel: "warning",
   };
   expect(await response.json()).toEqual(expected);
 

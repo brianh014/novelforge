@@ -97,73 +97,83 @@ function addOnce(list: string[], value: string) {
   return true;
 }
 
-/** Changes `state` and returns true, or returns false having changed nothing if `operation` is disproved. */
-function apply(state: State, operation: StateOperation) {
+/** Changes `state` and returns nothing, or returns why `operation` is disproved, having changed nothing. The reason goes to the Server Log, so it never quotes the operation. */
+function apply(state: State, operation: StateOperation): string | undefined {
   switch (operation.op) {
     case "add_item":
       state.inventory[operation.slot].push(operation.item);
-      return true;
+      return;
     case "remove_item":
-      return take(state.inventory.carrying, operation.item) || take(state.inventory.wearing, operation.item);
+      return take(state.inventory.carrying, operation.item) || take(state.inventory.wearing, operation.item) ? undefined : "not held";
     case "set_health":
-      if (hasNumber(operation.health)) return false;
+      if (hasNumber(operation.health)) return "has a number";
       state.status.health = operation.health;
-      return true;
+      return;
     case "add_status":
-      return !hasNumber(operation.text) && addOnce(state.status[operation.kind], operation.text);
+      if (hasNumber(operation.text)) return "has a number";
+      return addOnce(state.status[operation.kind], operation.text) ? undefined : "already there";
     case "remove_status":
-      return take(state.status[operation.kind], operation.text);
+      return take(state.status[operation.kind], operation.text) ? undefined : "not there";
     case "add_npc":
-      if (findNpc(state, operation.name)) return false;
+      if (findNpc(state, operation.name)) return "already an NPC";
       state.npcs.push({ name: operation.name, appearance: operation.appearance });
-      return true;
+      return;
     case "update_npc": {
       const npc = findNpc(state, operation.name);
-      if (!npc) return false;
+      if (!npc) return "no such NPC";
       npc.appearance = operation.appearance;
-      return true;
+      return;
     }
     case "set_scene": {
       // The cast only steers images, so a name the state lacks is left out rather than failing the Turn.
       const visibleCast = [...new Set(operation.visible_cast)].filter((name) => findNpc(state, name));
       state.scene = { location: operation.location, visibleCast };
-      return true;
+      return;
     }
     // A repeat is already true, so it costs nothing, and refusing one would throw away a whole response.
     case "add_known_fact":
       addOnce(state.pcKnown.facts, operation.fact);
-      return true;
+      return;
     case "add_known_npc":
-      if (!findNpc(state, operation.name)) return false;
+      if (!findNpc(state, operation.name)) return "no such NPC";
       addOnce(state.pcKnown.npcs, operation.name);
-      return true;
+      return;
     case "set_known_npc_summary":
-      if (!state.pcKnown.npcs.includes(operation.name)) return false;
+      if (!state.pcKnown.npcs.includes(operation.name)) return "NPC not known";
       state.pcKnown.summaries = { ...state.pcKnown.summaries, [operation.name]: operation.summary };
-      return true;
+      return;
     case "add_lore_entry": {
       const { title, keywords, content } = operation;
       // The Narrator only sees activated entries, so it can repeat a title innocently: keep the first, not fail the Turn.
-      if (state.worldBible.some((entry) => entry.title === title)) return true;
+      if (state.worldBible.some((entry) => entry.title === title)) return;
       // Always-on entries bypass the token budget, so the Narrator can only add keyword-activated ones.
       state.worldBible.push({ title, keywords, content, alwaysOn: false });
-      return true;
+      return;
     }
     case "add_plot_thread":
-      return addOnce(state.plotThreads, operation.thread);
+      return addOnce(state.plotThreads, operation.thread) ? undefined : "already there";
     case "resolve_plot_thread":
-      return take(state.plotThreads, operation.thread);
+      return take(state.plotThreads, operation.thread) ? undefined : "not there";
     case "set_summary":
       state.summary = operation.summary;
-      return true;
+      return;
   }
 }
+
+const isRepeat = ({ pcKnown }: State, operation: StateOperation) =>
+  (operation.op === "add_known_fact" && pcKnown.facts.includes(operation.fact)) ||
+  (operation.op === "add_known_npc" && pcKnown.npcs.includes(operation.name));
 
 /** Applies operations in order, so each is judged against the ones before it. */
 export function applyOperations(state: State, operations: StateOperation[]) {
   const next = structuredClone(state);
-  const refused = operations.filter((operation) => !apply(next, operation));
-  return { next, refused };
+  let repeats = 0;
+  const refused = operations.flatMap(({ ...operation }) => {
+    if (isRepeat(next, operation)) repeats++;
+    const reason = apply(next, operation);
+    return reason ? [{ op: operation.op, reason }] : [];
+  });
+  return { next, refused, repeats };
 }
 
 export type World = Pick<State, "worldBible" | "worldRules" | "plotThreads">;

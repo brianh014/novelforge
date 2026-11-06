@@ -4,7 +4,7 @@ import { Gallery } from "./gallery";
 import { Inventory } from "./inventory";
 import { Journal } from "./journal";
 import { LoadStory } from "./load";
-import { getSettings } from "./api";
+import { getSettings, reportEvent } from "./api";
 import { Menu } from "./menu";
 import { Play } from "./play";
 import { applyLook, SettingsScreen } from "./settings";
@@ -30,5 +30,9 @@ function App() {
 
 // If this fails the app still works, at the default size and the system's theme.
 getSettings().then(applyLook, () => {});
+
+// Where only, as the message can quote what the page holds.
+window.addEventListener("error", ({ lineno, colno }) => reportEvent("page-error", { line: lineno, column: colno }));
+window.addEventListener("unhandledrejection", () => reportEvent("page-error"));
 
 createRoot(document.getElementById("root")!).render(<App />);

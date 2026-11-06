@@ -3,19 +3,16 @@ import { networkInterfaces } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { openRouterImages } from "./image-adapter";
+import { defaultLevelFor, log, startLog } from "./logger";
 import { startServer } from "./rest-api";
 import { settingsStore } from "./settings-store";
 import { textProvider } from "./text-provider";
 
-// Here rather than at each call, so every line of the log has a time, from any part of the app.
-for (const level of ["log", "error"] as const) {
-  const write = console[level];
-  console[level] = (...args) => write(new Date().toISOString(), ...args);
-}
-
 // Under `bun run`, execPath is Bun itself, so keep dev Saves in the project rather than beside Bun.
 const isCompiled = basename(process.execPath, ".exe") !== "bun";
 const appDir = isCompiled ? dirname(process.execPath) : process.cwd();
+
+startLog(defaultLevelFor(isCompiled), join(appDir, "logs"));
 
 const settings = settingsStore(join(appDir, "settings.json"));
 
@@ -32,9 +29,9 @@ const server = startServer({
 });
 
 // A listening address of 0.0.0.0 is no use in a browser.
-console.log(`NovelForge is running at ${server.url.href.replace("0.0.0.0", "127.0.0.1")}`);
+log.startup(`NovelForge is running at ${server.url.href.replace("0.0.0.0", "127.0.0.1")}`);
 if (server.hostname === "0.0.0.0") {
   for (const address of Object.values(networkInterfaces()).flat()) {
-    if (address?.family === "IPv4" && !address.internal) console.log(`On your network: http://${address.address}:${server.port}/`);
+    if (address?.family === "IPv4" && !address.internal) log.startup(`On your network: http://${address.address}:${server.port}/`);
   }
 }

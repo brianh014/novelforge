@@ -1,6 +1,7 @@
 import type { comfyModels } from "../comfyui";
 import type { ImageKind } from "../image-pipeline";
 import type { FailedTurn, LiveTurn } from "../live-turns";
+import type { LogLevel } from "../logger";
 import type { ImageTarget, Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State, VisibleEdit } from "../state-applier";
@@ -12,6 +13,7 @@ export type OpenSave = ReturnType<SaveStore["read"]>;
 export type Inventory = State["inventory"];
 export type Status = State["status"];
 export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKey"> & {
+  defaultLogLevel: LogLevel;
   hasTextApiKey: boolean;
   hasImageApiKey: boolean;
   imagesReady: boolean;
@@ -48,6 +50,11 @@ async function request<T>(path: string, init?: RequestInit) {
   const response = await fetch(path, init);
   if (!response.ok) throw new Error(await errorMessage(response));
   return (await response.json()) as T;
+}
+
+/** Tells the Server Log what only the page can see. Numbers and a Save's id only, as the route takes nothing else, and a failed report is nobody's problem. */
+export function reportEvent(event: string, fields: Record<string, number | string> = {}) {
+  void fetch("/log", { ...jsonBody({ event, ...fields }), keepalive: true }).catch(() => {});
 }
 
 export const listSaves = () => request<{ saves: ListedSave[] }>("/saves").then(({ saves }) => saves);
@@ -286,6 +293,7 @@ async function awaitTurn(
   retryHint: string,
   show: (narration: string) => void,
 ): Promise<TurnResult> {
+  reportEvent("polling-fallback", { save: id, after });
   for (let misses = 0; misses < turnPolling.tries; ) {
     try {
       const { running, failed } = await getTurn(id);
@@ -302,12 +310,15 @@ async function awaitTurn(
     }
     await new Promise((resolve) => setTimeout(resolve, turnPolling.everyMs));
   }
+  reportEvent("polling-gave-up", { save: id, after, misses: turnPolling.tries });
   return { error: "NovelForge can't be reached. Make sure it's still running, then reload this page.", input };
 }
 
 /** Picks up a Turn this page didn't start or no longer holds, such as after a reload. */
-export const resumeTurn = (id: string, turn: LiveTurn, show: (narration: string) => void) =>
-  awaitTurn(id, turn.input, turn.after, retryHintFor(turn), show);
+export function resumeTurn(id: string, turn: LiveTurn, show: (narration: string) => void) {
+  reportEvent("turn-resumed", { save: id, after: turn.after });
+  return awaitTurn(id, turn.input, turn.after, retryHintFor(turn), show);
+}
 
 async function streamTurn(
   id: string,
@@ -335,7 +346,10 @@ async function streamTurn(
     let narration = "";
     for await (const { event, data } of turnEvents(response.body!)) {
       if (event === "narration") show((narration += data.text));
-      if (event === "restart") show((narration = ""));
+      if (event === "restart") {
+        show((narration = ""));
+        reportEvent("narration-restarted", { save: id, after });
+      }
       if (event === "done") return { messages: data.messages };
       if (event === "error") {
         // Heard here, so the server needn't keep it for the player's return.
@@ -348,5 +362,7 @@ async function streamTurn(
   } finally {
     globalThis.document?.removeEventListener("visibilitychange", onReturn);
   }
+  // `returned` tells a page that came back to the window from a stream that really broke.
+  reportEvent("stream-lost", { save: id, after, returned: stale.signal.aborted ? 1 : 0 });
   return awaitTurn(id, input, after, retryHint, show);
 }

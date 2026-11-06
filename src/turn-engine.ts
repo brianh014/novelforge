@@ -2,6 +2,7 @@ import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
 import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
+import { log } from "./logger";
 import { assemblePrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
@@ -10,13 +11,14 @@ import { applyOperations, introduce, Person, type State, StateOperation } from "
 /** Throws ContentRefused when the content is refused. Anything else it throws is a network or API error. */
 export type TextProvider = (
   prompt: Prompt,
-  request: { schema?: object; onText: (text: string) => void; signal: AbortSignal },
+  /** `onGeneration` hears the provider's id for this reply, the one way to find a reply no Save keeps. */
+  request: { schema?: object; onText: (text: string) => void; onGeneration?: (id: string) => void; signal: AbortSignal },
 ) => Promise<string>;
 
 export type TurnEvents = (event: "narration" | "restart", data: object) => void;
 
 export class ContentRefused extends Error {}
-/** A failure whose message is fit to show the player. Any provider detail is in its cause, for the server log. */
+/** A failure whose message is fit to show the player. */
 export class TextProviderFailed extends Error {}
 class InvalidResponse extends Error {}
 
@@ -94,6 +96,8 @@ function narrationSoFar(partial: string) {
 const MAX_ATTEMPTS = 3;
 
 type Narrated = {
+  /** For the Server Log. */
+  kind: "turn" | "opening" | "rewrite" | "regenerate";
   prompt: Prompt;
   /** The text a failure hands back to the player. */
   input: string;
@@ -133,6 +137,7 @@ export async function playTurn(
     promptStyle: images.ready() ? promptStyle(settings.read()) : null,
   });
   return narrate(textProvider, signal, emit, {
+    kind: input === OPENING_INPUT ? "opening" : "turn",
     prompt,
     input,
     refusal: "The Narrator refused this message. Edit it and try again.",
@@ -177,7 +182,9 @@ export async function replaceResponse(
     responseSchema: JSON.stringify(responseSchema),
     promptStyle: images.ready() ? promptStyle(settings.read()) : null,
   });
+  const kind = feedback === undefined ? "regenerate" : "rewrite";
   return narrate(textProvider, signal, emit, {
+    kind,
     prompt: [...prompt, replacementInstruction(feedback === undefined ? undefined : { narration, feedback }, hadPicture && images.ready())],
     input: feedback ?? "",
     refusal: "The Narrator refused this, so the response stays as it was.",
@@ -185,9 +192,11 @@ export async function replaceResponse(
     check,
     commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
     committed: (replacement, scene) => {
-      images.forget(id, messageId - 1);
+      images.forget(id, messageId - 1, kind);
       // shortcut: a Narrator that writes no prompt gets the old one, which shows the old moment and draws with no portraits. Retry the reply if real models do this.
       const description = scene.description || (sceneImage?.prompt ?? "");
+      if (hadPicture) log.info("turn", "Replaced Turn's Scene Image forced", { message: replacement });
+      if (hadPicture && !scene.description && sceneImage) log.warning("turn", "Replacement drawn from the old image's prompt", { message: replacement });
       images.sceneChanged(id, replacement, hadPicture ? { ...scene, changed: true, description } : scene);
     },
   });
@@ -197,7 +206,7 @@ async function narrate(
   textProvider: TextProvider,
   signal: AbortSignal,
   emit: TurnEvents,
-  { prompt, input, refusal, pcName, check: storedCheck, rollCheck, commit, committed }: Narrated,
+  { kind, prompt, input, refusal, pcName, check: storedCheck, rollCheck, commit, committed }: Narrated,
 ) {
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check = storedCheck;
@@ -205,6 +214,7 @@ async function narrate(
   for (let attempt = 1; ; attempt++) {
     if (narrationSent > 0) emit("restart", {});
     narrationSent = 0;
+    let generation: string | undefined;
     let partial = "";
     const onText = (text: string) => {
       partial += text;
@@ -217,7 +227,7 @@ async function narrate(
       const reply = await askNarrator(
         textProvider,
         check ? [...prompt, resultInstruction(check)] : prompt,
-        { schema: responseSchema, onText, signal },
+        { schema: responseSchema, onText, onGeneration: (id) => (generation = id), signal },
         input,
         refusal,
       );
@@ -234,11 +244,13 @@ async function narrate(
       let npcs: Scene["npcs"] = [];
       let wearing: Scene["wearing"] = [];
       let portraits: Scene["portraits"] = [];
+      let repeated = 0;
       const messages = commit(narration, check, (state) => {
         const introduced = introduce(state, people, pcName, state_operations);
-        const { next, refused } = applyOperations(introduced.state, introduced.operations);
+        const { next, refused, repeats } = applyOperations(introduced.state, introduced.operations);
         // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
         if (refused.length > 0) throw new InvalidResponse(undefined, { cause: refused });
+        repeated = repeats;
         if (summary.trim()) next.summary = summary.trim();
         moved = movedScene(state, next);
         location = next.scene.location;
@@ -256,22 +268,22 @@ async function narrate(
         wearing,
         portraits,
       });
-      // Counts and names only, so that the log never repeats the story.
-      console.log(
-        `Turn committed: ${JSON.stringify({
-          message: messages.at(-1)!.id,
-          attempts: attempt,
-          check: !!check,
-          narration: narration.length,
-          summary: summary.trim().length,
-          people: people.map(({ name }) => name),
-          operations: state_operations.map(({ op }) => op),
-          sceneChanged: !!scene_changed,
-        })}`,
-      );
+      if (repeated > 0) log.info("turn", "Repeats ignored", { count: repeated });
+      // Counts only, so that the log never repeats the story.
+      log.info("turn", "Turn committed", () => ({
+        kind,
+        message: messages.at(-1)!.id,
+        attempts: attempt,
+        check: !!check,
+        narration: narration.length,
+        summary: summary.trim().length,
+        people: people.length,
+        operations: state_operations.map(({ op }) => op),
+        sceneChanged: !!scene_changed,
+      }));
       return messages;
     } catch (cause) {
-      retryIfInvalid(cause, attempt, input);
+      retryIfInvalid(cause, attempt, input, generation);
     }
   }
 }
@@ -279,16 +291,16 @@ async function narrate(
 /** What was wrong with a reply, without any of its text. */
 function whyInvalid({ cause }: InvalidResponse) {
   if (cause instanceof z.ZodError) return cause.issues.map(({ path, code }) => `${path.join(".")}: ${code}`).join(", ");
-  if (Array.isArray(cause)) return `refused operations: ${cause.map(({ op }) => op).join(", ")}`;
+  if (Array.isArray(cause)) return `refused operations: ${cause.map(({ op, reason }) => `${op}: ${reason}`).join(", ")}`;
   // Not the parser's message, which quotes the reply.
   return cause instanceof SyntaxError ? "not JSON" : "a Check request where none is allowed";
 }
 
 /** Returns if another attempt should run. Anything but an invalid reply goes on up. */
-function retryIfInvalid(cause: unknown, attempt: number, input: string) {
+function retryIfInvalid(cause: unknown, attempt: number, input: string, generation: string | undefined) {
   if (!(cause instanceof InvalidResponse)) throw cause;
   const reason = whyInvalid(cause);
-  console.error(`Unusable Narrator reply, attempt ${attempt} of ${MAX_ATTEMPTS}: ${reason}`);
+  log.warning("turn", "Unusable Narrator reply", { attempt, of: MAX_ATTEMPTS, reason, generation });
   if (attempt === MAX_ATTEMPTS) {
     throw new TurnFailed("The Narrator gave no usable response", "retryable", input, { cause: new Error(reason) });
   }
@@ -322,12 +334,13 @@ export async function askForJson<T>(
   refusal: string,
   signal: AbortSignal,
 ) {
-  const request = { schema: jsonSchemaOf(schema), onText: () => {}, signal };
+  let generation: string | undefined;
+  const request = { schema: jsonSchemaOf(schema), onText: () => {}, onGeneration: (id: string) => (generation = id), signal };
   for (let attempt = 1; ; attempt++) {
     try {
       return parseReply(await askNarrator(textProvider, prompt, request, "", refusal), schema);
     } catch (cause) {
-      retryIfInvalid(cause, attempt, "");
+      retryIfInvalid(cause, attempt, "", generation);
     }
   }
 }

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { fillWorkflow } from "./comfy-workflow";
 import { buildGraph, usableReferences } from "./graph-builder";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
+import { errorFields, log } from "./logger";
 import { imageType } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 
@@ -120,8 +121,7 @@ function jobFailure({ messages, status_str }: NonNullable<HistoryEntry["status"]
 
 /**
  * The ComfyUI Image Adapter, using the Settings at the time of each call. It never sends a key. `report` tells of each
- * Advanced job, with "" for a good one. Every message here is safe to show the player: ComfyUI's own words stay in `cause`,
- * for the log.
+ * Advanced job, with "" for a good one. Every message here is safe to show the player or log, and ComfyUI's own words go no further.
  */
 export function comfyImages(
   settings: SettingsStore,
@@ -208,6 +208,8 @@ export function comfyImages(
       // Not awaited, so a server that has gone quiet doesn't also hold up the Save's next image.
       void cancel(url, job).catch(() => {});
       if (advanced && !signal.aborted) report((error as Error).message);
+      // Every message here is safe, and it's the why that the failed image's own line must leave out.
+      if (!signal.aborted) log.warning("images", "ComfyUI failed", errorFields(error));
       throw error;
     }
   };

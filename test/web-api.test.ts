@@ -21,7 +21,7 @@ import {
   setupProblem,
 } from "../src/web/api";
 import { ContentRefused, type TextProvider } from "../src/turn-engine";
-import { narration, startApp, tempFolder } from "./support";
+import { logOf, narration, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let app: ReturnType<typeof startApp>;
@@ -415,7 +415,12 @@ test("coming back to the page reads a stream that has gone quiet from the Turn i
 
     page.dispatchEvent(new Event("visibilitychange"));
 
-    expect(await playing).toMatchObject({ messages: [{ id: 1 }, { id: 2, text: "The tide rises." }] });
+    const log = await logOf(async () => {
+      expect(await playing).toMatchObject({ messages: [{ id: 1 }, { id: 2, text: "The tide rises." }] });
+      await Bun.sleep(20);
+    });
+    expect(log).toMatch(/INFO page stream-lost .*"returned":1/);
+    expect(log).toMatch(/VERBOSE page polling-fallback/);
     const asked = (fetch as unknown as { mock: { calls: [string][] } }).mock.calls.map(([path]) => String(path));
     expect(asked.some((path) => path.endsWith("/turn"))).toBe(true);
   } finally {

@@ -225,7 +225,7 @@ The Journal is built only from the PC-known section of the Snapshot and the summ
 
 **Editing:** The World Brief, Recent summary, each fact and each known NPC's summary have a pencil button that changes the text in place, facts can also be added and removed, and each edit reaches the next Turn. NPC names can't be edited, as portraits and Image Prompt marks find people by name. Inventory and status keep their own tab, and the Full Log can't be edited. An edit can only name a fact or NPC the Journal shows, and an NPC the PC doesn't know gets the same answer as someone who doesn't exist.
 
-**Tell the Narrator:** The “Tell Narrator what to change” button at the top right of the Journal's left page opens a box for plain words about the world as a whole, a World Change, such as “the mayor is secretly a smuggler”. It is how the player nudges the story where they want it or corrects a mistake. One Narrator call, not streamed, gets the whole World Bible, the world rules, the Plot Threads and the Journal's text, and replies with only what changes: Lore Entries to add or to rewrite by exact title, Lore Entries to remove, changes to single world rules, Plot Threads and facts, each quoting the old text exactly, and a new World Brief, Recent summary or NPC summary where the old one no longer holds. What a reply leaves out stays, so it can't lose an entry. A reply that misquotes, names an NPC the Journal doesn't show, or changes nothing, is unusable and gets the same retries as a Turn. The Journal's text stays free of secrets, by the Narrator's instructions alone: a secret goes in the hidden parts even when the player names it. The player sees that it was done or that it failed, and whatever changed in the Journal: the reply is never sent to the SPA, the server logs only how many entries changed, and a failure's log line leaves out the provider's detail, which can echo the prompt.
+**Tell the Narrator:** The “Tell Narrator what to change” button at the top right of the Journal's left page opens a box for plain words about the world as a whole, a World Change, such as “the mayor is secretly a smuggler”. It is how the player nudges the story where they want it or corrects a mistake. One Narrator call, not streamed, gets the whole World Bible, the world rules, the Plot Threads and the Journal's text, and replies with only what changes: Lore Entries to add or to rewrite by exact title, Lore Entries to remove, changes to single world rules, Plot Threads and facts, each quoting the old text exactly, and a new World Brief, Recent summary or NPC summary where the old one no longer holds. What a reply leaves out stays, so it can't lose an entry. A reply that misquotes, names an NPC the Journal doesn't show, or changes nothing, is unusable and gets the same retries as a Turn. The Journal's text stays free of secrets, by the Narrator's instructions alone: a secret goes in the hidden parts even when the player names it. The player sees that it was done or that it failed, and whatever changed in the Journal: the reply is never sent to the SPA, the Server Log holds only how many entries changed, and a failure's line leaves out the provider's detail, which can echo the prompt.
 
 Edits and World Changes are refused while a Turn runs. A Turn or edit is refused during a World Change, and a Revert during one wins, failing the change.
 
@@ -257,7 +257,7 @@ An NPC portrait is generated once, the first time that NPC appears in a Scene or
 
 One text call turns the words into an Image Prompt, the only one written outside a Turn, by the same rules and Prompt Style as a Scene Image's. It isn't streamed, and it gets what the player can read and the people in view: the words, the World Brief, the Scene's location, the last 12 Messages, the PC's looks, and the name and looks of each person in the Scene. It never gets the World Bible, world rules, Plot Threads or Checks, and a person outside the Scene isn't in it, so someone named in a mark who isn't in the Scene gets only the prompt's phrase, with no stored looks or portrait. The player's words are JSON data to that call and never instructions. Someone made up on the spot, like an unnamed woman, gets no portrait or NPC entry. A marked person with a portrait uses it as a reference, as a Scene Image does, and the Scene Image at or before the Message is the previous-scene reference when its location matches.
 
-A Requested Image shows as a folded row under its Message in every Chat style, whatever the left page shows, and the left page and Stage box keep showing the Scene Image. It also shows in the Full Log and the Gallery, labelled with the player's words, and can be Redrawn. A Requested Image isn't a Turn: it makes no Message or Snapshot, and the Narrator never hears about it. A Revert past its Message or a replaced response removes it, and stops one on the way, and duplicates, exports and imports carry it. A failed text call or draw says so once, even if the player was away, and puts their words back in the box. The log records only which step failed, never the words, the story or the prompt.
+A Requested Image shows as a folded row under its Message in every Chat style, whatever the left page shows, and the left page and Stage box keep showing the Scene Image. It also shows in the Full Log and the Gallery, labelled with the player's words, and can be Redrawn. A Requested Image isn't a Turn: it makes no Message or Snapshot, and the Narrator never hears about it. A Revert past its Message or a replaced response removes it, and stops one on the way, and duplicates, exports and imports carry it. A failed text call or draw says so once, even if the player was away, and puts their words back in the box. The Server Log records only which step failed and the error's type, never the words, the story or the prompt.
 
 **Unified Image Adapter Interface:** Define a standard internal payload (`prompt`, optional `negative_prompt`, `aspect_ratio`, `reference_images`, `style_preset`) and a lightweight backend adapter pattern to format requests for OpenRouter and ComfyUI. `reference_images` is a list where each item has a role, such as previous scene or NPC. Each adapter trims the list to what the model supports and drops unsupported fields.
 
@@ -292,6 +292,8 @@ Per install:
   * Toggle images on and off, current images are kept and displayed, just no new images created
   * Model Instructions, labelled Pre-History / System Prompt / Main Prompt \- allows the user to add an [agents.md](http://agents.md) style instruction. Blank by default
   * Test text \- a prompt box and Test button at the bottom of the Text settings send that prompt to the saved model, with the Model Instructions as the system prompt and no schema. The reply shows there with its time, time to the first word, approximate length and speed, and the model
+* Advanced
+  * Log Level \- Default, Error, Warning, Info or Verbose. Default shows what it is on this build, and a change applies as soon as it's saved
 * UI Settings
   * Chat style \- Script, Prose (the default), Bubbles or Stage box, from the UI options report. It changes how the Story shows Messages, not the Full Log, which stays exactly as written
   * Theme - Match this device (the default), Light or Dark
@@ -320,6 +322,27 @@ The app is a web based SPA with a local RESTful API server. Being API based, the
 The app is TypeScript on both ends, compiled with Bun into a single executable with the SPA embedded, so it has low system requirements and needs nothing else installed. Local model servers are the exception (see [ADR 0001](docs/adr/0001-connect-to-local-models-not-bundle.md)).
 
 The server uses `Bun.serve` with no web framework, and Zod validates Narrator JSON and API requests. Hono is the fallback if routing gets messy. The SPA uses React with TypeScript, built by Bun and styled with plain CSS design tokens. It uses no Tailwind, component library or state library, and no client-side router library is planned.
+
+## Server Log
+
+Every part of the app logs through `src/logger.ts`, so a problem can be traced from the Server Log alone. A line is the time, Log Level, area, message and JSON fields, in that order. Lines go to the console and to `logs/novelforge.log` beside `Saves`, created owner-only, which rotates at 10 MB and keeps one older file. If the file can't be written, the app carries on with the console and warns once.
+
+Each Log Level includes the ones above it here:
+
+| Level | Use it for | Console |
+|---|---|---|
+| Error | Something the player asked for or expected didn't happen, or a bug | `console.error` |
+| Warning | Something went wrong and the app recovered, or carried on with less | `console.warn` |
+| Info | One line per decision or finished step | `console.info` |
+| Verbose | The steps in between, and anything frequent | `console.debug` |
+
+The default is Verbose running from source, and Warning on a compiled build. A saved Log Level beats it, and a build with none saved keeps following its default. The startup lines, with the app's addresses, always print.
+
+The Server Log holds no World Bible, Plot Thread, world rule, story text, player input, Image Prompt or API key at any level, so it can be shared for help. A line about a Save gives its Save id, and its Message id or image where it has one, so the text can be found in the Save. A retried or failed Narrator reply is in no Save, so its line gives the generation id, which finds it in the provider's own logs where the provider keeps them. Requests log by route pattern, never the real path, and Settings changes by field name, never value.
+
+An error is logged by type, status and message, never its `cause`. Text from a Text Provider goes in at Verbose only, without the key, cut short, and held back if it repeats the prompt. An image model's error text is left out altogether, as it can lead with the Image Prompt, so that line gives the type and status.
+
+The page reports what only it can see to `POST /log`: stream lost, polling fallback, Turn resumed after a reload, polling gave up, narration restarted and uncaught page error. The route takes only those names, numbers and a Save id, with a 1 KB cap, as the app listens on the network, and anything else gets a 400. A line from the page has the area `page`, and a failed report never bothers the player.
 
 ## Storage
 
@@ -375,7 +398,7 @@ The player pastes a workflow from ComfyUI's Export (API) into Settings. It's per
 * References beyond the workflow's slots aren't sent. Portraits and first Scenes have no references, so a slot with no image gets a blank grey one and the job still runs. A `{{has_...}}` switch used as a weight or strength turns that slot off. An img2img workflow can't turn off that way, so it starts those images from grey.
 * The image kept is the highest numbered node's `SaveImage`, or `PreviewImage` if there's none. An id like `12:3` from a subgraph counts as higher than any plain number. Saved copies also stay in ComfyUI's output folder. A job that fails keeps no image, even if an earlier node finished one.
 * The Simple Mode model choices, LoRA list and trigger words are ignored. A workflow brings its own.
-* A failed job leaves the Turn alone, and Settings shows the node and error type of the last failure. ComfyUI's full text stays in the server log, as it can repeat the prompt.
+* A failed job leaves the Turn alone, and Settings shows the node and error type of the last failure. The Server Log has the same words. ComfyUI's full text goes nowhere, as it can repeat the prompt.
 
 ## Testing
 

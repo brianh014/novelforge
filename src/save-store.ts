@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { basename, join } from "node:path";
 import { z } from "zod";
 import { type Check, StoredCheck } from "./check-resolver";
+import { errorFields, log } from "./logger";
 import { applyEdit, openingState, type State, StateSections, WorldEdit } from "./state-applier";
 
 /**
@@ -291,9 +292,11 @@ function schemaVersion(db: Database) {
   return version;
 }
 
-function migrate(db: Database) {
+function migrate(db: Database, save?: string) {
   const version = schemaVersion(db);
   if (version === MIGRATIONS.length) return;
+  // Not a brand new Save, which takes every step too.
+  if (version > 0) log.info("saves", "Save upgraded", { save, from: version, to: MIGRATIONS.length });
   // All steps or none, so a failure leaves the Save as it was.
   db.transaction(() => {
     for (const step of MIGRATIONS.slice(version)) step(db);
@@ -471,7 +474,7 @@ export function saveStore(savesDir: string) {
     try {
       // secure_delete zeroes deleted rows, so a Reverted future cannot be read back from a shared Save file.
       db.run("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA secure_delete = ON;");
-      migrate(db);
+      migrate(db, basename(path, ".sqlite"));
       return db;
     } catch (error) {
       db.close();
@@ -522,6 +525,7 @@ export function saveStore(savesDir: string) {
       }
       // Renaming last means a crash can never leave a half-built file that looks like a Save.
       renameSync(unfinishedPath, pathOf(id));
+      log.info("saves", "Save created", { save: id });
       return id;
     },
 
@@ -535,7 +539,8 @@ export function saveStore(savesDir: string) {
         try {
           const { worldBrief, pc, hasCover, coverRedraws, title } = this.read(id);
           return { id, title, worldBrief, pc: { name: pc.name }, hasCover, coverRedraws, updatedAt: statSync(pathOf(id)).mtimeMs };
-        } catch {
+        } catch (error) {
+          log.error("saves", "A Save won't open", { save: id, ...errorFields(error) });
           return { id, unreadable: true as const, updatedAt: statSync(pathOf(id)).mtimeMs };
         }
       });
@@ -768,6 +773,7 @@ export function saveStore(savesDir: string) {
       return db.transaction(() => {
         const deleted = countAfter(db, messageId);
         deleteAfter(db, messageId);
+        log.info("saves", "Reverted", { save: id, message: messageId, ...deleted });
         return deleted;
       })();
     },
@@ -784,6 +790,7 @@ export function saveStore(savesDir: string) {
         deleteAfter(copy, fromMessage);
       }
       renameSync(unfinishedPath, pathOf(copyId));
+      log.info("saves", "Save duplicated", { save: id, copy: copyId, fromMessage });
       return copyId;
     },
 
@@ -791,6 +798,7 @@ export function saveStore(savesDir: string) {
       const path = existingPath(id);
       // The Save goes first, because a crash's leftovers hold story text but mean nothing without it.
       for (const suffix of ["", "-journal", "-wal", "-shm"]) rmSync(`${path}${suffix}`, { force: true });
+      log.info("saves", "Save deleted", { save: id });
     },
 
     /** One self-contained file, without deleted rows, whatever journal the Save last used. */
@@ -799,7 +807,9 @@ export function saveStore(savesDir: string) {
       const path = `${pathOf(crypto.randomUUID())}.unfinished`;
       try {
         source.run("VACUUM INTO ?", [path]);
-        return readFileSync(path);
+        const bytes = readFileSync(path);
+        log.info("saves", "Save exported", { save: id, bytes: bytes.byteLength });
+        return bytes;
       } finally {
         rmSync(path, { force: true });
       }
@@ -822,6 +832,7 @@ export function saveStore(savesDir: string) {
           copyRows(valid, save);
         }
         renameSync(unfinishedPath, pathOf(id));
+        log.info("saves", "Save imported", { save: id, bytes: bytes.byteLength });
         return id;
       } catch (error) {
         rmSync(unfinishedPath, { force: true });

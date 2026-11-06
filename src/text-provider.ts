@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { log } from "./logger";
 import type { SettingsStore } from "./settings-store";
 import { ContentRefused, type TextProvider, TextProviderFailed } from "./turn-engine";
 
@@ -13,6 +14,9 @@ const LIMITS = {
   // The list is only a nicety, so a server too busy to answer holds up a Turn or Settings this long at most.
   listMs: 15 * 1000,
 };
+
+// shortcut: a shorter echo, such as a few words of player input, passes this, drop provider text altogether if one is seen.
+const ECHO_CHARS = 16;
 
 type ProviderError = { metadata?: { error_type?: string; reasons?: string[] } };
 
@@ -85,21 +89,25 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
     return supported;
   }
 
-  return async (prompt, { schema, onText, signal }) => {
+  return async (prompt, { schema, onText, onGeneration, signal }) => {
     const { textBaseUrl, textApiKey, textModel } = settings.read();
     if (!textModel) throw new TextProviderFailed("No text model is set, so choose one in Settings");
     const url = textBaseUrl.replace(/\/$/, "");
     const headers = keyHeader(textApiKey);
-    // A provider may echo what it was sent, and this text goes to the server log, so no key and only a little of any story.
-    const redacted = (detail: string) => (textApiKey ? detail.replaceAll(textApiKey, "[key]") : detail).slice(0, 300);
-    const failure = (error: ProviderError | undefined, status: number) =>
-      isRefusal(error)
-        ? new ContentRefused()
-        : new TextProviderFailed(REJECTED, {
-            cause: new Error(redacted(`Text Provider error: ${JSON.stringify({ status, error })}`)),
-          });
+    const sent = prompt.map(({ content }) => content).join("\n");
+    // A provider may echo what it was sent, and this text goes to the Server Log at Verbose, so no key and nothing of the prompt.
+    const redacted = (detail: string) => {
+      const short = (textApiKey ? detail.replaceAll(textApiKey, "[key]") : detail).slice(0, 300);
+      for (let at = 0; at + ECHO_CHARS <= short.length; at++) if (sent.includes(short.slice(at, at + ECHO_CHARS))) return "[it repeats the prompt]";
+      return short;
+    };
+    const failure = (error: ProviderError | undefined, status: number) => {
+      if (isRefusal(error)) return new ContentRefused();
+      log.verbose("text", "Text Provider error", () => ({ detail: redacted(JSON.stringify({ status, error })) }));
+      return new TextProviderFailed(REJECTED);
+    };
 
-    // For the server log, so it holds how the reply went and none of its text.
+    // For the Server Log, so it holds how the reply went and none of its text.
     const started = Date.now();
     const seen: Record<string, unknown> = { model: textModel };
     let reply = "";
@@ -113,6 +121,7 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
 
     const send = async (useSchema: boolean) => {
       heardFrom();
+      log.verbose("text", "Prompt sent", () => ({ model: textModel, messages: prompt.length, chars: sent.length, schema: useSchema }));
       const response = await fetch(`${url}/chat/completions`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
@@ -139,7 +148,9 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
       let response = await send(useSchema);
       // A listing can claim schema support that the routed provider then rejects, and that must not fail every Turn.
       if (useSchema && (response.status === 400 || response.status === 404)) {
-        console.error(`Schema mode rejected for ${textModel}:`, redacted(await response.text()));
+        log.warning("text", "Schema mode rejected", { model: textModel, status: response.status });
+        const detail = await response.text();
+        log.verbose("text", "Schema mode rejection", () => ({ detail: redacted(detail) }));
         schemaSupport.set(`${url} ${textModel}`, false);
         seen.schema = false;
         response = await send(false);
@@ -159,6 +170,7 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
         seen.last = { chars: data.length, first: data[0], final: data.at(-1) };
         const { id, provider, usage, error, choices } = JSON.parse(data) as Chunk;
         delete seen.last;
+        if (id && id !== seen.generation) onGeneration?.(id);
         if (error) throw failure(error, response.status);
         const { delta, message, finish_reason, native_finish_reason } = choices?.[0] ?? {};
         Object.assign(seen, {
@@ -183,7 +195,8 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
       throw new TextProviderFailed(silence.signal.aborted ? STOPPED : UNREACHABLE, { cause });
     } finally {
       clearTimeout(timer);
-      console.log(`Text reply: ${JSON.stringify({ ...seen, chars: reply.length, ms: Date.now() - started })}`);
+      const logAs = seen.failed && !signal.aborted ? log.warning : log.info;
+      logAs("text", "Text reply", () => ({ ...seen, chars: reply.length, ms: Date.now() - started }));
     }
   };
 }
