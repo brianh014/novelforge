@@ -164,6 +164,15 @@ test("the last instruction asks for fresh prose, natural speech and none of the 
   expect(prompt).toContain("Never repeat the player's words back");
 });
 
+test("the last instruction has the Narrator correct a wrong assumption, in play and keeping its secrets", () => {
+  const prompt = promptFor();
+  const rule = prompt.indexOf("assume something that isn't so");
+
+  expect(rule).toBeGreaterThan(prompt.indexOf("world_rules:"));
+  expect(prompt.slice(rule)).toContain("make what is true clear in this reply");
+  expect(prompt.slice(rule)).toContain("keeping every secret");
+});
+
 test("a long story's World Bible fits the budget, with its Plot Threads and world_rules", () => {
   // The size of a story with 140 replies behind it: 20 entries of about 225 tokens, with 750 tokens of threads and rules.
   const worldBible = Array.from({ length: 20 }, (_, index) => entry(`Entry ${index}`, ["city"], { content: "x".repeat(900) }));
