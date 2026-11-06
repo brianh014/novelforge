@@ -7,7 +7,7 @@ import type { PromptStyle } from "./graph-builder";
 export type Prompt = { role: "system" | "user" | "assistant"; content: string }[];
 
 const WINDOW_MESSAGES = 100;
-const MEMORY_MESSAGES = 20;
+export const MEMORY_MESSAGES = 20;
 const LORE_TOKEN_BUDGET = 6000;
 const RESPONSES_PER_THREAD_NUDGE = 8;
 
@@ -95,11 +95,26 @@ export function memoryDue(messages: Message[], sceneMemories: SceneMemory[], mem
   return window.length < WINDOW_MESSAGES ? null : { firstMessage: window[0]!.id, lastMessage: window[MEMORY_MESSAGES - 1]!.id };
 }
 
+/** The Messages older than the first memory or the window, which no Turn will cover, as a Turn only ever asks for what comes next. */
+export function olderMessages(messages: Message[], sceneMemories: SceneMemory[], memoryStart: number) {
+  const stop = sceneMemories[0]?.firstMessage ?? messageWindow(messages, sceneMemories, memoryStart)[0]?.id ?? 0;
+  return messages.filter(({ id }) => id < stop);
+}
+
+const MEMORY_RULES =
+  "in about 100 words: what happened, who was there and what changed. Cover only what the PC experienced, with no Lore Entry or Plot Thread secrets and no dice, numbers or Checks, as the player reads it in the Journal. State them plainly as past events, not as story prose, and copy nothing of the style of those Messages.";
+
+/** A memory written away from any Turn: the batch and the rules alone, so no hidden text can reach it. */
+export const backfillPrompt = (batch: Message[]): Prompt => [
+  { role: "system", content: `Set scene_memory to a memory of the story Messages the user sends, ${MEMORY_RULES} Use fewer words if they hold less, and add nothing they don't show.` },
+  { role: "user", content: JSON.stringify(batch.map(({ role, text }) => ({ role, text }))) },
+];
+
 /** Rules only, as the Messages it covers are the oldest in the prompt, whose order the Narrator can see. */
 const memoryRequest = (due: boolean) =>
   due
     ? `
-Older Messages leave this prompt once a Scene Memory covers them, so set scene_memory now to a memory of the first ${MEMORY_MESSAGES} Messages above, in about 100 words: what happened, who was there and what changed. Cover only what the PC experienced, with no Lore Entry or Plot Thread secrets and no dice, numbers or Checks, as the player reads it in the Journal. State them plainly as past events, not as story prose, and copy nothing of the style of those Messages.`
+Older Messages leave this prompt once a Scene Memory covers them, so set scene_memory now to a memory of the first ${MEMORY_MESSAGES} Messages above, ${MEMORY_RULES}`
     : " Set scene_memory to null.";
 
 /** A Save from before Loose Ends has none, and only the Narrator can read them out of the story so far. */

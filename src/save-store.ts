@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { z } from "zod";
 import { type Check, StoredCheck } from "./check-resolver";
 import { errorFields, log } from "./logger";
-import { applyEdit, openingState, type State, StateSections, WorldEdit } from "./state-applier";
+import { applyEdit, openingState, type SceneMemory, type State, StateSections, WorldEdit } from "./state-applier";
 
 /**
  * The PC as the player wrote them, apart from the name. Each field is optional, as Saves from before these fields have
@@ -480,22 +480,58 @@ function latestTurn(db: Database, messageId: number) {
 // shortcut: room for a few hundred images, and import holds several copies in memory, so a longer story can export but not import until import streams.
 export const MAX_IMPORT_BYTES = 512 * 1024 * 1024;
 
+function connect(path: string) {
+  const db = new Database(path, { create: true, strict: true });
+  try {
+    // secure_delete zeroes deleted rows, so a Reverted future cannot be read back from a shared Save file.
+    db.run("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA secure_delete = ON;");
+    migrate(db, basename(path, ".sqlite"));
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+}
+
+/**
+ * What a backfill needs from a Save copy at any path. Opening upgrades it, as it does any Save, and that stays even if
+ * the backfill then fails. Checked read-only first, as `connect` would turn any other file into a new Save.
+ */
+export function readSaveCopy(path: string) {
+  try {
+    using file = new Database(path, { readonly: true, strict: true });
+    assertSafeToMigrate(file);
+    if (schemaVersion(file) === 0) throw new InvalidSave(NOT_A_SAVE);
+  } catch (error) {
+    throw error instanceof InvalidSave ? error : new InvalidSave(NOT_A_SAVE);
+  }
+  using db = connect(path);
+  return {
+    messages: db.query<Message, []>("SELECT id, role, text FROM messages ORDER BY id").all(),
+    sceneMemories: currentState(db).sceneMemories,
+    memoryStart: db.query<{ memory_start: number }, []>("SELECT memory_start FROM save").get()!.memory_start,
+  };
+}
+
+/**
+ * Puts memories of older Messages first in the latest Snapshot, and in the one before it, which a Regenerate of the
+ * latest Turn starts from. Sections are shared between Snapshots, so these get new rows and older Snapshots keep theirs.
+ */
+export function addOlderMemories(path: string, older: SceneMemory[]) {
+  using db = connect(path);
+  db.transaction(() => {
+    for (const { id } of db.query<{ id: number }, []>("SELECT id FROM messages ORDER BY id DESC LIMIT 2").all()) {
+      const content = JSON.stringify([...older, ...toState(sectionsAt(db, id)).sceneMemories]);
+      const section = db.query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id").get(content)!;
+      db.run("UPDATE snapshot_sections SET section_id = ? WHERE message_id = ? AND name = 'sceneMemories'", [section.id, id]);
+    }
+    sweepSections(db);
+  })();
+}
+
 export function saveStore(savesDir: string) {
   mkdirSync(savesDir, { recursive: true });
   const pathOf = (id: string) => join(savesDir, `${id}.sqlite`);
-
-  const connect = (path: string) => {
-    const db = new Database(path, { create: true, strict: true });
-    try {
-      // secure_delete zeroes deleted rows, so a Reverted future cannot be read back from a shared Save file.
-      db.run("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA secure_delete = ON;");
-      migrate(db, basename(path, ".sqlite"));
-      return db;
-    } catch (error) {
-      db.close();
-      throw error;
-    }
-  };
 
   const isSaveId = (id: string) => z.uuid().safeParse(id).success;
 
