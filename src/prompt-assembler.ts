@@ -6,7 +6,7 @@ import type { PromptStyle } from "./graph-builder";
 
 export type Prompt = { role: "system" | "user" | "assistant"; content: string }[];
 
-const WINDOW_MESSAGES = 100;
+const WINDOW_MESSAGES = 50;
 export const MEMORY_MESSAGES = 20;
 const LORE_TOKEN_BUDGET = 6000;
 const RESPONSES_PER_THREAD_NUDGE = 8;

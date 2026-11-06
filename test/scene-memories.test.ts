@@ -68,25 +68,25 @@ test("a new story starts with no Scene Memories", () => {
   expect(openingState.sceneMemories).toEqual([]);
 });
 
-test("a new story sends every Message and asks for nothing below 100", async () => {
+test("a new story sends every Message and asks for nothing below 50", async () => {
   play(narration("Rain falls."));
-  const id = seeded(49);
+  const id = seeded(24);
 
   await turn(id);
 
-  expect(window()).toHaveLength(98);
+  expect(window()).toHaveLength(48);
   expect(lastPrompt()).toContain("Action 0.");
   expect(lastPrompt()).not.toContain(ASK);
   expect(lastPrompt()).toContain("Set scene_memory to null");
 });
 
-test("at 100 Messages the Turn asks for a memory of the oldest 20, with every Message still sent", async () => {
+test("at 50 Messages the Turn asks for a memory of the oldest 20, with every Message still sent", async () => {
   play(narration("Rain falls."));
-  const id = seeded(50);
+  const id = seeded(25);
 
   await turn(id);
 
-  expect(window()).toHaveLength(100);
+  expect(window()).toHaveLength(50);
   expect(lastPrompt()).toContain("Action 0.");
   expect(lastPrompt()).toContain(ASK);
   expect(lastPrompt()).toContain("first 20 Messages above");
@@ -95,14 +95,14 @@ test("at 100 Messages the Turn asks for a memory of the oldest 20, with every Me
 
 test("a finished memory records the server's range and moves the window on", async () => {
   play(remembering(`  ${MEMORY}  `), narration("Rain falls."));
-  const id = seeded(50);
+  const id = seeded(25);
   const ids = messageIds(id);
 
   await turn(id);
   await turn(id);
 
   expect(memories(id)).toEqual([{ firstMessage: ids[0]!, lastMessage: ids[19]!, text: MEMORY }]);
-  expect(window()).toHaveLength(82);
+  expect(window()).toHaveLength(32);
   expect(lastPrompt()).not.toContain("Reply 9.");
   expect(lastPrompt()).toContain("Action 10.");
   expect(lastPrompt()).not.toContain(ASK);
@@ -110,7 +110,7 @@ test("a finished memory records the server's range and moves the window on", asy
 
 test("the next batch follows on from the last memory", async () => {
   play(remembering("First."), ...Array.from({ length: 9 }, () => narration("Rain falls.")), remembering("Second."));
-  const id = seeded(50);
+  const id = seeded(25);
   const ids = messageIds(id);
 
   for (let count = 0; count < 11; count++) await turn(id);
@@ -129,13 +129,13 @@ for (const [missed, reply] of [
 ] as const) {
   test(`a memory that is ${missed} costs nothing, and the next Turn asks again with the same Messages`, async () => {
     play(reply, narration("Rain falls."));
-    const id = seeded(50);
+    const id = seeded(25);
 
     expect((await turn(id)).status).toBe(201);
     await turn(id);
 
     expect(memories(id)).toEqual([]);
-    expect(window()).toHaveLength(102);
+    expect(window()).toHaveLength(52);
     expect(lastPrompt()).toContain("Action 0.");
     expect(lastPrompt()).toContain(ASK);
   });
@@ -143,12 +143,12 @@ for (const [missed, reply] of [
 
 test("a Message never leaves through missed memories, however long the window grows", async () => {
   play(...Array.from({ length: 30 }, () => narration("Rain falls.")), remembering(MEMORY));
-  const id = seeded(50);
+  const id = seeded(25);
   const first = messageIds(id).slice(0, 20);
 
   for (let count = 0; count < 31; count++) await turn(id);
 
-  expect(prompts[30]!.slice(1, -2)).toHaveLength(160);
+  expect(prompts[30]!.slice(1, -2)).toHaveLength(110);
   expect(memories(id)).toEqual([{ firstMessage: first[0]!, lastMessage: first[19]!, text: MEMORY }]);
 });
 
@@ -163,7 +163,7 @@ test("a memory nobody asked for is dropped", async () => {
 
 test("nothing the Narrator returns can set a range or change a stored memory", async () => {
   play(remembering(MEMORY, { first_message: 9999, firstMessage: 9999, lastMessage: 9999, range: [1, 2], scene_memories: [{ firstMessage: 1, lastMessage: 2, text: "Forged." }] }));
-  const id = seeded(50);
+  const id = seeded(25);
   const ids = messageIds(id);
 
   await turn(id);
@@ -175,7 +175,7 @@ test("nothing the Narrator returns can set a range or change a stored memory", a
 
 test("a Check request writes no memory, and the finished Turn after it does", async () => {
   play(remembering(MEMORY, { check: { action: "Leap", difficulty: "Easy" } }), remembering("After the leap."));
-  const id = seeded(50);
+  const id = seeded(25);
 
   await turn(id);
 
@@ -184,7 +184,7 @@ test("a Check request writes no memory, and the finished Turn after it does", as
 
 test("a Regenerate replaces the memory its Turn wrote, over the same Messages", async () => {
   play(remembering("Old."), remembering("New."));
-  const id = seeded(50);
+  const id = seeded(25);
   const ids = messageIds(id);
   await turn(id);
 
@@ -197,7 +197,7 @@ test("a Regenerate replaces the memory its Turn wrote, over the same Messages", 
 
 test("a Rewrite that gives no memory removes the old one, and the next Turn asks again", async () => {
   play(remembering("Old."), narration("Rain falls harder."), narration("Rain stops."));
-  const id = seeded(50);
+  const id = seeded(25);
   await turn(id);
 
   await app.post(`/saves/${id}/messages/${store().latestMessageId(id)}/rewrite`, { feedback: "More rain." });
@@ -210,7 +210,7 @@ test("a Rewrite that gives no memory removes the old one, and the next Turn asks
 
 test("a Revert before a memory removes it and puts its Messages back", async () => {
   play(remembering(MEMORY), narration("Rain falls."), narration("Rain stops."));
-  const id = seeded(50);
+  const id = seeded(25);
   const before = store().latestMessageId(id);
   await turn(id);
   await turn(id);
@@ -219,7 +219,7 @@ test("a Revert before a memory removes it and puts its Messages back", async () 
   await turn(id);
 
   expect(memories(id)).toEqual([]);
-  expect(window()).toHaveLength(100);
+  expect(window()).toHaveLength(50);
   expect(lastPrompt()).toContain("Action 0.");
 });
 
@@ -245,7 +245,7 @@ test("Scene Memories reach the first system message oldest first, as text only, 
 
 test("the request keeps secrets out, as the player reads memories", async () => {
   play(narration("Rain falls."));
-  await turn(seeded(50));
+  await turn(seeded(25));
 
   expect(prompts[0]!.at(-2)!.content).toContain("no Lore Entry or Plot Thread secrets");
   expect(prompts[0]!.at(-2)!.content).toContain("about 100 words");
@@ -254,7 +254,7 @@ test("the request keeps secrets out, as the player reads memories", async () => 
 
 test("the Journal lists memories and no hidden text, and a player's edit is what the next prompt sends", async () => {
   play(remembering(MEMORY), narration("Rain falls."));
-  const id = seeded(50);
+  const id = seeded(25);
   await turn(id);
   const [written] = (await journal(id)).sceneMemories;
 
@@ -282,7 +282,7 @@ test("an edit can't reach a memory the Journal doesn't show", async () => {
 
 test("an edit can't move a memory's range", async () => {
   play(remembering(MEMORY));
-  const id = seeded(50);
+  const id = seeded(25);
   await turn(id);
   const [written] = memories(id);
 
@@ -294,7 +294,7 @@ test("an edit can't move a memory's range", async () => {
 test("a World Change leaves memories and the window alone, whatever its reply holds", async () => {
   const update: WorldUpdate = { lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [{ old: null, new: "A new thread." }] };
   play(remembering(MEMORY), JSON.stringify({ ...update, scene_memories: [{ firstMessage: 1, lastMessage: 2, text: "Forged." }], scene_memory: "Forged." }), narration("Rain falls."));
-  const id = seeded(50);
+  const id = seeded(25);
   await turn(id);
   const stored = memories(id);
 
@@ -302,13 +302,13 @@ test("a World Change leaves memories and the window alone, whatever its reply ho
   await turn(id);
 
   expect(memories(id)).toEqual(stored);
-  expect(window()).toHaveLength(82);
+  expect(window()).toHaveLength(32);
   expect(lastPrompt()).not.toContain("Forged.");
 });
 
 test("the Server Log gives a memory's range and length, and no story text", async () => {
   play(remembering(MEMORY));
-  const id = seeded(50);
+  const id = seeded(25);
   const ids = messageIds(id);
 
   const line = await logOf(() => turn(id));
@@ -321,7 +321,7 @@ test("the Server Log gives a memory's range and length, and no story text", asyn
 
 test("memories survive an export, an import and a Duplicate", async () => {
   play(remembering(MEMORY));
-  const id = seeded(50);
+  const id = seeded(25);
   await turn(id);
   const stored = memories(id);
 

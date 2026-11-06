@@ -981,20 +981,20 @@ test("player text reaches the Narrator as delimited in-character data, even if i
 });
 
 test("a prompt holds in order the Messages that no Scene Memory covers yet", async () => {
-  const replies = Array.from({ length: 52 }, (_, turn) => narration(`Reply ${turn}.`));
-  replies[50] = JSON.stringify({ narration: "Reply 50.", state_operations: [], scene_memory: "Early days." });
+  const replies = Array.from({ length: 27 }, (_, turn) => narration(`Reply ${turn}.`));
+  replies[25] = JSON.stringify({ narration: "Reply 25.", state_operations: [], scene_memory: "Early days." });
   const { app, prompts } = play(...replies);
   const id = await app.createSave();
 
-  for (let turn = 0; turn < 52; turn++) await app.post(`/saves/${id}/turns`, { input: `Action ${turn}.` });
+  for (let turn = 0; turn < 27; turn++) await app.post(`/saves/${id}/turns`, { input: `Action ${turn}.` });
 
   expect(prompts[1]!.map(({ role }) => role)).toEqual(["system", "user", "assistant", "system", "user"]);
-  const prompt = contents(prompts[51]).join();
+  const prompt = contents(prompts[26]).join();
   expect(prompt).not.toContain("Action 0.");
   expect(prompt).not.toContain("Reply 9.");
   expect(prompt).toContain("Action 10.");
   expect(prompt.indexOf("Reply 10.")).toBeLessThan(prompt.indexOf("Action 11."));
-  expect(prompts[51]!.at(-1)!.content).toContain("Action 51.");
+  expect(prompts[26]!.at(-1)!.content).toContain("Action 26.");
 });
 
 /** Writes what no REST route can yet: World Creation and Director's Notes arrive in later tickets. */

@@ -175,7 +175,7 @@ test("a window that a Revert moved back keeps its Messages", async () => {
   const start = saves.memoryStart(id);
   saves.revert(id, start + 9);
   const before = windowOf(id);
-  expect(before).toHaveLength(100);
+  expect(before).toHaveLength(50);
 
   await run(pathOf(id), ...manyMemories()).finished;
 
