@@ -455,6 +455,8 @@ function copyRows(from: Database, to: Database) {
       const insert = to.query(`INSERT INTO ${table} (${columns}) VALUES (${columns.map(() => "?")})`);
       for (const row of rows.values()) insert.run(...(row as SQLQueryBindings[]));
     }
+    // The id sequence stays behind, so new ids restart here, and a window starting past them would never see them.
+    to.run("UPDATE save SET memory_start = min(memory_start, (SELECT coalesce(max(id), 0) + 1 FROM messages))");
   })();
 }
 

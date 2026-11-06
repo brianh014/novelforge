@@ -331,6 +331,45 @@ test("memories survive an export, an import and a Duplicate", async () => {
   expect(memories(store().duplicate(id))).toEqual(stored);
 });
 
+test("the window's start survives an export, an import and a Duplicate", async () => {
+  play();
+  const id = seeded(60);
+  downgrade(id);
+  const start = messageIds(id)[20]!;
+  expect(store().memoryStart(id)).toBe(start);
+
+  const file = await (await app.get(`/saves/${id}/export`)).arrayBuffer();
+
+  expect(store().memoryStart(store().import(new Uint8Array(file)))).toBe(start);
+  expect(store().memoryStart(store().duplicate(id))).toBe(start);
+});
+
+test("an old Save reverted past its window, then imported, can't lose new Messages", async () => {
+  play();
+  const id = seeded(100);
+  downgrade(id);
+  const kept = messageIds(id)[49]!;
+  store().revert(id, kept);
+
+  const imported = store().import(new Uint8Array(await (await app.get(`/saves/${id}/export`)).arrayBuffer()));
+
+  expect(store().memoryStart(imported)).toBe(kept + 1);
+});
+
+test("a Regenerate on an old Save keeps its window and asks for the same range", async () => {
+  play(narration("Rain falls."), remembering(MEMORY));
+  const id = seeded(60);
+  downgrade(id);
+  const ids = messageIds(id);
+  await turn(id);
+
+  await app.post(`/saves/${id}/messages/${store().latestMessageId(id)}/regenerate`, {});
+
+  expect(lastPrompt()).toContain("Action 10.");
+  expect(lastPrompt()).not.toContain("Reply 9.");
+  expect(memories(id)).toEqual([{ firstMessage: ids[20]!, lastMessage: ids[39]!, text: MEMORY }]);
+});
+
 test("an old Save upgrades, opens and keeps its latest 100 Messages until a memory covers them", async () => {
   play(narration("Rain falls."), narration("Rain falls."), remembering(MEMORY), narration("Rain falls."));
   const id = seeded(60);

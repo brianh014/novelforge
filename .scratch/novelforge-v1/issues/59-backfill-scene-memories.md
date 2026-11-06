@@ -47,6 +47,9 @@ Ask the player first. It sends every older Message to the Text Provider, even th
 
 ## Comments
 
+Review fix: the backfill prompt now asks for JSON itself, so a Text Model without schema support can still answer it.
+
+
 - **Two Snapshots, not one:** the design said the latest Snapshot only, but a Regenerate or Rewrite of the latest Turn starts from the Snapshot before it, so that alone would silently drop every backfilled memory. So the list goes into both Snapshots of the latest Turn. Every older Snapshot is left alone, and these two get new section rows, as sections are shared.
 - **A failure and the upgrade:** a failed run writes no memories, and a Save already at this version stays identical byte for byte. A Save at an older version stays upgraded, as opening it does that first.
 - **Where the memories end:** just before the first existing memory, otherwise just before the window. That's `memory_start`, except after a Revert has moved the window back past it, where stopping at `memory_start` would take Messages out of the window.

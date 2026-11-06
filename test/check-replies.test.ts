@@ -114,6 +114,19 @@ test("each reply is judged on what its Turn knew, and not on anything after", as
   for (const later of ["Fact 2", "Fact 3", `${STORY} reply 2.`, "Action 3."]) expect(sent).not.toContain(later);
 });
 
+test("a rebuilt prompt starts its window where the Save does", async () => {
+  const copy = copyOfSave(55);
+  {
+    using db = new Database(copy);
+    db.run("UPDATE save SET memory_start = (SELECT id FROM messages ORDER BY id LIMIT 1 OFFSET 4)");
+  }
+  const { textProvider, prompts } = scriptedTextProvider(...Array.from({ length: 50 }, () => answers()));
+  await run(copy, textProvider);
+  const sent = JSON.stringify(asked(prompts.at(-1)!).narrator_prompt);
+  expect(sent).toContain("Action 3.");
+  expect(sent).not.toContain("Action 1.");
+});
+
 test("a reply that followed a Check is judged with its result, and a replacement with the edits it kept", async () => {
   const saves = saveStore(savesDir);
   const id = saves.create({ worldBrief: "A wet town.", pc: { name: "Ash" } });

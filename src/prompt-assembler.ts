@@ -106,7 +106,7 @@ const MEMORY_RULES =
 
 /** A memory written away from any Turn: the batch and the rules alone, so no hidden text can reach it. */
 export const backfillPrompt = (batch: Message[]): Prompt => [
-  { role: "system", content: `Set scene_memory to a memory of the story Messages the user sends, ${MEMORY_RULES} Use fewer words if they hold less, and add nothing they don't show.` },
+  { role: "system", content: `Set scene_memory to a memory of the story Messages the user sends, ${MEMORY_RULES} Use fewer words if they hold less, and add nothing they don't show. Reply only with JSON: {"scene_memory": "the memory"}.` },
   { role: "user", content: JSON.stringify(batch.map(({ role, text }) => ({ role, text }))) },
 ];
 
