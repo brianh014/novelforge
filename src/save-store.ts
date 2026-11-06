@@ -295,13 +295,13 @@ function schemaVersion(db: Database) {
 function migrate(db: Database, save?: string) {
   const version = schemaVersion(db);
   if (version === MIGRATIONS.length) return;
-  // Not a brand new Save, which takes every step too.
-  if (version > 0) log.info("saves", "Save upgraded", { save, from: version, to: MIGRATIONS.length });
   // All steps or none, so a failure leaves the Save as it was.
   db.transaction(() => {
     for (const step of MIGRATIONS.slice(version)) step(db);
     db.run(`PRAGMA user_version = ${MIGRATIONS.length}`);
   })();
+  // Not a brand new Save, which takes every step too.
+  if (version > 0) log.info("saves", "Save upgraded", { save, from: version, to: MIGRATIONS.length });
 }
 
 const NOT_A_SAVE = "This file isn't a valid Save.";

@@ -279,7 +279,8 @@ data: ${JSON.stringify(data)}
 function logged<Route extends string>(routes: Bun.Serve.Routes<undefined, Route>) {
   const wrap = (route: string, method: string, handler: (req: Bun.BunRequest) => Response | Promise<Response>) => (req: Bun.BunRequest) => {
     const { id } = req.params as { id?: string };
-    const save = z.uuid().safeParse(id).success ? id : undefined;
+    // Not `/worlds/:id`, whose id is a story's before it has a Save, which then gets another.
+    const save = route.startsWith("/saves/") && z.uuid().safeParse(id).success ? id : undefined;
     return withLogContext({ route, save }, async () => {
       const started = performance.now();
       const response = await Promise.resolve().then(() => handler(req)).catch(errorResponse);

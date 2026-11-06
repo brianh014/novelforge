@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -147,6 +148,35 @@ test("a request logs its route pattern and the Save it's about, never the real p
   expect(line).toContain(`"save":"${id}"`);
   expect(line).toContain('"status":200');
   expect(line).not.toContain("not-a-uuid-secret");
+  await app.stop();
+});
+
+test("a story that isn't a Save yet is never named as one", async () => {
+  const app = startApp(join(folder.path, "Saves"), scriptedTextProvider().textProvider);
+  const world = crypto.randomUUID();
+
+  const line = await logOf(() => app.get(`/worlds/${world}/cover`));
+
+  expect(line).toContain('"route":"/worlds/:id/cover"');
+  expect(line).not.toContain(world);
+  await app.stop();
+});
+
+test("an older Save logs its upgrade only once it's done", async () => {
+  const app = startApp(join(folder.path, "Saves"), scriptedTextProvider().textProvider);
+  const open = async (id: string) => logOf(() => app.get(`/saves/${id}`));
+  const older = (id: string, change: string) => {
+    using db = new Database(join(folder.path, "Saves", `${id}.sqlite`));
+    db.run(change);
+  };
+  const upgrades = await app.createSave();
+  older(upgrades, "ALTER TABLE save DROP COLUMN art_style; ALTER TABLE save DROP COLUMN starting_hook; ALTER TABLE save DROP COLUMN pc_details; PRAGMA user_version = 1");
+  // Its columns are all there already, so the step that adds one fails.
+  const fails = await app.createSave();
+  older(fails, "PRAGMA user_version = 1");
+
+  expect(await open(upgrades)).toMatch(/INFO saves Save upgraded .*"from":1/);
+  expect(await open(fails)).not.toContain("Save upgraded");
   await app.stop();
 });
 
