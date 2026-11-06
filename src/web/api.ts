@@ -19,7 +19,7 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   imagesReady: boolean;
   workflowProblem: string;
 };
-export type Journal = { summary: string; facts: string[]; looseEnds: string[]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[] };
+export type Journal = { summary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[] };
 /** A null `npc` is the PC. */
 export type Portrait = ReturnType<SaveStore["portraits"]>[number];
 export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];

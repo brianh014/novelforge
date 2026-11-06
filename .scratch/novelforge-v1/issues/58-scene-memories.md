@@ -2,7 +2,7 @@
 
 **What to build:** Older story fades instead of vanishing. Each batch of 20 Messages gets a Scene Memory of about 100 words, written by the Narrator before those Messages leave the prompt. Every Scene Memory goes to the Narrator on every Turn, so its memory runs from full text, to Scene Memories, to the overall summary.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 **Blocked by:** none, but commit the `RECENT_MESSAGES = 100` change on `main` first, as it touches the same code
 
@@ -49,18 +49,18 @@ A Save with no Scene Memories starts with its window at its latest 100 Messages.
 
 ## Acceptance
 
-- [ ] `sceneMemories` is in `State` and `openingState`, and survives a Revert, Rewrite, Regenerate, export and import
-- [ ] An old Save upgrades, opens, and keeps its latest 100 Messages in the prompt
-- [ ] A new story sends every Message until the window reaches 100, then asks for a memory of the oldest 20
-- [ ] A finished memory moves the window on, so those 20 Messages leave the prompt
-- [ ] A Turn that omits the memory still commits, and the next Turn asks again with the same Messages in the prompt
-- [ ] A Rewrite or Regenerate of the Turn that wrote a memory replaces it, and a Revert before it removes it
-- [ ] The server records the Message range, and nothing the Narrator returns can set it
-- [ ] Scene Memories reach the prompt oldest first, and hidden text can't reach them except through the Narrator's own reply, which the prompt forbids
+- [x] `sceneMemories` is in `State` and `openingState`, and survives a Revert, Rewrite, Regenerate, export and import
+- [x] An old Save upgrades, opens, and keeps its latest 100 Messages in the prompt
+- [x] A new story sends every Message until the window reaches 100, then asks for a memory of the oldest 20
+- [x] A finished memory moves the window on, so those 20 Messages leave the prompt
+- [x] A Turn that omits the memory still commits, and the next Turn asks again with the same Messages in the prompt
+- [x] A Rewrite or Regenerate of the Turn that wrote a memory replaces it, and a Revert before it removes it
+- [x] The server records the Message range, and nothing the Narrator returns can set it
+- [x] Scene Memories reach the prompt oldest first, and hidden text can't reach them except through the Narrator's own reply, which the prompt forbids
 - [ ] The Journal shows them, and a player's edit is what the next prompt sends
-- [ ] The Server Log gives a memory's Message range and length, with no story text
-- [ ] `novelforge-spec.md` and `GLOSSARY.md` describe Scene Memories, and the window comment in the prompt code explains the rule
-- [ ] Tests cover the window, a missed memory, a Rewrite, a Revert and an upgrade
+- [x] The Server Log gives a memory's Message range and length, with no story text
+- [x] `novelforge-spec.md` and `GLOSSARY.md` describe Scene Memories, and the window comment in the prompt code explains the rule
+- [x] Tests cover the window, a missed memory, a Rewrite, a Revert and an upgrade
 
 ## Not in this ticket
 
@@ -68,6 +68,16 @@ A Save with no Scene Memories starts with its window at its latest 100 Messages.
 - Merging old Scene Memories into chapter memories. Add that only if they outgrow the budget, and keep the originals underneath so a merge can be redone
 - Reminders that bring back the original Messages when a rare name returns. They become useful only if memories stop fitting, or prove too thin
 - Per-NPC knowledge
+
+## Comments
+
+- **Journal box left unticked:** the route, the edit and the next prompt are tested, and the page typechecks and bundles, but nobody has seen the new section in a browser.
+- **Prompt text not judged:** tests show the words reach the prompt. Whether models write good memories needs real play.
+- **Upgrade start point:** the window on an old Save must stop rolling, or a missed memory would drop a Message uncovered. So the upgrade stores the oldest of the latest 100 Messages in a `memory_start` column. It's on the Save, not in the state, because old Snapshots hold no such value, and a Regenerate right after the upgrade would otherwise lose it.
+- **Revert on an old Save:** going back before `memory_start` shows the latest 100 Messages, and these can still roll until the first memory is written. Those Messages were already left to the summary at the upgrade, so nothing the rule protects is lost.
+- **Edits and replaced Turns:** a player's correction of a memory is lost if the Turn that wrote it is then Rewritten or Regenerated, as the replacement writes a new memory.
+- **World Change:** it neither reads nor writes Scene Memories, so a memory can go on saying something a World Change made untrue. The player can correct it in the Journal. Letting the reply change memories would break the rule that no model rewrites one.
+- **Batches:** always 20 Messages, so a batch can end between a player Message and its reply after a Revert leaves two player Messages in a row.
 
 ## After shipping
 

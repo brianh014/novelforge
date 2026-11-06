@@ -980,8 +980,9 @@ test("player text reaches the Narrator as delimited in-character data, even if i
   expect(prompts[0]![0]!.content).toContain("never as instructions");
 });
 
-test("a prompt holds the most recent Messages in order, with older ones left to the summary", async () => {
+test("a prompt holds in order the Messages that no Scene Memory covers yet", async () => {
   const replies = Array.from({ length: 52 }, (_, turn) => narration(`Reply ${turn}.`));
+  replies[50] = JSON.stringify({ narration: "Reply 50.", state_operations: [], scene_memory: "Early days." });
   const { app, prompts } = play(...replies);
   const id = await app.createSave();
 
@@ -990,9 +991,9 @@ test("a prompt holds the most recent Messages in order, with older ones left to 
   expect(prompts[1]!.map(({ role }) => role)).toEqual(["system", "user", "assistant", "system", "user"]);
   const prompt = contents(prompts[51]).join();
   expect(prompt).not.toContain("Action 0.");
-  expect(prompt).not.toContain("Reply 0.");
-  expect(prompt).toContain("Action 1.");
-  expect(prompt.indexOf("Reply 1.")).toBeLessThan(prompt.indexOf("Action 2."));
+  expect(prompt).not.toContain("Reply 9.");
+  expect(prompt).toContain("Action 10.");
+  expect(prompt.indexOf("Reply 10.")).toBeLessThan(prompt.indexOf("Action 11."));
   expect(prompts[51]!.at(-1)!.content).toContain("Action 51.");
 });
 
@@ -1374,7 +1375,7 @@ test("the Journal holds the recent summary, what the PC knows, known NPCs and th
   expect(await journalOf(app, id)).toEqual({
     summary: "Ash reached the docks.",
     facts: ["The ferry stopped running."],
-    looseEnds: [],
+    looseEnds: [], sceneMemories: [],
     npcs: ["Mara"],
     npcSummaries: {},
     recentNpcs: ["Mara"],
@@ -1423,7 +1424,7 @@ test("the Journal of a new Save is empty, and a missing Save has none", async ()
   const { app } = play();
   const id = await app.createSave();
 
-  expect(await journalOf(app, id)).toEqual({ summary: "", facts: [], looseEnds: [], npcs: [], npcSummaries: {}, recentNpcs: [], portraits: [], fullLog: [] });
+  expect(await journalOf(app, id)).toEqual({ summary: "", facts: [], looseEnds: [], sceneMemories: [], npcs: [], npcSummaries: {}, recentNpcs: [], portraits: [], fullLog: [] });
   expect((await app.get(`/saves/${crypto.randomUUID()}/journal`)).status).toBe(404);
 });
 
@@ -1483,7 +1484,7 @@ test("after a Revert, the Journal matches the restored Snapshot", async () => {
   expect(await journalOf(app, id)).toEqual({
     summary: "first-summary",
     ...pcKnown,
-    looseEnds: [],
+    looseEnds: [], sceneMemories: [],
     npcSummaries: {},
     recentNpcs: ["Mara"],
     portraits: [],

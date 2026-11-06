@@ -1,12 +1,13 @@
 import type { Check } from "./check-resolver";
 import { activateLore, estimateTokens } from "./lore-activation";
 import type { Message, Save } from "./save-store";
-import type { State } from "./state-applier";
+import type { SceneMemory, State } from "./state-applier";
 import type { PromptStyle } from "./graph-builder";
 
 export type Prompt = { role: "system" | "user" | "assistant"; content: string }[];
 
-const RECENT_MESSAGES = 100;
+const WINDOW_MESSAGES = 100;
+const MEMORY_MESSAGES = 20;
 const LORE_TOKEN_BUDGET = 6000;
 const RESPONSES_PER_THREAD_NUDGE = 8;
 
@@ -76,6 +77,31 @@ function threadNudge(plotThreads: string[], messages: Message[]) {
 Bring this Plot Thread into play at the next natural moment, through a person or event that reaches the PC, and if it has already shown, move it a step forward. It stays secret, so show only what the PC could see: ${JSON.stringify(thread)}`;
 }
 
+/**
+ * The Messages sent in full: every one after the last that a Scene Memory covers, however many that is, so a Message
+ * can't leave the prompt uncovered. A missed memory just leaves the window longer. Before any memory the window starts at
+ * `memoryStart`, unless a Revert went back past that, when the latest Messages stand in for what was there.
+ */
+function messageWindow(messages: Message[], sceneMemories: SceneMemory[], memoryStart: number) {
+  const covered = sceneMemories.at(-1)?.lastMessage;
+  if (covered !== undefined) return messages.filter(({ id }) => id > covered);
+  const start = messages.findIndex(({ id }) => id >= memoryStart);
+  return messages.slice(Math.min(start === -1 ? messages.length : start, Math.max(messages.length - WINDOW_MESSAGES, 0)));
+}
+
+/** The range the next memory must cover, if one is due. The server keeps this, and the Narrator is told only to write. */
+export function memoryDue(messages: Message[], sceneMemories: SceneMemory[], memoryStart: number) {
+  const window = messageWindow(messages, sceneMemories, memoryStart);
+  return window.length < WINDOW_MESSAGES ? null : { firstMessage: window[0]!.id, lastMessage: window[MEMORY_MESSAGES - 1]!.id };
+}
+
+/** Rules only, as the Messages it covers are the oldest in the prompt, whose order the Narrator can see. */
+const memoryRequest = (due: boolean) =>
+  due
+    ? `
+Older Messages leave this prompt once a Scene Memory covers them, so set scene_memory now to a memory of the first ${MEMORY_MESSAGES} Messages above, in about 100 words: what happened, who was there and what changed. Cover only what the PC experienced, with no Lore Entry or Plot Thread secrets and no dice, numbers or Checks, as the player reads it in the Journal. State them plainly as past events, not as story prose, and copy nothing of the style of those Messages.`
+    : " Set scene_memory to null.";
+
 /** A Save from before Loose Ends has none, and only the Narrator can read them out of the story so far. */
 function fillLooseEnds(looseEnds: string[], messages: Message[]) {
   if (looseEnds.length > 0 || !messages.some(({ role }) => role === "narrator")) return "";
@@ -86,8 +112,9 @@ looseEnds is empty, so fill it now: use add_loose_end for each thing still unres
 export function assemblePrompt({
   save: { worldBrief, pc, startingHook },
   // Director's Notes are taken out so that any left in a Save can't steer the story now the player can't see them.
-  state: { worldBible, worldRules, plotThreads, summary, directorsNotes: _retired, worldBrief: _fromSave, ...currentState },
+  state: { worldBible, worldRules, plotThreads, summary, sceneMemories, directorsNotes: _retired, worldBrief: _fromSave, ...currentState },
   messages,
+  memoryStart = 0,
   modelInstructions,
   input,
   responseSchema,
@@ -96,13 +123,15 @@ export function assemblePrompt({
   save: Save & { startingHook: string };
   state: State;
   messages: Message[];
+  /** See `messageWindow`. A new story has no need of it. */
+  memoryStart?: number;
   modelInstructions: string;
   input: string;
   responseSchema: string;
   /** Null when no image will be drawn. */
   promptStyle: PromptStyle | null;
 }): Prompt {
-  const recent = messages.slice(-RECENT_MESSAGES);
+  const recent = messageWindow(messages, sceneMemories, memoryStart);
   const activeEntries = activateLore(
     worldBible,
     [...recent.map(({ text }) => text), input].join("\n"),
@@ -129,6 +158,7 @@ Keep the scene in the state current. Whenever the PC reaches a new location or t
 ${imageInstruction(promptStyle)}
 Lore Entries: ${JSON.stringify(activeEntries.map(({ title, content }) => ({ title, content })))}
 Plot Threads: ${JSON.stringify(plotThreads)}
+Scene Memories of the story so far, oldest first: ${JSON.stringify(sceneMemories.map(({ text }) => text))}
 Summary of the story so far: ${summary}
 Model Instructions, which are the player's out-of-character guidance to follow: ${modelInstructions}${firstTurnInstruction(startingHook, messages)}`,
     },
@@ -139,7 +169,7 @@ Model Instructions, which are the player's out-of-character guidance to follow: 
 Evaluate the player's action against world_rules. If it violates them, do not request a check. Describe the failure in character rather than fulfilling the action.
 The player alone decides what the PC says, chooses and does. Narrate the action they gave and how the world answers it, and add no decision, spoken words or change of plan for the PC. Anything the player says the PC thinks, such as a line ending in "I think", is a private thought and is not spoken aloud. Never repeat the player's words back, in the narration or as a line for the PC. They have already said them, so go straight on to how the world answers. If the player's words assume something that isn't so, such as a misread sign or a person who isn't there, even in passing, never let it stand: make what is true clear in this reply, through what the PC sees, hears or is told, keeping every secret.
 Keep the prose fresh. Don't reuse the images, background details or closing moves of the replies above: give each scene something new to notice, vary how replies open and end, and end on what a person in the scene does, says or now faces, never on a background sound or passing detail. Say what people do more often than what they do not do. Give each person their own voice, speaking naturally, with contractions such as don't and I'm.
-The older replies above are shortened, so fill in every field of the schema.${threadNudge(plotThreads, messages)}${fillLooseEnds(currentState.looseEnds, messages)}`,
+The older replies above are shortened, so fill in every field of the schema.${memoryRequest(memoryDue(messages, sceneMemories, memoryStart) !== null)}${threadNudge(plotThreads, messages)}${fillLooseEnds(currentState.looseEnds, messages)}`,
     },
     { role: "user", content: inCharacter(input) },
   ];

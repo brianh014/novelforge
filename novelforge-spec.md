@@ -134,13 +134,15 @@ Rewrite, Model Instructions and Tell the Narrator in the Journal are the only ou
 
 ### Turns
 
-Every Turn is a fresh, stateless LLM call (see [ADR 0002](docs/adr/0002-stateless-turns-from-snapshots.md)). The prompt is assembled from the current Snapshot, active Lore Entries, the rolling summary, Director's Notes, Model Instructions and the most recent Messages. `world_rules` go late in the prompt, where they have the most impact.
+Every Turn is a fresh, stateless LLM call (see [ADR 0002](docs/adr/0002-stateless-turns-from-snapshots.md)). The prompt is assembled from the current Snapshot, active Lore Entries, Scene Memories, the rolling summary, Director's Notes, Model Instructions and every Message no Scene Memory covers yet. `world_rules` go late in the prompt, where they have the most impact.
 
 Lore Entry activation:
 
 * Always-on entries include `world_rules` and active Plot Threads
 * Each finished Turn replaces the rolling summary with its `summary`, and a blank one leaves it as it was
 * The current state carries every Loose End on every Turn, so they don't depend on the summary. If the list is empty once the story has begun, the prompt asks the Narrator to fill it from the summary, known facts and recent Messages, which is how a Save from before Loose Ends gets them
+* Scene Memories fade older story without losing it, so the Narrator's memory runs from full Messages, to Scene Memories, to the summary. Every Scene Memory goes in the first system message on every Turn, oldest first, with no keywords or retrieval
+* The Message window is every Message after the last one a Scene Memory covers, so a Message can't leave the prompt uncovered. Once it reaches 100 Messages, the Turn asks for a Scene Memory of its oldest 20 in about 100 words, in the nullable `scene_memory` field. The server records the Message range, and a reply can't choose it. A missed memory costs nothing: the Turn commits, the window keeps those Messages, and the next Turn asks again. Only a finished Turn writes one. A Save from before Scene Memories starts its window at its latest 100 Messages, and older ones stay with the summary. After a Revert to before that point, the latest 100 Messages stand in until a memory is written
 * Every eighth response, the prompt names the next Plot Thread in turn and asks the Narrator to bring it into play
 * The last instruction before the player's action keeps the PC's choices and speech to the player, and treats anything the PC is said to think as private
 * Other entries activate when their keywords appear in recent Messages, within a token budget, the latest mentioned first
@@ -208,7 +210,7 @@ A failed Turn writes nothing and keeps the player's text in the input box.
 
 ### State Snapshots
 
-Story state (Inventory, Status, World Bible, world rules, Plot Threads, NPC lists, PC-known information, Loose Ends, summary, World Brief, Director's Notes) is stored as a logically complete, immutable Snapshot linked to every Message `ID`. Reverting to Message `N` restores Snapshot `N` instantly without re-summarization or API calls.
+Story state (Inventory, Status, World Bible, world rules, Plot Threads, NPC lists, PC-known information, Loose Ends, Scene Memories, summary, World Brief, Director's Notes) is stored as a logically complete, immutable Snapshot linked to every Message `ID`. Reverting to Message `N` restores Snapshot `N` instantly without re-summarization or API calls.
 
 Snapshots never change, so an edit made in the Journal waits on the Save, is laid over the latest Snapshot for everything that reads the state, and goes into the Snapshot of the next Message. A Revert to any Message from before an edit undoes it, for hidden and visible edits alike, and so does Duplicate from a Message from before it. A Rewrite or Regenerate of the latest response keeps every edit made since that response's player Message, however many times it runs, by replaying them over that Message's Snapshot. An edit to something only the replaced response wrote stands as an addition. The World Brief the Save began with stays on the Save, and the Snapshots hold the one in use.
 
@@ -218,14 +220,15 @@ The Journal has multiple sections
 
 * World Brief \- the player's own description of the world
 * Recent summary \- summary of recent events
+* Scene Memories \- what happened in older Messages, newest first
 * What the PC knows \- facts the PC has learned
 * Loose Ends \- what the PC knows is still unresolved
 * Full log \- a full history of exactly the story along with images
 * NPCs \- a list of NPCs the PC knows about. Images next to their name
 
-The Journal is built only from the PC-known and Loose Ends sections of the Snapshot and the summary and World Brief, which the Narrator's state operations and the player's edits update. The server never sends the World Bible, world rules or Plot Threads to the SPA.
+The Journal is built only from the PC-known, Loose Ends and Scene Memories sections of the Snapshot and the summary and World Brief, which the Narrator's state operations and the player's edits update. The server never sends the World Bible, world rules or Plot Threads to the SPA.
 
-**Editing:** The World Brief, Recent summary, each fact, each Loose End and each known NPC's summary have a pencil button that changes the text in place, facts and Loose Ends can also be added and removed, and each edit reaches the next Turn. NPC names can't be edited, as portraits and Image Prompt marks find people by name. Inventory and status keep their own tab, and the Full Log can't be edited. An edit can only name a fact, Loose End or NPC the Journal shows, and an NPC the PC doesn't know gets the same answer as someone who doesn't exist.
+**Editing:** The World Brief, Recent summary, each Scene Memory, each fact, each Loose End and each known NPC's summary have a pencil button that changes the text in place, facts and Loose Ends can also be added and removed, and each edit reaches the next Turn. NPC names can't be edited, as portraits and Image Prompt marks find people by name. Inventory and status keep their own tab, and the Full Log can't be edited. A Scene Memory's Message range can't be edited, and no state operation or World Change lets the Narrator change a stored memory. An edit can only name a fact, Loose End, Scene Memory or NPC the Journal shows, and an NPC the PC doesn't know gets the same answer as someone who doesn't exist.
 
 **Tell the Narrator:** The “Tell Narrator what to change” button at the top right of the Journal's left page opens a box for plain words about the world as a whole, a World Change, such as “the mayor is secretly a smuggler”. It is how the player nudges the story where they want it or corrects a mistake. One Narrator call, not streamed, gets the whole World Bible, the world rules, the Plot Threads and the Journal's text, and replies with only what changes: Lore Entries to add or to rewrite by exact title, Lore Entries to remove, changes to single world rules, Plot Threads and facts, each quoting the old text exactly, and a new World Brief, Recent summary or NPC summary where the old one no longer holds. What a reply leaves out stays, so it can't lose an entry. A World Change neither sees nor changes Loose Ends, which only a Turn's state operations and the player's own edits can touch. A reply that misquotes, names an NPC the Journal doesn't show, or changes nothing, is unusable and gets the same retries as a Turn. The Journal's text stays free of secrets, by the Narrator's instructions alone: a secret goes in the hidden parts even when the player names it. The player sees that it was done or that it failed, and whatever changed in the Journal: the reply is never sent to the SPA, the Server Log holds only how many entries changed, and a failure's line leaves out the provider's detail, which can echo the prompt.
 

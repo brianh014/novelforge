@@ -85,6 +85,10 @@ _Avoid_: Hook (alone), plot
 Something the PC knows is still unresolved, such as an unanswered question, a promise, a plan, an invitation or someone still missing. It stays on the list until play settles it, and the player can read and edit it in the Journal.
 _Avoid_: Open thread, Plot Thread (that is secret, and says where the story could go)
 
+**Scene Memory**:
+About 100 words on what happened in a batch of 20 older Messages, written by the Narrator before they leave the prompt and sent on every Turn after. The server records which Messages it covers. Only the player can change it, in the Journal.
+_Avoid_: Summary (that is the one rolling account of the whole story), Scene (that is a place and situation in the story)
+
 **World Overview**:
 A short, spoiler-free description of the world as the PC would plausibly know it.
 _Avoid_: World Bible, World Brief

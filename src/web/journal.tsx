@@ -199,6 +199,20 @@ export function Journal({ id }: { id: string }) {
             <Editable label="Recent summary" text={journal.summary} onSave={(text) => edit({ edit: "summary", text })}>
               {journal.summary ? <p>{journal.summary}</p> : <p className="muted">Nothing to look back on yet.</p>}
             </Editable>
+            <h2>Scene Memories</h2>
+            {journal.sceneMemories.length > 0 ? (
+              <ul>
+                {journal.sceneMemories.toReversed().map(({ firstMessage, text }) => (
+                  <li key={firstMessage}>
+                    <Editable label="Scene Memory" text={text} onSave={(next) => edit({ edit: "sceneMemory", firstMessage, text: next })}>
+                      <span>{text}</span>
+                    </Editable>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">Nothing has faded yet.</p>
+            )}
             <h2>What {save.pc.name} knows</h2>
             {journal.facts.length > 0 ? (
               <ul>

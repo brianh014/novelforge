@@ -286,8 +286,19 @@ const toVersion13 = (db: Database) =>
 /** Loose Ends, which start empty, as nothing could write to them yet. */
 const toVersion14 = addMissingSections;
 
+/**
+ * Scene Memories, which start empty, and where they start from. A column rather than a Snapshot section, because
+ * Reverting or replacing a Turn must not lose it. It's the oldest of the latest 100 Messages, as the older ones stay with
+ * the summary, and 0 in a shorter Save, where no Message has left the prompt. A number here, as an upgrade must never change.
+ */
+function toVersion15(db: Database) {
+  addMissingSections(db);
+  if (!hasColumn(db, "save", "memory_start")) db.run("ALTER TABLE save ADD COLUMN memory_start INTEGER NOT NULL DEFAULT 0");
+  db.run("UPDATE save SET memory_start = coalesce((SELECT id FROM messages ORDER BY id DESC LIMIT 1 OFFSET 99), 0)");
+}
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -367,6 +378,7 @@ function assertValidSave(db: Database) {
     starting_hook: z.string(),
     pc_details: jsonText(PcDetails),
     title: z.string(),
+    memory_start: rowId,
   });
   const messages = rowsOf(db, "messages", {
     id: rowId.positive(),
@@ -754,6 +766,12 @@ export function saveStore(savesDir: string) {
       );
     },
 
+    /** The first Message a Scene Memory can cover: older ones stayed with the summary when the Save upgraded. */
+    memoryStart(id: string) {
+      using db = open(id);
+      return db.query<{ memory_start: number }, []>("SELECT memory_start FROM save").get()!.memory_start;
+    },
+
     latestState(id: string) {
       using db = open(id);
       return currentState(db);
@@ -882,11 +900,12 @@ export function saveStore(savesDir: string) {
     addEdit(id: string, edit: WorldEdit) {
       using db = open(id);
       db.transaction(() => {
-        const { pcKnown, looseEnds } = currentState(db);
+        const { pcKnown, looseEnds, sceneMemories } = currentState(db);
         const missing =
           (edit.edit === "fact" && edit.old !== null && !pcKnown.facts.includes(edit.old)) ||
           (edit.edit === "looseEnd" && edit.old !== null && !looseEnds.includes(edit.old)) ||
-          (edit.edit === "npcSummary" && !pcKnown.npcs.includes(edit.name));
+          (edit.edit === "npcSummary" && !pcKnown.npcs.includes(edit.name)) ||
+          (edit.edit === "sceneMemory" && !sceneMemories.some(({ firstMessage }) => firstMessage === edit.firstMessage));
         if (missing) throw new EditNotFound();
         db.run("UPDATE save SET pending_edits = ?", [JSON.stringify([...pendingEdits(db), edit])]);
       })();

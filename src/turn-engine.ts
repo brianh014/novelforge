@@ -3,7 +3,7 @@ import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resol
 import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
 import { log } from "./logger";
-import { assemblePrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
+import { assemblePrompt, memoryDue, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, introduce, Person, type State, StateOperation } from "./state-applier";
@@ -39,6 +39,7 @@ const FinishedTurn = z.object({
   state_operations: z.array(StateOperation).default([]),
   people: z.array(Person).catch([]),
   summary: z.string().catch(""),
+  scene_memory: z.string().catch(""),
   scene_changed: z.boolean().nullish(),
   visual_description: z.string().nullish(),
   // Without this, narration beside an invalid difficulty would pass as a finished Turn and dodge the Check.
@@ -71,6 +72,7 @@ const responseSchema = jsonSchemaOf(
     state_operations: z.array(StateOperation),
     people: z.array(Person),
     summary: z.string(),
+    scene_memory: z.string().nullable(),
     scene_changed: z.boolean().nullable(),
     visual_description: z.string().nullable(),
   }),
@@ -104,6 +106,8 @@ type Narrated = {
   refusal: string;
   pcName: string;
   check?: Check;
+  /** What a memory in this reply would cover, if one is due. Worked out here, so no reply can choose it. */
+  memoryRange: ReturnType<typeof memoryDue>;
   /** Left out when no new roll is allowed, which makes a Check request an invalid reply. */
   rollCheck?: (request: z.infer<typeof CheckRequest>) => Check;
   commit: (narration: string, check: Check | undefined, advance: (state: State) => State) => Message[];
@@ -127,10 +131,14 @@ export async function playTurn(
   mayCheck = true,
 ) {
   const basedOn = saves.latestMessageId(id);
+  const state = saves.latestState(id);
+  const messages = saves.messages(id);
+  const memoryStart = saves.memoryStart(id);
   const prompt = assemblePrompt({
     save: saves.read(id),
-    state: saves.latestState(id),
-    messages: saves.messages(id),
+    state,
+    messages,
+    memoryStart,
     modelInstructions: settings.read().modelInstructions,
     input,
     responseSchema: JSON.stringify(responseSchema),
@@ -142,6 +150,7 @@ export async function playTurn(
     input,
     refusal: "The Narrator refused this message. Edit it and try again.",
     pcName: saves.read(id).pc.name,
+    memoryRange: memoryDue(messages, state.sceneMemories, memoryStart),
     rollCheck: mayCheck ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
     committed: (messageId, scene) => images.sceneChanged(id, messageId, scene),
@@ -173,10 +182,12 @@ export async function replaceResponse(
   const { input, narration, check, state, messages, sceneImage } = saves.turnToReplace(id, messageId);
   // The old picture goes with its response, so the new one always gets its own, whatever the Narrator decides.
   const hadPicture = !!sceneImage || images.sceneDrawing(id, messageId);
+  const memoryStart = saves.memoryStart(id);
   const prompt = assemblePrompt({
     save: saves.read(id),
     state,
     messages,
+    memoryStart,
     modelInstructions: settings.read().modelInstructions,
     input,
     responseSchema: JSON.stringify(responseSchema),
@@ -190,6 +201,7 @@ export async function replaceResponse(
     refusal: "The Narrator refused this, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
     check,
+    memoryRange: memoryDue(messages, state.sceneMemories, memoryStart),
     commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
     committed: (replacement, scene) => {
       images.forget(id, messageId - 1, kind);
@@ -206,7 +218,7 @@ async function narrate(
   textProvider: TextProvider,
   signal: AbortSignal,
   emit: TurnEvents,
-  { kind, prompt, input, refusal, pcName, check: storedCheck, rollCheck, commit, committed }: Narrated,
+  { kind, prompt, input, refusal, pcName, check: storedCheck, memoryRange, rollCheck, commit, committed }: Narrated,
 ) {
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check = storedCheck;
@@ -238,7 +250,9 @@ async function narrate(
         attempt = 0; // The result call gets its own retries.
         continue;
       }
-      const { narration, state_operations, people, summary, scene_changed, visual_description } = response;
+      const { narration, state_operations, people, summary, scene_memory, scene_changed, visual_description } = response;
+      // A missed memory costs nothing: the window keeps its Messages, and the next Turn asks again.
+      const memory = memoryRange && scene_memory.trim() ? { ...memoryRange, text: scene_memory.trim() } : null;
       let moved = false;
       let location = "";
       let npcs: Scene["npcs"] = [];
@@ -254,6 +268,7 @@ async function narrate(
         repeated = repeats;
         ignored = harmless;
         if (summary.trim()) next.summary = summary.trim();
+        if (memory) next.sceneMemories.push(memory);
         moved = movedScene(state, next);
         location = next.scene.location;
         npcs = next.npcs;
@@ -280,6 +295,7 @@ async function narrate(
         check: !!check,
         narration: narration.length,
         summary: summary.trim().length,
+        ...(memory && { memoryFirst: memory.firstMessage, memoryLast: memory.lastMessage, memoryLength: memory.text.length }),
         people: people.length,
         operations: state_operations.map(({ op }) => op),
         sceneChanged: !!scene_changed,

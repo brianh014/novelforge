@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export type LoreEntry = { title: string; keywords: string[]; content: string; alwaysOn: boolean };
 
+export type SceneMemory = { firstMessage: number; lastMessage: number; text: string };
+
 export type State = {
   inventory: { wearing: string[]; carrying: string[] };
   status: { health: string; injuries: string[]; conditions: string[] };
@@ -11,6 +13,8 @@ export type State = {
   pcKnown: { facts: string[]; npcs: string[]; summaries?: Record<string, string> };
   /** What the PC knows is still unresolved. Unlike a Plot Thread, the player reads these. */
   looseEnds: string[];
+  /** The story's older Messages in about 100 words each, oldest first. The server sets each range, so a wrong memory can be traced to its source. */
+  sceneMemories: SceneMemory[];
   worldBible: LoreEntry[];
   worldRules: string[];
   plotThreads: string[];
@@ -27,6 +31,7 @@ export const openingState: State = {
   scene: { location: "", visibleCast: [] },
   pcKnown: { facts: [], npcs: [] },
   looseEnds: [],
+  sceneMemories: [],
   worldBible: [],
   worldRules: [],
   plotThreads: [],
@@ -45,6 +50,7 @@ export const StateSections = {
   scene: z.object({ location: z.string(), visibleCast: stringList }),
   pcKnown: z.object({ facts: stringList, npcs: stringList, summaries: z.record(z.string(), z.string()).optional() }),
   looseEnds: stringList,
+  sceneMemories: z.array(z.object({ firstMessage: z.number().int(), lastMessage: z.number().int(), text: z.string() })),
   worldBible: z.array(
     z.object({ title: z.string(), keywords: stringList, content: z.string(), alwaysOn: z.boolean() }),
   ),
@@ -303,6 +309,8 @@ export const VisibleEdit = z.discriminatedUnion("edit", [
   z.object({ edit: z.literal("fact"), old: quote.nullable(), new: words.nullable() }).refine(namesSomething),
   z.object({ edit: z.literal("looseEnd"), old: quote.nullable(), new: words.nullable() }).refine(namesSomething),
   z.object({ edit: z.literal("npcSummary"), name: words, text: words }),
+  // Text only: the range stays the server's. Never give a Narrator reply this edit, as no model rewrites a stored memory.
+  z.object({ edit: z.literal("sceneMemory"), firstMessage: z.number().int(), text: words }),
 ]);
 
 export type VisibleEdit = z.infer<typeof VisibleEdit>;
@@ -323,6 +331,9 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, looseEnds: changeList(state.looseEnds, edit) };
     case "npcSummary":
       return { ...state, pcKnown: { ...state.pcKnown, summaries: { ...state.pcKnown.summaries, [edit.name]: edit.text } } };
+    // A replaced response can take the memory away, and with it what this names, so a miss changes nothing.
+    case "sceneMemory":
+      return { ...state, sceneMemories: state.sceneMemories.map((memory) => (memory.firstMessage === edit.firstMessage ? { ...memory, text: edit.text } : memory)) };
     case "world":
       return { ...state, ...mergeWorldUpdate(state, edit.update) };
   }
