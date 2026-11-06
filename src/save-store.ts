@@ -514,6 +514,44 @@ export function readSaveCopy(path: string) {
 }
 
 /**
+ * Each Narrator reply of a Save copy, with the state its Turn started from. The copy is read once into memory, where an
+ * older Save upgrades, so nothing can write to the file. A replacement's `edits` came after its player Message's Snapshot.
+ */
+export function readReplies(path: string) {
+  try {
+    using db = Database.deserialize(readFileSync(path));
+    assertSafeToMigrate(db);
+    if (schemaVersion(db) === 0) throw new InvalidSave(NOT_A_SAVE);
+    migrate(db);
+    const save = db
+      .query<{ pc_name: string; pc_details: string; starting_hook: string; memory_start: number }, []>(
+        "SELECT pc_name, pc_details, starting_hook, memory_start FROM save",
+      )
+      .get()!;
+    const rows = db.query<Message & { hidden_check: string | null; edits: string | null }, []>("SELECT id, role, text, hidden_check, edits FROM messages ORDER BY id").all();
+    return {
+      pc: { ...(JSON.parse(save.pc_details) as PcDetails), name: save.pc_name },
+      startingHook: save.starting_hook,
+      memoryStart: save.memory_start,
+      messages: rows.map(({ id, role, text }): Message => ({ id, role, text })),
+      replies: rows.flatMap(({ id, role, text, hidden_check, edits }, index) => {
+        const player = rows[index - 1];
+        if (role !== "narrator" || player?.role !== "player") return [];
+        return {
+          id,
+          text,
+          input: { id: player.id, text: player.text },
+          check: hidden_check ? (JSON.parse(hidden_check) as Check) : undefined,
+          state: parseEdits(edits).reduce(applyEdit, toState(sectionsAt(db, player.id))),
+        };
+      }),
+    };
+  } catch (error) {
+    throw error instanceof InvalidSave ? error : new InvalidSave(NOT_A_SAVE);
+  }
+}
+
+/**
  * Puts memories of older Messages first in the latest Snapshot, and in the one before it, which a Regenerate of the
  * latest Turn starts from. Sections are shared between Snapshots, so these get new rows and older Snapshots keep theirs.
  */

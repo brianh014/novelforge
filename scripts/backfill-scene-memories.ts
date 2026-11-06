@@ -12,7 +12,7 @@ import { textProvider } from "../src/text-provider";
 import { askForJson, type TextProvider, TurnFailed } from "../src/turn-engine";
 import { readable } from "../src/web/chat-style";
 
-class Refused extends Error {}
+export class Refused extends Error {}
 
 const SceneMemoryReply = z.object({ scene_memory: z.string().refine((text) => text.trim() !== "") });
 
@@ -29,7 +29,7 @@ const fileId = (path: string) => {
 };
 
 /** By file identity, not by text, as case, slashes, \\?\ and \\localhost prefixes and junctions all reach the same folder. */
-function assertIsACopy(path: string, savesFolder: string) {
+export function assertIsACopy(path: string, savesFolder: string) {
   if (!existsSync(path)) throw new Refused(`There's no file at ${path}.`);
   const saves = existsSync(savesFolder) ? fileId(savesFolder) : undefined;
   for (let at = realpathSync.native(path); ; at = dirname(at)) {
