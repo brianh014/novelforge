@@ -981,19 +981,19 @@ test("player text reaches the Narrator as delimited in-character data, even if i
 });
 
 test("a prompt holds the most recent Messages in order, with older ones left to the summary", async () => {
-  const replies = Array.from({ length: 12 }, (_, turn) => narration(`Reply ${turn}.`));
+  const replies = Array.from({ length: 52 }, (_, turn) => narration(`Reply ${turn}.`));
   const { app, prompts } = play(...replies);
   const id = await app.createSave();
 
-  for (let turn = 0; turn < 12; turn++) await app.post(`/saves/${id}/turns`, { input: `Action ${turn}.` });
+  for (let turn = 0; turn < 52; turn++) await app.post(`/saves/${id}/turns`, { input: `Action ${turn}.` });
 
   expect(prompts[1]!.map(({ role }) => role)).toEqual(["system", "user", "assistant", "system", "user"]);
-  const prompt = contents(prompts[11]).join();
+  const prompt = contents(prompts[51]).join();
   expect(prompt).not.toContain("Action 0.");
   expect(prompt).not.toContain("Reply 0.");
   expect(prompt).toContain("Action 1.");
   expect(prompt.indexOf("Reply 1.")).toBeLessThan(prompt.indexOf("Action 2."));
-  expect(prompts[11]!.at(-1)!.content).toContain("Action 11.");
+  expect(prompts[51]!.at(-1)!.content).toContain("Action 51.");
 });
 
 /** Writes what no REST route can yet: World Creation and Director's Notes arrive in later tickets. */
