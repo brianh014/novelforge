@@ -22,7 +22,13 @@ export type State = {
   directorsNotes: string[];
   /** Here rather than on the Save, so a Revert undoes an edit to it. */
   worldBrief: string;
+  /** Closed Chapters, oldest first. A null `lastMessage` was closed after the latest Message, and the next Turn fills it in. */
+  chapters: Chapter[];
+  /** Whether the latest Narrator reply suggested ending the open Chapter. */
+  chapterReady: boolean;
 };
+
+export type Chapter = { lastMessage: number | null; title: string };
 
 export const openingState: State = {
   inventory: { wearing: [], carrying: [] },
@@ -38,6 +44,8 @@ export const openingState: State = {
   summary: "",
   directorsNotes: [],
   worldBrief: "",
+  chapters: [],
+  chapterReady: false,
 };
 
 const stringList = z.array(z.string());
@@ -59,6 +67,8 @@ export const StateSections = {
   summary: z.string(),
   directorsNotes: stringList,
   worldBrief: z.string(),
+  chapters: z.array(z.object({ lastMessage: z.number().int().nullable(), title: z.string() })),
+  chapterReady: z.boolean(),
 } satisfies { [Section in keyof State]: z.ZodType<State[Section]> };
 
 const nonEmpty = z.string().min(1);
@@ -312,12 +322,19 @@ export const VisibleEdit = z.discriminatedUnion("edit", [
   z.object({ edit: z.literal("npcSummary"), name: words, text: words }),
   // Text only: the range stays the server's. Never give a Narrator reply this edit, as no model rewrites a stored memory.
   z.object({ edit: z.literal("sceneMemory"), firstMessage: z.number().int(), text: words }),
+  // The place in `chapters`, as titles needn't be unique.
+  z.object({ edit: z.literal("chapterTitle"), index: z.number().int().min(0), title: words }),
 ]);
 
 export type VisibleEdit = z.infer<typeof VisibleEdit>;
 
 /** A change made between Messages. Snapshots are immutable, so these wait on the Save for the next Message to store. */
-export const WorldEdit = z.discriminatedUnion("edit", [...VisibleEdit.options, z.object({ edit: z.literal("world"), update: WorldUpdate })]);
+export const WorldEdit = z.discriminatedUnion("edit", [
+  ...VisibleEdit.options,
+  z.object({ edit: z.literal("world"), update: WorldUpdate }),
+  // Only the server closes a Chapter, as it writes the title.
+  z.object({ edit: z.literal("closeChapter"), title: z.string() }),
+]);
 export type WorldEdit = z.infer<typeof WorldEdit>;
 
 export function applyEdit(state: State, edit: WorldEdit): State {
@@ -337,6 +354,11 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, sceneMemories: state.sceneMemories.map((memory) => (memory.firstMessage === edit.firstMessage ? { ...memory, text: edit.text } : memory)) };
     case "world":
       return { ...state, ...mergeWorldUpdate(state, edit.update) };
+    case "chapterTitle":
+      return { ...state, chapters: state.chapters.map((chapter, index) => (index === edit.index ? { ...chapter, title: edit.title } : chapter)) };
+    // A second close before any new Message would make an empty Chapter.
+    case "closeChapter":
+      return state.chapters.at(-1)?.lastMessage === null ? state : { ...state, chapters: [...state.chapters, { lastMessage: null, title: edit.title }], chapterReady: false };
   }
 }
 

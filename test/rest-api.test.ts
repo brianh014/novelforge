@@ -1381,6 +1381,7 @@ test("the Journal holds the recent summary, what the PC knows, known NPCs and th
       { id: 1, role: "player", text: "I wave back." },
       { id: 2, role: "narrator", text: "Mara waves.\n\n  \"Come in,\" she says." },
     ],
+    chapters: [{ title: "", lastMessage: null }],
   });
 });
 
@@ -1421,7 +1422,7 @@ test("the Journal of a new Save is empty, and a missing Save has none", async ()
   const { app } = play();
   const id = await app.createSave();
 
-  expect(await journalOf(app, id)).toEqual({ summary: "", facts: [], looseEnds: [], sceneMemories: [], npcs: [], npcSummaries: {}, recentNpcs: [], portraits: [], fullLog: [] });
+  expect(await journalOf(app, id)).toEqual({ summary: "", facts: [], looseEnds: [], sceneMemories: [], npcs: [], npcSummaries: {}, recentNpcs: [], portraits: [], fullLog: [], chapters: [{ title: "", lastMessage: null }] });
   expect((await app.get(`/saves/${crypto.randomUUID()}/journal`)).status).toBe(404);
 });
 
@@ -1489,6 +1490,7 @@ test("after a Revert, the Journal matches the restored Snapshot", async () => {
       { id: 1, role: "player", text: "One." },
       { id: 2, role: "narrator", text: "Mara waves." },
     ],
+    chapters: [{ title: "", lastMessage: null }],
   });
 });
 

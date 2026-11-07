@@ -21,7 +21,9 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   workflowProblem: string;
 };
 export type TextHost = Awaited<ReturnType<typeof textHosts>>[number];
-export type Journal = { summary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[] };
+export type Journal = { summary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[]; chapters: Chapter[] };
+/** The open Chapter is last, with a null `lastMessage`. */
+export type Chapter = { title: string; lastMessage: number | null };
 /** A null `npc` is the PC. */
 export type Portrait = ReturnType<SaveStore["portraits"]>[number];
 export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];
@@ -209,6 +211,10 @@ export const enhance = (
 ) => request<{ text: string }>("/enhance", { ...jsonBody({ ...choices, field, text }), signal }).then(({ text }) => text);
 
 export const editJournal = (id: string, edit: VisibleEdit) => request<object>(`/saves/${id}/edits`, jsonBody(edit));
+
+export const getChapters = (id: string) => request<{ chapters: Chapter[]; offer: boolean }>(`/saves/${id}/chapters`);
+
+export const closeChapter = (id: string) => request<object>(`/saves/${id}/chapters`, { method: "POST" });
 
 /** Answers only that it was done, as what changed is hidden from the player. */
 export const tellNarrator = (id: string, change: string) => request<object>(`/saves/${id}/world-change`, jsonBody({ change }));

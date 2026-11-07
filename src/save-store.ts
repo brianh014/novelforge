@@ -111,6 +111,12 @@ function currentState(db: Database) {
   return pendingEdits(db).reduce(applyEdit, noted);
 }
 
+/** A Chapter closed after the latest Message ends there, so that a Regenerate of that Message keeps the new one in it. */
+const sealChapter = (state: State, latest: number): State => ({
+  ...state,
+  chapters: state.chapters.map((chapter) => (chapter.lastMessage === null ? { ...chapter, lastMessage: latest } : chapter)),
+});
+
 const clearPending = (db: Database) => db.run("UPDATE save SET pending_notes = NULL, pending_edits = NULL");
 
 /** Links a section the latest Snapshot already holds rather than storing it again, and never rewrites one. */
@@ -297,8 +303,11 @@ function toVersion15(db: Database) {
   db.run("UPDATE save SET memory_start = coalesce((SELECT id FROM messages ORDER BY id DESC LIMIT 1 OFFSET 99), 0)");
 }
 
+/** Chapters, which start with none closed, as nothing could close one yet. */
+const toVersion16 = addMissingSections;
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -961,7 +970,7 @@ export function saveStore(savesDir: string) {
       return db.transaction(() => {
         // Message ids are never reused, so any Revert or other Turn since `basedOn` is caught here.
         if (latestMessage(db) !== basedOn) throw new StaleTurn();
-        const state = currentState(db);
+        const state = sealChapter(currentState(db), basedOn);
         const player = insert.get("player", input, null)!;
         writeSnapshot(db, player.id, state);
         clearPending(db);
@@ -984,12 +993,13 @@ export function saveStore(savesDir: string) {
     addEdit(id: string, edit: WorldEdit) {
       using db = open(id);
       db.transaction(() => {
-        const { pcKnown, looseEnds, sceneMemories } = currentState(db);
+        const { pcKnown, looseEnds, sceneMemories, chapters } = currentState(db);
         const missing =
           (edit.edit === "fact" && edit.old !== null && !pcKnown.facts.includes(edit.old)) ||
           (edit.edit === "looseEnd" && edit.old !== null && !looseEnds.includes(edit.old)) ||
           (edit.edit === "npcSummary" && !pcKnown.npcs.includes(edit.name)) ||
-          (edit.edit === "sceneMemory" && !sceneMemories.some(({ firstMessage }) => firstMessage === edit.firstMessage));
+          (edit.edit === "sceneMemory" && !sceneMemories.some(({ firstMessage }) => firstMessage === edit.firstMessage)) ||
+          (edit.edit === "chapterTitle" && edit.index >= chapters.length);
         if (missing) throw new EditNotFound();
         db.run("UPDATE save SET pending_edits = ?", [JSON.stringify([...pendingEdits(db), edit])]);
       })();

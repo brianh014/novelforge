@@ -6,6 +6,25 @@ import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./play";
 import { Person } from "./zoom";
 
+const FIRST_SHOWN = 5;
+const MORE_SHOWN = 10;
+
+/** A list newest first, as the latest is what play needs. `items` come oldest first, and each `children` gives an `li` with its key. */
+function NewestFirst<T>({ items, className, children }: { items: T[]; className?: string; children: (item: T) => ReactNode }) {
+  const [shown, setShown] = useState(FIRST_SHOWN);
+  const newest = items.toReversed();
+  return (
+    <>
+      <ul className={className}>{newest.slice(0, shown).map(children)}</ul>
+      {newest.length > shown && (
+        <button className="quiet show-more" onClick={() => setShown(shown + MORE_SHOWN)}>
+          Show more ({newest.length - shown} older)
+        </button>
+      )}
+    </>
+  );
+}
+
 /** Text the player can change where it stands. A failure keeps what they typed, and the server's refusal during a Turn shows here. */
 function Editable(props: { label: string; text: string; opener?: string; onSave: (text: string) => Promise<unknown>; onRemove?: () => Promise<unknown>; children?: ReactNode }) {
   const { label, text, opener, onSave, onRemove, children } = props;
@@ -129,6 +148,7 @@ export function Journal({ id }: { id: string }) {
   const [requested, setRequested] = useState<RequestedImage[]>([]);
   const [loadError, setLoadError] = useState("");
   const [telling, setTelling] = useState(false);
+  const [reading, setReading] = useState<number>();
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -172,7 +192,14 @@ export function Journal({ id }: { id: string }) {
     await reread();
   };
   const pcPortrait = journal.portraits.find(({ npc }) => npc === null);
-  const log = readable(journal.fullLog);
+  const { chapters } = journal;
+  const chapterName = (index: number) => `Chapter ${index + 1}${chapters[index]?.title ? ` · ${chapters[index].title}` : ""}`;
+  // A Chapter holds the Messages after the one before it, up to its own last, and the open one runs on to the latest.
+  const chapterLog = (index: number) => {
+    const start = chapters[index - 1]?.lastMessage ?? 0;
+    const end = chapters[index]?.lastMessage ?? Infinity;
+    return readable(journal.fullLog).filter(({ id }) => id > start && id <= end);
+  };
 
   return (
     <Book
@@ -201,22 +228,22 @@ export function Journal({ id }: { id: string }) {
             </Editable>
             <h2>Scene Memories</h2>
             {journal.sceneMemories.length > 0 ? (
-              <ul>
-                {journal.sceneMemories.toReversed().map(({ firstMessage, text }) => (
+              <NewestFirst items={journal.sceneMemories}>
+                {({ firstMessage, text }) => (
                   <li key={firstMessage}>
                     <Editable label="Scene Memory" text={text} onSave={(next) => edit({ edit: "sceneMemory", firstMessage, text: next })}>
                       <span>{text}</span>
                     </Editable>
                   </li>
-                ))}
-              </ul>
+                )}
+              </NewestFirst>
             ) : (
               <p className="muted">Nothing has faded yet.</p>
             )}
             <h2>What {save.pc.name} knows</h2>
             {journal.facts.length > 0 ? (
-              <ul>
-                {journal.facts.map((fact) => (
+              <NewestFirst items={journal.facts}>
+                {(fact) => (
                   <li key={fact}>
                     <Editable
                       label={`What ${save.pc.name} knows`}
@@ -227,16 +254,16 @@ export function Journal({ id }: { id: string }) {
                       <span>{fact}</span>
                     </Editable>
                   </li>
-                ))}
-              </ul>
+                )}
+              </NewestFirst>
             ) : (
               <p className="muted">Nothing certain yet.</p>
             )}
             <Editable label={`New fact ${save.pc.name} knows`} text="" opener="Add a fact" onSave={(text) => edit({ edit: "fact", old: null, new: text })} />
             <h2>Loose Ends</h2>
             {journal.looseEnds.length > 0 ? (
-              <ul>
-                {journal.looseEnds.map((looseEnd) => (
+              <NewestFirst items={journal.looseEnds}>
+                {(looseEnd) => (
                   <li key={looseEnd}>
                     <Editable
                       label="Loose End"
@@ -247,16 +274,16 @@ export function Journal({ id }: { id: string }) {
                       <span>{looseEnd}</span>
                     </Editable>
                   </li>
-                ))}
-              </ul>
+                )}
+              </NewestFirst>
             ) : (
               <p className="muted">Nothing left open.</p>
             )}
             <Editable label="New Loose End" text="" opener="Add a Loose End" onSave={(text) => edit({ edit: "looseEnd", old: null, new: text })} />
             <h2>NPCs</h2>
             {journal.npcs.length > 0 ? (
-              <ul className="people">
-                {journal.npcs.map((name) => (
+              <NewestFirst items={journal.npcs} className="people">
+                {(name) => (
                   <li key={name}>
                     <Editable label={`Who ${name} is`} text={journal.npcSummaries[name] ?? ""} onSave={(text) => edit({ edit: "npcSummary", name, text })}>
                       <span className="person">
@@ -264,8 +291,8 @@ export function Journal({ id }: { id: string }) {
                       </span>
                     </Editable>
                   </li>
-                ))}
-              </ul>
+                )}
+              </NewestFirst>
             ) : (
               <p className="muted">No one yet.</p>
             )}
@@ -274,24 +301,60 @@ export function Journal({ id }: { id: string }) {
       }
       tabs={<BookTabs id={id} current="Journal" />}
     >
-      <h2>Full Log</h2>
-      <div className="full-log" tabIndex={0} role="region" aria-label="Full Log">
-        {log.length === 0 && <p className="muted">The page is blank.</p>}
-        {log.map((message) => {
-          const image = images.find(({ messageId }) => messageId === message.id);
-          return (
-            <div key={message.id} className={`message ${message.role}`}>
-              {image && <SceneImage id={id} image={image} />}
-              {requested
-                .filter(({ messageId }) => messageId === message.id)
-                .map((image) => (
-                  <RequestedPicture key={image.ref} id={id} image={image} />
-                ))}
-              <p>{message.text}</p>
-            </div>
-          );
-        })}
-      </div>
+      {reading === undefined ? (
+        <>
+          <h2>Chapters</h2>
+          <ol className="chapters">
+            {chapters
+              .map((chapter, index) => ({ chapter, index }))
+              .toReversed()
+              .map(({ chapter, index }) => (
+                <li key={index}>
+                  <button className="chapter" onClick={() => setReading(index)}>
+                    {chapterName(index)}
+                    {chapter.lastMessage === null && <span className="muted"> · in progress</span>}
+                  </button>
+                </li>
+              ))}
+          </ol>
+        </>
+      ) : (
+        <>
+          <button className="quiet back" onClick={() => setReading(undefined)}>
+            Back to chapters
+          </button>
+          {chapters[reading]?.lastMessage === null ? (
+            <h2>{chapterName(reading)} <span className="muted">· in progress</span></h2>
+          ) : (
+            <Editable label="Chapter title" text={chapters[reading]?.title ?? ""} onSave={(title) => edit({ edit: "chapterTitle", index: reading, title })}>
+              <h2>{chapterName(reading)}</h2>
+            </Editable>
+          )}
+          <ChapterText messages={chapterLog(reading)} id={id} images={images} requested={requested} />
+        </>
+      )}
     </Book>
+  );
+}
+
+function ChapterText({ id, messages, images, requested }: { id: string; messages: ReturnType<typeof readable>; images: SceneImageInfo[]; requested: RequestedImage[] }) {
+  return (
+    <div className="full-log" tabIndex={0} role="region" aria-label="Chapter">
+      {messages.length === 0 && <p className="muted">The page is blank.</p>}
+      {messages.map((message) => {
+        const image = images.find(({ messageId }) => messageId === message.id);
+        return (
+          <div key={message.id} className={`message ${message.role}`}>
+            {image && <SceneImage id={id} image={image} />}
+            {requested
+              .filter(({ messageId }) => messageId === message.id)
+              .map((image) => (
+                <RequestedPicture key={image.ref} id={id} image={image} />
+              ))}
+            <p>{message.text}</p>
+          </div>
+        );
+      })}
+    </div>
   );
 }

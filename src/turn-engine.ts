@@ -3,7 +3,7 @@ import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resol
 import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
 import { log } from "./logger";
-import { assemblePrompt, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
+import { assemblePrompt, chapterTitlePrompt, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, introduce, Person, type SceneMemory, type State, StateOperation } from "./state-applier";
@@ -42,6 +42,7 @@ const FinishedTurn = z.object({
   summary: z.string().catch(""),
   scene_changed: z.boolean().nullish(),
   visual_description: z.string().nullish(),
+  chapter_ends: z.boolean().nullish(),
   // Without this, narration beside an invalid difficulty would pass as a finished Turn and dodge the Check.
   check: z.null().optional(),
 });
@@ -74,6 +75,11 @@ const responseSchema = jsonSchemaOf(
     summary: z.string(),
     scene_changed: z.boolean().nullable(),
     visual_description: z.string().nullable(),
+    // Defined here, beside the field, as a rule mid-prompt is the kind Narrators ignore.
+    chapter_ends: z
+      .boolean()
+      .nullable()
+      .describe("true only when a Scene has just resolved and the story is about to move to a new place, a new time, or a new stage in a Plot Thread, which suggests ending the chapter here"),
   }),
 );
 
@@ -249,7 +255,7 @@ async function narrate(
         attempt = 0; // The result call gets its own retries.
         continue;
       }
-      const { narration, state_operations, people, summary, scene_changed, visual_description } = response;
+      const { narration, state_operations, people, summary, scene_changed, visual_description, chapter_ends } = response;
       const memory = await pendingMemory;
       let moved = false;
       let location = "";
@@ -267,6 +273,7 @@ async function narrate(
         ignored = harmless;
         if (summary.trim()) next.summary = summary.trim();
         if (memory) next.sceneMemories.push(memory);
+        next.chapterReady = !!chapter_ends;
         moved = movedScene(state, next);
         location = next.scene.location;
         npcs = next.npcs;
@@ -297,6 +304,7 @@ async function narrate(
         people: people.length,
         operations: state_operations.map(({ op }) => op),
         sceneChanged: !!scene_changed,
+        chapterEnds: !!chapter_ends,
       }));
       return messages;
     } catch (cause) {
@@ -353,6 +361,14 @@ const SceneMemoryReply = z.object({ scene_memory: z.string().refine((text) => te
 export async function askForMemory(textProvider: TextProvider, batch: Message[], previous: string | undefined, signal: AbortSignal) {
   const { scene_memory } = await askForJson(textProvider, memoryPrompt(batch, previous), SceneMemoryReply, "The model refused a batch of Messages.", signal);
   return scene_memory.trim();
+}
+
+const ChapterTitleReply = z.object({ title: z.string().trim().min(1).max(80) });
+
+/** Throws as askForJson does. */
+export async function askForChapterTitle(textProvider: TextProvider, memories: string[], recent: Message[], signal: AbortSignal) {
+  const { title } = await askForJson(textProvider, chapterTitlePrompt(memories, recent), ChapterTitleReply, "The model refused to title the chapter.", signal);
+  return title;
 }
 
 /** Runs beside the Turn, so the player waits no longer. A missed memory costs nothing: the window keeps its Messages, and the next Turn asks again. */

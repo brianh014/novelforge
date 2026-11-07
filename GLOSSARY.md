@@ -40,6 +40,10 @@ _Avoid_: Title image, world image
 **Opening**:
 The Narrator's first Message, which brings the player up to speed before they act. It is a first Turn whose stored player Message the story never shows.
 
+**Chapter**:
+A titled run of consecutive Messages, read as one piece in the Journal. One Chapter is always open, the one play is adding to. Only the player closes it, sometimes on the Narrator's suggestion, and closing starts the next. The Opening begins Chapter 1, and a Chapter never splits a Turn. Chapters don't change what the Narrator is sent.
+_Avoid_: Act, part, Scene (that is a place and situation, and a Chapter may hold many)
+
 **Scene Image**:
 A generated image showing the current moment of a Scene.
 
@@ -116,7 +120,7 @@ A standing out-of-character instruction to the Narrator for one Save, such as co
 _Avoid_: Author's Note, edit
 
 **Chat style**:
-How the Story shows Messages: Script, Prose, Bubbles or Stage box. It never changes the Full Log.
+How the Story shows Messages: Script, Prose, Bubbles or Stage box. It never changes how Chapters read in the Journal.
 
 **Beat**:
 One line of a Message, spoken or not, and what a Stage box shows at a time.
@@ -133,10 +137,10 @@ _Avoid_: Save (a Snapshot is not a player-facing save)
 
 **Journal**:
 The player-facing record of only what the PC knows or has encountered, where the player can edit that text. An edit lasts until a Revert to before it.
-_Avoid_: Log (the Full Log is one section of the Journal)
+_Avoid_: Log
 
 **Server Log**:
-The app's own record of what it did, for tracing a problem: the console and `logs/novelforge.log`. It never holds story text, only ids that lead to it in the Save. It's nothing to do with the Full Log, which is the story's own record.
+The app's own record of what it did, for tracing a problem: the console and `logs/novelforge.log`. It never holds story text, only ids that lead to it in the Save. It has nothing to do with the Chapters, which are the story's own record.
 _Avoid_: Log (alone), debug log
 
 **Log Level**:

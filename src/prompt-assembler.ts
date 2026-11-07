@@ -21,7 +21,7 @@ const toPrompt = (npcs: State["npcs"], peopleFrom: number) => ({ id, role, text 
     ? { role: "user", content: inCharacter(text) }
     : // The same key order as a new reply, because the Narrator copies what it sees and streaming needs check first.
       // No summary, as one in each of these would cost far more than it teaches.
-      { role: "assistant", content: JSON.stringify({ check: null, narration: text, state_operations: [], people: id >= peopleFrom ? npcs.filter(({ name }) => text.includes(name)) : [], scene_changed: false, visual_description: "" }) };
+      { role: "assistant", content: JSON.stringify({ check: null, narration: text, state_operations: [], people: id >= peopleFrom ? npcs.filter(({ name }) => text.includes(name)) : [], scene_changed: false, visual_description: "", chapter_ends: false }) };
 
 // Last before the player's words and in plain numbers, as the same rule mid-prompt in general terms was ignored.
 const PACE =
@@ -110,6 +110,15 @@ export function olderMessages(messages: Message[], sceneMemories: SceneMemory[],
 const MEMORY_RULES =
   "in about 100 words: what happened, who was there and what changed. Cover only what the PC experienced, with no Lore Entry or Plot Thread secrets and no dice, numbers or Checks, as the player reads it in the Journal. State them plainly as past events, not as story prose, and copy nothing of the style of those Messages.";
 
+/** Only text the player can already read, so a title can't give away a secret. */
+export const chapterTitlePrompt = (memories: string[], recent: Message[]): Prompt => [
+  {
+    role: "system",
+    content: `Set title to a title for a chapter of a story, in two to six words, like a chapter title in a novel. The user sends memories of the chapter's earlier events, then its last Messages. Name what the chapter is about, with no Lore Entry or Plot Thread secrets and no dice, numbers or Checks. Reply only with JSON: {"title": "the title"}.`,
+  },
+  { role: "user", content: JSON.stringify({ memories, messages: recent.map(({ role, text }) => ({ role, text })) }) },
+];
+
 /**
  * The batch, the memory before it and the rules alone, so no hidden text can reach a memory. It gets its own call because a
  * Narrator asked for one beside the summary wrote another summary.
@@ -132,7 +141,7 @@ looseEnds is empty, so fill it now: use add_loose_end for each thing still unres
 export function assemblePrompt({
   save: { worldBrief, pc, startingHook },
   // Director's Notes are taken out so that any left in a Save can't steer the story now the player can't see them.
-  state: { worldBible, worldRules, plotThreads, summary, sceneMemories, directorsNotes: _retired, worldBrief: _fromSave, ...currentState },
+  state: { worldBible, worldRules, plotThreads, summary, sceneMemories, directorsNotes: _retired, worldBrief: _fromSave, chapters: _chapters, chapterReady: _ready, ...currentState },
   messages,
   memoryStart = 0,
   modelInstructions,

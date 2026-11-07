@@ -25,7 +25,8 @@ import { type SettingsChange, type SettingsStore, SettingsUpdate } from "./setti
 import { textHosts, textModels } from "./text-provider";
 import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-turns";
 import { VisibleEdit, type World, type WorldEdit } from "./state-applier";
-import { ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
+import { askForChapterTitle, ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
+import { readable } from "./web/chat-style";
 import spa from "./web/index.html";
 import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type WorldChoices, type WorldPc, writeImagePrompt } from "./world-creation";
 
@@ -126,6 +127,10 @@ const PageEvent = z.strictObject({
 });
 
 const MOST_PAGE_EVENT_BYTES = 1024;
+
+/** The fewest Messages the open Chapter needs before a Narrator's suggestion to end it shows. The player can end one sooner. */
+export const MIN_CHAPTER_MESSAGES = 10;
+const CHAPTER_TITLE_MESSAGES = 20;
 
 /** Stops reading at the cap, as a Save's import needs the server's own limit to be huge. */
 async function cappedBody(req: Request) {
@@ -321,6 +326,22 @@ export function startServer(options: {
   let workflowProblem = "";
   const local = comfyImages(settings, undefined, (problem) => (workflowProblem = problem));
   const images = imagePipeline(saves, { openrouter: options.imageAdapter, local }, settings);
+
+  /** Every Chapter, oldest first, ending with the open one, whose `lastMessage` is null. A Chapter holds the Messages after the one before it, up to its own `lastMessage`. */
+  function chaptersOf(id: string) {
+    const { chapters, chapterReady, sceneMemories } = saves.latestState(id);
+    const latest = saves.latestMessageId(id);
+    const closed = chapters.map(({ title, lastMessage }) => ({ title, lastMessage: lastMessage ?? latest }));
+    const start = closed.at(-1)?.lastMessage ?? 0;
+    const open = saves.messages(id).filter(({ id }) => id > start);
+    return {
+      chapters: [...closed, { title: "", lastMessage: null }],
+      open,
+      openMemories: sceneMemories.filter(({ firstMessage }) => firstMessage > start).map(({ text }) => text),
+      // Below this, a suggestion would end a chapter every few Turns.
+      offer: chapterReady && open.length >= MIN_CHAPTER_MESSAGES,
+    };
+  }
   const engine = { ...options, images };
   // Held here until Begin because a Save holds it all at once, and so that the client never holds the secrets.
   // shortcut: an abandoned world and its images stay until the app restarts, evict them if that ever adds up.
@@ -713,7 +734,37 @@ export function startServer(options: {
             recentNpcs: [...new Set([...scene.visibleCast.filter((name) => pcKnown.npcs.includes(name)), ...pcKnown.npcs.toReversed()])],
             portraits: knownPortraits(req.params.id),
             fullLog: saves.messages(req.params.id),
+            chapters: chaptersOf(req.params.id).chapters,
           });
+        },
+      },
+      "/saves/:id/chapters": {
+        GET: (req) => {
+          const { chapters, offer } = chaptersOf(req.params.id);
+          return Response.json({ chapters, offer });
+        },
+        /** Closes the open Chapter after the latest Message. A title the model won't give leaves it untitled, which the player can fix in the Journal. */
+        POST: async (req) => {
+          const { id } = req.params;
+          const basedOn = saves.latestMessageId(id);
+          const release = turns.hold(id);
+          try {
+            const { chapters, open, openMemories } = chaptersOf(id);
+            if (open.length === 0) return Response.json({ error: "This chapter has no Messages yet" }, { status: 409 });
+            let title = "";
+            try {
+              title = await askForChapterTitle(options.textProvider, openMemories, readable(open).slice(-CHAPTER_TITLE_MESSAGES), req.signal);
+            } catch (error) {
+              if (!(error instanceof TurnFailed)) throw error;
+              log.warning("chapters", "Chapter title missed", { failure: error.failure, message: error.message });
+            }
+            if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
+            saves.addEdit(id, { edit: "closeChapter", title });
+            log.info("chapters", "Chapter closed", { chapter: chapters.length, messages: open.length, titled: !!title });
+            return Response.json({});
+          } finally {
+            release();
+          }
         },
       },
       "/saves/:id/inventory": {

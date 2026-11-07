@@ -10,6 +10,8 @@ import {
   type TurnStatus,
   getImages,
   getJournal,
+  getChapters,
+  closeChapter,
   getRequestedImages,
   getSave,
   imageUrl,
@@ -38,7 +40,7 @@ import {
   type TurnResult,
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
-import { DecideIcon, DownIcon, DrawIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
+import { ChapterIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
@@ -185,6 +187,9 @@ export function Play({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [reverting, setReverting] = useState<Message>();
+  const [chapterOffer, setChapterOffer] = useState(false);
+  const [endingChapter, setEndingChapter] = useState(false);
+  const [closingChapter, setClosingChapter] = useState(false);
   const inputBox = useRef<HTMLTextAreaElement>(null);
   const story = useRef<HTMLDivElement>(null);
   const inlineCount = images.images.length + requested.images.length + (journal?.portraits.length ?? 0);
@@ -236,12 +241,31 @@ export function Play({ id }: { id: string }) {
       else if (move === "open") openStory();
     }, (failure: Error) => setLoadError(failure.message));
     checkImages();
+    checkChapter();
     return () => {
       leaving.current.abort();
       unwatchTurn.current();
       clearTimeout(imageCheck.current);
     };
   }, [id]);
+
+  function checkChapter() {
+    getChapters(id).then(({ offer }) => setChapterOffer(offer), () => {});
+  }
+
+  async function endChapter() {
+    setClosingChapter(true);
+    try {
+      await closeChapter(id);
+      setEndingChapter(false);
+      setChapterOffer(false);
+      setAnnouncement("Chapter ended. The next Turn starts a new one.");
+    } catch (failure) {
+      setError((failure as Error).message);
+    } finally {
+      setClosingChapter(false);
+    }
+  }
 
   // Images draw in the background, so the page looks for them apart from the Turn, for as long as any are on the way.
   function checkImages() {
@@ -395,6 +419,7 @@ export function Play({ id }: { id: string }) {
       getMessages(id).then(setMessages, () => {});
     }
     getStatus(id).then(setStatus, () => {});
+    checkChapter();
     checkImages();
   }
 
@@ -490,6 +515,11 @@ export function Play({ id }: { id: string }) {
         >
           {DuplicateIcon}
         </button>
+        {message === latest && (
+          <button className="icon" title="End the chapter here" aria-label="End the chapter here" aria-expanded={endingChapter} onClick={() => setEndingChapter(!endingChapter)}>
+            {ChapterIcon}
+          </button>
+        )}
         {message === replaceable && (
           <>
             <button
@@ -658,6 +688,34 @@ export function Play({ id }: { id: string }) {
           <button type="button" className="quiet" aria-label="Dismiss this error" onClick={() => setError("")}>×</button>
         </div>
       )}
+      {closingChapter ? (
+        <p role="status" className="waiting">Ending the chapter…</p>
+      ) : (
+        !turn &&
+        (endingChapter ? (
+          <div className="ask">
+            <p>End this chapter after the latest Message? The Narrator gives it a title, and the next Turn starts a new chapter.</p>
+            <div className="row">
+              <button type="button" className="quiet" onClick={() => setEndingChapter(false)}>
+                Cancel
+              </button>
+              <button type="button" className="action" onClick={endChapter}>
+                End the chapter
+              </button>
+            </div>
+          </div>
+        ) : (
+          chapterOffer && (
+            <div className="notice dismissable">
+              <p>This feels like the end of a chapter.</p>
+              <button type="button" className="quiet chapter-end" onClick={endChapter}>
+                End the chapter
+              </button>
+              <button type="button" className="quiet" aria-label="Keep the chapter going" onClick={() => setChapterOffer(false)}>×</button>
+            </div>
+          )
+        ))
+      )}
       {requested.drawing > 0 && <p role="status" className="waiting">Drawing {plural(requested.drawing, "picture")}…</p>}
       {replaceable && rewriting === replaceable.id && (
         <form className="ask" onSubmit={sendFeedback}>
@@ -756,6 +814,7 @@ export function Play({ id }: { id: string }) {
             setMessages(messages.filter((message) => message.id <= reverting.id));
             setChosenBeat(undefined);
             getStatus(id).then(setStatus, () => {});
+            checkChapter();
             getJournal(id).then(setJournal, () => {});
             checkImages();
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.

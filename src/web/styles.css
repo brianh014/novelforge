@@ -1527,6 +1527,38 @@ a.action {
   overflow: auto;
 }
 
+.chapters {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+}
+
+.chapters .chapter {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chapters .chapter:hover {
+  background: var(--soft);
+}
+
+.show-more,
+.back {
+  align-self: flex-start;
+  min-height: 44px;
+}
+
 @media (hover: hover) {
   .message .revert {
     opacity: 0;
@@ -1585,6 +1617,12 @@ a.action {
 
 .notice {
   color: var(--ink);
+}
+
+.dismissable .chapter-end {
+  margin-left: auto;
+  font-size: inherit;
+  text-decoration: underline;
 }
 
 .error {
