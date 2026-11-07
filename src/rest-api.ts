@@ -131,6 +131,7 @@ const MOST_PAGE_EVENT_BYTES = 1024;
 /** The fewest Messages the open Chapter needs before a Narrator's suggestion to end it shows. The player can end one sooner. */
 export const MIN_CHAPTER_MESSAGES = 10;
 const CHAPTER_TITLE_MESSAGES = 20;
+const RECENT_CHARACTERS = 6;
 
 /** Stops reading at the cap, as a Save's import needs the server's own limit to be huge. */
 async function cappedBody(req: Request) {
@@ -730,8 +731,10 @@ export function startServer(options: {
             sceneMemories,
             npcs: pcKnown.npcs,
             npcSummaries: pcKnown.summaries ?? {},
-            // Those in the scene, then the latest met. The filter keeps a visible NPC the PC doesn't know yet hidden.
-            recentNpcs: [...new Set([...scene.visibleCast.filter((name) => pcKnown.npcs.includes(name)), ...pcKnown.npcs.toReversed()])],
+            // Everyone in the scene, then the last seen. The filter keeps an NPC the PC doesn't know yet hidden.
+            recentNpcs: [...new Set([...scene.visibleCast, ...saves.recentCast(req.params.id)])]
+              .filter((name) => pcKnown.npcs.includes(name))
+              .slice(0, Math.max(RECENT_CHARACTERS, scene.visibleCast.length)),
             portraits: knownPortraits(req.params.id),
             fullLog: saves.messages(req.params.id),
             chapters: chaptersOf(req.params.id).chapters,

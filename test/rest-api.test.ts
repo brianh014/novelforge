@@ -1375,7 +1375,7 @@ test("the Journal holds the recent summary, what the PC knows, known NPCs and th
     looseEnds: [], sceneMemories: [],
     npcs: ["Mara"],
     npcSummaries: {},
-    recentNpcs: ["Mara"],
+    recentNpcs: [],
     portraits: [],
     fullLog: [
       { id: 1, role: "player", text: "I wave back." },
@@ -1385,7 +1385,7 @@ test("the Journal holds the recent summary, what the PC knows, known NPCs and th
   });
 });
 
-test("the Journal says who known NPCs are, and lists those in the scene first, then the latest met", async () => {
+test("the Journal says who known NPCs are, and lists the known ones in the scene, then the last seen", async () => {
   const { app, prompts } = play(
     narration(
       "They wait.",
@@ -1400,13 +1400,14 @@ test("the Journal says who known NPCs are, and lists those in the scene first, t
       { op: "set_scene", location: "The docks", visible_cast: ["Stranger", "Mara"] },
     ),
     narration("Later.", { op: "set_known_npc_summary", name: "Mara", summary: "A smuggler, it turns out." }),
+    narration("Wren arrives.", { op: "set_scene", location: "The ferry", visible_cast: ["Wren"] }),
   );
   const id = await app.createSave();
 
   await app.post(`/saves/${id}/turns`, { input: "I look." });
 
   const journal = await journalOf(app, id);
-  expect(journal).toMatchObject({ npcSummaries: { Mara: "The ferry's pilot." }, recentNpcs: ["Mara", "Wren", "Tobin"] });
+  expect(journal).toMatchObject({ npcSummaries: { Mara: "The ferry's pilot." }, recentNpcs: ["Mara"] });
   expect(JSON.stringify(journal)).not.toContain("SECRET-LOOKS");
   expect(JSON.stringify(journal)).not.toContain("Stranger");
   expect(prompts[0]![0]!.content).toContain("set_known_npc_summary");
@@ -1416,6 +1417,9 @@ test("the Journal says who known NPCs are, and lists those in the scene first, t
 
   await app.post(`/saves/${id}/messages/2/revert`, {});
   expect(await journalOf(app, id)).toMatchObject({ npcSummaries: { Mara: "The ferry's pilot." } });
+
+  await app.post(`/saves/${id}/turns`, { input: "I board." });
+  expect(await journalOf(app, id)).toMatchObject({ recentNpcs: ["Wren", "Mara"] });
 });
 
 test("the Journal of a new Save is empty, and a missing Save has none", async () => {
@@ -1484,7 +1488,7 @@ test("after a Revert, the Journal matches the restored Snapshot", async () => {
     ...pcKnown,
     looseEnds: [], sceneMemories: [],
     npcSummaries: {},
-    recentNpcs: ["Mara"],
+    recentNpcs: [],
     portraits: [],
     fullLog: [
       { id: 1, role: "player", text: "One." },

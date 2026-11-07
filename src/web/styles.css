@@ -354,16 +354,7 @@ h2 {
 
 /* The story's left page */
 
-/* Only a phone folds this away. */
-.story-top {
-  display: contents;
-}
-
-.icon.story-toggle {
-  display: none;
-}
-
-/* With the picture out of sight, each sits folded in the story where it happened. */
+/* Each picture sits folded in the story where it happened. */
 .inline-image {
   display: block;
   margin-block: 6px;
@@ -412,10 +403,6 @@ h2 {
 }
 
 @media (width > 760px) {
-  .book:not(.left-folded) .inline-image:not(.requested) {
-    display: none;
-  }
-
   .story-title {
     padding-right: 30px;
   }
@@ -472,9 +459,7 @@ h2 {
     font-size: 24px;
   }
 
-  /* The Journal and Inventory hold all of this, and a row in the story stands in for the picture. */
-  .left-folded .story-top,
-  .left-folded .story-card,
+  /* The Journal holds all of this. */
   .left-folded .story-recap {
     display: none;
   }
@@ -490,23 +475,6 @@ h2 {
 .page .sheet-scroll,
 .book:has(.tabs) .page .sheet-scroll {
   padding: 0 0 24px;
-}
-
-.story-card {
-  display: flex;
-  gap: 14px;
-  align-items: start;
-}
-
-.story-card .zoom {
-  flex: none;
-  width: 104px;
-}
-
-.story-card .zoom img {
-  display: block;
-  width: 100%;
-  border: 1px solid var(--line);
 }
 
 .people {
@@ -1812,28 +1780,12 @@ dialog blockquote {
     flex-basis: 100%;
   }
 
-  .story-top:not(.open) {
-    display: none;
-  }
-
-  .icon.story-toggle {
-    display: grid;
-    width: 44px;
-    height: 44px;
-    margin-left: auto;
-  }
-
   /* Already a strip here. */
   .icon.left-toggle {
     display: none;
   }
 
-  .story-toggle[aria-expanded="true"] svg {
-    transform: rotate(180deg);
-  }
-
-  /* The Journal and Inventory hold all of this, and the story needs the room. */
-  .story-card,
+  /* The Journal holds all of this, and the story needs the room. */
   .story-recap {
     display: none;
   }

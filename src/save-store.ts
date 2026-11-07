@@ -865,6 +865,19 @@ export function saveStore(savesDir: string) {
       return db.query<{ memory_start: number }, []>("SELECT memory_start FROM save").get()!.memory_start;
     },
 
+    /** Everyone who has been in a Scene, last seen first. */
+    recentCast(id: string) {
+      using db = open(id);
+      return db
+        .query<{ npc: string }, []>(
+          `SELECT cast_member.value AS npc FROM snapshot_sections
+           JOIN sections ON sections.id = section_id, json_each(content, '$.visibleCast') AS cast_member
+           WHERE snapshot_sections.name = 'scene' GROUP BY npc ORDER BY max(message_id) DESC`,
+        )
+        .all()
+        .map(({ npc }) => npc);
+    },
+
     latestState(id: string) {
       using db = open(id);
       return currentState(db);

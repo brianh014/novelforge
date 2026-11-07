@@ -1,6 +1,5 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  coverUrl,
   decideForMe,
   duplicateFrom,
   failureMessage,
@@ -17,7 +16,6 @@ import {
   imageUrl,
   type OpenSave,
   getSettings,
-  getStatus,
   type Message,
   playOpening,
   playTurn,
@@ -33,8 +31,6 @@ import {
   type SceneImageInfo,
   type SceneImages,
   setupProblem,
-  type Status,
-  statusWords,
   storyName,
   takeImageFailure,
   type TurnResult,
@@ -48,7 +44,7 @@ import { Person, Zoomable } from "./zoom";
 // An item's action, which the Story plays as a Turn once it has loaded, so it streams like any other.
 const itemActions = new Map<string, string>();
 
-const RECENT_NPCS = 3;
+const RECENT_LOOSE_ENDS = 3;
 
 export function playItemAction(id: string, input: string) {
   itemActions.set(id, input);
@@ -163,10 +159,8 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
 
 export function Play({ id }: { id: string }) {
   const [save, setSave] = useState<OpenSave>();
-  const [topOpen, setTopOpen] = useState(false);
   const [folded, setFolded] = useState(leftFolded);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [status, setStatus] = useState<Status>();
   const [images, setImages] = useState<SceneImages>({ images: [], pending: false, session: 0 });
   const [requested, setRequested] = useState<RequestedImages>({ images: [], drawing: 0 });
   const [imagesReady, setImagesReady] = useState(false);
@@ -210,7 +204,7 @@ export function Play({ id }: { id: string }) {
     // Without Settings the story still reads, in Prose.
     const reading = getSettings().catch(() => undefined);
     const live: Promise<TurnStatus> = inProgress ? Promise.resolve({}) : getTurn(id).catch(() => ({}));
-    Promise.all([getSave(id), getMessages(id), getStatus(id), reading, live]).then(([save, messages, status, settings, { running, failed }]) => {
+    Promise.all([getSave(id), getMessages(id), reading, live]).then(([save, messages, settings, { running, failed }]) => {
       if (settings) {
         setSetupNotice(setupProblem(settings));
         setChatStyle(settings.chatStyle);
@@ -218,7 +212,6 @@ export function Play({ id }: { id: string }) {
       }
       setSave(save);
       setMessages(messages);
-      setStatus(status);
       const failure = missed ?? (failed && { ...failed, error: failureMessage(failed) });
       if (failure) {
         setError(failure.error);
@@ -418,7 +411,6 @@ export function Play({ id }: { id: string }) {
       // A stale Turn means the story moved on without this page.
       getMessages(id).then(setMessages, () => {});
     }
-    getStatus(id).then(setStatus, () => {});
     checkChapter();
     checkImages();
   }
@@ -434,26 +426,17 @@ export function Play({ id }: { id: string }) {
       </Book>
     );
   }
-  if (!save || !status) return <Book left={null}>{null}</Book>;
+  if (!save) return <Book left={null}>{null}</Book>;
   const pc = save.pc.name;
   const portraits = journal?.portraits ?? [];
   const portraitOf = (name?: string | null) => portraits.find(({ npc }) => npc === name);
-  const pcPortrait = portraitOf(null);
   const latest = messages.at(-1);
   const replaceable = !turn && latest?.role === "narrator" ? latest : undefined;
   const scene = images.images.at(-1);
   const told = readable(turn?.replaces ? messages.slice(0, -1) : messages);
   const staged = chatStyle === "stage" && (told.length > 0 || !!turn);
   const sceneImage = (image = scene) => image && <SceneImage id={id} image={image} />;
-  const cover = save.hasCover && (
-    <figure className="plate">
-      <Zoomable src={coverUrl(id, save.coverRedraws)} alt={`Cover of ${storyName(save)}`} />
-    </figure>
-  );
-
-  const picture = !staged && (sceneImage() || cover);
-
-  /** Pictures the player asked for, which have no other place in the story, so these stay whatever the left page shows. */
+  /** Pictures the player asked for, which have no other place in the story. */
   const requestedRows = (message: Message) =>
     requested.images
       .filter(({ messageId }) => messageId === message.id)
@@ -464,7 +447,7 @@ export function Play({ id }: { id: string }) {
         </details>
       ));
 
-  /** Folded in the story under the response they came with, for when the left page is out of sight. */
+  /** Folded in the story under the response they came with. */
   const inlineImages = (message: Message) => {
     const image = images.images.find(({ messageId }) => messageId === message.id);
     return (
@@ -565,37 +548,32 @@ export function Play({ id }: { id: string }) {
               <h1 className="title">{storyName(save)}</h1>
               {save.title && <p className="muted">{pc}</p>}
             </div>
-            {picture && (
-              <button
-                type="button"
-                className="icon story-toggle"
-                title={topOpen ? "Hide the picture" : "Show the picture"}
-                aria-label="Picture"
-                aria-expanded={topOpen}
-                onClick={() => setTopOpen(!topOpen)}
-              >
-                {DownIcon}
-              </button>
-            )}
-            <div className={topOpen ? "story-top open" : "story-top"}>{picture}</div>
-            <div className="story-card">
-              {pcPortrait && <Zoomable lazy src={portraitUrl(id, pcPortrait)} alt={`Portrait of ${pc}`} />}
-              <div className="condition">
-                <h2>Condition</h2>
-                <p className="status">{statusWords(status)}</p>
-              </div>
-            </div>
             {journal?.summary && (
               <div className="story-recap">
                 <h2>So far</h2>
                 <p className="brief">{journal.summary}</p>
               </div>
             )}
+            {!!journal?.looseEnds.length && (
+              <div className="story-recap">
+                <h2>Loose Ends</h2>
+                <ul>
+                  {journal.looseEnds.toReversed().slice(0, RECENT_LOOSE_ENDS).map((looseEnd) => (
+                    <li key={looseEnd}>{looseEnd}</li>
+                  ))}
+                </ul>
+                {journal.looseEnds.length > RECENT_LOOSE_ENDS && (
+                  <a className="quiet" href={`#/journal/${id}`}>
+                    More ({journal.looseEnds.length - RECENT_LOOSE_ENDS})
+                  </a>
+                )}
+              </div>
+            )}
             {!!journal?.recentNpcs.length && (
               <div className="story-recap">
-                <h2>Recent people</h2>
+                <h2>Recent Characters</h2>
                 <ul className="people">
-                  {journal.recentNpcs.slice(0, RECENT_NPCS).map((name) => (
+                  {journal.recentNpcs.map((name) => (
                     <li key={name} className="person">
                       <Person id={id} name={name} portrait={portraitOf(name)} who={journal.npcSummaries[name]} />
                     </li>
@@ -813,7 +791,6 @@ export function Play({ id }: { id: string }) {
           onReverted={() => {
             setMessages(messages.filter((message) => message.id <= reverting.id));
             setChosenBeat(undefined);
-            getStatus(id).then(setStatus, () => {});
             checkChapter();
             getJournal(id).then(setJournal, () => {});
             checkImages();
