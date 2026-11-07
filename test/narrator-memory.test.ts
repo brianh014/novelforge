@@ -149,8 +149,9 @@ test("the Narrator is told to keep its records true to play", () => {
   for (const op of ["update_lore_entry", "remove_lore_entry", "update_plot_thread", "update_known_fact", "remove_known_fact", "merge_npc"]) expect(prompt).toContain(op);
 });
 
-test("the summary has room to keep what still matters", () => {
+test("the summary has room to keep what still matters, most of it for the recent story", () => {
   expect(promptFor()).toContain("under 500 words");
+  expect(promptFor()).toContain("give the last few scenes about two thirds of the words");
 });
 
 test("the last instruction asks for fresh prose, natural speech and none of the player's words back", () => {
