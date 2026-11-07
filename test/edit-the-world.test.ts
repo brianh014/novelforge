@@ -144,7 +144,7 @@ test("the next Turn uses the edited world, and its Snapshots hold the edit", asy
 
   const [system] = prompts[0]!;
   expect(system!.content).toContain("World Brief: A city of glass");
-  expect(system!.content).toContain("The city is dry.");
+  expect(prompts[0]!.at(-2)!.content).toContain("The city is dry.");
   expect(system!.content).not.toContain("A drowned city");
   expect(system!.content).not.toContain(firstFact);
   expect(store().snapshot(id, 1).pcKnown.facts).toEqual(["The city is dry.", "Ferries stop at dusk."]);
@@ -197,12 +197,12 @@ test.each([
   const first = await app.post(`/saves/${id}/messages/2/${action}`, body);
   expect(first.status).toBe(201);
   expect(prompts[1]![0]!.content).toContain("World Brief: A city of glass");
-  expect(prompts[1]![0]!.content).toContain("The city is dry.");
+  expect(prompts[1]!.at(-3)!.content).toContain("The city is dry.");
   expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
 
   const { messages } = (await first.json()) as { messages: { id: number }[] };
   await app.post(`/saves/${id}/messages/${messages[0]!.id}/${action}`, body);
-  expect(prompts[2]![0]!.content).toContain("The city is dry.");
+  expect(prompts[2]!.at(-3)!.content).toContain("The city is dry.");
   expect(prompts[2]![0]!.content).toContain("World Brief: A city of glass");
   expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
   expect(await brief(id)).toBe("A city of glass");
@@ -546,7 +546,7 @@ test("the next Turn uses a hidden change", async () => {
   await turn(id, "I visit the mayor.");
 
   const [system] = prompts[1]!;
-  expect(system!.content).toContain("the mayor smuggles.");
+  expect(prompts[1]!.at(-2)!.content).toContain("the mayor smuggles.");
   expect(system!.content).toContain("the mayor runs guns.");
   expect(system!.content).not.toContain("keeps bees");
   expect(store().snapshot(id, 2).plotThreads).toContain(`${SECRET} the mayor runs guns.`);

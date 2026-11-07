@@ -649,6 +649,79 @@ input {
   min-width: 0;
 }
 
+.picker {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--accent);
+}
+
+.picker > button {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.picker > button::after {
+  content: "\25BE";
+}
+
+.picker > button > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.picker-panel {
+  position: absolute;
+  top: 100%;
+  inset-inline: 0;
+  z-index: 5;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  background: var(--page);
+  color: var(--ink);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+}
+
+.picker-panel ul {
+  max-height: min(280px, 45dvh);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.picker-panel li {
+  padding: 6px;
+  overflow-wrap: anywhere;
+}
+
+.picker-panel li[role="option"] {
+  cursor: pointer;
+}
+
+.picker-panel li[role="option"]:hover,
+.picker-panel li[data-active] {
+  background: var(--soft);
+}
+
+.picker-panel li[aria-selected="true"] {
+  color: var(--accent);
+  font-weight: bold;
+}
+
 .settings fieldset {
   display: grid;
   gap: 12px;

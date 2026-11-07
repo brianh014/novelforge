@@ -554,20 +554,28 @@ export function readReplies(path: string) {
 }
 
 /**
- * Puts memories of older Messages first in the latest Snapshot, and in the one before it, which a Regenerate of the
- * latest Turn starts from. Sections are shared between Snapshots, so these get new rows and older Snapshots keep theirs.
+ * Changes the latest Snapshot and the one before it, which a Regenerate of the latest Turn starts from. Sections are
+ * shared between Snapshots, so changed ones get new rows and older Snapshots keep theirs. A throw changes nothing.
  */
-export function addOlderMemories(path: string, older: SceneMemory[]) {
+export function changeLatestStates(path: string, change: (state: State) => State) {
   using db = connect(path);
   db.transaction(() => {
     for (const { id } of db.query<{ id: number }, []>("SELECT id FROM messages ORDER BY id DESC LIMIT 2").all()) {
-      const content = JSON.stringify([...older, ...toState(sectionsAt(db, id)).sceneMemories]);
-      const section = db.query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id").get(content)!;
-      db.run("UPDATE snapshot_sections SET section_id = ? WHERE message_id = ? AND name = 'sceneMemories'", [section.id, id]);
+      const sections = sectionsAt(db, id);
+      for (const [name, value] of Object.entries(change(toState(sections)))) {
+        const content = JSON.stringify(value);
+        if (sections.find((row) => row.name === name)?.content === content) continue;
+        const section = db.query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id").get(content)!;
+        db.run("UPDATE snapshot_sections SET section_id = ? WHERE message_id = ? AND name = ?", [section.id, id, name]);
+      }
     }
     sweepSections(db);
   })();
 }
+
+/** Puts memories of older Messages first. */
+export const addOlderMemories = (path: string, older: SceneMemory[]) =>
+  changeLatestStates(path, (state) => ({ ...state, sceneMemories: [...older, ...state.sceneMemories] }));
 
 export function saveStore(savesDir: string) {
   mkdirSync(savesDir, { recursive: true });

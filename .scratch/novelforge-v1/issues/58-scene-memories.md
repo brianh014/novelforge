@@ -83,4 +83,4 @@ A Save with no Scene Memories starts with its window at its latest 100 Messages.
 
 Compare a stretch of play with memories against `.scratch/novelforge-v1/narrator-review-baseline.md`. If quality drops at 100 Messages, as Summaryception's author would predict, lower the window to about 50.
 
-- **The window is now 50, at the user's request on 2026-11-06, to spend less:** a memory falls due at 50 and takes the oldest 20, so the window runs between about 32 and 50 Messages. The upgrade step still keeps 100 on an old Save, so nothing goes uncovered; the window then shrinks to 50 as memories are written, one per Turn.
+- **The window is now 80, set on 2026-11-06 after 50 lost too much of the story:** a memory falls due at 80 and takes the oldest 20, so the window runs between 60 and 80 Messages. Each memory now has its own call beside the Turn, as memories written inside a reply came out as whole-story recaps. A missed one costs nothing and is tried again next Turn.

@@ -23,6 +23,9 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
   expect(await settings()).toEqual({
     textBaseUrl: "https://openrouter.ai/api/v1",
     textModel: "",
+    textRouting: "price",
+    textHost: "",
+    textHostFallback: true,
     hasTextApiKey: false,
     modelInstructions: "",
     imageProvider: "openrouter",
@@ -67,6 +70,9 @@ test("every setting survives a restart, and no key comes back", async () => {
   const response = await change({
     textBaseUrl: "http://localhost:1234/v1",
     textModel: "local/model",
+    textRouting: "latency",
+    textHost: "xiaomi",
+    textHostFallback: false,
     textApiKey: "text-key-value",
     modelInstructions: "Keep it short.",
     imageProvider: "local",
@@ -82,6 +88,9 @@ test("every setting survives a restart, and no key comes back", async () => {
   const expected = {
     textBaseUrl: "http://localhost:1234/v1",
     textModel: "local/model",
+    textRouting: "latency",
+    textHost: "xiaomi",
+    textHostFallback: false,
     hasTextApiKey: true,
     modelInstructions: "Keep it short.",
     imageProvider: "local",

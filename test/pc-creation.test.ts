@@ -98,7 +98,6 @@ test("the starting inventory is sorted into wearing and carrying, keeping every 
 test("the opening status comes from the Narrator under the Turn's rules, so a status with numerals is retried", async () => {
   play(
     sheet({ health: "12 of 20 hit points" }),
-    sheet({ conditions: ["blind in one eye", "blind in one eye"] }),
     sheet({ health: "tired", injuries: ["a healed burn"], conditions: ["blind in one eye"] }),
     generated(),
   );
@@ -110,7 +109,7 @@ test("the opening status comes from the Narrator under the Turn's rules, so a st
     injuries: ["a healed burn"],
     conditions: ["blind in one eye"],
   });
-  expect(prompts).toHaveLength(4);
+  expect(prompts).toHaveLength(3);
 });
 
 const SECRET = "ZQX-PC-SECRET-";
@@ -144,14 +143,14 @@ test("the first Turn opens from the Starting Hook, as delimited data, and later 
 
   const first = await app.post(`/saves/${id}/turns`, { input: "I look." });
   const { messages } = (await first.json()) as { messages: { id: number }[] };
-  expect(prompts[2]![0]!.content).toContain(JSON.stringify({ starting_hook: `A body washes ashore "}` }));
+  expect(prompts[2]!.at(-2)!.content).toContain(JSON.stringify({ starting_hook: `A body washes ashore "}` }));
 
   await app.post(`/saves/${id}/messages/${messages[1]!.id}/regenerate`, {});
-  expect(prompts[3]![0]!.content).toContain("starting_hook");
+  expect(prompts[3]!.at(-3)!.content).toContain("starting_hook");
 
   await app.post(`/saves/${id}/turns`, { input: "I run." });
-  expect(prompts[4]![0]!.content).not.toContain("starting_hook");
-  expect(prompts[4]![0]!.content).not.toContain("sandbox");
+  expect(prompts[4]!.at(-2)!.content).not.toContain("starting_hook");
+  expect(prompts[4]!.at(-2)!.content).not.toContain("sandbox");
 });
 
 test("with no Starting Hook, the first Turn is a sandbox start and the rest are not", async () => {
@@ -161,9 +160,9 @@ test("with no Starting Hook, the first Turn is a sandbox start and the rest are 
   await app.post(`/saves/${id}/turns`, { input: "I look." });
   await app.post(`/saves/${id}/turns`, { input: "I walk." });
 
-  expect(prompts[2]![0]!.content).toContain("sandbox");
-  expect(prompts[2]![0]!.content).not.toContain("starting_hook");
-  expect(prompts[3]![0]!.content).not.toContain("sandbox");
+  expect(prompts[2]!.at(-2)!.content).toContain("sandbox");
+  expect(prompts[2]!.at(-2)!.content).not.toContain("starting_hook");
+  expect(prompts[3]!.at(-2)!.content).not.toContain("sandbox");
 });
 
 test("a Revert to the first player Message is still the first Turn, as the Narrator never answered it", async () => {
@@ -174,7 +173,7 @@ test("a Revert to the first player Message is still the first Turn, as the Narra
 
   await app.post(`/saves/${id}/turns`, { input: "I look harder." });
 
-  expect(prompts[3]![0]!.content).toContain("starting_hook");
+  expect(prompts[3]!.at(-2)!.content).toContain("starting_hook");
 });
 
 test("the player can read their own Starting Hook, to know where the story opens", async () => {

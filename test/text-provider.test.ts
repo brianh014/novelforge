@@ -258,8 +258,32 @@ test("schema mode is used on a model that supports it", async () => {
   expect(authorization).toBe("Bearer test-key");
   expect(body.model).toBe("fake/model");
   expect(body.stream).toBe(true);
-  expect(body.provider).toEqual({ require_parameters: true });
+  expect(body.provider).toEqual({ require_parameters: true, sort: "price" });
   expect(body.response_format).toMatchObject({ type: "json_schema", json_schema: { strict: true } });
+});
+
+test.each([
+  ["a routing", { textRouting: "throughput" }, { require_parameters: true, sort: "throughput" }],
+  ["OpenRouter's own choice", { textRouting: "default" }, { require_parameters: true }],
+  ["a named host, which wins over the routing", { textHost: "xiaomi" }, { require_parameters: true, order: ["xiaomi"], allow_fallbacks: true }],
+  ["a host with no fallback", { textHost: "xiaomi", textHostFallback: false }, { require_parameters: true, order: ["xiaomi"], allow_fallbacks: false }],
+] as const)("%s reaches the request", async (_, change, expected) => {
+  play([narrated("Rain.")], schemaModel);
+  settingsStore(join(folder.path, "settings.json")).update(change);
+  const id = await app.createSave();
+
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(provider.requests[0]!.body.provider).toEqual(expected);
+});
+
+test("a server with no schema mode isn't sent routing it may not know", async () => {
+  play([narrated("Rain.")], { data: [{ id: "fake/model" }] });
+  const id = await app.createSave();
+
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(provider.requests[0]!.body.provider).toBeUndefined();
 });
 
 test("the schema keeps to what strict schema modes accept, with check first", async () => {
@@ -270,7 +294,7 @@ test("the schema keeps to what strict schema modes accept, with check first", as
   const { schema } = provider.requests[0]!.body.response_format.json_schema;
 
   expect(schema.type).toBe("object");
-  expect(Object.keys(schema.properties)).toEqual(["check", "narration", "state_operations", "people", "summary", "scene_memory", "scene_changed", "visual_description"]);
+  expect(Object.keys(schema.properties)).toEqual(["check", "narration", "state_operations", "people", "summary", "scene_changed", "visual_description"]);
   const visit = (node: any) => {
     if (typeof node !== "object" || node === null) return;
     for (const refused of ["oneOf", "minLength", "$schema"]) expect(Object.keys(node)).not.toContain(refused);
@@ -340,7 +364,7 @@ test("the prompt reaches the provider in order, so world_rules and the Check res
 
   const messages: { role: string; content: string }[] = provider.requests[1]!.body.messages;
   expect(messages.map(({ role }) => role)).toEqual(["system", "system", "user", "system"]);
-  expect(messages[1]!.content).toStartWith("world_rules:");
+  expect(messages[1]!.content).toContain("world_rules:");
   expect(messages[2]!.content).toContain("I leap.");
   expect(messages[3]!.content).toStartWith("The Check is resolved");
 });

@@ -243,14 +243,11 @@ test("state operations update status and PC-known information across Turns", asy
 
 test.each([
   ["removing a status the PC lacks", { op: "remove_status", kind: "injuries", text: "broken leg" }],
-  ["repeating a status", { op: "add_status", kind: "conditions", text: "soaked" }],
   ["health given as a number", { op: "set_health", health: "72/100 HP" }],
   ["an injury given with a number", { op: "add_status", kind: "injuries", text: "2 broken ribs" }],
   ["a condition given with a number", { op: "add_status", kind: "conditions", text: "fatigue level 3" }],
   ["adding an NPC who exists", { op: "add_npc", name: "Mara", appearance: "a stranger" }],
   ["updating an NPC who does not exist", { op: "update_npc", name: "Nobody", appearance: "towering" }],
-  ["knowing an NPC who does not exist", { op: "add_known_npc", name: "Nobody" }],
-  ["summing up an NPC the PC doesn't know", { op: "set_known_npc_summary", name: "Nobody", summary: "Who?" }],
 ])("the server refuses %s", async (_, operation) => {
   const { app, prompts } = play(
     narration(
@@ -981,20 +978,20 @@ test("player text reaches the Narrator as delimited in-character data, even if i
 });
 
 test("a prompt holds in order the Messages that no Scene Memory covers yet", async () => {
-  const replies = Array.from({ length: 27 }, (_, turn) => narration(`Reply ${turn}.`));
-  replies[25] = JSON.stringify({ narration: "Reply 25.", state_operations: [], scene_memory: "Early days." });
+  const replies = Array.from({ length: 42 }, (_, turn) => narration(`Reply ${turn}.`));
+  replies.splice(40, 0, JSON.stringify({ scene_memory: "Early days." })); // At 80 Messages, a memory call comes before the Turn's own.
   const { app, prompts } = play(...replies);
   const id = await app.createSave();
 
-  for (let turn = 0; turn < 27; turn++) await app.post(`/saves/${id}/turns`, { input: `Action ${turn}.` });
+  for (let turn = 0; turn < 42; turn++) await app.post(`/saves/${id}/turns`, { input: `Action ${turn}.` });
 
   expect(prompts[1]!.map(({ role }) => role)).toEqual(["system", "user", "assistant", "system", "user"]);
-  const prompt = contents(prompts[26]).join();
+  const prompt = contents(prompts.at(-1)).join();
   expect(prompt).not.toContain("Action 0.");
   expect(prompt).not.toContain("Reply 9.");
   expect(prompt).toContain("Action 10.");
   expect(prompt.indexOf("Reply 10.")).toBeLessThan(prompt.indexOf("Action 11."));
-  expect(prompts[26]!.at(-1)!.content).toContain("Action 26.");
+  expect(prompts.at(-1)!.at(-1)!.content).toContain("Action 41.");
 });
 
 /** Writes what no REST route can yet: World Creation and Director's Notes arrive in later tickets. */

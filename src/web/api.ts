@@ -1,4 +1,5 @@
 import type { comfyModels } from "../comfyui";
+import type { textHosts } from "../text-provider";
 import type { ImageKind } from "../image-pipeline";
 import type { FailedTurn, LiveTurn } from "../live-turns";
 import type { LogLevel } from "../logger";
@@ -19,6 +20,7 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   imagesReady: boolean;
   workflowProblem: string;
 };
+export type TextHost = Awaited<ReturnType<typeof textHosts>>[number];
 export type Journal = { summary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[] };
 /** A null `npc` is the PC. */
 export type Portrait = ReturnType<SaveStore["portraits"]>[number];
@@ -103,6 +105,8 @@ export async function drawComfyTest(prompt: string, signal: AbortSignal) {
 }
 
 export const getTextModels = () => request<{ models: string[] }>("/settings/text-models").then(({ models }) => models);
+export const getTextHosts = (model: string) =>
+  request<{ hosts: TextHost[] }>(`/settings/text-hosts?model=${encodeURIComponent(model)}`).then(({ hosts }) => hosts);
 
 /** What stops the Narrator replying, if anything. */
 export function setupProblem({

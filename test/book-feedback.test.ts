@@ -131,7 +131,7 @@ test("the opening is a first Turn that asks for the whole picture, without showi
   const { messages } = (await response.json()) as { messages: Parameters<typeof readable>[0] };
   expect(messages.map(({ role }) => role)).toEqual(["player", "narrator"]);
   expect(readable(messages).map(({ text }) => text)).toEqual(["The rain never stops."]);
-  expect(script.prompts[0]![0]!.content).toContain("fully up to speed");
+  expect(script.prompts[0]!.at(-2)!.content).toContain("fully up to speed");
 });
 
 test("the opening rolls no Check, and can't overwrite a story already under way", async () => {

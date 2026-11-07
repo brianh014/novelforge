@@ -243,8 +243,9 @@ const isRepeat = ({ pcKnown, looseEnds }: State, operation: StateOperation) =>
   (operation.op === "add_known_npc" && pcKnown.npcs.includes(operation.name)) ||
   (operation.op === "add_loose_end" && looseEnds.includes(operation.loose_end));
 
-// A miscopied item just stays open, so it isn't worth a whole response.
-const isHarmless = ({ op }: { op: StateOperation["op"] }) => op === "resolve_loose_end";
+// None of these contradict the narration, so they aren't worth a whole response. Someone nameless is added once they're named.
+const IGNORABLE: StateOperation["op"][] = ["resolve_loose_end", "add_known_npc", "set_known_npc_summary"];
+const isHarmless = ({ op, reason }: { op: StateOperation["op"]; reason: string }) => IGNORABLE.includes(op) || reason === "already there";
 
 /** Applies operations in order, so each is judged against the ones before it. */
 export function applyOperations(state: State, operations: StateOperation[]) {

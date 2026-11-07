@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { backfill, mainSavesFolder } from "../scripts/backfill-scene-memories";
 import { assemblePrompt, memoryDue, OPENING_INPUT, type Prompt } from "../src/prompt-assembler";
 import { InvalidSave, type Message, saveStore } from "../src/save-store";
-import { TurnFailed } from "../src/turn-engine";
+import { ContentRefused, TurnFailed } from "../src/turn-engine";
 import { delta, fakeOpenAi, scriptedDice, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
@@ -175,7 +175,7 @@ test("a window that a Revert moved back keeps its Messages", async () => {
   const start = saves.memoryStart(id);
   saves.revert(id, start + 9);
   const before = windowOf(id);
-  expect(before).toHaveLength(50);
+  expect(before).toHaveLength(80);
 
   await run(pathOf(id), ...manyMemories()).finished;
 
@@ -299,7 +299,8 @@ test("older Snapshots stay as they were, and the memories survive a Regenerate o
   expect(sectionAt(0)).toBe("[]");
   expect(sectionAt(latest - 2)).toBe("[]");
 
-  const script = scriptedTextProvider(JSON.stringify({ narration: "A new reply.", state_operations: [] }));
+  // The refusal answers the memory the Regenerate asks for, so that the list stays as the backfill wrote it.
+  const script = scriptedTextProvider(new ContentRefused(), JSON.stringify({ narration: "A new reply.", state_operations: [] }));
   app = startApp(savesDir, script.textProvider, scriptedDice());
   const response = await app.post(`/saves/${id}/messages/${latest}/regenerate`, {});
   await response.text();

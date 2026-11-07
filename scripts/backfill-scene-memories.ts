@@ -4,17 +4,14 @@
 //   bun run scripts/backfill-scene-memories.ts <Save copy> <settings.json>
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { z } from "zod";
-import { backfillPrompt, MEMORY_MESSAGES, olderMessages } from "../src/prompt-assembler";
+import { MEMORY_MESSAGES, olderMessages } from "../src/prompt-assembler";
 import { addOlderMemories, InvalidSave, readSaveCopy } from "../src/save-store";
 import { settingsStore } from "../src/settings-store";
 import { textProvider } from "../src/text-provider";
-import { askForJson, type TextProvider, TurnFailed } from "../src/turn-engine";
+import { askForMemory, type TextProvider, TurnFailed } from "../src/turn-engine";
 import { readable } from "../src/web/chat-style";
 
 export class Refused extends Error {}
-
-const SceneMemoryReply = z.object({ scene_memory: z.string().refine((text) => text.trim() !== "") });
 
 /** Worked out from this script's own folder, so a worktree finds the checkout it came from. */
 export function mainSavesFolder() {
@@ -29,7 +26,7 @@ const fileId = (path: string) => {
 };
 
 /** By file identity, not by text, as case, slashes, \\?\ and \\localhost prefixes and junctions all reach the same folder. */
-export function assertIsACopy(path: string, savesFolder: string) {
+export function assertIsACopy(path: string, savesFolder = mainSavesFolder()) {
   if (!existsSync(path)) throw new Refused(`There's no file at ${path}.`);
   const saves = existsSync(savesFolder) ? fileId(savesFolder) : undefined;
   for (let at = realpathSync.native(path); ; at = dirname(at)) {
@@ -52,8 +49,8 @@ export async function backfill(path: string, provider: TextProvider, savesFolder
   const memories = [];
   for (const [index, batch] of batches.entries()) {
     print(`Batch ${index + 1} of ${batches.length}`);
-    const { scene_memory } = await askForJson(provider, backfillPrompt(batch), SceneMemoryReply, "The model refused a batch of Messages.", new AbortController().signal);
-    memories.push({ firstMessage: batch[0]!.id, lastMessage: batch.at(-1)!.id, text: scene_memory.trim() });
+    const text = await askForMemory(provider, batch, memories.at(-1)?.text, new AbortController().signal);
+    memories.push({ firstMessage: batch[0]!.id, lastMessage: batch.at(-1)!.id, text });
   }
   addOlderMemories(path, memories);
   print(`Wrote ${memories.length} Scene Memories covering ${older.length} Messages to ${path}`);

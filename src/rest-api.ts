@@ -22,7 +22,7 @@ import {
   StaleTurn,
 } from "./save-store";
 import { type SettingsChange, type SettingsStore, SettingsUpdate } from "./settings-store";
-import { textModels } from "./text-provider";
+import { textHosts, textModels } from "./text-provider";
 import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-turns";
 import { VisibleEdit, type World, type WorldEdit } from "./state-applier";
 import { ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
@@ -411,6 +411,9 @@ export function startServer(options: {
     const {
       textBaseUrl,
       textModel,
+      textRouting,
+      textHost,
+      textHostFallback,
       textApiKey,
       modelInstructions,
       imageProvider,
@@ -436,6 +439,9 @@ export function startServer(options: {
     return {
       textBaseUrl,
       textModel,
+      textRouting,
+      textHost,
+      textHostFallback,
       hasTextApiKey: textApiKey !== "",
       modelInstructions,
       imageProvider,
@@ -494,6 +500,9 @@ export function startServer(options: {
       // Only ever the saved server, so a key can't reach an address that is still being typed.
       "/settings/text-models": {
         GET: async (req) => Response.json({ models: await textModels(settings, req.signal) }),
+      },
+      "/settings/text-hosts": {
+        GET: async (req) => Response.json({ hosts: await textHosts(settings, new URL(req.url).searchParams.get("model") ?? "", req.signal) }),
       },
       // The prompt and Model Instructions alone, with no schema, so a failure points at the model and not at the app.
       "/settings/text-test": {

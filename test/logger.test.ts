@@ -183,15 +183,29 @@ test("an older Save logs its upgrade only once it's done", async () => {
 test("a refused operation gives a reason, and a repeat is counted, not refused", () => {
   const { refused } = applyOperations(openingState, [
     { op: "remove_item", item: "ZQX" },
-    { op: "add_known_npc", name: "ZQX" },
+    { op: "update_npc", name: "ZQX", appearance: "tall" },
   ]);
   expect(refused).toEqual([
     { op: "remove_item", reason: "not held" },
-    { op: "add_known_npc", reason: "no such NPC" },
+    { op: "update_npc", reason: "no such NPC" },
   ]);
 
   const fact = { op: "add_known_fact", fact: "ZQX" } as const;
   expect(applyOperations(openingState, [fact, fact, fact])).toMatchObject({ refused: [], repeats: 2 });
+});
+
+test("a stranger with no record or a repeated status is ignored, so the Turn isn't thrown away", () => {
+  const status = { op: "add_status", kind: "conditions", text: "tired" } as const;
+  const { next, refused, ignored } = applyOperations(openingState, [
+    { op: "add_known_npc", name: "ZQX" },
+    { op: "set_known_npc_summary", name: "ZQX", summary: "A stranger." },
+    status,
+    status,
+  ]);
+
+  expect(refused).toEqual([]);
+  expect(ignored.map(({ reason }) => reason)).toEqual(["no such NPC", "NPC not known", "already there"]);
+  expect(next.pcKnown.npcs).not.toContain("ZQX");
 });
 
 test("a refused Turn logs why, a retry its generation, and a repeat a count", async () => {

@@ -172,7 +172,7 @@ test("the next Turn hears a Journal edit, and a Revert undoes it and the Turn's 
   await edit(id, { edit: "looseEnd", old: null, new: MISSING });
   await turn(id);
 
-  expect(prompts[1]![0]!.content).toContain(MISSING);
+  expect(prompts[1]!.at(-2)!.content).toContain(MISSING);
   expect(ends(id)).toEqual([MISSING]);
 
   await app.post(`/saves/${id}/messages/2/revert`, {});

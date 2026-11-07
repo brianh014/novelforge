@@ -271,6 +271,26 @@ test.each([
   expect(await app.get("/settings/text-models").then((r) => r.json())).toEqual({ models: [] });
 });
 
+test("Settings lists a model's hosts once each, without prices, and sends only a model id in the path", async () => {
+  const paths: string[] = [];
+  const host = (provider_name: string, tag: string) => ({ provider_name, tag, pricing: { prompt: "0.000001" } });
+  const server = Bun.serve({
+    port: 0,
+    fetch(req) {
+      paths.push(new URL(req.url).pathname);
+      return Response.json({ data: { endpoints: [host("Cheap", "cheap/turbo"), host("Cheap", "cheap/fp8"), host("Dear", "dear")] } });
+    },
+  });
+  others.push(server);
+  startAt(new URL("/v1", server.url).href);
+  const hosts = (model: string) => app.get(`/settings/text-hosts?model=${encodeURIComponent(model)}`).then((r) => r.json());
+
+  expect(await hosts("a/model:free")).toEqual({ hosts: [{ slug: "cheap", name: "Cheap" }, { slug: "dear", name: "Dear" }] });
+  expect(await hosts("../../secret/x")).toEqual({ hosts: [] });
+  expect(await hosts("")).toEqual({ hosts: [] });
+  expect(paths).toEqual(["/v1/models/a/model/endpoints"]);
+});
+
 test("an unreachable server lists no models", async () => {
   startAt(await closedAddress());
 

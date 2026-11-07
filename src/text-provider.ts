@@ -51,21 +51,36 @@ async function* eventData(body: ReadableStream, onRead: () => void) {
 
 const keyHeader = (key: string): Record<string, string> => (key ? { Authorization: `Bearer ${key}` } : {});
 
+// A provider's tag is its slug, then sometimes a variant, such as `deepinfra/fp8`.
+const HostList = z.object({
+  data: z.object({
+    endpoints: z.array(
+      z.object({
+        provider_name: z.string(),
+        tag: z.string(),
+      }),
+    ),
+  }),
+});
+
 // `supported_parameters` is OpenRouter's, and a local server may put anything there or nothing.
 const ModelList = z.object({
   data: z.array(z.object({ id: z.string(), supported_parameters: z.array(z.string()).catch([]) })),
 });
 
-/** The server's models, or undefined without a usable answer. */
-async function listModels(url: string, headers: Record<string, string>, signal: AbortSignal, listMs: number) {
+/** The answer at `url`, or undefined without a usable one. */
+async function list<T>(url: string, shape: z.ZodType<T>, headers: Record<string, string>, signal: AbortSignal, listMs: number) {
   try {
     const limited = AbortSignal.any([signal, AbortSignal.timeout(listMs)]);
-    const response = await fetch(`${url}/models`, { headers, signal: limited });
-    return response.ok ? ModelList.parse(await response.json()).data : undefined;
+    const response = await fetch(url, { headers, signal: limited });
+    return response.ok ? shape.parse(await response.json()) : undefined;
   } catch {
     return undefined;
   }
 }
+
+const listModels = async (url: string, headers: Record<string, string>, signal: AbortSignal, listMs: number) =>
+  (await list(`${url}/models`, ModelList, headers, signal, listMs))?.data;
 
 /** The ids of the models on the saved server, empty if it doesn't list any. */
 export async function textModels(settings: SettingsStore, signal: AbortSignal) {
@@ -73,6 +88,26 @@ export async function textModels(settings: SettingsStore, signal: AbortSignal) {
   const models = await listModels(textBaseUrl.replace(/\/$/, ""), keyHeader(textApiKey), signal, LIMITS.listMs);
   return models?.map(({ id }) => id) ?? [];
 }
+
+// Goes into a path sent with the key, so nothing that could climb out of it.
+const MODEL_ID = /^\w[\w.-]*\/\w[\w.:-]*$/;
+
+/** Who hosts a model on the saved server, each once. Empty if it can't say. */
+export async function textHosts(settings: SettingsStore, model: string, signal: AbortSignal) {
+  if (!MODEL_ID.test(model)) return [];
+  const { textBaseUrl, textApiKey } = settings.read();
+  // A variant such as `:free` shares its model's page.
+  const url = `${textBaseUrl.replace(/\/$/, "")}/models/${model.split(":")[0]}/endpoints`;
+  const hosts = (await list(url, HostList, keyHeader(textApiKey), signal, LIMITS.listMs))?.data.endpoints ?? [];
+  const bySlug = new Map(hosts.map(({ provider_name, tag }) => [tag.split("/")[0]!, provider_name]));
+  return [...bySlug].map(([slug, name]) => ({ slug, name }));
+}
+
+type Routing = Pick<ReturnType<SettingsStore["read"]>, "textRouting" | "textHost" | "textHostFallback">;
+
+// Each host keeps its own prompt cache, so one host Turn after Turn is what makes the cache pay.
+const routing = ({ textRouting, textHost, textHostFallback }: Routing) =>
+  textHost ? { order: [textHost], allow_fallbacks: textHostFallback } : textRouting === "default" ? {} : { sort: textRouting };
 
 /** The one Text Provider: any OpenAI-compatible server, using the Settings at the time of each call. */
 export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LIMITS): TextProvider {
@@ -90,9 +125,10 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
   }
 
   return async (prompt, { schema, onText, onGeneration, signal }) => {
-    const { textBaseUrl, textApiKey, textModel } = settings.read();
+    const { textBaseUrl, textApiKey, textModel, ...chosen } = settings.read();
     if (!textModel) throw new TextProviderFailed("No text model is set, so choose one in Settings");
     const url = textBaseUrl.replace(/\/$/, "");
+    const openRouter = url.includes("openrouter.ai");
     const headers = keyHeader(textApiKey);
     const sent = prompt.map(({ content }) => content).join("\n");
     // A provider may echo what it was sent, and this text goes to the Server Log at Verbose, so no key and nothing of the prompt.
@@ -132,10 +168,9 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
           model: textModel,
           messages: prompt,
           stream: true,
-          ...(useSchema && {
-            response_format: { type: "json_schema", json_schema: { name: "narrator_response", strict: true, schema } },
-            provider: { require_parameters: true },
-          }),
+          ...(useSchema && { response_format: { type: "json_schema", json_schema: { name: "narrator_response", strict: true, schema } } }),
+          // A strict local server can refuse a field it doesn't know, so not sent to one without a schema.
+          ...((useSchema || openRouter) && { provider: { ...(useSchema && { require_parameters: true }), ...routing(chosen) } }),
         }),
       });
       heardFrom();

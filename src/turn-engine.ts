@@ -3,10 +3,11 @@ import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resol
 import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
 import { log } from "./logger";
-import { assemblePrompt, memoryDue, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
+import { assemblePrompt, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
-import { applyOperations, introduce, Person, type State, StateOperation } from "./state-applier";
+import { applyOperations, introduce, Person, type SceneMemory, type State, StateOperation } from "./state-applier";
+import { readable } from "./web/chat-style";
 
 /** Throws ContentRefused when the content is refused. Anything else it throws is a network or API error. */
 export type TextProvider = (
@@ -39,7 +40,6 @@ const FinishedTurn = z.object({
   state_operations: z.array(StateOperation).default([]),
   people: z.array(Person).catch([]),
   summary: z.string().catch(""),
-  scene_memory: z.string().catch(""),
   scene_changed: z.boolean().nullish(),
   visual_description: z.string().nullish(),
   // Without this, narration beside an invalid difficulty would pass as a finished Turn and dodge the Check.
@@ -72,7 +72,6 @@ const responseSchema = jsonSchemaOf(
     state_operations: z.array(StateOperation),
     people: z.array(Person),
     summary: z.string(),
-    scene_memory: z.string().nullable(),
     scene_changed: z.boolean().nullable(),
     visual_description: z.string().nullable(),
   }),
@@ -106,8 +105,8 @@ type Narrated = {
   refusal: string;
   pcName: string;
   check?: Check;
-  /** What a memory in this reply would cover, if one is due. Worked out here, so no reply can choose it. */
-  memoryRange: ReturnType<typeof memoryDue>;
+  /** The Scene Memory this Turn adds, if one is due and came back. */
+  memory: Promise<SceneMemory | null>;
   /** Left out when no new roll is allowed, which makes a Check request an invalid reply. */
   rollCheck?: (request: z.infer<typeof CheckRequest>) => Check;
   commit: (narration: string, check: Check | undefined, advance: (state: State) => State) => Message[];
@@ -150,7 +149,7 @@ export async function playTurn(
     input,
     refusal: "The Narrator refused this message. Edit it and try again.",
     pcName: saves.read(id).pc.name,
-    memoryRange: memoryDue(messages, state.sceneMemories, memoryStart),
+    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, signal),
     rollCheck: mayCheck ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
     committed: (messageId, scene) => images.sceneChanged(id, messageId, scene),
@@ -201,7 +200,7 @@ export async function replaceResponse(
     refusal: "The Narrator refused this, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
     check,
-    memoryRange: memoryDue(messages, state.sceneMemories, memoryStart),
+    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, signal),
     commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
     committed: (replacement, scene) => {
       images.forget(id, messageId - 1, kind);
@@ -218,7 +217,7 @@ async function narrate(
   textProvider: TextProvider,
   signal: AbortSignal,
   emit: TurnEvents,
-  { kind, prompt, input, refusal, pcName, check: storedCheck, memoryRange, rollCheck, commit, committed }: Narrated,
+  { kind, prompt, input, refusal, pcName, check: storedCheck, memory: pendingMemory, rollCheck, commit, committed }: Narrated,
 ) {
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check = storedCheck;
@@ -250,9 +249,8 @@ async function narrate(
         attempt = 0; // The result call gets its own retries.
         continue;
       }
-      const { narration, state_operations, people, summary, scene_memory, scene_changed, visual_description } = response;
-      // A missed memory costs nothing: the window keeps its Messages, and the next Turn asks again.
-      const memory = memoryRange && scene_memory.trim() ? { ...memoryRange, text: scene_memory.trim() } : null;
+      const { narration, state_operations, people, summary, scene_changed, visual_description } = response;
+      const memory = await pendingMemory;
       let moved = false;
       let location = "";
       let npcs: Scene["npcs"] = [];
@@ -349,6 +347,27 @@ async function askNarrator(
 }
 
 /** One reply matching `schema`, with the retries and failures of a Turn. Nothing streams, as a reply may hold secrets. */
+const SceneMemoryReply = z.object({ scene_memory: z.string().refine((text) => text.trim() !== "") });
+
+/** Throws as askForJson does. */
+export async function askForMemory(textProvider: TextProvider, batch: Message[], previous: string | undefined, signal: AbortSignal) {
+  const { scene_memory } = await askForJson(textProvider, memoryPrompt(batch, previous), SceneMemoryReply, "The model refused a batch of Messages.", signal);
+  return scene_memory.trim();
+}
+
+/** Runs beside the Turn, so the player waits no longer. A missed memory costs nothing: the window keeps its Messages, and the next Turn asks again. */
+async function nextMemory(textProvider: TextProvider, messages: Message[], sceneMemories: SceneMemory[], memoryStart: number, signal: AbortSignal) {
+  const range = memoryDue(messages, sceneMemories, memoryStart);
+  if (!range) return null;
+  const batch = readable(messages.filter(({ id }) => id >= range.firstMessage && id <= range.lastMessage));
+  try {
+    return { ...range, text: await askForMemory(textProvider, batch, sceneMemories.at(-1)?.text, signal) };
+  } catch (cause) {
+    log.warning("turn", "Scene Memory missed", { reason: cause instanceof Error ? cause.message : "unknown" });
+    return null;
+  }
+}
+
 export async function askForJson<T>(
   textProvider: TextProvider,
   prompt: Prompt,

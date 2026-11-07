@@ -1,4 +1,4 @@
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { WORKFLOW_EXAMPLE } from "../comfy-workflow";
 import { chosenModels } from "../graph-builder";
@@ -9,11 +9,13 @@ import {
   getComfyModels,
   getSave,
   getSettings,
+  getTextHosts,
   getTextModels,
   OPENROUTER_URL,
   saveArtStyle,
   saveSettings,
   type Settings,
+  type TextHost,
   type TextTest,
 } from "./api";
 import { BookTabs, Sheet } from "./menu";
@@ -118,6 +120,127 @@ function ModelSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+/** Whether `text` holds every word searched for, in any order, so "mimo pro" finds "xiaomi/mimo-v2.6-pro". */
+export function matches(text: string, search: string) {
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  return words.every((word) => text.toLowerCase().includes(word));
+}
+
+type Choice = { value: string; label: string };
+
+function Picker({
+  label,
+  empty,
+  value,
+  choices,
+  onChange,
+}: {
+  label: string;
+  empty?: string;
+  value: string;
+  choices: Choice[];
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [active, setActive] = useState(0);
+  const picker = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+  const list = useRef<HTMLUListElement>(null);
+  const found = choices.filter((choice) => matches(choice.label, search));
+
+  useEffect(() => {
+    if (!open) return;
+    const away = ({ target }: PointerEvent) => !picker.current?.contains(target as Node) && setOpen(false);
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) list.current?.querySelector("[data-active]")?.scrollIntoView({ block: "nearest" });
+  }, [open, active]);
+
+  const choose = (chosen: string) => {
+    onChange(chosen);
+    setOpen(false);
+    button.current?.focus();
+  };
+
+  function keys(event: KeyboardEvent<HTMLInputElement>) {
+    const moves: Record<string, () => void> = {
+      ArrowDown: () => setActive(Math.min(active + 1, found.length - 1)),
+      ArrowUp: () => setActive(Math.max(active - 1, 0)),
+      // Enter would save the form, and Escape would close Settings.
+      Enter: () => found[active] && choose(found[active].value),
+      Escape: () => {
+        setOpen(false);
+        button.current?.focus();
+      },
+    };
+    const move = moves[event.key];
+    if (!move) return;
+    event.preventDefault();
+    event.stopPropagation();
+    move();
+  }
+
+  return (
+    <div className="picker" ref={picker}>
+      <span id={`${id}-label`}>{label}</span>
+      <button
+        type="button"
+        ref={button}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={`${id}-label ${id}-value`}
+        onClick={() => {
+          setSearch("");
+          setActive(Math.max(choices.findIndex((choice) => choice.value === value), 0));
+          setOpen(!open);
+        }}
+      >
+        <span id={`${id}-value`}>{choices.find((choice) => choice.value === value)?.label ?? (value || empty)}</span>
+      </button>
+      {open && (
+        <div className="picker-panel">
+          <input
+            autoFocus
+            role="combobox"
+            aria-label={`Search ${label}`}
+            aria-expanded
+            aria-controls={`${id}-list`}
+            aria-activedescendant={found[active] && `${id}-${active}`}
+            autoComplete="off"
+            placeholder={`Search ${choices.length} options`}
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setActive(0);
+            }}
+            onKeyDown={keys}
+          />
+          <ul id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} ref={list}>
+            {found.map((choice, at) => (
+              <li
+                key={choice.value}
+                id={`${id}-${at}`}
+                role="option"
+                aria-selected={choice.value === value}
+                data-active={at === active || undefined}
+                onClick={() => choose(choice.value)}
+              >
+                {choice.label}
+              </li>
+            ))}
+            {found.length === 0 && <li className="muted">Nothing matches.</li>}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -573,7 +696,6 @@ function InstallSettings({
 
   useEffect(() => {
     setModels(undefined);
-    if (saved.textBaseUrl === OPENROUTER_URL) return;
     let current = true;
     const show = (list: string[]) => current && setModels(list);
     getTextModels().then(show, () => show([]));
@@ -581,6 +703,22 @@ function InstallSettings({
       current = false;
     };
   }, [saved]);
+
+  const [hosts, setHosts] = useState<TextHost[]>([]);
+  const hostsListed = !local && addressSaved && !!models?.includes(draft.textModel);
+
+  useEffect(() => {
+    setHosts([]);
+    if (!hostsListed) return;
+    let current = true;
+    getTextHosts(draft.textModel).then((list) => current && setHosts(list), () => {});
+    return () => {
+      current = false;
+    };
+  }, [hostsListed, draft.textModel]);
+
+  // Hosts differ by model, so the old one may not offer a new one.
+  const chooseModel = (textModel: string) => set({ textModel, textHost: textModel === draft.textModel ? draft.textHost : "" });
 
   const losesKey = saved.hasTextApiKey && draft.textBaseUrl !== saved.textBaseUrl && !textKey.trim();
   const keyHint = (stored: boolean) => (stored ? "Saved. Type a new key to replace it." : "None saved");
@@ -639,23 +777,59 @@ function InstallSettings({
           />
         </label>
       )}
-      <label>
-        Text model
-        {local && addressSaved && models?.length ? (
-          <select value={draft.textModel} onChange={(e) => set({ textModel: e.target.value })}>
-            {!draft.textModel && <option value="">Choose a model</option>}
-            {/* A saved model the server doesn't list stays as it is until the player changes it. */}
-            {[...new Set([draft.textModel, ...models])].filter(Boolean).map((model) => (
-              <option key={model}>{model}</option>
-            ))}
-          </select>
-        ) : (
-          <input value={draft.textModel} onChange={(e) => set({ textModel: e.target.value })} />
-        )}
-      </label>
+      {addressSaved && models?.length ? (
+        <Picker
+          label="Text model"
+          empty="Choose a model"
+          value={draft.textModel}
+          choices={models.map((model) => ({ value: model, label: model }))}
+          onChange={chooseModel}
+        />
+      ) : (
+        <label>
+          Text model
+          <input value={draft.textModel} onChange={(e) => chooseModel(e.target.value)} />
+        </label>
+      )}
       {local && !addressSaved && <p className="muted">Save the address to choose from this server's models.</p>}
-      {local && addressSaved && models?.length === 0 && (
+      {addressSaved && models?.length === 0 && (
         <p className="muted">No models listed. Make sure the server is running, or type the model's name.</p>
+      )}
+      {!local && (
+        <>
+          <Picker
+            label="Provider"
+            value={draft.textHost}
+            choices={[
+              { value: "", label: "Any, using the routing below" },
+              // A saved one stays as it is while its model's hosts load, or if they no longer include it.
+              ...(draft.textHost && !hosts.some(({ slug }) => slug === draft.textHost) ? [{ value: draft.textHost, label: draft.textHost }] : []),
+              ...hosts.map(({ slug, name }) => ({ value: slug, label: name })),
+            ]}
+            onChange={(textHost) => set({ textHost })}
+          />
+          {draft.textHost ? (
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={draft.textHostFallback}
+                onChange={(e) => set({ textHostFallback: e.target.checked })}
+              />
+              If this provider is down, let OpenRouter use another
+            </label>
+          ) : (
+            <label>
+              Routing
+              <select value={draft.textRouting} onChange={(e) => set({ textRouting: e.target.value as Settings["textRouting"] })}>
+                <option value="price">Cheapest</option>
+                <option value="throughput">Fastest writing</option>
+                <option value="latency">Quickest to start</option>
+                <option value="default">OpenRouter's choice</option>
+              </select>
+            </label>
+          )}
+          <p className="muted">Staying on one provider keeps its prompt cache, which can cut the cost of a Turn.</p>
+        </>
       )}
       <label>
         {local ? "Text API key (most local servers need none)" : "Text API key"}
