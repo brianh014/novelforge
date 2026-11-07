@@ -110,3 +110,13 @@ test("the Narrator may invent the present but not the PC's past, and that rule l
   expect(lastSystem()).toContain("something the PC did, said or was told earlier");
   expect(prompts.at(-1)![0]!.content).not.toContain("Invent freely");
 });
+
+test("the Narrator stops when someone waits on the PC, and that rule leaves the cached start alone", async () => {
+  play(summed("Ash reached the docks."));
+  const id = await app.createSave();
+
+  await playTurn(id);
+
+  expect(lastSystem()).toContain("end the reply there");
+  expect(prompts.at(-1)![0]!.content).not.toContain("end the reply there");
+});
