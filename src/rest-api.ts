@@ -85,6 +85,9 @@ const PickRequest = z.object({
   pc: PcBoxes.optional(),
 });
 
+// A `draft` is the player's own move to Enhance. Without one, the PC's next move is written from scratch.
+const DecideRequest = z.object({ draft: z.string().trim().max(4000).default("") });
+
 // Any box may be empty, and an empty `text` asks for that box to be written from scratch.
 const EnhanceRequest = z.object({
   field: z.enum(ENHANCE_FIELDS),
@@ -883,10 +886,10 @@ export function startServer(options: {
       },
       "/saves/:id/decide": {
         POST: async (req) => {
-          await parseBody(req, NoFields);
+          const { draft } = await parseBody(req, DecideRequest);
           const { id } = req.params;
           const story = { save: saves.read(id), state: saves.latestState(id), messages: saves.messages(id) };
-          return Response.json({ text: await decideForPc(options, story, req.signal) });
+          return Response.json({ text: await decideForPc(options, story, req.signal, draft) });
         },
       },
       "/saves/:id/messages": {

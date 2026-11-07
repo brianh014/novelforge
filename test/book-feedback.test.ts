@@ -181,6 +181,22 @@ test("Decide for me writes the PC's next move from what the player can read, and
   expect(saveStore(savesDir).messages(id)).toHaveLength(2);
 });
 
+test("Decide for me with words in the box Enhances them, keeping the player's draft in the prompt", async () => {
+  const script = scriptedTextProvider(sheet, generated, narration("A boat drifts near."), JSON.stringify({ text: "I cup my hands and hail the boat." }));
+  app = startApp(savesDir, script.textProvider);
+  const world = await newWorld();
+  const id = await begin(world);
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  const response = await app.post(`/saves/${id}/decide`, { draft: "i hail boat" });
+
+  expect(await response.json()).toEqual({ text: "I cup my hands and hail the boat." });
+  const prompt = JSON.stringify(script.prompts.at(-1));
+  expect(prompt).toContain("i hail boat");
+  expect(prompt).toContain("Keep every action");
+  expect(prompt).not.toContain(SECRET);
+});
+
 test("the theme is a stored setting that follows the device until the player picks one", async () => {
   app = startApp(savesDir, scriptedTextProvider().textProvider);
   const read = async () => ((await (await app.get("/settings")).json()) as { theme: string }).theme;

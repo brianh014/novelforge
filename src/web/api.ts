@@ -175,8 +175,8 @@ export const drawOnForm = (
   ask: { id?: string; artStyle: string } & ({ kind: "cover"; title: string; theme: string; worldBrief: string } | { kind: "portrait"; name: string; physicalTraits: string }),
 ) => request<{ id: string }>("/worlds/draw", jsonBody(ask));
 
-export const decideForMe = (id: string, signal?: AbortSignal) =>
-  request<{ text: string }>(`/saves/${id}/decide`, { ...jsonBody({}), signal }).then(({ text }) => text);
+export const decideForMe = (id: string, draft: string, signal?: AbortSignal) =>
+  request<{ text: string }>(`/saves/${id}/decide`, { ...jsonBody({ draft }), signal }).then(({ text }) => text);
 
 export const portraitUrl = (id: string, { id: portraitId, redraws }: Pick<Portrait, "id" | "redraws">) =>
   `/saves/${id}/portraits/${portraitId}?v=${redraws}`;

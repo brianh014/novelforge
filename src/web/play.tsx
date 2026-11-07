@@ -176,6 +176,8 @@ export function Play({ id }: { id: string }) {
   const [draft, setDraft] = useState("");
   const [turn, setTurn] = useState<TurnInProgress>();
   const [deciding, setDeciding] = useState(false);
+  /** The player's words before an Enhance, which Undo puts back while the box still holds the Enhanced text. */
+  const [enhanced, setEnhanced] = useState<{ was: string; now: string }>();
   // The response being rewritten, by id, so the box goes if the story moves on from it.
   const [rewriting, setRewriting] = useState<number>();
   // Whether that box holds the response's own words for an Edit, rather than feedback for a Rewrite.
@@ -288,7 +290,7 @@ export function Play({ id }: { id: string }) {
 
   function send(event: FormEvent) {
     event.preventDefault();
-    if (turn || !draft.trim()) return;
+    if (turn || deciding || !draft.trim()) return;
     setDraft("");
     playInput(draft, messages);
   }
@@ -303,10 +305,13 @@ export function Play({ id }: { id: string }) {
   }
 
   async function decide() {
-    if (turn || deciding || draft.trim()) return;
+    if (turn || deciding) return;
     setDeciding(true);
     try {
-      setDraft(await decideForMe(id, leaving.current.signal));
+      const was = draft.trim();
+      const now = await decideForMe(id, was, leaving.current.signal);
+      setEnhanced(was ? { was: draft, now } : undefined);
+      setDraft(now);
       inputBox.current?.focus();
     } catch (failure) {
       if (!leaving.current.signal.aborted) setError((failure as Error).message);
@@ -782,7 +787,8 @@ export function Play({ id }: { id: string }) {
             rows={1}
             placeholder={deciding ? "The Narrator is deciding…" : `What does ${pc} say or do?`}
             value={draft}
-            readOnly={!!turn}
+            // While deciding, the reply would overwrite anything typed.
+            readOnly={!!turn || deciding}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={sendOnEnter}
           />
@@ -803,13 +809,23 @@ export function Play({ id }: { id: string }) {
           <button
             type="button"
             className="icon"
-            title={draft.trim() ? "Decide for me: clear the box first" : "Decide for me"}
-            aria-label="Decide for me"
-            aria-disabled={!!turn || deciding || !!draft.trim()}
+            title={draft.trim() ? "Enhance what you wrote" : "Decide for me"}
+            aria-label={draft.trim() ? "Enhance" : "Decide for me"}
+            aria-disabled={!!turn || deciding}
             onClick={decide}
           >
             {DecideIcon}
           </button>
+          {enhanced && enhanced.now === draft && (
+            <button type="button" className="quiet" onClick={() => setDraft(enhanced.was)}>
+              Undo
+            </button>
+          )}
+          {deciding && !!draft.trim() && (
+            <span role="status" className="waiting">
+              Enhancing…
+            </span>
+          )}
           {!draft.trim() && (
             <button
               type="button"
@@ -823,7 +839,7 @@ export function Play({ id }: { id: string }) {
             </button>
           )}
           {/* aria-disabled, because a disabled button would drop keyboard focus at every Send. */}
-          <button className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || !draft.trim()}>
+          <button className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !draft.trim()}>
             {SendIcon}
           </button>
         </div>
