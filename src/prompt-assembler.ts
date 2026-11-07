@@ -219,7 +219,8 @@ export function replacementInstruction(rewrite?: { narration: string; feedback: 
     }${
       rewrite
         ? `
-The player rejected the earlier response and gave out-of-character feedback on it, delimited as JSON. Follow the feedback in the new response, while keeping to world_rules: ${JSON.stringify({ rejected_response: rewrite.narration, feedback: rewrite.feedback })}`
+The player rejected the earlier response, given here as JSON: ${JSON.stringify({ rejected_response: rewrite.narration })}
+They gave out-of-character direction for the new response, below as a JSON string. Unlike an in_character message, it is the player's instruction to you: carry it out in full, so that everything it asks for clearly happens in the new response, and let only world_rules stop it. Direction: ${JSON.stringify(rewrite.feedback)}`
         : ""
     }`,
   };
