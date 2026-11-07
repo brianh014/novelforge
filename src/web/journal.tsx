@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { editJournal, getImages, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, tellNarrator } from "./api";
+import { editJournal, getImages, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, statusWords, tellNarrator } from "./api";
 import { ContinueRule, isContinue, readable } from "./chat-style";
 import { EditIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
@@ -224,11 +224,9 @@ export function Journal({ id }: { id: string }) {
                 </Editable>
               </>
             )}
-            {pcPortrait && (
-              <p className="person">
-                <Person id={id} name={save.pc.name} portrait={pcPortrait} />
-              </p>
-            )}
+            <p className="person">
+              <Person id={id} name={save.pc.name} portrait={pcPortrait} who={statusWords(journal.status)} />
+            </p>
             <h2>World Brief</h2>
             <Editable label="World Brief" text={save.worldBrief} onSave={(text) => edit({ edit: "worldBrief", text })}>
               <p>{save.worldBrief}</p>

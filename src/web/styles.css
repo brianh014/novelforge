@@ -217,6 +217,14 @@ h2 {
   grid-template-columns: 256px minmax(0, 1fr);
 }
 
+.book.sheet:not(:has(> .sheet-rail)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sheet-foot .leave {
+  margin-right: auto;
+}
+
 .sheet-rail {
   min-height: 0;
   padding: 14px 22px;
@@ -756,7 +764,8 @@ input {
   overflow-wrap: anywhere;
 }
 
-.workflow {
+.workflow,
+.wizard textarea {
   resize: vertical;
 }
 
@@ -1400,30 +1409,6 @@ a.action {
 
 .status::first-letter {
   text-transform: uppercase;
-}
-
-.items {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.items button {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  padding: 6px 0;
-  border: 0;
-  border-bottom: 1px dotted var(--muted);
-  background: none;
-  text-align: left;
-  overflow-wrap: anywhere;
-  cursor: pointer;
-}
-
-.items button:hover,
-.items [aria-current] {
-  color: var(--accent);
 }
 
 /* Stuck to the page's foot, so a long list can't hide the box or its Send. */

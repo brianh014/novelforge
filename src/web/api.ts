@@ -6,12 +6,11 @@ import type { LogLevel } from "../logger";
 import type { ImageTarget, Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State, VisibleEdit } from "../state-applier";
-import type { EnhanceField, PcDraft, WorldChoices, WorldField, WorldPc } from "../world-creation";
+import type { Character, EnhanceField, PcDraft, WorldChoices, WorldField, WorldPc } from "../world-creation";
 
-export type { EnhanceField, ImageKind, Message, PcDraft, Save, WorldChoices, WorldField };
+export type { Character, EnhanceField, ImageKind, Message, PcDraft, Save, WorldChoices, WorldField };
 export type ListedSave = ReturnType<SaveStore["list"]>[number];
 export type OpenSave = ReturnType<SaveStore["read"]>;
-export type Inventory = State["inventory"];
 export type Status = State["status"];
 export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKey"> & {
   defaultLogLevel: LogLevel;
@@ -21,7 +20,7 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   workflowProblem: string;
 };
 export type TextHost = Awaited<ReturnType<typeof textHosts>>[number];
-export type Journal = { storyTime: { date: string; timeOfDay: string } | null; summary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[]; chapters: Chapter[] };
+export type Journal = { status: Status; storyTime: { date: string; timeOfDay: string } | null; summary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[]; chapters: Chapter[] };
 /** The open Chapter is last, with a null `lastMessage`. */
 export type Chapter = { title: string; lastMessage: number | null };
 /** A null `npc` is the PC. */
@@ -181,8 +180,6 @@ export const decideForMe = (id: string, draft: string, signal?: AbortSignal) =>
 export const portraitUrl = (id: string, { id: portraitId, redraws }: Pick<Portrait, "id" | "redraws">) =>
   `/saves/${id}/portraits/${portraitId}?v=${redraws}`;
 
-export const getInventory = (id: string) => request<Inventory>(`/saves/${id}/inventory`);
-
 export const getStatus = (id: string) => request<Status>(`/saves/${id}/status`);
 
 export const statusWords = ({ health, injuries, conditions }: Status) =>
@@ -206,7 +203,7 @@ export const pickForMe = (theme: string, form: Partial<Record<WorldField, string
 export const enhance = (
   field: EnhanceField,
   text: string,
-  choices: Omit<WorldChoices, "artStyle"> & { pc?: PcDraft },
+  choices: Omit<WorldChoices, "artStyle"> & { pc?: PcDraft; character?: Character },
   signal?: AbortSignal,
 ) => request<{ text: string }>("/enhance", { ...jsonBody({ ...choices, field, text }), signal }).then(({ text }) => text);
 

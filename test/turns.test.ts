@@ -87,15 +87,13 @@ test("a failed replacement with nobody watching remembers what it replaced", asy
   expect(takeMissedFailure("replaced")).toEqual({ error: "No", input: "Shorter.", replaces: 2 });
 });
 
-const page = { running: false, failure: false, action: false, unopened: false };
+const page = { running: false, failure: false, unopened: false };
 
 test.each([
   ["a quiet story", page, "wait"],
   ["an unopened story", { ...page, unopened: true }, "open"],
-  ["an item waiting to be used", { ...page, action: true }, "play"],
-  ["a running Turn, ahead of all else", { ...page, running: true, failure: true, action: true, unopened: true }, "follow"],
+  ["a running Turn, ahead of all else", { ...page, running: true, failure: true, unopened: true }, "follow"],
   ["a failed Opening, which must not be paid for again", { ...page, failure: true, unopened: true }, "wait"],
-  ["a failure with an item waiting", { ...page, failure: true, action: true }, "wait"],
 ])("a page opening on %s", (_, state, move) => {
   expect(firstMove(state)).toBe(move);
 });

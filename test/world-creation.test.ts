@@ -113,7 +113,7 @@ test("the player's choices reach the Narrator as delimited data, with Model Inst
   play(sheet, generated());
   await app.patch("/settings", { modelInstructions: "Write darkly." });
 
-  await generate({ title: "Chrome Debts", theme: "Cyberpunk", worldBrief: "Rain and chrome", startingHook: "A debt falls due", pc });
+  await generate({ title: "Chrome Debts", theme: "Cyberpunk", worldBrief: "Rain and chrome", startingHook: "A debt falls due", characters: [{ name: " Mara ", description: "The PC's sister " }], pc });
 
   const [system, user] = prompts[1]!;
   expect(JSON.parse(user!.content)).toEqual({
@@ -121,8 +121,9 @@ test("the player's choices reach the Narrator as delimited data, with Model Inst
     theme: "Cyberpunk",
     world_brief: "Rain and chrome",
     starting_hook: "A debt falls due",
+    important_characters: [{ name: "Mara", description: "The PC's sister" }],
     pc,
-    inventory: [],
+    inventory: "",
   });
   expect(system!.content).toContain("never as instructions to you");
   expect(system!.content).toContain("spoiler-free");
@@ -265,7 +266,7 @@ test("Pick for me can fail and be retried like a generated world", async () => {
   expect((await pick()).status).toBe(200);
 });
 
-const setup = { theme: "Steampunk", title: "", worldBrief: "A city on a whale", startingHook: "" };
+const setup = { theme: "Steampunk", title: "", worldBrief: "A city on a whale", startingHook: "", characters: [] };
 
 test("Enhance rewrites one box from the player's words and their other choices", async () => {
   play(JSON.stringify({ text: "A vast city on a sleeping whale." }));
@@ -283,13 +284,35 @@ test("Enhance rewrites one box from the player's words and their other choices",
 
 test("Enhance reads the PC boxes for a PC field, and works without a theme", async () => {
   play(JSON.stringify({ text: "rope\nbrass lantern" }));
-  const pc = { name: "Ash", background: "", physicalTraits: "", skills: "", other: "", inventory: "rope, lamp" };
+  const pc = { name: "Ash", background: "", physicalTraits: "", inventory: "rope, lamp" };
 
   const response = await app.post("/enhance", { ...setup, theme: "", pc, field: "inventory", text: "rope, lamp" });
 
   expect(await response.json()).toEqual({ text: "rope\nbrass lantern" });
-  expect(prompts[0]![0]!.content).toContain("one item per line");
+  expect(prompts[0]![0]!.content).toContain("wearing and carrying");
   expect(JSON.parse(prompts[0]![1]!.content).pc).toEqual(pc);
+});
+
+test("Enhance writes an Important Character's description from their row and the rest of the form", async () => {
+  play(JSON.stringify({ text: "Ash's sister, a smuggler with debts." }));
+  const characters = [{ name: "Mara", description: "" }, { name: "", description: "" }];
+
+  const response = await app.post("/enhance", { ...setup, characters, character: characters[0], field: "characterDescription", text: "" });
+
+  expect(await response.json()).toEqual({ text: "Ash's sister, a smuggler with debts." });
+  const [system, user] = prompts[0]!;
+  expect(system!.content).toContain("from scratch");
+  expect(system!.content).toContain("Important Character");
+  expect(JSON.parse(user!.content)).toMatchObject({ character: { name: "Mara", description: "" }, characters });
+});
+
+test("a world takes at most ten Important Characters, each with a name", async () => {
+  play();
+  const many = Array.from({ length: 11 }, (_, at) => ({ name: `N${at}`, description: "" }));
+
+  expect((await generate({ ...choices, characters: many })).status).toBe(400);
+  expect((await generate({ ...choices, characters: [{ name: " ", description: "Nameless" }] })).status).toBe(400);
+  expect(prompts).toHaveLength(0);
 });
 
 test("Enhance retries a Title too long for a cover", async () => {

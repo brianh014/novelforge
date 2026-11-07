@@ -161,7 +161,7 @@ test("the text call gets the recent story and the Scene's people with their look
     ...Array.from({ length: 12 }, (_, index) => png(index)),
   );
   const world = (await (
-    await app.post("/worlds", { title: "Salt", theme: "Western", worldBrief: "A drowned city", startingHook: "", pc: { name: "Ash", physicalTraits: "cropped hair" }, inventory: ["a tin badge"] })
+    await app.post("/worlds", { title: "Salt", theme: "Western", worldBrief: "A drowned city", startingHook: "", pc: { name: "Ash", physicalTraits: "cropped hair" }, inventory: "A tin badge." })
   ).json()) as { id: string };
   const { id } = (await (await app.post(`/worlds/${world.id}/begin`, { artStyle: "" })).json()) as { id: string };
   await playTurn(id);

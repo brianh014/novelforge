@@ -43,15 +43,7 @@ import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from 
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
 
-// An item's action, which the Story plays as a Turn once it has loaded, so it streams like any other.
-const itemActions = new Map<string, string>();
-
 const RECENT_LOOSE_ENDS = 3;
-
-export function playItemAction(id: string, input: string) {
-  itemActions.set(id, input);
-  location.hash = `/play/${id}`;
-}
 
 // Often enough to feel prompt, as an image takes many seconds anyway.
 export const IMAGE_CHECK_MS = 2000;
@@ -202,8 +194,6 @@ export function Play({ id }: { id: string }) {
   const duplicating = useRef(false);
 
   useEffect(() => {
-    const action = itemActions.get(id);
-    itemActions.delete(id);
     // Taken now, as it may finish while the page loads, and its Messages must not be missed.
     const inProgress = runningTurn(id);
     const missed = takeMissedFailure(id);
@@ -229,14 +219,10 @@ export function Play({ id }: { id: string }) {
       const move = firstMove({
         running: !!(inProgress || resumed),
         failure: !!failure,
-        action: !!action,
         // Without a working Narrator this would only fail, and the page already says what to fix.
         unopened: messages.length === 0 && !!settings && !setupProblem(settings),
       });
-      // One Turn at a time, so an item used meanwhile waits in the box.
-      if (action && move !== "play" && !failure?.input) setDraft(action);
       if (move === "follow") follow(inProgress ?? resumed!);
-      else if (move === "play") playInput(action!, messages);
       else if (move === "open") openStory();
     }, (failure: Error) => setLoadError(failure.message));
     checkImages();

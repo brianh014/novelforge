@@ -52,9 +52,8 @@ export function takeMissedFailure(id: string) {
 }
 
 /** What a story page does once loaded. A failure waits for the player, as going on would pay again and clear the error. */
-export function firstMove(page: { running: boolean; failure: boolean; action: boolean; unopened: boolean }) {
+export function firstMove(page: { running: boolean; failure: boolean; unopened: boolean }) {
   if (page.running) return "follow";
   if (page.failure) return "wait";
-  if (page.action) return "play";
   return page.unopened ? "open" : "wait";
 }

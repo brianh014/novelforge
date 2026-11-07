@@ -209,13 +209,13 @@ test("the theme is a stored setting that follows the device until the player pic
 });
 
 test("a Save from before the personality field went keeps it, and a new PC can't ask for one", async () => {
-  const script = scriptedTextProvider(JSON.stringify({ startingHook: "H", name: "Ash", background: "B", physicalTraits: "T", skills: "S", other: "O", inventory: "I" }));
+  const script = scriptedTextProvider(JSON.stringify({ startingHook: "H", name: "Ash", background: "B", physicalTraits: "T", inventory: "I" }));
   app = startApp(savesDir, script.textProvider);
   const created = await app.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", personality: "Dry." } });
   const { id } = (await created.json()) as { id: string };
   expect(saveStore(savesDir).read(id).pc.personality).toBe("Dry.");
 
-  const pc = { name: "", background: "", physicalTraits: "", skills: "", other: "", inventory: "" };
+  const pc = { name: "", background: "", physicalTraits: "", inventory: "" };
   expect((await app.post("/worlds/pick", { ...choices, pc })).status).toBe(200);
   expect(JSON.stringify(script.prompts[0])).not.toContain("personality");
 });

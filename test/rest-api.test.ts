@@ -1365,6 +1365,8 @@ test("the root serves the SPA page", async () => {
 const journalOf = (app: ReturnType<typeof startApp>, id: string) =>
   app.get(`/saves/${id}/journal`).then((r) => r.json());
 
+const UNHURT = { health: "unhurt", injuries: [], conditions: [] };
+
 test("the Journal holds the recent summary, what the PC knows, known NPCs and the Full Log", async () => {
   const { app } = play(
     narration(
@@ -1380,6 +1382,7 @@ test("the Journal holds the recent summary, what the PC knows, known NPCs and th
   await app.post(`/saves/${id}/turns`, { input: "I wave back." });
 
   expect(await journalOf(app, id)).toEqual({
+    status: UNHURT,
     storyTime: null,
     summary: "Ash reached the docks.",
     facts: ["The ferry stopped running."],
@@ -1437,7 +1440,7 @@ test("the Journal of a new Save is empty, and a missing Save has none", async ()
   const { app } = play();
   const id = await app.createSave();
 
-  expect(await journalOf(app, id)).toEqual({ storyTime: null, summary: "", facts: [], looseEnds: [], sceneMemories: [], npcs: [], npcSummaries: {}, recentNpcs: [], portraits: [], fullLog: [], chapters: [{ title: "", lastMessage: null }] });
+  expect(await journalOf(app, id)).toEqual({ status: UNHURT, storyTime: null, summary: "", facts: [], looseEnds: [], sceneMemories: [], npcs: [], npcSummaries: {}, recentNpcs: [], portraits: [], fullLog: [], chapters: [{ title: "", lastMessage: null }] });
   expect((await app.get(`/saves/${crypto.randomUUID()}/journal`)).status).toBe(404);
 });
 
@@ -1495,6 +1498,7 @@ test("after a Revert, the Journal matches the restored Snapshot", async () => {
   const { pcKnown } = (await snapshotAt(app, id, 2)) as State;
   expect(pcKnown).toEqual({ facts: ["first-fact"], npcs: ["Mara"] });
   expect(await journalOf(app, id)).toEqual({
+    status: UNHURT,
     storyTime: null,
     summary: "first-summary",
     ...pcKnown,

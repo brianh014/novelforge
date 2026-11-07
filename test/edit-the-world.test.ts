@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
-import { mergeWorldUpdate } from "../src/state-applier";
+import { applyOperations, mergeWorldUpdate, openingState } from "../src/state-applier";
 import { ContentRefused, TextProviderFailed } from "../src/turn-engine";
 import { logOf, narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
@@ -382,6 +382,34 @@ test("one Narrator call applies a hidden change, and the player hears only that 
     plotThreads: WORLD.plotThreads,
   });
   expect(await journal(id)).toEqual(before);
+});
+
+test("a World Change can fix what the PC wears and carries, and their status, which the Journal shows", async () => {
+  play(update({ inventory: { wearing: ["oilskin coat"], carrying: ["brass lantern"] }, status: { health: "bruised", injuries: [], conditions: ["soaked"] } }));
+  const id = createSave();
+
+  const response = await change(id, "Ash never dropped the lantern, and he is soaked");
+
+  expect(response.status).toBe(200);
+  expect(store().latestState(id).inventory).toEqual({ wearing: ["oilskin coat"], carrying: ["brass lantern"] });
+  expect((await journal(id)).status).toEqual({ health: "bruised", injuries: [], conditions: ["soaked"] });
+  expect(prompts[0]![0]!.content).toContain('"inventory":{"wearing":[],"carrying":[]}');
+});
+
+test("a World Change's status with a numeral is retried, and one left out changes nothing", async () => {
+  play(update({ status: { health: "2 hit points", injuries: [], conditions: [] } }), update({ summary: "It rained harder." }));
+  const id = createSave();
+
+  expect((await change(id, "it rains harder")).status).toBe(200);
+
+  expect(prompts).toHaveLength(2);
+  expect(store().latestState(id).status).toEqual(openingState.status);
+});
+
+test("the PC keeps only their latest three injuries and conditions, however many the Narrator adds", () => {
+  const added = ["a cut", "a bruise", "a burn", "a sprain"].map((text) => ({ op: "add_status" as const, kind: "injuries" as const, text }));
+
+  expect(applyOperations(openingState, added).next.status.injuries).toEqual(["a bruise", "a burn", "a sprain"]);
 });
 
 test("a World Change can change the Journal's text as well as the hidden world", async () => {

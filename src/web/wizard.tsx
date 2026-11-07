@@ -1,8 +1,9 @@
-import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ART_EXAMPLES } from "./art-examples";
 import { ART_STYLES } from "./art-styles";
 import {
   beginStory,
+  type Character,
   drawOnForm,
   type EnhanceField,
   enhance,
@@ -40,10 +41,6 @@ const THEMES: Record<string, string> = {
   Horror: "Ordinary lives unravel as something terrible closes in, and safety never lasts.",
   Noir: "Rain-slick streets, crooked cops and secrets that someone will kill to keep.",
 };
-const STEPS = [
-  { href: "#/new", name: "Of the World and the PC" },
-  { href: "#/new/overview", name: "The World Overview" },
-];
 
 const OWN_THEME = "Create your own";
 
@@ -56,9 +53,10 @@ const blank = {
   title: "",
   hookOn: true,
   startingHook: "",
+  characters: [] as Character[],
   artStyle: Object.keys(ART_STYLES)[0]!,
   ownArtStyle: "",
-  pc: { name: "", background: "", physicalTraits: "", skills: "", other: "", inventory: "" } as PcDraft,
+  pc: { name: "", background: "", physicalTraits: "", inventory: "" } as PcDraft,
   /** What the server holds this form's images and world under, once it holds any. */
   id: undefined as string | undefined,
   /** Each image asked for, and how many times it has changed, so that a new image is a new address. */
@@ -70,7 +68,14 @@ const blank = {
 const STORAGE_KEY = "novelforge-new-story";
 
 // Kept for the tab, so a reload or a trip to Settings to fix a failure doesn't lose what the player wrote. It only ever holds player-facing text.
-const stored = () => ({ ...blank, ...(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") as Partial<typeof blank>) });
+const stored = () => {
+  const draft = { ...blank, ...(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") as Partial<typeof blank>) };
+  // A form kept from before the Important Characters were a list, or from when the PC had more boxes.
+  const pc = Object.fromEntries(Object.keys(blank.pc).map((field) => [field, draft.pc[field as keyof PcDraft] ?? ""])) as PcDraft;
+  return { ...draft, pc, characters: Array.isArray(draft.characters) ? draft.characters : [] };
+};
+
+const MAX_CHARACTERS = 10;
 
 function Choices(props: { legend: string; options: string[]; value: string; art?: boolean; onChange: (value: string) => void }) {
   return (
@@ -197,7 +202,8 @@ export function NewStory({ step }: { step?: string }) {
   /** True while a draw is being asked for, so that a form's first two draws can't each get an id of their own. */
   const [asking, setAsking] = useState(false);
   /** What each box held before Enhance, as replacing a box's value leaves nothing for the browser's own undo. */
-  const [enhanced, setEnhanced] = useState<Partial<Record<EnhanceField, { was: string; now: string }>>>({});
+  // Keyed by field, and by row as well for an Important Character's.
+  const [enhanced, setEnhanced] = useState<Record<string, { was: string; now: string }>>({});
   const set = (change: Partial<typeof blank>) => setDraft((current) => ({ ...current, ...change }));
   const running = useRef<AbortController>(undefined);
 
@@ -232,7 +238,7 @@ export function NewStory({ step }: { step?: string }) {
     setBusy("");
   }
 
-  const worldChoices = { title: draft.title, theme: themeForNarrator, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "" };
+  const worldChoices = { title: draft.title, theme: themeForNarrator, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "", characters: draft.characters };
 
   /** What a world was written from, to tell if the form has moved on from it. */
   const formNow = JSON.stringify([worldChoices, draft.pc]);
@@ -268,11 +274,13 @@ export function NewStory({ step }: { step?: string }) {
     if (!theme || !draft.worldBrief.trim() || !draft.title.trim() || (draft.hookOn && !draft.startingHook.trim()) || !artStyle.trim()) {
       return setError("Fill in each box with some words, use Pick for me, or turn the Starting Hook off.");
     }
-    if (!draft.pc.name.trim()) return setError("Give your PC a name, or use Pick for me.");
+    if (!draft.pc.name.trim()) return setError("Give your character a name, or use Pick for me.");
+    const characters = draft.characters.map(({ name, description }) => ({ name: name.trim(), description: description.trim() })).filter(({ name, description }) => name || description);
+    if (characters.some(({ name }) => !name)) return setError("Give each Important Character a name.");
+    choices.characters = characters;
     const { inventory, ...pc } = draft.pc;
-    const items = inventory.split("\n").map((item) => item.trim()).filter(Boolean);
     return run("The Narrator is building the world. This can take a few minutes.", async (signal) => {
-      const { id, overview } = await generateWorld({ ...choices, id: draft.id, pc, inventory: items }, signal);
+      const { id, overview } = await generateWorld({ ...choices, id: draft.id, pc, inventory }, signal);
       setDraft((current) => ({ ...current, id, world: { overview, choices, form: formNow }, drawn: redrew(redrew(current.drawn, "cover"), "portrait") }));
       location.hash = "/new/overview";
     });
@@ -289,66 +297,40 @@ export function NewStory({ step }: { step?: string }) {
     </>
   );
 
-  const jump = (id: string) => document.getElementById(id)?.scrollIntoView();
-
   const frame = (here: number, content: ReactNode, foot: ReactNode) => (
     <Sheet
       view={here}
-      lockRail={!!busy}
       foot={
         !busy && (
           <>
             {feedback}
-            <div className="row">{foot}</div>
+            <div className="row">
+              {/* The only way out, with no index beside the page. */}
+              <a className="quiet leave" href={here === 0 ? "#/" : "#/new"}>{here === 0 ? "Main Menu" : "Back"}</a>
+              {foot}
+            </div>
           </>
         )
-      }
-      rail={
-        <>
-          <nav aria-label="Steps">
-            {STEPS.map(({ href, name }, index) => (
-              <Fragment key={name}>
-                {index === 0 || draft.world ? (
-                  <a href={href} aria-current={index === here ? "step" : undefined}>{index + 1}. {name}</a>
-                ) : (
-                  <span>{index + 1}. {name}</span>
-                )}
-                {index === 0 && here === 0 && (
-                  <>
-                    <button type="button" className="jump" onClick={() => jump("world-choices")}>World choices</button>
-                    <button type="button" className="jump" onClick={() => jump("art-style")}>Art Style</button>
-                    <button type="button" className="jump" onClick={() => jump("cover")}>Cover</button>
-                    <button type="button" className="jump" onClick={() => jump("pc")}>The PC</button>
-                    <button type="button" className="jump" onClick={() => jump("portrait")}>Portrait</button>
-                  </>
-                )}
-              </Fragment>
-            ))}
-          </nav>
-          <p className="muted so-far">
-            <b>So far</b>
-            {[theme, draft.title.trim(), draft.artStyle === OWN_ART_STYLE ? "Your own Art Style" : draft.artStyle, draft.pc.name.trim()].filter(Boolean).map((choice) => (
-              <span key={choice}>{choice}</span>
-            ))}
-          </p>
-          <a className="quiet" href="#/">Main Menu</a>
-        </>
       }
     >
       {busy ? <Working message={busy} onCancel={() => running.current?.abort()} /> : content}
     </Sheet>
   );
 
+  const setCharacter = (index: number, change: Partial<Character>) =>
+    setDraft((current) => ({ ...current, characters: current.characters.map((character, at) => (at === index ? { ...character, ...change } : character)) }));
+
   const setPc = (field: keyof PcDraft, text: string) =>
     setDraft((current) => ({ ...current, pc: { ...current.pc, [field]: text } }));
 
-  const enhanceTools = (field: EnhanceField, label: string, value: string, write: (text: string) => void) => {
-    const before = enhanced[field];
+  const enhanceTools = (field: EnhanceField, label: string, value: string, write: (text: string) => void, row?: { key: string; character: Character }) => {
+    const key = row?.key ?? field;
+    const before = enhanced[key];
     const action = value.trim() ? "Enhance" : "Write";
     const improve = () =>
       run("The Narrator is thinking…", async (signal) => {
-        const now = await enhance(field, value, { ...worldChoices, pc: draft.pc }, signal);
-        setEnhanced((current) => ({ ...current, [field]: { was: value, now } }));
+        const now = await enhance(field, value, { ...worldChoices, pc: draft.pc, ...(row && { character: row.character }) }, signal);
+        setEnhanced((current) => ({ ...current, [key]: { was: value, now } }));
         write(now);
       });
     return (
@@ -427,13 +409,14 @@ export function NewStory({ step }: { step?: string }) {
     );
   }
 
-  const pcBox = (field: Exclude<keyof PcDraft, "name">, label: string, rows: number) => (
+  // `short` names the box on its buttons, as a question makes a clumsy one.
+  const pcBox = (field: Exclude<keyof PcDraft, "name">, label: string, short: string, rows: number) => (
     <div className="enhanceable">
       <label>
         {label}
         <textarea rows={rows} value={draft.pc[field]} onChange={(e) => setPc(field, e.target.value)} />
       </label>
-      {enhanceTools(field, label, draft.pc[field], (text) => setPc(field, text))}
+      {enhanceTools(field, short, draft.pc[field], (text) => setPc(field, text))}
     </div>
   );
 
@@ -471,10 +454,10 @@ export function NewStory({ step }: { step?: string }) {
     <div className="fields wizard">
       <div id="world-choices" className="fields wizard">
         <div>
-          <Heading step={1} title="Of the World and the PC" busy={!!busy} />
+          <Heading step={1} title="Your New World and Character" busy={!!busy} />
         </div>
         <Choices
-          legend="Theme"
+          legend="What kind of story is it?"
           options={[...Object.keys(THEMES), OWN_THEME]}
           value={draft.theme}
           onChange={(theme) => set({ theme })}
@@ -482,24 +465,88 @@ export function NewStory({ step }: { step?: string }) {
         {description && <p className="muted">{description}</p>}
         {draft.theme === OWN_THEME && (
           <label>
-            Your theme
+            What is your theme?
             <input value={draft.ownTheme} onChange={(e) => set({ ownTheme: e.target.value })} />
           </label>
         )}
         <div className="enhanceable">
           <label>
-            World Brief
-            <textarea rows={3} value={draft.worldBrief} onChange={(e) => set({ worldBrief: e.target.value })} />
-          </label>
-          {worldTools("worldBrief", "World Brief")}
-        </div>
-        <div className="enhanceable">
-          <label>
-            Title
+            What is your story called?
             <input maxLength={80} value={draft.title} onChange={(e) => set({ title: e.target.value })} />
           </label>
           {worldTools("title", "Title")}
         </div>
+        <div className="enhanceable">
+          <label>
+            What is your world like?
+            <textarea rows={3} value={draft.worldBrief} onChange={(e) => set({ worldBrief: e.target.value })} />
+          </label>
+          {worldTools("worldBrief", "World Brief")}
+        </div>
+      </div>
+      <div id="pc" className="fields wizard">
+        <div>
+          <h2>Your Character</h2>
+          <p className="muted">Play whomever you want. What you write is canon, and the world changes if it must.</p>
+        </div>
+        <div className="enhanceable">
+          <label>
+            What is your character's name?
+            <input value={draft.pc.name} onChange={(e) => setPc("name", e.target.value)} />
+          </label>
+          {enhanceTools("name", "Name", draft.pc.name, (text) => setPc("name", text))}
+        </div>
+        {pcBox("background", "Where do they come from, what have they done, and what are they good at?", "Background", 4)}
+        {pcBox("physicalTraits", "What do they look like?", "Looks", 3)}
+        {pcBox("inventory", "What is your character wearing and carrying?", "Wearing and carrying", 3)}
+      </div>
+      <div id="characters" className="fields wizard">
+        <div>
+          <h2>Important Characters</h2>
+          <p className="muted">People you want in the story besides your PC. Pick for me leaves these alone, so there are only those you add.</p>
+        </div>
+        {draft.characters.map((character, index) => {
+          const label = character.name.trim() || `Character ${index + 1}`;
+          const box = (field: keyof Character, enhanceField: EnhanceField, name: string, input: ReactNode) => (
+            <div className="enhanceable">
+              <label>
+                {name}
+                {input}
+              </label>
+              {enhanceTools(enhanceField, `${name}: ${label}`, character[field], (text) => setCharacter(index, { [field]: text }), { key: `${enhanceField}:${index}`, character })}
+            </div>
+          );
+          return (
+            <fieldset key={index}>
+              <legend>{label}</legend>
+              {box("name", "characterName", "Name", <input maxLength={80} value={character.name} onChange={(e) => setCharacter(index, { name: e.target.value })} />)}
+              {box(
+                "description",
+                "characterDescription",
+                "Description",
+                <textarea rows={3} maxLength={1000} value={character.description} onChange={(e) => setCharacter(index, { description: e.target.value })} />,
+              )}
+              <div className="row">
+                <button type="button" className="quiet" aria-label={`Remove ${label}`} onClick={() => set({ characters: draft.characters.filter((_, at) => at !== index) })}>
+                  Remove
+                </button>
+              </div>
+            </fieldset>
+          );
+        })}
+        <div className="row">
+          <button
+            type="button"
+            className="quiet"
+            disabled={draft.characters.length >= MAX_CHARACTERS}
+            onClick={() => set({ characters: [...draft.characters, { name: "", description: "" }] })}
+          >
+            Add a character
+          </button>
+          {draft.characters.length >= MAX_CHARACTERS && <span className="muted">That's the most a story can start with.</span>}
+        </div>
+      </div>
+      <div id="hook" className="fields wizard">
         <label className="toggle">
           <input type="checkbox" checked={draft.hookOn} onChange={(e) => set({ hookOn: e.target.checked })} />
           Starting Hook
@@ -541,25 +588,7 @@ export function NewStory({ step }: { step?: string }) {
         worldBrief,
         artStyle,
       })}
-      <div id="pc" className="fields wizard">
-        <div>
-          <h2>Of the PC</h2>
-          <p className="muted">Play whomever you want. What you write is canon, and the world changes if it must.</p>
-        </div>
-        <div className="enhanceable">
-          <label>
-            PC name
-            <input value={draft.pc.name} onChange={(e) => setPc("name", e.target.value)} />
-          </label>
-          {enhanceTools("name", "PC name", draft.pc.name, (text) => setPc("name", text))}
-        </div>
-        {pcBox("background", "Background", 3)}
-        {pcBox("physicalTraits", "Physical traits", 3)}
-        {pcBox("skills", "Skills and experience", 3)}
-        {pcBox("inventory", "Starting inventory, one item per line", 4)}
-        {pcBox("other", "Anything else", 2)}
-      </div>
-      {imageSection("portrait", "Portrait", physicalTraits.trim() ? "" : "Fill in the physical traits to draw this.", {
+      {imageSection("portrait", "Portrait", physicalTraits.trim() ? "" : "Say what your character looks like to draw this.", {
         kind: "portrait",
         name: draft.pc.name,
         physicalTraits,

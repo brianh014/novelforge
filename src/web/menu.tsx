@@ -76,11 +76,12 @@ export function MoreBelow({ onClick }: { onClick: () => void }) {
 }
 
 /** A single sheet for screens of fields: an index down the side, then one scrolling column above a pinned `foot`. */
-export function Sheet(props: { rail: ReactNode; children: ReactNode; foot?: ReactNode; tabs?: ReactNode; lockRail?: boolean; view?: unknown }) {
+/** Without a `rail`, the page takes the whole sheet. */
+export function Sheet(props: { rail?: ReactNode; children: ReactNode; foot?: ReactNode; tabs?: ReactNode; lockRail?: boolean; view?: unknown }) {
   return (
     <main className="desk">
       <div className="book sheet">
-        <aside className="sheet-rail" inert={props.lockRail}>{props.rail}</aside>
+        {props.rail !== undefined && <aside className="sheet-rail" inert={props.lockRail}>{props.rail}</aside>}
         <section className="sheet-main">
           <Fold view={props.view}>{props.children}</Fold>
           {props.foot && <div className="sheet-foot">{props.foot}</div>}
@@ -131,14 +132,13 @@ export function DeleteDialog(props: { name: string; warning: string; onDelete: (
   );
 }
 
-export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Gallery" | "Inventory" | "Settings" }) {
+export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Gallery" | "Settings" }) {
   const here = (tab: typeof current) => (tab === current ? "page" : undefined);
   return (
     <nav className="tabs" aria-label="Book sections">
       <a href={`#/play/${id}`} aria-current={here("Story")}>Story</a>
       <a href={`#/journal/${id}`} aria-current={here("Journal")}>Journal</a>
       <a href={`#/gallery/${id}`} aria-current={here("Gallery")}>Gallery</a>
-      <a href={`#/inventory/${id}`} aria-current={here("Inventory")}>Inventory</a>
       <a href={`#/settings/${id}`} aria-current={here("Settings")}>Settings</a>
     </nav>
   );

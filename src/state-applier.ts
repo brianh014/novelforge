@@ -130,7 +130,10 @@ function take(list: string[], value: string) {
 
 // Status reads as words in the story, never as points or percentages.
 // shortcut: spelled-out numbers pass and only the Narrator prompt stops them, screen them if models write them.
-const hasNumber = (text: string) => /\p{N}/u.test(text);
+export const hasNumber = (text: string) => /\p{N}/u.test(text);
+
+/** The most injuries, and the most conditions, the PC keeps, so the status the player reads stays a line or two. */
+export const MAX_STATUS = 3;
 
 function addOnce(list: string[], value: string) {
   if (list.includes(value)) return false;
@@ -178,7 +181,10 @@ function apply(state: State, operation: StateOperation): string | undefined {
       return;
     case "add_status":
       if (hasNumber(operation.text)) return "has a number";
-      return addOnce(state.status[operation.kind], operation.text) ? undefined : "already there";
+      if (!addOnce(state.status[operation.kind], operation.text)) return "already there";
+      // The oldest goes, as Narrators often forget to remove what has passed.
+      state.status[operation.kind] = state.status[operation.kind].slice(-MAX_STATUS);
+      return;
     case "remove_status":
       return take(state.status[operation.kind], operation.text) ? undefined : "not there";
     case "add_npc":
@@ -350,6 +356,9 @@ export type VisibleEdit = z.infer<typeof VisibleEdit>;
 export const WorldEdit = z.discriminatedUnion("edit", [
   ...VisibleEdit.options,
   z.object({ edit: z.literal("world"), update: WorldUpdate }),
+  // Whole lists, as a World Change rewrites what the player says is wrong rather than one item at a time.
+  z.object({ edit: z.literal("inventory"), wearing: z.array(z.string()), carrying: z.array(z.string()) }),
+  z.object({ edit: z.literal("status"), health: z.string(), injuries: z.array(z.string()), conditions: z.array(z.string()) }),
   // Only the server closes a Chapter, as it writes the title.
   z.object({ edit: z.literal("closeChapter"), title: z.string() }),
 ]);
@@ -372,6 +381,10 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, sceneMemories: state.sceneMemories.map((memory) => (memory.firstMessage === edit.firstMessage ? { ...memory, text: edit.text } : memory)) };
     case "world":
       return { ...state, ...mergeWorldUpdate(state, edit.update) };
+    case "inventory":
+      return { ...state, inventory: { wearing: edit.wearing, carrying: edit.carrying } };
+    case "status":
+      return { ...state, status: { health: edit.health, injuries: edit.injuries.slice(-MAX_STATUS), conditions: edit.conditions.slice(-MAX_STATUS) } };
     case "storyTime":
       return { ...state, storyTime: { day: state.storyTime?.day ?? 1, date: edit.date, timeOfDay: edit.timeOfDay } };
     case "chapterTitle":

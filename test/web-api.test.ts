@@ -331,15 +331,15 @@ const worldReply = (overview: string) =>
   });
 
 test("the wizard's calls carry a world from Pick for me to a Save", async () => {
-  const sheet = JSON.stringify({ wearing: ["coat"], health: "unhurt", injuries: [], conditions: [] });
-  const replies = [JSON.stringify({ worldBrief: "A city on a whale.", title: "The Salt Reckoning", skills: "Sailing" }), JSON.stringify({ text: "A vast city on a sleeping whale." }), sheet, worldReply("First."), worldReply("Second.")];
+  const sheet = JSON.stringify({ wearing: ["coat"], carrying: [], health: "unhurt", injuries: [], conditions: [] });
+  const replies = [JSON.stringify({ worldBrief: "A city on a whale.", title: "The Salt Reckoning", background: "Sailing" }), JSON.stringify({ text: "A vast city on a sleeping whale." }), sheet, worldReply("First."), worldReply("Second.")];
   start(async () => replies.shift()!);
 
-  const pc = { name: "Ash", background: "B", physicalTraits: "T", skills: "", other: "O", inventory: "coat" };
-  const { worldBrief, title, skills } = await pickForMe("Steampunk", { title: "", worldBrief: "", pc });
+  const pc = { name: "Ash", background: "", physicalTraits: "T", inventory: "coat" };
+  const { worldBrief, title, background } = await pickForMe("Steampunk", { title: "", worldBrief: "", pc });
   const choices = { title: title!, theme: "Steampunk", worldBrief: worldBrief!, startingHook: "" };
   const enhanced = await enhance("worldBrief", worldBrief!, choices);
-  const { id: world, overview } = await generateWorld({ ...choices, pc: { name: "Ash" }, inventory: ["coat"] });
+  const { id: world, overview } = await generateWorld({ ...choices, pc: { name: "Ash" }, inventory: "a coat" });
   const regenerated = await regenerateWorld(world, choices);
   const { id } = await beginStory(world, "Ink");
 
@@ -347,14 +347,14 @@ test("the wizard's calls carry a world from Pick for me to a Save", async () => 
   expect(enhanced).toBe("A vast city on a sleeping whale.");
   expect(overview).toBe("First.");
   expect(regenerated.overview).toBe("Second.");
-  expect(skills).toBe("Sailing");
+  expect(background).toBe("Sailing");
   expect(await getSave(id)).toMatchObject({ worldBrief, artStyle: "Ink" });
 });
 
 test("a failed generation reaches the wizard as an error it can show", async () => {
   start(unreachable("offline"));
 
-  await expect(generateWorld({ title: "Dust", theme: "Western", worldBrief: "Dust", startingHook: "", pc: { name: "Ash" }, inventory: [] })).rejects.toThrow(
+  await expect(generateWorld({ title: "Dust", theme: "Western", worldBrief: "Dust", startingHook: "", pc: { name: "Ash" }, inventory: "" })).rejects.toThrow(
     "The Text Provider request failed",
   );
 });

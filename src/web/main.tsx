@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { Gallery } from "./gallery";
-import { Inventory } from "./inventory";
 import { Journal } from "./journal";
 import { LoadStory } from "./load";
 import { getSettings, reportEvent } from "./api";
@@ -21,7 +20,6 @@ function App() {
   if (screen === "play" && id) return <Play key={id} id={id} />;
   if (screen === "journal" && id) return <Journal key={id} id={id} />;
   if (screen === "gallery" && id) return <Gallery key={id} id={id} />;
-  if (screen === "inventory" && id) return <Inventory key={id} id={id} />;
   if (screen === "new") return <NewStory step={id} />;
   if (screen === "load") return <LoadStory />;
   if (screen === "settings") return <SettingsScreen id={id} />;

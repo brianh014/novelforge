@@ -84,6 +84,10 @@ _Avoid_: World details, lore
 The optional opening situation chosen during story creation.
 _Avoid_: Hook (alone)
 
+**Important Characters**:
+People besides the PC that the player wants in the story, added on the New Story form, each with a name and a description, up to ten. They are canon, and the world is built around them. Pick for me never writes them; only Enhance does, when the player presses it.
+_Avoid_: Cast, NPCs (those are whoever the story meets)
+
 **Plot Thread**:
 A secret storyline held by the Narrator that play can reveal.
 _Avoid_: Hook (alone), plot
@@ -119,7 +123,7 @@ Replacing the latest Narrator response without feedback, or a world before play 
 _Avoid_: Retry, swipe
 
 **World Change**:
-A change to the world in the player's own plain words, to nudge the story or correct a mistake, given through Tell the Narrator in the Journal. The Narrator applies it to the World Bible, world rules and Plot Threads, and to the Journal's text where that no longer holds. The player sees only that it was done, and any change to the Journal.
+A change to the world in the player's own plain words, to nudge the story or correct a mistake, given through Tell the Narrator in the Journal. The Narrator applies it to the World Bible, world rules and Plot Threads, and to the Journal's text where that no longer holds, including what the PC wears and carries and their status. The player never sees the inventory itself. The player sees only that it was done, and any change to the Journal.
 _Avoid_: Edit (that is a change to text the player can read)
 
 **Director's Note** (retired from play, see ticket 31):

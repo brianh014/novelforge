@@ -44,6 +44,7 @@ const WorldRequest = z.object({
   theme: z.string().trim().min(1),
   worldBrief: z.string().trim().min(1),
   startingHook: z.string().trim(),
+  characters: z.array(z.object({ name: z.string().trim().min(1).max(80), description: z.string().trim().max(1000) })).max(10).default([]),
   artStyle: z.string().optional(),
 });
 
@@ -51,7 +52,7 @@ const WorldRequest = z.object({
 const NewWorldRequest = WorldRequest.extend({
   id: z.string().optional(),
   pc: NamedPc,
-  inventory: z.array(z.string().trim().min(1)).default([]),
+  inventory: z.string().trim().max(4000).default(""),
 });
 
 const someWords = z.string().trim().min(1);
@@ -88,7 +89,9 @@ const PickRequest = z.object({
 // A `draft` is the player's own move to Enhance. Without one, the PC's next move is written from scratch.
 const DecideRequest = z.object({ draft: z.string().trim().max(4000).default("") });
 
-// Any box may be empty, and an empty `text` asks for that box to be written from scratch.
+const CharacterBoxes = z.object({ name: z.string().trim().max(80), description: z.string().trim().max(1000) });
+
+// Any box may be empty, and an empty `text` asks for that box to be written from scratch. `character` is the row an Important Character's box is in.
 const EnhanceRequest = z.object({
   field: z.enum(ENHANCE_FIELDS),
   text: z.string().trim(),
@@ -96,6 +99,9 @@ const EnhanceRequest = z.object({
   title: z.string().trim(),
   worldBrief: z.string().trim(),
   startingHook: z.string().trim(),
+  // Half-written rows, as the form holds them while the player works on them.
+  characters: z.array(CharacterBoxes).max(10).default([]),
+  character: CharacterBoxes.optional(),
   pc: PcBoxes.optional(),
 });
 
@@ -734,8 +740,9 @@ export function startServer(options: {
         GET: (req) => {
           // An allowlist, so the World Bible, Plot Threads and NPC appearance text can never reach the player by default.
           // shortcut: the summary, facts, Loose Ends and Scene Memories are Narrator free text, kept clean only by its prompt, screen them if models leak.
-          const { summary, pcKnown, looseEnds, sceneMemories, scene, storyTime } = saves.latestState(req.params.id);
+          const { summary, pcKnown, looseEnds, sceneMemories, scene, storyTime, status } = saves.latestState(req.params.id);
           return Response.json({
+            status,
             // Without the day count, which only the Narrator uses.
             storyTime: storyTime && { date: storyTime.date, timeOfDay: storyTime.timeOfDay },
             summary,
@@ -830,13 +837,15 @@ export function startServer(options: {
           const basedOn = saves.latestMessageId(id);
           const release = turns.hold(id);
           try {
-            const { world_brief, summary, facts, npc_summaries, ...update } = await changeWorld(options, saves.latestState(id), change, req.signal);
+            const { world_brief, summary, facts, npc_summaries, inventory, status, ...update } = await changeWorld(options, saves.latestState(id), change, req.signal);
             if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
             const journal: WorldEdit[] = [
               ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),
               ...(summary === null ? [] : [{ edit: "summary" as const, text: summary }]),
               ...facts.map((fact) => ({ edit: "fact" as const, ...fact })),
               ...npc_summaries.map(({ name, summary }) => ({ edit: "npcSummary" as const, name, text: summary })),
+              ...(inventory === null ? [] : [{ edit: "inventory" as const, ...inventory }]),
+              ...(status === null ? [] : [{ edit: "status" as const, ...status }]),
             ];
             for (const edit of [{ edit: "world" as const, update }, ...journal]) saves.addEdit(id, edit);
             // Counts only, so that the log never repeats the world.
