@@ -848,7 +848,7 @@ function InstallSettings({
         </p>
       )}
       <label>
-        Pre-History / System Prompt / Main Prompt
+        Extra Narrator Instructions
         <textarea
           rows={5}
           value={draft.modelInstructions}
@@ -858,7 +858,7 @@ function InstallSettings({
       <p className="muted">Your own guidance to the Narrator, for every Save.</p>
       <TestBox
         title="Test text"
-        hint="Sends this prompt to your saved model, with the saved system prompt above. OpenRouter may charge for each test."
+        hint="Sends this prompt to your saved model, with the saved Extra Narrator Instructions above. OpenRouter may charge for each test."
         working="Asking…"
         run={askTextTest}
       >

@@ -122,7 +122,7 @@ How the Story shows Messages: Script, Prose, Bubbles or Stage box. It never chan
 One line of a Message, spoken or not, and what a Stage box shows at a time.
 
 **Model Instructions**:
-The player's own global guidance to the Narrator, set in Settings and applying to every Save.
+The player's own global guidance to the Narrator, set in Settings and applying to every Save. Settings shows it as Extra Narrator Instructions, as the Narrator works without it.
 _Avoid_: System prompt
 
 ### State
