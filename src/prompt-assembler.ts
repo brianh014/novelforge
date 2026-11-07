@@ -6,7 +6,8 @@ import type { PromptStyle } from "./graph-builder";
 
 export type Prompt = { role: "system" | "user" | "assistant"; content: string }[];
 
-const WINDOW_MESSAGES = 80;
+/** The default for Settings' recent Messages, which a Save without one falls back to. */
+export const WINDOW_MESSAGES = 80;
 export const MEMORY_MESSAGES = 20;
 const LORE_TOKEN_BUDGET = 6000;
 const RESPONSES_PER_THREAD_NUDGE = 8;
@@ -88,17 +89,18 @@ Bring this Plot Thread into play at the next natural moment, through a person or
  * can't leave the prompt uncovered. A missed memory just leaves the window longer. Before any memory the window starts at
  * `memoryStart`, unless a Revert went back past that, when the latest Messages stand in for what was there.
  */
-function messageWindow(messages: Message[], sceneMemories: SceneMemory[], memoryStart: number) {
+function messageWindow(messages: Message[], sceneMemories: SceneMemory[], memoryStart: number, windowMessages = WINDOW_MESSAGES) {
   const covered = sceneMemories.at(-1)?.lastMessage;
   if (covered !== undefined) return messages.filter(({ id }) => id > covered);
   const start = messages.findIndex(({ id }) => id >= memoryStart);
-  return messages.slice(Math.min(start === -1 ? messages.length : start, Math.max(messages.length - WINDOW_MESSAGES, 0)));
+  return messages.slice(Math.min(start === -1 ? messages.length : start, Math.max(messages.length - windowMessages, 0)));
 }
 
 /** The range the next memory must cover, if one is due. The server keeps this, and the Narrator is told only to write. */
-export function memoryDue(messages: Message[], sceneMemories: SceneMemory[], memoryStart: number) {
-  const window = messageWindow(messages, sceneMemories, memoryStart);
-  return window.length < WINDOW_MESSAGES ? null : { firstMessage: window[0]!.id, lastMessage: window[MEMORY_MESSAGES - 1]!.id };
+export function memoryDue(messages: Message[], sceneMemories: SceneMemory[], memoryStart: number, windowMessages = WINDOW_MESSAGES) {
+  const window = messageWindow(messages, sceneMemories, memoryStart, windowMessages);
+  // A window made smaller in Settings catches up one memory a Turn.
+  return window.length < windowMessages ? null : { firstMessage: window[0]!.id, lastMessage: window[MEMORY_MESSAGES - 1]!.id };
 }
 
 /** The Messages older than the first memory or the window, which no Turn will cover, as a Turn only ever asks for what comes next. */
@@ -151,6 +153,7 @@ export function assemblePrompt({
   state: { worldBible, worldRules, plotThreads, summary, sceneMemories, directorsNotes: _retired, worldBrief: _fromSave, chapters: _chapters, chapterReady: _ready, ...currentState },
   messages,
   memoryStart = 0,
+  windowMessages,
   modelInstructions,
   input,
   responseSchema,
@@ -161,13 +164,15 @@ export function assemblePrompt({
   messages: Message[];
   /** See `messageWindow`. A new story has no need of it. */
   memoryStart?: number;
+  /** How many recent Messages Settings sends in full. */
+  windowMessages?: number;
   modelInstructions: string;
   input: string;
   responseSchema: string;
   /** Null when no image will be drawn. */
   promptStyle: PromptStyle | null;
 }): Prompt {
-  const recent = messageWindow(messages, sceneMemories, memoryStart);
+  const recent = messageWindow(messages, sceneMemories, memoryStart, windowMessages);
   const activeEntries = activateLore(
     worldBible,
     [...recent.map(({ text }) => text), input].join("\n"),
@@ -234,11 +239,14 @@ They gave out-of-character direction for the new response, below as a JSON strin
   };
 }
 
-/** For an Edit. The player's words are canon, so nothing here lets the Narrator push back on them. */
+/**
+ * For an Edit. The player's words are canon, so nothing here lets the Narrator push back on them. It copies them into
+ * narration, as asking for null there sent a model into a reply that never ended. The server keeps the player's copy.
+ */
 export function editInstruction(text: string): Prompt[number] {
   return {
     role: "system",
-    content: `The player has edited the response to their last action themselves. Their edited response is below as JSON, and it is now exactly what happened: never refuse it, correct it or add to it. Set narration to null and write no narration of your own. The state above is from before that response, so include every state operation and person the edited response needs, including add_known_fact where it applies, and a summary that covers it. Where it disagrees with a Lore Entry or Plot Thread, fix that in this Turn. Set check to null, scene_changed to false and visual_description to null. Edited response: ${JSON.stringify({ edited_response: text })}`,
+    content: `The player has edited the response to their last action themselves. Their edited response is below as JSON, and it is now exactly what happened: never refuse it, correct it or add to it. Set narration to the edited response, copied exactly, and write no narration of your own. The state above is from before that response, so include every state operation and person the edited response needs, including add_known_fact where it applies, and a summary that covers it. Where it disagrees with a Lore Entry or Plot Thread, fix that in this Turn. Set check to null, scene_changed to false and visual_description to null. Edited response: ${JSON.stringify({ edited_response: text })}`,
   };
 }
 

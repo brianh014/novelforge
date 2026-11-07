@@ -148,6 +148,7 @@ export async function playTurn(
     state,
     messages,
     memoryStart,
+    windowMessages: settings.read().textRecentMessages,
     modelInstructions: settings.read().modelInstructions,
     input,
     responseSchema: JSON.stringify(responseSchema),
@@ -159,7 +160,7 @@ export async function playTurn(
     input,
     refusal: "The Narrator refused this message. Edit it and try again.",
     pcName: saves.read(id).pc.name,
-    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, signal),
+    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, settings.read().textRecentMessages, signal),
     rollCheck: mayCheck ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
     committed: (messageId, scene) => images.sceneChanged(id, messageId, scene),
@@ -197,6 +198,7 @@ export async function replaceResponse(
     state,
     messages,
     memoryStart,
+    windowMessages: settings.read().textRecentMessages,
     modelInstructions: settings.read().modelInstructions,
     input,
     responseSchema: JSON.stringify(responseSchema),
@@ -210,7 +212,7 @@ export async function replaceResponse(
     refusal: "The Narrator refused this, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
     check,
-    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, signal),
+    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, settings.read().textRecentMessages, signal),
     commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
     committed: (replacement, scene) => {
       images.forget(id, messageId - 1, kind);
@@ -240,6 +242,7 @@ export async function editResponse(
     state,
     messages,
     memoryStart,
+    windowMessages: settings.read().textRecentMessages,
     modelInstructions: settings.read().modelInstructions,
     input,
     responseSchema: JSON.stringify(responseSchema),
@@ -253,7 +256,7 @@ export async function editResponse(
     refusal: "The Narrator refused this edit, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
     narration: text,
-    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, signal),
+    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, settings.read().textRecentMessages, signal),
     commit: (narration, _check, advance) => saves.editTurn(id, messageId, narration, advance),
     // Only portraits for anyone new, as the Scene Image stays.
     committed: (edited, scene) => images.sceneChanged(id, edited, { ...scene, changed: false }),
@@ -415,8 +418,8 @@ export async function askForChapterTitle(textProvider: TextProvider, memories: s
 }
 
 /** Runs beside the Turn, so the player waits no longer. A missed memory costs nothing: the window keeps its Messages, and the next Turn asks again. */
-async function nextMemory(textProvider: TextProvider, messages: Message[], sceneMemories: SceneMemory[], memoryStart: number, signal: AbortSignal) {
-  const range = memoryDue(messages, sceneMemories, memoryStart);
+async function nextMemory(textProvider: TextProvider, messages: Message[], sceneMemories: SceneMemory[], memoryStart: number, windowMessages: number, signal: AbortSignal) {
+  const range = memoryDue(messages, sceneMemories, memoryStart, windowMessages);
   if (!range) return null;
   const batch = readable(messages.filter(({ id }) => id >= range.firstMessage && id <= range.lastMessage));
   try {

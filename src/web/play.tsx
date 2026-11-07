@@ -717,6 +717,8 @@ export function Play({ id }: { id: string }) {
           )
         ))
       )}
+      {/* An Edit shows its words at once, so this is all that says the Narrator is still at work. */}
+      {turn?.edit && <p role="status" className="waiting">The Narrator is updating the story…</p>}
       {requested.drawing > 0 && <p role="status" className="waiting">Drawing {plural(requested.drawing, "picture")}…</p>}
       {replaceable && rewriting === replaceable.id && (
         <form className="ask" onSubmit={sendFeedback}>

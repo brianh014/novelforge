@@ -6,6 +6,7 @@ import { ContentRefused, type TextProvider, TextProviderFailed } from "./turn-en
 // The player sees these with a retry hint after them, so none ends in a full stop.
 const UNREACHABLE = "The Text Provider can't be reached, so make sure it's running and that its address in Settings is right";
 const STOPPED = "The Text Provider stopped responding, so make sure it isn't stuck or still loading a model";
+const TOO_LONG = "The Narrator's reply ran far too long and was stopped, so nothing was saved";
 const REJECTED = "The Text Provider returned an error, so look over its address, the text model and any API key in Settings";
 
 const LIMITS = {
@@ -125,7 +126,7 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
   }
 
   return async (prompt, { schema, onText, onGeneration, signal }) => {
-    const { textBaseUrl, textApiKey, textModel, ...chosen } = settings.read();
+    const { textBaseUrl, textApiKey, textModel, textMaxTokens, textReplyMinutes, ...chosen } = settings.read();
     if (!textModel) throw new TextProviderFailed("No text model is set, so choose one in Settings");
     const url = textBaseUrl.replace(/\/$/, "");
     const openRouter = url.includes("openrouter.ai");
@@ -150,6 +151,9 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
 
     const silence = new AbortController();
     let timer: Timer | undefined;
+    // A model can stream forever without falling silent, so a reply also has a time limit.
+    const overrun = new AbortController();
+    let deadline: Timer | undefined;
     const heardFrom = () => {
       clearTimeout(timer);
       timer = setTimeout(() => silence.abort(), silenceMs);
@@ -161,13 +165,14 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
       const response = await fetch(`${url}/chat/completions`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },
-        signal: AbortSignal.any([signal, silence.signal]),
+        signal: AbortSignal.any([signal, silence.signal, overrun.signal]),
         // Bun's own limit would otherwise end a slow first response before ours.
         timeout: false,
         body: JSON.stringify({
           model: textModel,
           messages: prompt,
           stream: true,
+          max_tokens: textMaxTokens,
           ...(useSchema && { response_format: { type: "json_schema", json_schema: { name: "narrator_response", strict: true, schema } } }),
           // A strict local server can refuse a field it doesn't know, so not sent to one without a schema.
           ...((useSchema || openRouter) && { provider: { ...(useSchema && { require_parameters: true }), ...routing(chosen) } }),
@@ -200,6 +205,7 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
       const whole = response.headers.get("content-type")?.includes("application/json");
       for await (const data of whole ? [await response.text()] : eventData(response.body, heardFrom)) {
         if (data === "[DONE]") break;
+        deadline ??= setTimeout(() => overrun.abort(), textReplyMinutes * 60 * 1000);
         seen.lines = ((seen.lines as number) ?? 0) + 1;
         // Enough to tell cut-off JSON from an HTML page, and it can't hold a word of the story.
         seen.last = { chars: data.length, first: data[0], final: data.at(-1) };
@@ -216,6 +222,8 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
           nativeFinish: native_finish_reason ?? seen.nativeFinish,
         });
         if (delta?.refusal || finish_reason === "content_filter") throw new ContentRefused();
+        // Cut off, so not worth the automatic retries an unusable reply gets: each would likely run as long.
+        if (finish_reason === "length") throw new TextProviderFailed(TOO_LONG);
         const text = delta?.content ?? message?.content;
         if (text) {
           reply += text;
@@ -227,9 +235,10 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
       seen.failed = signal.aborted ? "the client left" : (cause as Error).name;
       const known = cause instanceof ContentRefused || cause instanceof TextProviderFailed;
       if (known || signal.aborted || cause instanceof SyntaxError) throw cause;
-      throw new TextProviderFailed(silence.signal.aborted ? STOPPED : UNREACHABLE, { cause });
+      throw new TextProviderFailed(overrun.signal.aborted ? TOO_LONG : silence.signal.aborted ? STOPPED : UNREACHABLE, { cause });
     } finally {
       clearTimeout(timer);
+      clearTimeout(deadline);
       const logAs = seen.failed && !signal.aborted ? log.warning : log.info;
       logAs("text", "Text reply", () => ({ ...seen, chars: reply.length, ms: Date.now() - started }));
     }

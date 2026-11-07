@@ -451,6 +451,53 @@ test("a streamed Turn survives a silence longer than Bun's default idle timeout"
   expect(events.at(-1)!.event).toBe("done");
 }, 20_000);
 
+test("every reply is sent with the token limit from Settings", async () => {
+  play([narrated("Rain."), narrated("Sleet.")]);
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
+  settingsStore(join(folder.path, "settings.json")).update({ textMaxTokens: 4000 });
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(provider.requests.map(({ body }) => body.max_tokens)).toEqual([16_000, 4000]);
+});
+
+test("a reply cut off at the token limit fails the Turn at once, without the retries that would each run as long", async () => {
+  play([[delta('{"check":null,"narration":"On and on'), `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "length" }] })}
+
+`]]);
+  const id = await app.createSave();
+
+  const failed = await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(failed.status).toBe(502);
+  expect(await failed.text()).toContain("ran far too long");
+  expect(provider.requests).toHaveLength(1);
+  expect(await storedMessages(id)).toEqual([]);
+});
+
+test("a reply that streams past the time limit in Settings is stopped, and nothing is saved", async () => {
+  play([
+    async function* () {
+      yield delta('{"check":null,"narration":"');
+      // Never silent, so only the time limit can stop it.
+      for (let at = 0; at < 100; at++) {
+        await Bun.sleep(50);
+        yield delta("and ");
+      }
+    },
+  ]);
+  settingsStore(join(folder.path, "settings.json")).update({ textReplyMinutes: 0.005 });
+  const id = await app.createSave();
+
+  const started = Date.now();
+  const failed = await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(Date.now() - started).toBeLessThan(3000);
+  expect(await failed.text()).toContain("ran far too long");
+  expect(provider.requests).toHaveLength(1);
+  expect(await storedMessages(id)).toEqual([]);
+});
+
 const textTest = (prompt: string) => app.post("/settings/text-test", { prompt });
 const body = (response: Response) => response.json() as Promise<Record<string, any>>;
 

@@ -856,6 +856,43 @@ function InstallSettings({
         />
       </label>
       <p className="muted">Your own guidance to the Narrator, for every Save.</p>
+      <label>
+        Longest reply, in tokens
+        <input
+          type="number"
+          required
+          min={1000}
+          max={200000}
+          step={1000}
+          value={draft.textMaxTokens}
+          onChange={(e) => set({ textMaxTokens: e.target.valueAsNumber })}
+        />
+      </label>
+      <label>
+        Longest reply, in minutes
+        <input
+          type="number"
+          required
+          min={1}
+          max={60}
+          value={draft.textReplyMinutes}
+          onChange={(e) => set({ textReplyMinutes: e.target.valueAsNumber })}
+        />
+      </label>
+      <p className="muted">A reply that runs past either limit is stopped and nothing is saved, so a stuck model can't run up your bill. Reasoning counts toward the tokens, and the minutes start once the reply begins.</p>
+      <label>
+        Recent Messages sent to the Narrator
+        <input
+          type="number"
+          required
+          min={40}
+          max={400}
+          step={10}
+          value={draft.textRecentMessages}
+          onChange={(e) => set({ textRecentMessages: e.target.valueAsNumber })}
+        />
+      </label>
+      <p className="muted">Sent in full on every Turn. Older Messages reach the Narrator as Scene Memories. More remembers detail better but makes each Turn cost more, and fewer saves money. A lower number catches up one Scene Memory a Turn.</p>
       <TestBox
         title="Test text"
         hint="Sends this prompt to your saved model, with the saved Extra Narrator Instructions above. OpenRouter may charge for each test."

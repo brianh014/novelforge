@@ -14,6 +14,12 @@ export const SettingsUpdate = z
     textHost: z.string(),
     textHostFallback: z.boolean(),
     modelInstructions: z.string(),
+    // Limits on one reply, so a model that never stops can't hang a Turn or run up a bill. The provider stops billing at the token limit.
+    textMaxTokens: z.number().int().min(1000).max(200_000),
+    // Counted from the first byte, as loading a model can take minutes.
+    textReplyMinutes: z.number().positive().max(60),
+    // Recent Messages sent in full each Turn. Older ones reach the Narrator as Scene Memories, written in batches of 20, so it can't go below two batches.
+    textRecentMessages: z.number().int().min(40).max(400),
     imageProvider: z.enum(["openrouter", "local"]),
     imageModel: z.string(),
     imageApiKey: z.string(),
@@ -49,6 +55,11 @@ const defaults = {
   textHost: "",
   textHostFallback: true,
   modelInstructions: "",
+  // Over twice the longest real reply, reasoning included, so only a runaway reaches it.
+  textMaxTokens: 16_000,
+  // The slowest real reply so far took five.
+  textReplyMinutes: 8,
+  textRecentMessages: 80,
   imageProvider: "openrouter",
   imageModel: "",
   imageApiKey: "",
