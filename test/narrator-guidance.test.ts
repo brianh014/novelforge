@@ -118,5 +118,6 @@ test("the Narrator stops when someone waits on the PC, and that rule leaves the 
   await playTurn(id);
 
   expect(lastSystem()).toContain("end the reply there");
+  expect(lastSystem()).toContain("the PC's time passes only when the player says so");
   expect(prompts.at(-1)![0]!.content).not.toContain("end the reply there");
 });
