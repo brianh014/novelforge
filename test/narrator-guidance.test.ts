@@ -99,3 +99,14 @@ test("a story with no Plot Threads gets no nudge", async () => {
 
   expect(lastSystem()).not.toContain("Bring this Plot Thread into play");
 });
+
+test("the Narrator may invent the present but not the PC's past, and that rule leaves the cached start alone", async () => {
+  play(summed("Ash reached the docks."));
+  const id = await app.createSave();
+
+  await playTurn(id);
+
+  expect(lastSystem()).toContain("Invent freely in the present");
+  expect(lastSystem()).toContain("something the PC did, said or was told earlier");
+  expect(prompts.at(-1)![0]!.content).not.toContain("Invent freely");
+});
