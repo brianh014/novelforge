@@ -1040,6 +1040,22 @@ export function saveStore(savesDir: string) {
      * Swaps the latest Narrator Message for a new one that keeps its Check. The new Message gets a new id, so any
      * Turn or replacement in flight from the old response is caught as stale.
      */
+    /** In place, so the Message keeps its id and with it its Scene Image, Requested Images and portraits. */
+    editTurn(id: string, messageId: number, narration: string, advance: (state: State) => State) {
+      using db = open(id);
+      return db.transaction(() => {
+        const { state, edits } = latestTurn(db, messageId);
+        const edited = db
+          .query<Message, [string, string | null, number]>("UPDATE messages SET text = ?, edits = ? WHERE id = ? RETURNING id, role, text")
+          .get(narration, edits.length > 0 ? JSON.stringify(edits) : null, messageId)!;
+        db.run("DELETE FROM snapshot_sections WHERE message_id = ?", [messageId]);
+        writeSnapshot(db, messageId, advance(state));
+        sweepSections(db);
+        clearPending(db);
+        return [edited];
+      })();
+    },
+
     replaceTurn(id: string, messageId: number, narration: string, advance: (state: State) => State) {
       using db = open(id);
       return db.transaction(() => {

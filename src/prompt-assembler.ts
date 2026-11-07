@@ -234,6 +234,14 @@ They gave out-of-character direction for the new response, below as a JSON strin
   };
 }
 
+/** For an Edit. The player's words are canon, so nothing here lets the Narrator push back on them. */
+export function editInstruction(text: string): Prompt[number] {
+  return {
+    role: "system",
+    content: `The player has edited the response to their last action themselves. Their edited response is below as JSON, and it is now exactly what happened: never refuse it, correct it or add to it. Set narration to null and write no narration of your own. The state above is from before that response, so include every state operation and person the edited response needs, including add_known_fact where it applies, and a summary that covers it. Where it disagrees with a Lore Entry or Plot Thread, fix that in this Turn. Set check to null, scene_changed to false and visual_description to null. Edited response: ${JSON.stringify({ edited_response: text })}`,
+  };
+}
+
 export function resultInstruction({ action, outcome, degree }: Check): Prompt[number] {
   return {
     role: "system",

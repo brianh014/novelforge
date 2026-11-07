@@ -23,6 +23,7 @@ import {
   portraitUrl,
   previewRevert,
   replaceResponse,
+  editResponse,
   type RequestedImage,
   type RequestedImages,
   requestedImageUrl,
@@ -36,7 +37,7 @@ import {
   type TurnResult,
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
-import { ChapterIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
+import { ChapterIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
@@ -176,6 +177,8 @@ export function Play({ id }: { id: string }) {
   const [deciding, setDeciding] = useState(false);
   // The response being rewritten, by id, so the box goes if the story moves on from it.
   const [rewriting, setRewriting] = useState<number>();
+  // Whether that box holds the response's own words for an Edit, rather than feedback for a Rewrite.
+  const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [error, setError] = useState("");
@@ -313,18 +316,33 @@ export function Play({ id }: { id: string }) {
 
   function sendFeedback(event: FormEvent) {
     event.preventDefault();
-    if (feedback.trim()) replace(feedback);
+    const replaces = messages.at(-1);
+    if (!feedback.trim() || !replaces) return;
+    if (!editing) return replace(feedback);
+    story.current!.focus();
+    // The edited words show while the Narrator catches the state up with them.
+    run({ input: feedback, narration: feedback, replaces, edit: true }, messages.slice(0, -1), (_show, signal) => editResponse(id, replaces.id, feedback, signal));
   }
 
   function startRewrite(message: Message) {
-    if (rewriting === message.id) return;
+    if (rewriting === message.id && !editing) return;
     setRewriting(message.id);
+    setEditing(false);
     setFeedback("");
+    setAsking(false);
+  }
+
+  function startEdit(message: Message) {
+    if (rewriting === message.id && editing) return;
+    setRewriting(message.id);
+    setEditing(true);
+    setFeedback(message.text);
     setAsking(false);
   }
 
   function cancelRewrite() {
     setRewriting(undefined);
+    setEditing(false);
     setFeedback("");
     // Back in a Stage box can have taken the button away.
     (rewriteButton.current ?? story.current)?.focus();
@@ -367,10 +385,11 @@ export function Play({ id }: { id: string }) {
   }
 
   /** A failed Turn's text goes back where it was written, as feedback must never be sent as the PC's words. */
-  function giveBack(input: string, replaces?: number) {
+  function giveBack(input: string, replaces?: number, edit = false) {
     if (replaces === undefined) setDraft(input);
     else if (input) {
       setRewriting(replaces);
+      setEditing(edit);
       setFeedback(input);
     }
   }
@@ -396,7 +415,7 @@ export function Play({ id }: { id: string }) {
     const result = await running.finished;
     if (leaving.current.signal.aborted) return;
     unwatchTurn.current();
-    const { replaces, narration } = running.turn;
+    const { replaces, narration, edit } = running.turn;
     if ("messages" in result) {
       const latest = before ? [...before, ...result.messages] : await getMessages(id).catch(() => result.messages);
       setTurn(undefined);
@@ -406,7 +425,7 @@ export function Play({ id }: { id: string }) {
       if (!narration) setAnnouncement(result.messages.at(-1)!.text);
     } else {
       setTurn(undefined);
-      giveBack(result.input, replaces?.id);
+      giveBack(result.input, replaces?.id, edit);
       setError(result.error);
       // A stale Turn means the story moved on without this page.
       getMessages(id).then(setMessages, () => {});
@@ -514,6 +533,9 @@ export function Play({ id }: { id: string }) {
               onClick={() => startRewrite(message)}
             >
               {RewriteIcon}
+            </button>
+            <button className="icon" title="Edit" aria-label="Edit" aria-expanded={rewriting === message.id && editing} onClick={() => startEdit(message)}>
+              {EditIcon}
             </button>
             <button className="icon" title="Regenerate" aria-label="Regenerate" onClick={() => replace("")}>
               {RegenerateIcon}
@@ -699,13 +721,14 @@ export function Play({ id }: { id: string }) {
       {replaceable && rewriting === replaceable.id && (
         <form className="ask" onSubmit={sendFeedback}>
           <label>
-            What should the Narrator change?
+            {editing ? "Edit the response" : "What should the Narrator change?"}
             <textarea
               autoFocus
-              rows={2}
+              rows={editing ? 10 : 2}
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
-              onKeyDown={sendOnEnter}
+              // An Edit is many lines long, so Enter makes a new line.
+              onKeyDown={editing ? undefined : sendOnEnter}
             />
           </label>
           <div className="row">
@@ -713,7 +736,7 @@ export function Play({ id }: { id: string }) {
               Cancel
             </button>
             <button className="action" aria-disabled={!feedback.trim()}>
-              Rewrite the response
+              {editing ? "Save the edit" : "Rewrite the response"}
             </button>
           </div>
         </form>

@@ -107,6 +107,10 @@ _Avoid_: World Info, lorebook entry
 Regenerating the latest Narrator response using the player's feedback.
 _Avoid_: Edit
 
+**Edit** (of a response):
+The player changing the words of the latest Narrator response themselves, after which the Narrator brings the state in line with them and writes nothing new. Any picture stays.
+_Avoid_: Rewrite (that is the Narrator writing a new response from feedback)
+
 **Regenerate**:
 Replacing the latest Narrator response without feedback, or a world before play begins, which keeps the PC and every image already drawn.
 _Avoid_: Retry, swipe

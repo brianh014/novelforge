@@ -3,7 +3,7 @@ import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resol
 import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
 import { log } from "./logger";
-import { assemblePrompt, chapterTitlePrompt, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
+import { assemblePrompt, chapterTitlePrompt, editInstruction, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, introduce, Person, type SceneMemory, type State, StateOperation } from "./state-applier";
@@ -47,6 +47,8 @@ const FinishedTurn = z.object({
   check: z.null().optional(),
 });
 const NarratorResponse = z.union([z.object({ check: CheckRequest }), FinishedTurn]);
+/** The player wrote the narration of an Edit, so the reply holds only what follows from it. */
+const EditedTurn = FinishedTurn.extend({ narration: z.string().nullish() });
 
 /** A schema to send to a model. Strict schema modes refuse some keywords, so those are left to validating the reply. */
 export function jsonSchemaOf(schema: z.ZodType) {
@@ -104,12 +106,14 @@ const MAX_ATTEMPTS = 3;
 
 type Narrated = {
   /** For the Server Log. */
-  kind: "turn" | "opening" | "rewrite" | "regenerate";
+  kind: "turn" | "opening" | "rewrite" | "regenerate" | "edit";
   prompt: Prompt;
   /** The text a failure hands back to the player. */
   input: string;
   refusal: string;
   pcName: string;
+  /** The player's own words for an Edit, which stand in for whatever narration the reply holds. */
+  narration?: string;
   check?: Check;
   /** The Scene Memory this Turn adds, if one is due and came back. */
   memory: Promise<SceneMemory | null>;
@@ -219,11 +223,48 @@ export async function replaceResponse(
   });
 }
 
+/** An Edit: the player's words replace the latest response's, and the Narrator brings the state in line with them. The picture and any Check stay. */
+export async function editResponse(
+  saves: SaveStore,
+  { textProvider, settings, images }: { textProvider: TextProvider; settings: SettingsStore; images: ImagePipeline },
+  id: string,
+  messageId: number,
+  text: string,
+  signal: AbortSignal,
+  emit: TurnEvents = () => {},
+) {
+  const { input, state, messages } = saves.turnToReplace(id, messageId);
+  const memoryStart = saves.memoryStart(id);
+  const prompt = assemblePrompt({
+    save: saves.read(id),
+    state,
+    messages,
+    memoryStart,
+    modelInstructions: settings.read().modelInstructions,
+    input,
+    responseSchema: JSON.stringify(responseSchema),
+    // No picture is drawn, so the Narrator needn't write a prompt for one.
+    promptStyle: null,
+  });
+  return narrate(textProvider, signal, emit, {
+    kind: "edit",
+    prompt: [...prompt, editInstruction(text)],
+    input: text,
+    refusal: "The Narrator refused this edit, so the response stays as it was.",
+    pcName: saves.read(id).pc.name,
+    narration: text,
+    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, signal),
+    commit: (narration, _check, advance) => saves.editTurn(id, messageId, narration, advance),
+    // Only portraits for anyone new, as the Scene Image stays.
+    committed: (edited, scene) => images.sceneChanged(id, edited, { ...scene, changed: false }),
+  });
+}
+
 async function narrate(
   textProvider: TextProvider,
   signal: AbortSignal,
   emit: TurnEvents,
-  { kind, prompt, input, refusal, pcName, check: storedCheck, memory: pendingMemory, rollCheck, commit, committed }: Narrated,
+  { kind, prompt, input, refusal, pcName, narration: edited, check: storedCheck, memory: pendingMemory, rollCheck, commit, committed }: Narrated,
 ) {
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check = storedCheck;
@@ -234,6 +275,7 @@ async function narrate(
     let generation: string | undefined;
     let partial = "";
     const onText = (text: string) => {
+      if (edited !== undefined) return;
       partial += text;
       const narration = narrationSoFar(partial);
       if (narration.length <= narrationSent) return;
@@ -248,14 +290,15 @@ async function narrate(
         input,
         refusal,
       );
-      const response = parseReply(reply, NarratorResponse);
+      const response = parseReply<z.infer<typeof NarratorResponse | typeof EditedTurn>>(reply, edited === undefined ? NarratorResponse : EditedTurn);
       if (response.check) {
         if (check || !rollCheck) throw new InvalidResponse();
         check = rollCheck(response.check);
         attempt = 0; // The result call gets its own retries.
         continue;
       }
-      const { narration, state_operations, people, summary, scene_changed, visual_description, chapter_ends } = response;
+      const { state_operations, people, summary, scene_changed, visual_description, chapter_ends } = response;
+      const narration = edited ?? (response.narration as string);
       const memory = await pendingMemory;
       let moved = false;
       let location = "";

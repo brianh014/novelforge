@@ -1704,6 +1704,53 @@ test("Rewrite needs feedback, and writes nothing without it", async () => {
   expect(await messageTexts(app, id)).toEqual(["I wait.", "The tide rises."]);
 });
 
+const editTo = (app: ReturnType<typeof startApp>, id: string, messageId: number, text: string) =>
+  app.post(`/saves/${id}/messages/${messageId}/edit`, { text });
+
+test("Edit keeps the player's words and the Message, and brings the state in line from before the response", async () => {
+  const edited = "[Ashley]: “Get out.”\nAshley throws the lantern at you.";
+  const { app, prompts } = play(
+    narration("Ashley smiles.", { op: "add_known_fact", fact: "Ashley is pleased." }, { op: "add_item", slot: "carrying", item: "lantern" }),
+    JSON.stringify({ narration: "Something else entirely.", state_operations: [{ op: "add_known_fact", fact: "Ashley is angry." }], people: [{ name: "Ashley", appearance: "a tall woman in overalls" }] }),
+  );
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I hand over the spanners." });
+
+  const response = await editTo(app, id, 2, edited);
+
+  expect(response.status).toBe(201);
+  // The same id, so its pictures stay with it, and the Narrator's own narration never replaces the player's.
+  expect(await response.json()).toEqual({ messages: [{ id: 2, role: "narrator", text: edited }] });
+  expect(await messageTexts(app, id)).toEqual(["I hand over the spanners.", edited]);
+  expect(await journal(app, id)).toMatchObject({ facts: ["Ashley is angry."], npcs: ["Ashley"] });
+  expect(await inventory(app, id)).toMatchObject({ carrying: [] });
+  const last = prompts[1]!.at(-1)!;
+  expect(last.content).toContain(JSON.stringify({ edited_response: edited }));
+  expect(contents(prompts[1])).not.toContainEqual(expect.stringContaining("Ashley smiles"));
+  expect(contents(prompts[1])).not.toContainEqual(expect.stringContaining("Ashley is pleased"));
+});
+
+test("Edit needs words, and a refused Edit leaves the response as it was", async () => {
+  const { app } = play(narration("The tide rises.", { op: "add_known_fact", fact: "The tide is high." }), new ContentRefused("policy"));
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect((await editTo(app, id, 2, "   ")).status).toBe(400);
+  expect((await editTo(app, id, 2, "The tide falls.")).status).toBe(422);
+  expect(await messageTexts(app, id)).toEqual(["I wait.", "The tide rises."]);
+  expect(await journal(app, id)).toMatchObject({ facts: ["The tide is high."] });
+});
+
+test("only the latest response can be edited", async () => {
+  const { app } = play(narration("One."), narration("Two."));
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "A." });
+  await app.post(`/saves/${id}/turns`, { input: "B." });
+
+  expect((await editTo(app, id, 2, "Changed.")).status).toBe(409);
+  expect(await messageTexts(app, id)).toEqual(["A.", "One.", "B.", "Two."]);
+});
+
 test("a non-JSON Regenerate is rejected, so other websites cannot replace a response", async () => {
   const { app, prompts } = play(narration("The tide rises."));
   const id = await app.createSave();

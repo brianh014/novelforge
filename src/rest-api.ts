@@ -25,7 +25,7 @@ import { type SettingsChange, type SettingsStore, SettingsUpdate } from "./setti
 import { textHosts, textModels } from "./text-provider";
 import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-turns";
 import { type State, VisibleEdit, type World, type WorldEdit } from "./state-applier";
-import { askForChapterTitle, ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
+import { askForChapterTitle, ContentRefused, editResponse, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import { readable } from "./web/chat-style";
 import spa from "./web/index.html";
 import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type WorldChoices, type WorldPc, writeImagePrompt } from "./world-creation";
@@ -150,6 +150,8 @@ const NewTurnRequest = z.object({ input: z.string().min(1) });
 const NoFields = z.object({});
 
 const RewriteRequest = z.object({ feedback: z.string().trim().min(1) });
+
+const EditRequest = z.object({ text: z.string().trim().min(1) });
 
 const PromptRequest = z.object({ prompt: z.string().trim().min(1) });
 
@@ -981,6 +983,15 @@ export function startServer(options: {
           const { id, messageId } = req.params;
           return turnResponse(req, turns.begin(id, saves.latestMessageId(id), feedback, Number(messageId)), (emit) =>
             replaceResponse(saves, engine, id, Number(messageId), feedback, NEVER, emit),
+          );
+        },
+      },
+      "/saves/:id/messages/:messageId/edit": {
+        POST: async (req) => {
+          const { text } = await parseBody(req, EditRequest);
+          const { id, messageId } = req.params;
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), text, Number(messageId)), (emit) =>
+            editResponse(saves, engine, id, Number(messageId), text, NEVER, emit),
           );
         },
       },

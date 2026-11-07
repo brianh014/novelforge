@@ -280,6 +280,10 @@ export const replaceResponse = (
     signal,
   );
 
+/** An Edit: the player's own words for the latest response, which keeps its id. Nothing streams, as the words are the player's. */
+export const editResponse = (id: string, messageId: number, text: string, signal: AbortSignal) =>
+  streamTurn(id, `messages/${messageId}/edit`, { text }, text, messageId, "Try again.", () => {}, signal);
+
 /** The state of a Turn on the server, which goes on without this page. Reading a failure takes it. */
 export const getTurn = (id: string) => request<TurnStatus>(`/saves/${id}/turn`);
 

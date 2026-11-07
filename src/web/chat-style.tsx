@@ -4,7 +4,7 @@ import type { Message, Settings } from "./api";
 export type ChatStyle = Settings["chatStyle"];
 export type Beat = { speaker?: string; player?: boolean; text: string };
 /** A `replaces` response is left out of the story while its replacement arrives. */
-export type TurnInProgress = { input: string; narration: string; replaces?: Message };
+export type TurnInProgress = { input: string; narration: string; replaces?: Message; edit?: boolean };
 export type StageBeat = { beat: Beat; message?: Message; number: number; of: number };
 
 // shortcut: a bare name is any capitalized words before a colon and a quote, so "Sign: “Closed”" gets a speaker and "Jan van Dijk" doesn't, match against the state's names if that shows up.
