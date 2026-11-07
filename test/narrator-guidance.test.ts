@@ -117,9 +117,9 @@ test("the Narrator stops when someone waits on the PC, and that rule leaves the 
 
   await playTurn(id);
 
-  expect(lastSystem()).toContain("end the reply there");
+  expect(lastSystem()).toContain("End the reply there");
   expect(lastSystem()).toContain("the PC's time passes only when the player says so");
-  expect(prompts.at(-1)![0]!.content).not.toContain("end the reply there");
+  expect(prompts.at(-1)![0]!.content).not.toContain("End the reply there");
 });
 
 test("the rules every story needs are built in, near the reply, so Model Instructions can stay short", async () => {
@@ -140,4 +140,25 @@ test("the rules every story needs are built in, near the reply, so Model Instruc
     expect(lastSystem()).toContain(rule);
     expect(prompts.at(-1)![0]!.content).not.toContain(rule);
   }
+});
+
+test("the pace of a reply is the last thing the Narrator reads before the player's words", async () => {
+  play(summed("Ash reached the docks."));
+  const id = await app.createSave();
+
+  await playTurn(id);
+
+  expect(lastSystem()).toEndWith("never carry it through to its end in one reply.");
+  expect(lastSystem()).toContain("never over 350");
+  expect(prompts.at(-1)!.at(-1)!.role).toBe("user");
+});
+
+test("a reply is held to one thing for the PC to answer, in numbers the Narrator can count", async () => {
+  play(summed("Ash reached the docks."));
+  const id = await app.createSave();
+
+  await playTurn(id);
+
+  expect(lastSystem()).toContain("No one speaks more than twice in a reply");
+  expect(lastSystem()).toContain("at most one thing for the PC to answer");
 });
