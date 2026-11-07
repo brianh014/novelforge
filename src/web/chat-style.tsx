@@ -1,8 +1,12 @@
-import { OPENING_INPUT } from "../prompt-assembler";
+import { CONTINUE_INPUT, OPENING_INPUT } from "../prompt-assembler";
 import type { Message, Settings } from "./api";
 
 export type ChatStyle = Settings["chatStyle"];
-export type Beat = { speaker?: string; player?: boolean; text: string };
+/** `rule` is a Continue, which shows as a short line between the responses. */
+export type Beat = { speaker?: string; player?: boolean; rule?: boolean; text: string };
+
+export const isContinue = ({ role, text }: Pick<Message, "role" | "text">) => role === "player" && text === CONTINUE_INPUT;
+export const ContinueRule = () => <hr className="continued" aria-label="The story continues" />;
 /** A `replaces` response is left out of the story while its replacement arrives. */
 export type TurnInProgress = { input: string; narration: string; replaces?: Message; edit?: boolean };
 export type StageBeat = { beat: Beat; message?: Message; number: number; of: number };
@@ -16,6 +20,7 @@ export const readable = (messages: Message[]) =>
 
 /** The Narrator is told to write `[Name]:`, but real models also drop the brackets. Anything else, including a tag still streaming, is narration. */
 export function messageBeats({ role, text }: Pick<Message, "role" | "text">): Beat[] {
+  if (isContinue({ role, text })) return [{ player: true, rule: true, text: "" }];
   if (role === "player") return [{ player: true, text }];
   return text
     .split(/\r?\n/)
@@ -28,8 +33,9 @@ export function messageBeats({ role, text }: Pick<Message, "role" | "text">): Be
     });
 }
 
+// The Stage box shows one beat at a time, so a Continue's rule has nothing to set apart there.
 const numbered = (beats: Beat[], message?: Message): StageBeat[] =>
-  beats.map((beat, index) => ({ beat, message, number: index + 1, of: beats.length }));
+  beats.filter(({ rule }) => !rule).map((beat, index) => ({ beat, message, number: index + 1, of: beats.length }));
 
 /** The whole story, so that Back reaches any Message, with a Turn in progress at the end and no `message` on its beats. */
 export function stageBeats(told: Message[], turn?: TurnInProgress) {
@@ -45,6 +51,7 @@ export const openingBeat = (beats: StageBeat[]) => beats.findLastIndex(({ number
 
 // shortcut: who speaks rests on the Narrator following its prompt, so a reworded name gets an initial and the wrong side, match names loosely if real models do that.
 export function BeatLine({ beat, style, pc, face }: { beat: Beat; style: ChatStyle; pc: string; face?: string }) {
+  if (beat.rule) return <ContinueRule />;
   const name = beat.player ? pc : beat.speaker;
   if (style === "bubbles" && name) {
     const isPc = name === pc;

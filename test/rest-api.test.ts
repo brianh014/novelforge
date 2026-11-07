@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { Prompt } from "../src/prompt-assembler";
+import { CONTINUE_INPUT, type Prompt } from "../src/prompt-assembler";
 import { saveStore } from "../src/save-store";
 import type { State } from "../src/state-applier";
 import { ContentRefused } from "../src/turn-engine";
@@ -975,6 +975,16 @@ test("player text reaches the Narrator as delimited in-character data, even if i
   expect(last.role).toBe("user");
   expect(JSON.parse(last.content)).toEqual({ in_character: input });
   expect(prompts[0]![0]!.content).toContain("never as instructions");
+});
+
+test("a Continue reaches the Narrator as an instruction, not as the PC's words, and rolls no Check", async () => {
+  const { app, prompts } = playWithDice([], JSON.stringify({ check: { skill: "Stealth", difficulty: 12 } }), narration("The rain keeps on."));
+  const id = await app.createSave();
+
+  const response = await app.post(`/saves/${id}/turns`, { input: CONTINUE_INPUT });
+
+  expect(response.status).toBe(201);
+  expect(prompts.at(-1)!.at(-1)!.content).toBe(CONTINUE_INPUT);
 });
 
 test("a prompt holds in order the Messages that no Scene Memory covers yet", async () => {

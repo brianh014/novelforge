@@ -3,7 +3,7 @@ import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resol
 import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
 import { log } from "./logger";
-import { assemblePrompt, chapterTitlePrompt, editInstruction, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
+import { assemblePrompt, chapterTitlePrompt, CONTINUE_INPUT, editInstruction, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, introduce, Person, type SceneMemory, type State, StateOperation } from "./state-applier";
@@ -161,7 +161,8 @@ export async function playTurn(
     refusal: "The Narrator refused this message. Edit it and try again.",
     pcName: saves.read(id).pc.name,
     memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, settings.read().textRecentMessages, signal),
-    rollCheck: mayCheck ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
+    // The PC attempts nothing in a Continue, so there is nothing to roll for.
+    rollCheck: mayCheck && input !== CONTINUE_INPUT ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
     committed: (messageId, scene) => images.sceneChanged(id, messageId, scene),
   });

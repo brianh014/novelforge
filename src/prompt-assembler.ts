@@ -17,9 +17,15 @@ const REPLIES_SHOWING_PEOPLE = 2;
 // JSON encoding means player text can never close the delimiter early.
 const inCharacter = (text: string) => JSON.stringify({ in_character: text });
 
+/** The player Message of a Continue, a Turn with no player input. The page shows a rule in its place. */
+export const CONTINUE_INPUT = "The player takes no action this Turn. Continue the story: the PC does nothing new, so move the scene forward on its own, then stop with the PC free to act.";
+
+// A Continue is an instruction, and must never read as the PC's own words.
+const playerWords = (text: string) => (text === CONTINUE_INPUT ? CONTINUE_INPUT : inCharacter(text));
+
 const toPrompt = (npcs: State["npcs"], peopleFrom: number) => ({ id, role, text }: Message): Prompt[number] =>
   role === "player"
-    ? { role: "user", content: inCharacter(text) }
+    ? { role: "user", content: playerWords(text) }
     : // The same key order as a new reply, because the Narrator copies what it sees and streaming needs check first.
       // No summary, as one in each of these would cost far more than it teaches.
       { role: "assistant", content: JSON.stringify({ check: null, narration: text, state_operations: [], people: id >= peopleFrom ? npcs.filter(({ name }) => text.includes(name)) : [], scene_changed: false, visual_description: "", chapter_ends: false }) };
@@ -219,7 +225,7 @@ Keep the prose fresh. Don't reuse the images, background details or closing move
 The older replies above are shortened, so fill in every field of the schema.${threadNudge(plotThreads, messages)}${fillLooseEnds(currentState.looseEnds, messages)}${fillStoryTime(currentState.storyTime, messages)}
 ${PACE}`,
     },
-    { role: "user", content: inCharacter(input) },
+    { role: "user", content: playerWords(input) },
   ];
 }
 

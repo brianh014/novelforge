@@ -37,7 +37,8 @@ import {
   type TurnResult,
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
-import { ChapterIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon } from "./icons";
+import { CONTINUE_INPUT } from "../prompt-assembler";
+import { ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
@@ -292,6 +293,11 @@ export function Play({ id }: { id: string }) {
     playInput(draft, messages);
   }
 
+  function continueStory() {
+    if (turn || deciding || draft.trim()) return;
+    playInput(CONTINUE_INPUT, messages);
+  }
+
   function openStory() {
     run({ input: "", narration: "" }, [], (show, signal) => playOpening(id, show, signal));
   }
@@ -386,7 +392,8 @@ export function Play({ id }: { id: string }) {
 
   /** A failed Turn's text goes back where it was written, as feedback must never be sent as the PC's words. */
   function giveBack(input: string, replaces?: number, edit = false) {
-    if (replaces === undefined) setDraft(input);
+    // A failed Continue leaves the box empty, so the Continue button is back to press again.
+    if (replaces === undefined) setDraft(input === CONTINUE_INPUT ? "" : input);
     else if (input) {
       setRewriting(replaces);
       setEditing(edit);
@@ -772,7 +779,7 @@ export function Play({ id }: { id: string }) {
           <span className="visually-hidden">What does {pc} say or do?</span>
           <textarea
             ref={inputBox}
-            rows={2}
+            rows={1}
             placeholder={deciding ? "The Narrator is deciding…" : `What does ${pc} say or do?`}
             value={draft}
             readOnly={!!turn}
@@ -803,9 +810,21 @@ export function Play({ id }: { id: string }) {
           >
             {DecideIcon}
           </button>
+          {!draft.trim() && (
+            <button
+              type="button"
+              className="icon continue"
+              title="Continue: the Narrator moves the story on"
+              aria-label="Continue"
+              aria-disabled={!!turn || deciding}
+              onClick={continueStory}
+            >
+              {ContinueIcon}
+            </button>
+          )}
           {/* aria-disabled, because a disabled button would drop keyboard focus at every Send. */}
-          <button className="action" aria-disabled={!!turn || !draft.trim()}>
-            Send
+          <button className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || !draft.trim()}>
+            {SendIcon}
           </button>
         </div>
       </form>

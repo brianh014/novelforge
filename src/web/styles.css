@@ -1599,8 +1599,24 @@ a.action {
 
 .compose {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--soft);
+}
+
+/* The whole box shows focus, so the text box itself has no line of its own. */
+.compose:has(textarea:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.compose textarea {
+  padding: 2px 0;
+  border: 0;
+  outline: none;
 }
 
 .compose-actions {
@@ -1609,9 +1625,33 @@ a.action {
   gap: 6px;
 }
 
-.compose label {
-  flex: 1;
-  min-width: 0;
+.compose .send {
+  width: 34px;
+  height: 34px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Continue and Send sit together on the right. */
+.compose .continue {
+  margin-left: auto;
+}
+
+.compose .continue + .send {
+  margin-left: 0;
+}
+
+.continued {
+  width: 3em;
+  margin: 1em auto;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.compose .send svg {
+  stroke-width: 2.2;
 }
 
 .compose textarea,

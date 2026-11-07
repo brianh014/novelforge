@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { editJournal, getImages, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, tellNarrator } from "./api";
-import { readable } from "./chat-style";
+import { ContinueRule, isContinue, readable } from "./chat-style";
 import { EditIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./play";
@@ -362,7 +362,7 @@ function ChapterText({ id, messages, images, requested }: { id: string; messages
               .map((image) => (
                 <RequestedPicture key={image.ref} id={id} image={image} />
               ))}
-            <p>{message.text}</p>
+            {isContinue(message) ? <ContinueRule /> : <p>{message.text}</p>}
           </div>
         );
       })}

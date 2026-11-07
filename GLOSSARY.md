@@ -40,6 +40,9 @@ _Avoid_: Title image, world image
 **Opening**:
 The Narrator's first Message, which brings the player up to speed before they act. It is a first Turn whose stored player Message the story never shows.
 
+**Continue**:
+A Turn with no player input, in which the Narrator moves the story on by itself, with no Check. The story shows a short rule where its player Message would be.
+
 **Chapter**:
 A titled run of consecutive Messages, read as one piece in the Journal. One Chapter is always open, the one play is adding to. Only the player closes it, sometimes on the Narrator's suggestion, and closing starts the next. The Opening begins Chapter 1, and a Chapter never splits a Turn. Chapters don't change what the Narrator is sent.
 _Avoid_: Act, part, Scene (that is a place and situation, and a Chapter may hold many)

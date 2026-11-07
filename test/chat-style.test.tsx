@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { CONTINUE_INPUT } from "../src/prompt-assembler";
 import { type Beat, BeatLine, messageBeats, openingBeat, stageBeats } from "../src/web/chat-style";
+
+test("a Continue shows as a rule in the story, and the Stage box skips it", () => {
+  const [beat] = messageBeats({ role: "player", text: CONTINUE_INPUT });
+  expect(renderToStaticMarkup(<BeatLine beat={beat!} style="script" pc="Ash" />)).toContain('<hr class="continued"');
+  const told = [{ id: 1, role: "player", text: CONTINUE_INPUT }, { id: 2, role: "narrator", text: "The rain keeps on." }] as Parameters<typeof stageBeats>[0];
+  expect(stageBeats(told).map(({ beat }) => beat.text)).toEqual(["The rain keeps on."]);
+});
 
 const narrator = (text: string) => messageBeats({ role: "narrator", text });
 
