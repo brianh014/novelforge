@@ -33,6 +33,9 @@ const WorldReply = z.object({
   lore_entries: z.array(LoreEntryReply).min(1),
   world_rules: z.array(text).min(1),
   plot_threads: z.array(text).min(1),
+  calendar: text,
+  start_date: text,
+  start_time_of_day: text,
 });
 
 const PickReply = z.object({ text });
@@ -85,6 +88,7 @@ lore_entries is the World Bible, which is secret. Write at least twelve entries 
 world_rules are strict statements of what is and is not possible in this world. Start with its theme and tone, because you will see these on every Turn and nothing else carries them.
 plot_threads are secret storylines for play to reveal. Write three to six.
 Keep each world rule and plot thread to a sentence or two, because they sit in every prompt.
+calendar says in two or three sentences how people in this world count days, months and years, with the names they use, so that dates stay consistent in play. start_date and start_time_of_day are when the story opens, in that calendar, as the PC would reckon them, such as "3rd of Frostmoon, 412 AR" and "late evening". Make them fit the starting_hook, if there is one.
 world_overview is the only part the player ever reads. In a few short paragraphs, cover only what the PC would plausibly know from living in this world. It must be spoiler-free: never reveal or hint at a plot thread, and leave out every secret in the lore entries.
 ${modelInstructions(context)}`,
   },
@@ -289,17 +293,19 @@ export const changeWorld = (context: Context, state: State, change: string, sign
 /** Only `overview` may reach the player. */
 export async function generateWorld(context: Context, choices: WorldChoices, pc: WorldPc, signal: AbortSignal) {
   // shortcut: the Overview is Narrator free text, kept clean only by its prompt, even against a World Brief that asks for secrets, screen it if models leak.
-  const { world_overview, lore_entries, world_rules, plot_threads } = await askForJson(
+  const { world_overview, lore_entries, world_rules, plot_threads, calendar, start_date, start_time_of_day } = await askForJson(
     context.textProvider,
     worldPrompt(context, choices, pc),
     WorldReply,
     REFUSAL,
     signal,
   );
-  const world: World = {
-    worldBible: toLoreEntries(lore_entries),
+  const world: World & Pick<State, "storyTime"> = {
+    // Always on, as every Turn can move the date, and its rules are what keep it consistent.
+    worldBible: [...toLoreEntries(lore_entries), { title: "Calendar", keywords: ["calendar", "date", "day"], content: calendar, alwaysOn: true }],
     worldRules: world_rules,
     plotThreads: plot_threads,
+    storyTime: { day: 1, date: start_date, timeOfDay: start_time_of_day },
   };
   return { overview: world_overview, world };
 }

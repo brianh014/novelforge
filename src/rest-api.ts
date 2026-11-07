@@ -24,7 +24,7 @@ import {
 import { type SettingsChange, type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textHosts, textModels } from "./text-provider";
 import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-turns";
-import { VisibleEdit, type World, type WorldEdit } from "./state-applier";
+import { type State, VisibleEdit, type World, type WorldEdit } from "./state-applier";
 import { askForChapterTitle, ContentRefused, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import { readable } from "./web/chat-style";
 import spa from "./web/index.html";
@@ -346,7 +346,7 @@ export function startServer(options: {
   const engine = { ...options, images };
   // Held here until Begin because a Save holds it all at once, and so that the client never holds the secrets.
   // shortcut: an abandoned world and its images stay until the app restarts, evict them if that ever adds up.
-  const worlds = new Map<string, World & WorldChoices & WorldPc & { sheet: Awaited<ReturnType<typeof pcSheet>> }>();
+  const worlds = new Map<string, World & Pick<State, "storyTime"> & WorldChoices & WorldPc & { sheet: Awaited<ReturnType<typeof pcSheet>> }>();
   // By the id a form or its world goes by, as these can be drawn before either a world or a Save exists. The form's text is safe in its tab if a restart loses them.
   const held: Record<ImageKind, Map<string, { drawn: Promise<DrawnImage>; artStyle: string; stop: AbortController }>> = {
     cover: new Map(),
@@ -632,8 +632,8 @@ export function startServer(options: {
           const { artStyle } = await parseBody(req, ArtStyleRequest);
           const world = worlds.get(req.params.id);
           if (!world) throw new WorldNotFound();
-          const { title, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, sheet } = world;
-          const opening = { worldBible, worldRules, plotThreads, ...sheet };
+          const { title, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, storyTime, sheet } = world;
+          const opening = { worldBible, worldRules, plotThreads, storyTime, ...sheet };
           const id = saves.create({ title, worldBrief, startingHook, pc, artStyle, opening });
           worlds.delete(req.params.id);
           images.saveCreated(id, held.portrait.get(req.params.id)?.drawn);
@@ -723,8 +723,10 @@ export function startServer(options: {
         GET: (req) => {
           // An allowlist, so the World Bible, Plot Threads and NPC appearance text can never reach the player by default.
           // shortcut: the summary, facts, Loose Ends and Scene Memories are Narrator free text, kept clean only by its prompt, screen them if models leak.
-          const { summary, pcKnown, looseEnds, sceneMemories, scene } = saves.latestState(req.params.id);
+          const { summary, pcKnown, looseEnds, sceneMemories, scene, storyTime } = saves.latestState(req.params.id);
           return Response.json({
+            // Without the day count, which only the Narrator uses.
+            storyTime: storyTime && { date: storyTime.date, timeOfDay: storyTime.timeOfDay },
             summary,
             facts: pcKnown.facts,
             looseEnds,

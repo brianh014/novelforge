@@ -31,6 +31,9 @@ const sheet = JSON.stringify({ wearing: [], health: "unhurt", injuries: [], cond
 const generated = (mark = "", changes = {}) =>
   JSON.stringify({
     world_overview: `${mark}Rain never stops in Saltmere.`,
+    calendar: "Days run in weeks of seven under the Tide Reckoning.",
+    start_date: "3rd of Lowtide",
+    start_time_of_day: "dusk",
     lore_entries: [
       { title: `${mark}The Tide Court`, keywords: ["Tide Court", "the court", "magistrates"], content: `${mark}Its judges drown the guilty.` },
     ],
@@ -77,9 +80,13 @@ test("a generated world reaches the player only as its World Overview, and its S
       content: "Its judges drown the guilty.",
       alwaysOn: false,
     },
+    { title: "Calendar", keywords: ["calendar", "date", "day"], content: "Days run in weeks of seven under the Tide Reckoning.", alwaysOn: true },
   ]);
   expect(worldRules).toEqual(["Magic does not exist."]);
   expect(plotThreads).toEqual(["The mayor is a drowned ghost."]);
+  expect(saves.latestState(id).storyTime).toEqual({ day: 1, date: "3rd of Lowtide", timeOfDay: "dusk" });
+  // The day count is the Narrator's alone.
+  expect(await app.get(`/saves/${id}/journal`).then((r) => r.json())).toMatchObject({ storyTime: { date: "3rd of Lowtide", timeOfDay: "dusk" } });
 });
 
 const SECRET = "ZQX-SECRET-";

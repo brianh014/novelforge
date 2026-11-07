@@ -135,6 +135,10 @@ _Avoid_: System prompt
 The complete, immutable story state belonging to a Message. Reverting to a Message restores its Snapshot.
 _Avoid_: Save (a Snapshot is not a player-facing save)
 
+**Story Time**:
+The in-story date and time of day the PC is living in now, written in the world's own reckoning as the PC knows it, such as "3rd of Frostmoon" and "late evening". The world build picks the day the story starts on. The Narrator moves it on only when the player lets time pass, and the player can correct it in the Journal. Behind it the Narrator keeps a count of days since the Opening, which the player never sees.
+_Avoid_: Clock, date (alone), current time
+
 **Journal**:
 The player-facing record of only what the PC knows or has encountered, where the player can edit that text. An edit lasts until a Revert to before it.
 _Avoid_: Log

@@ -213,6 +213,17 @@ export function Journal({ id }: { id: string }) {
           </div>
           {telling && <TellTheNarrator id={id} onDone={reread} onClose={() => setTelling(false)} />}
           <div className="journal">
+            {journal.storyTime && (
+              <>
+                <h2>Story Time</h2>
+                <Editable label="Date" text={journal.storyTime.date} onSave={(date) => edit({ edit: "storyTime", date, timeOfDay: journal.storyTime!.timeOfDay })}>
+                  <p>{journal.storyTime.date}</p>
+                </Editable>
+                <Editable label="Time of day" text={journal.storyTime.timeOfDay} onSave={(timeOfDay) => edit({ edit: "storyTime", date: journal.storyTime!.date, timeOfDay })}>
+                  <p>{journal.storyTime.timeOfDay}</p>
+                </Editable>
+              </>
+            )}
             {pcPortrait && (
               <p className="person">
                 <Person id={id} name={save.pc.name} portrait={pcPortrait} />

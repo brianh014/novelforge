@@ -26,7 +26,12 @@ export type State = {
   chapters: Chapter[];
   /** Whether the latest Narrator reply suggested ending the open Chapter. */
   chapterReady: boolean;
+  /** Null until the Narrator first sets it, as in a Save from before Story Time. */
+  storyTime: StoryTime | null;
 };
+
+/** `day` counts days since the Opening, as Narrators add whole numbers far better than they work an in-world calendar. The player never sees it. */
+export type StoryTime = { day: number; date: string; timeOfDay: string };
 
 export type Chapter = { lastMessage: number | null; title: string };
 
@@ -46,6 +51,7 @@ export const openingState: State = {
   worldBrief: "",
   chapters: [],
   chapterReady: false,
+  storyTime: null,
 };
 
 const stringList = z.array(z.string());
@@ -69,6 +75,7 @@ export const StateSections = {
   worldBrief: z.string(),
   chapters: z.array(z.object({ lastMessage: z.number().int().nullable(), title: z.string() })),
   chapterReady: z.boolean(),
+  storyTime: z.object({ day: z.number().int(), date: z.string(), timeOfDay: z.string() }).nullable(),
 } satisfies { [Section in keyof State]: z.ZodType<State[Section]> };
 
 const nonEmpty = z.string().min(1);
@@ -108,6 +115,7 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("update_plot_thread"), thread: nonEmpty, replacement: nonEmpty }),
   z.object({ op: z.literal("resolve_plot_thread"), thread: nonEmpty }),
   z.object({ op: z.literal("set_summary"), summary: nonEmpty }),
+  z.object({ op: z.literal("set_story_time"), days_passed: z.number().int().min(0), date: nonEmpty.nullable(), time_of_day: nonEmpty }),
 ]);
 export type StateOperation = z.infer<typeof StateOperation>;
 
@@ -245,6 +253,14 @@ function apply(state: State, operation: StateOperation): string | undefined {
     case "set_summary":
       state.summary = operation.summary;
       return;
+    case "set_story_time": {
+      const { days_passed, time_of_day } = operation;
+      // A new day kept on the old date would put the story on the wrong day, so it waits for a Turn that names one.
+      const date = operation.date ?? (days_passed === 0 ? state.storyTime?.date : undefined);
+      if (date === undefined) return "no date";
+      state.storyTime = { day: (state.storyTime?.day ?? 1) + days_passed, date, timeOfDay: time_of_day };
+      return;
+    }
   }
 }
 
@@ -254,7 +270,7 @@ const isRepeat = ({ pcKnown, looseEnds }: State, operation: StateOperation) =>
   (operation.op === "add_loose_end" && looseEnds.includes(operation.loose_end));
 
 // None of these contradict the narration, so they aren't worth a whole response. Someone nameless is added once they're named.
-const IGNORABLE: StateOperation["op"][] = ["resolve_loose_end", "add_known_npc", "set_known_npc_summary"];
+const IGNORABLE: StateOperation["op"][] = ["resolve_loose_end", "add_known_npc", "set_known_npc_summary", "set_story_time"];
 const isHarmless = ({ op, reason }: { op: StateOperation["op"]; reason: string }) => IGNORABLE.includes(op) || reason === "already there";
 
 /** Applies operations in order, so each is judged against the ones before it. */
@@ -324,6 +340,8 @@ export const VisibleEdit = z.discriminatedUnion("edit", [
   z.object({ edit: z.literal("sceneMemory"), firstMessage: z.number().int(), text: words }),
   // The place in `chapters`, as titles needn't be unique.
   z.object({ edit: z.literal("chapterTitle"), index: z.number().int().min(0), title: words }),
+  // Never the day count, which only measures the days played.
+  z.object({ edit: z.literal("storyTime"), date: words, timeOfDay: words }),
 ]);
 
 export type VisibleEdit = z.infer<typeof VisibleEdit>;
@@ -354,6 +372,8 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, sceneMemories: state.sceneMemories.map((memory) => (memory.firstMessage === edit.firstMessage ? { ...memory, text: edit.text } : memory)) };
     case "world":
       return { ...state, ...mergeWorldUpdate(state, edit.update) };
+    case "storyTime":
+      return { ...state, storyTime: { day: state.storyTime?.day ?? 1, date: edit.date, timeOfDay: edit.timeOfDay } };
     case "chapterTitle":
       return { ...state, chapters: state.chapters.map((chapter, index) => (index === edit.index ? { ...chapter, title: edit.title } : chapter)) };
     // A second close before any new Message would make an empty Chapter.

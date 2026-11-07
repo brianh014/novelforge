@@ -23,6 +23,9 @@ afterEach(async () => {
 const SECRET = "ZQX-SECRET";
 const generated = JSON.stringify({
   world_overview: "Rain never stops in Saltmere.",
+    calendar: "Days run in weeks of seven under the Tide Reckoning.",
+    start_date: "3rd of Lowtide",
+    start_time_of_day: "dusk",
   lore_entries: [{ title: "Magic", keywords: ["magic", "spell", "sorcery"], content: `${SECRET} magic is real.` }],
   world_rules: [`${SECRET} rule.`],
   plot_threads: [`${SECRET} the mayor is a ghost.`],

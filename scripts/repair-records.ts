@@ -18,7 +18,7 @@ const Plan = z.object({
   looseEnds: z.array(z.string()).optional(),
   plotThreads: z.array(z.string()).optional(),
   /** By title. Null removes the entry, and a new title adds one. */
-  lore: z.record(z.string(), z.object({ keywords: z.array(z.string()).optional(), content: z.string() }).nullable()).default({}),
+  lore: z.record(z.string(), z.object({ keywords: z.array(z.string()).optional(), content: z.string(), alwaysOn: z.boolean().optional() }).nullable()).default({}),
   operations: z.array(StateOperation).default([]),
 });
 export type Plan = z.input<typeof Plan>;

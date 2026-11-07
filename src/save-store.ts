@@ -306,8 +306,11 @@ function toVersion15(db: Database) {
 /** Chapters, which start with none closed, as nothing could close one yet. */
 const toVersion16 = addMissingSections;
 
+/** Story Time, which a Save from before it has none of. */
+const toVersion17 = addMissingSections;
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16, toVersion17];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;

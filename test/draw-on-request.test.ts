@@ -129,6 +129,9 @@ test("a Message can have several, and the Gallery keeps them in story order", as
 test("the text call gets the recent story and the Scene's people with their looks, and nothing hidden", async () => {
   const reply = JSON.stringify({
     world_overview: "Rain.",
+    calendar: "Days run in weeks of seven under the Tide Reckoning.",
+    start_date: "3rd of Lowtide",
+    start_time_of_day: "dusk",
     lore_entries: [{ title: "SECRET-TITLE", keywords: ["tide", "sea", "flood"], content: "SECRET-LORE" }],
     world_rules: ["SECRET-RULE"],
     plot_threads: ["SECRET-THREAD"],
@@ -527,5 +530,5 @@ test("an older Save opens with the new table, empty, and a request works on it",
 
   expect((await requestedOf(id)).images).toHaveLength(1);
   using db = new Database(path);
-  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 16 });
+  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 17 });
 });

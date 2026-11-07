@@ -249,6 +249,9 @@ test("older images have no prompt, can be given one, and import still checks the
 
 const generated = JSON.stringify({
   world_overview: "Rain never stops in Saltmere.",
+    calendar: "Days run in weeks of seven under the Tide Reckoning.",
+    start_date: "3rd of Lowtide",
+    start_time_of_day: "dusk",
   lore_entries: [{ title: "Magic", keywords: ["magic", "spell", "sorcery"], content: "Magic is real." }],
   world_rules: ["A rule."],
   plot_threads: ["A thread."],

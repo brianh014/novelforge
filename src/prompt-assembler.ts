@@ -138,6 +138,13 @@ function fillLooseEnds(looseEnds: string[], messages: Message[]) {
 looseEnds is empty, so fill it now: use add_loose_end for each thing still unresolved in the summary, known facts and Messages above, if there are any.`;
 }
 
+/** A Save from before Story Time has none, and only the Narrator can tell from the story where it has got to. */
+function fillStoryTime(storyTime: State["storyTime"], messages: Message[]) {
+  if (storyTime || !messages.some(({ role }) => role === "narrator")) return "";
+  return `
+storyTime is null, so set it now: use set_story_time with days_passed 0 and the date and time of day the story has reached, as best the summary, known facts and Messages above show, and if they never give a date, choose one that fits the world and its calendar.`;
+}
+
 export function assemblePrompt({
   save: { worldBrief, pc, startingHook },
   // Director's Notes are taken out so that any left in a Save can't steer the story now the player can't see them.
@@ -183,6 +190,7 @@ Record what the PC learns through add_known_fact, and each unnamed NPC the PC co
 The player reads the inventory and status too, so write them as the PC would, with no Lore Entry or Plot Thread secrets. Keep the inventory realistic for this world: add only what the PC could really wear or carry there, and narrate anything too heavy or bulky being left behind instead of adding it. Use remove_item only for an item the state lists, and to move an item between wearing and carrying use remove_item and then add_item. Describe health, injuries and conditions in words with no digits, never as points or percentages. Use remove_status only for an entry the state lists under that kind, and never add_status one it already lists. Keep status short: remove an entry when it passes, and remove the old entry when a new one says much the same.
 The Lore Entries and Plot Threads are secret. Let them shape the story and reveal them only through play. When play goes somewhere they do not cover, add a Lore Entry with several keywords so that paraphrases still activate it. Resolve a Plot Thread once play has exhausted it, and add a new one when none remain. Keep them true to the story, as what has happened in play beats any Lore Entry or Plot Thread: as soon as one is out of date, or disagrees with the narration or the known facts, fix it in that Turn with update_lore_entry, giving its title and its whole new keywords and content, or update_plot_thread, copying the old thread exactly, and use remove_lore_entry for an entry that no longer holds.
 Keep the scene in the state current. Whenever the PC reaches a new location or the NPCs they can see change, use set_scene with a short name for the location, repeated exactly while they stay there, and visible_cast listing the NPCs in view by their names in the state, using add_npc first for a new one. An NPC's appearance is used to paint them, so give it ${LOOKS}, and use update_npc when their looks change. If two NPCs in the state turn out to be one person, such as a description and the name they later gave, use merge_npc with name for the one to drop and into for the one to keep, then use only the kept name. The player reads the location as a caption, so write it as the PC would, with no Lore Entry or Plot Thread secrets, and no dice, numbers or Checks.
+storyTime in the current state is the date and time of day the PC is living in, and its day counts the days since the story began. Whenever the narration moves time on, even from evening to night, use set_story_time in that Turn: time_of_day in a few words, days_passed as how many days the narration moved past, usually 0, and date only when days_passed is above 0, worked out from the current date by the world's calendar, otherwise null. Time moves only as far as the player lets it pass. Whenever anyone mentions a day, date or how long ago something was, keep it true to storyTime. The player reads the date and time of day, so write them as the PC would reckon them, even vaguely if the PC has lost track, with no Lore Entry or Plot Thread secrets.
 ${imageInstruction(promptStyle)}
 Plot Threads: ${JSON.stringify(plotThreads)}
 Model Instructions, which are the player's out-of-character guidance to follow: ${modelInstructions}
@@ -203,7 +211,7 @@ People know only what they have seen, heard or been told themselves, so they can
 Carry on from the last reply: anything left unfinished, such as an action, a question or a person waiting, stays in play even if the player doesn't mention it.
 Avoid melodrama, cliché and overused metaphors, and prefer natural, grounded language. Tell things in order with strong verbs and conjunctions, rather than participle phrases. Vary the length and structure of your sentences. Never use em-dashes.
 Keep the prose fresh. Don't reuse the images, background details or closing moves of the replies above: give each scene something new to notice, vary how replies open and end, and end on what a person in the scene does, says or now faces, never on a background sound or passing detail. Say what people do more often than what they do not do. Say what is so, never what it isn't first: no "it's not X, it's Y", and no "Not X. Not Y. Z." No stock phrases such as a beat, letting something sit or land, a voice dropping, "in the way of someone who" or "here's the thing". Don't reach for eyes, hands, mugs or wall clocks to fill a pause: let people say or do something only they would. Give each person their own voice, speaking naturally, with contractions such as don't and I'm.
-The older replies above are shortened, so fill in every field of the schema.${threadNudge(plotThreads, messages)}${fillLooseEnds(currentState.looseEnds, messages)}
+The older replies above are shortened, so fill in every field of the schema.${threadNudge(plotThreads, messages)}${fillLooseEnds(currentState.looseEnds, messages)}${fillStoryTime(currentState.storyTime, messages)}
 ${PACE}`,
     },
     { role: "user", content: inCharacter(input) },

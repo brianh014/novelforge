@@ -322,6 +322,9 @@ test("the Load Story calls duplicate, import and delete a Save", async () => {
 const worldReply = (overview: string) =>
   JSON.stringify({
     world_overview: overview,
+    calendar: "Days run in weeks of seven under the Tide Reckoning.",
+    start_date: "3rd of Lowtide",
+    start_time_of_day: "dusk",
     lore_entries: [{ title: "T", keywords: ["a", "b", "c"], content: "C" }],
     world_rules: ["R"],
     plot_threads: ["P"],

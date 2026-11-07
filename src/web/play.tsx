@@ -547,6 +547,7 @@ export function Play({ id }: { id: string }) {
             <div className="story-title">
               <h1 className="title">{storyName(save)}</h1>
               {save.title && <p className="muted">{pc}</p>}
+              {journal?.storyTime && <p className="muted">{journal.storyTime.date}, {journal.storyTime.timeOfDay}</p>}
             </div>
             {journal?.summary && (
               <div className="story-recap">
