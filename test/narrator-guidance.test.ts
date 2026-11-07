@@ -121,3 +121,23 @@ test("the Narrator stops when someone waits on the PC, and that rule leaves the 
   expect(lastSystem()).toContain("the PC's time passes only when the player says so");
   expect(prompts.at(-1)![0]!.content).not.toContain("end the reply there");
 });
+
+test("the rules every story needs are built in, near the reply, so Model Instructions can stay short", async () => {
+  play(summed("Ash reached the docks."));
+  const id = await app.createSave();
+
+  await playTurn(id);
+
+  for (const rule of [
+    "People know only what they have seen, heard or been told themselves",
+    "Carry on from the last reply",
+    "Their goals are their own and can conflict with the PC's",
+    "Avoid melodrama, cliché and overused metaphors",
+    "rather than participle phrases",
+    "Vary the length and structure of your sentences",
+    "Never use em-dashes",
+  ]) {
+    expect(lastSystem()).toContain(rule);
+    expect(prompts.at(-1)![0]!.content).not.toContain(rule);
+  }
+});
