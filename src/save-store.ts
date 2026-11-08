@@ -309,8 +309,13 @@ const toVersion16 = addMissingSections;
 /** Story Time, which a Save from before it has none of. */
 const toVersion17 = addMissingSections;
 
+/** The story's theme, which pictures are drawn in. Empty for a Save from before it, whose pictures go by the World Brief alone. */
+const toVersion18 = (db: Database) => {
+  if (!hasColumn(db, "save", "theme")) db.run("ALTER TABLE save ADD COLUMN theme TEXT NOT NULL DEFAULT ''");
+};
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16, toVersion17];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16, toVersion17, toVersion18];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -390,6 +395,7 @@ function assertValidSave(db: Database) {
     starting_hook: z.string(),
     pc_details: jsonText(PcDetails),
     title: z.string(),
+    theme: z.string(),
     memory_start: rowId,
   });
   const messages = rowsOf(db, "messages", {
@@ -610,20 +616,22 @@ export function saveStore(savesDir: string) {
       artStyle = "",
       startingHook = "",
       title = "",
+      theme = "",
       opening,
-    }: Save & { artStyle?: string; startingHook?: string; title?: string; opening?: Partial<State> }) {
+    }: Save & { artStyle?: string; startingHook?: string; title?: string; theme?: string; opening?: Partial<State> }) {
       const id = crypto.randomUUID();
       const unfinishedPath = `${pathOf(id)}.unfinished`;
       {
         using db = connect(unfinishedPath);
         const { name, ...details } = pc;
-        db.run("INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details, title) VALUES (1, ?, ?, ?, ?, ?, ?)", [
+        db.run("INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details, title, theme) VALUES (1, ?, ?, ?, ?, ?, ?, ?)", [
           worldBrief,
           name,
           artStyle,
           startingHook,
           JSON.stringify(details),
           title,
+          theme,
         ]);
         // No Message has this Snapshot yet, and the file isn't a Save until the rename below.
         for (const [name, value] of Object.entries({ ...opening, worldBrief })) {
@@ -658,11 +666,11 @@ export function saveStore(savesDir: string) {
       return saves.toSorted((a, b) => b.updatedAt - a.updatedAt);
     },
 
-    read(id: string): Save & { artStyle: string; startingHook: string; title: string; hasCover: boolean; coverRedraws: number } {
+    read(id: string): Save & { artStyle: string; startingHook: string; title: string; theme: string; hasCover: boolean; coverRedraws: number } {
       using db = open(id);
       const save = db
-        .query<{ pc_name: string; art_style: string; starting_hook: string; pc_details: string; title: string }, []>(
-          "SELECT pc_name, art_style, starting_hook, pc_details, title FROM save",
+        .query<{ pc_name: string; art_style: string; starting_hook: string; pc_details: string; title: string; theme: string }, []>(
+          "SELECT pc_name, art_style, starting_hook, pc_details, title, theme FROM save",
         )
         .get()!;
       return {
@@ -671,6 +679,7 @@ export function saveStore(savesDir: string) {
         artStyle: save.art_style,
         startingHook: save.starting_hook,
         title: save.title,
+        theme: save.theme,
         hasCover: db.query("SELECT 1 FROM cover").get() !== null,
         coverRedraws: db.query<{ redraws: number }, []>("SELECT redraws FROM cover").get()?.redraws ?? 0,
       };
@@ -685,6 +694,11 @@ export function saveStore(savesDir: string) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       using db = open(id);
       db.run("INSERT OR REPLACE INTO cover (id, bytes, prompt) VALUES (1, ?, ?)", [bytes, prompt]);
+    },
+
+    setTheme(id: string, theme: string) {
+      using db = open(id);
+      db.run("UPDATE save SET theme = ?", [theme]);
     },
 
     setArtStyle(id: string, artStyle: string) {

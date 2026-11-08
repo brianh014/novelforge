@@ -1058,9 +1058,12 @@ export function SettingsScreen({ id }: { id?: string }) {
             ))}
           </nav>
           {!id && <p className="muted so-far">Open a story to change its Art Style.</p>}
-          <a className="quiet" href="#/">
-            Main Menu
-          </a>
+          {/* A story's Settings has the Main Menu among its tabs. */}
+          {!id && (
+            <a className="quiet" href="#/">
+              Main Menu
+            </a>
+          )}
         </>
       }
     >

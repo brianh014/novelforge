@@ -140,6 +140,7 @@ export function BookTabs({ id, current }: { id: string; current: "Story" | "Jour
       <a href={`#/journal/${id}`} aria-current={here("Journal")}>Journal</a>
       <a href={`#/gallery/${id}`} aria-current={here("Gallery")}>Gallery</a>
       <a href={`#/settings/${id}`} aria-current={here("Settings")}>Settings</a>
+      <a href="#/">Menu</a>
     </nav>
   );
 }

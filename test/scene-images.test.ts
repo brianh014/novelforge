@@ -10,10 +10,12 @@ type Images = { images: { messageId: number; caption: string, redraws: 0 }[]; pe
 let folder: ReturnType<typeof tempFolder>;
 let app: ReturnType<typeof startApp>;
 let images: ReturnType<typeof scriptedImages>;
+let script: ReturnType<typeof scriptedTextProvider>;
 
 const play = (replies: (string | Error)[], ...imageReplies: Parameters<typeof scriptedImages>) => {
   images = scriptedImages(...imageReplies);
-  app = startApp(join(folder.path, "Saves"), scriptedTextProvider(...replies).textProvider, undefined, undefined, images.imageAdapter);
+  script = scriptedTextProvider(...replies);
+  app = startApp(join(folder.path, "Saves"), script.textProvider, undefined, undefined, images.imageAdapter);
 };
 
 const enableImages = () => app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
@@ -217,7 +219,7 @@ test.each([
   logged.mockRestore();
 });
 
-test("new images use the current Art Style, and stored images never change", async () => {
+test("the Narrator writes each Scene Image in the current Art Style, and stored images never change", async () => {
   play([newScene(), newScene("A pier", "The pier")], png(1), png(2));
   await enableImages();
   const id = await app.createSave();
@@ -229,7 +231,9 @@ test("new images use the current Art Style, and stored images never change", asy
   await playTurn(id);
   await settled(id);
 
-  expect(images.payloads.map(({ style_preset }) => style_preset)).toEqual(["Woodcut", "Watercolor"]);
+  // In the prompt the Narrator writes, not added after it.
+  expect(script.prompts.map((prompt) => prompt[0]!.content.match(/"art_style":"(\w+)"/)?.[1])).toEqual(["Woodcut", "Watercolor"]);
+  expect(images.payloads.map(({ style_preset }) => style_preset)).toEqual(["", ""]);
   expect(await imageBytes(id, 2)).toEqual(png(1));
   expect(await imageBytes(id, 4)).toEqual(png(2));
 });

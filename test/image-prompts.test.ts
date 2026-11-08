@@ -73,7 +73,7 @@ const systemPrompt = (style: Parameters<typeof assemblePrompt>[0]["promptStyle"]
     promptStyle: style,
   })[0]!.content;
 
-test("the Narrator is asked for a prompt in the Prompt Style, which stands alone and leaves style to the Art Style", () => {
+test("the Narrator is asked for a prompt in the Prompt Style, which stands alone and opens with the Art Style", () => {
   const prose = systemPrompt("prose");
   const keywords = systemPrompt("keywords");
   expect(prose).toContain("connected sentences");
@@ -82,7 +82,8 @@ test("the Narrator is asked for a prompt in the Prompt Style, which stands alone
   expect(keywords).not.toContain("[Name: phrase]");
   for (const system of [prose, keywords]) {
     expect(system).toContain("someone who has never read it");
-    expect(system).toContain("Never name an art medium, camera or lens");
+    expect(system).toContain("Open the prompt with the picture's art style");
+    expect(system).toContain('"art_style":');
     expect(system).toContain("40 to 60 words");
   }
 });

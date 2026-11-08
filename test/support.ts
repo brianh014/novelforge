@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Dice } from "../src/check-resolver";
 import type { ImageAdapter, ImagePayload } from "../src/image-adapter";
+import type { PictureWriter } from "../src/image-pipeline";
 import { type LogLevel, setLogLevel } from "../src/logger";
 import { startServer } from "../src/rest-api";
 import type { Prompt } from "../src/prompt-assembler";
@@ -98,9 +99,11 @@ export function startApp(
   dice = scriptedDice(),
   nearMissMargin = 2,
   imageAdapter = scriptedImages().imageAdapter,
+  // The templates, so that a scripted conversation isn't asked for Image Prompts it never planned.
+  writePicture: PictureWriter = async (_ask, _style, fallback) => fallback,
 ) {
   const settings = settingsStore(join(dirname(savesDir), "settings.json"));
-  const start = () => startServer({ savesDir, settings, textProvider, imageAdapter, dice, nearMissMargin, port: 0 });
+  const start = () => startServer({ savesDir, settings, textProvider, imageAdapter, dice, nearMissMargin, port: 0, writePicture });
   let server = start();
   const post = (path: string, body: unknown) => postJson(new URL(path, server.url), body);
   return {

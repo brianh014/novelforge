@@ -6,7 +6,7 @@ import { chosenModels, drawSteps, localIsSetUp, promptStyle } from "./graph-buil
 import { defaultLogLevel, errorFields, errorType, log, setLogLevel, withLogContext } from "./logger";
 import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
-import { coverPrompt, type EarlyImage, type ImageKind, imagePipeline, shownFailure, visibleNpcs } from "./image-pipeline";
+import { coverPeople, type EarlyImage, type ImageKind, imagePipeline, pcLooks, type PictureWriter, shownFailure, visibleNpcs } from "./image-pipeline";
 import {
   EditNotFound,
   imageType,
@@ -28,7 +28,7 @@ import { type State, VisibleEdit, type World, type WorldEdit } from "./state-app
 import { askForChapterTitle, ContentRefused, editResponse, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import { readable } from "./web/chat-style";
 import spa from "./web/index.html";
-import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type WorldChoices, type WorldPc, writeImagePrompt } from "./world-creation";
+import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type PictureAsk, type WorldChoices, type WorldPc, writeImagePrompt, writePicturePrompt } from "./world-creation";
 
 const NamedPc = PcDetails.extend({ name: z.string().trim().min(1) });
 
@@ -65,6 +65,11 @@ const DrawRequest = z.discriminatedUnion("kind", [
     title: someWords.max(80),
     theme: someWords,
     worldBrief: someWords,
+    // Whoever the form holds so far, to be on the cover.
+    pc: z.object({ name: z.string().trim().max(80), physicalTraits: z.string().trim().max(4000) }).default({ name: "", physicalTraits: "" }),
+    characters: z.array(z.object({ name: z.string().trim().max(80), description: z.string().trim().max(1000) })).max(10).default([]),
+    // The form's wearing and carrying box, so the PC is drawn dressed before the Narrator has sorted it.
+    inventory: z.string().trim().max(4000).default(""),
     artStyle: z.string().default(""),
   }),
   z.object({
@@ -72,6 +77,10 @@ const DrawRequest = z.discriminatedUnion("kind", [
     id: z.string().optional(),
     name: z.string().trim(),
     physicalTraits: someWords,
+    inventory: z.string().trim().max(4000).default(""),
+    // The world the PC belongs to, so they're drawn in its era. Either may be empty while the form is.
+    theme: z.string().trim().max(4000).default(""),
+    worldBrief: z.string().trim().max(4000).default(""),
     artStyle: z.string().default(""),
   }),
 ]);
@@ -165,9 +174,13 @@ const EditRequest = z.object({ text: z.string().trim().min(1) });
 const PromptRequest = z.object({ prompt: z.string().trim().min(1) });
 
 // The form's Art Style can change after a first draw.
-const HeldRedrawRequest = PromptRequest.extend({ artStyle: z.string().optional() });
-
 const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene", "requested"]), ref: z.number().int().nonnegative() });
+
+// Only these have a prompt the text model writes from the story, as a Scene Image's comes from its Turn.
+const RedoRequest = z.object({ kind: z.enum(["cover", "portrait"]), ref: z.number().int().nonnegative() });
+
+// Besides the PC, so a cover isn't crowded.
+const COVER_NPCS = 3;
 
 // An allowlist, as the Cover and portraits are never the player's to delete.
 const DeleteImageRequest = z.object({ kind: z.enum(["scene", "requested"]), ref: z.number().int().nonnegative() });
@@ -323,6 +336,8 @@ export function startServer(options: {
   nearMissMargin: number;
   settings: SettingsStore;
   port: number;
+  /** How a Cover's or portrait's prompt is written. By default the text model writes it. */
+  writePicture?: PictureWriter;
 }) {
   const saves = saveStore(options.savesDir);
   const turns = liveTurns();
@@ -337,7 +352,12 @@ export function startServer(options: {
   // shortcut: a restart clears it and an open Settings screen doesn't update, poll or store it if players miss failures.
   let workflowProblem = "";
   const local = comfyImages(settings, undefined, (problem) => (workflowProblem = problem));
-  const images = imagePipeline(saves, { openrouter: options.imageAdapter, local }, settings);
+  const images = imagePipeline(
+    saves,
+    { openrouter: options.imageAdapter, local },
+    settings,
+    options.writePicture ?? ((ask, style, fallback, signal) => writePicturePrompt(options, ask, style, fallback, signal)),
+  );
 
   /** Every Chapter, oldest first, ending with the open one, whose `lastMessage` is null. A Chapter holds the Messages after the one before it, up to its own `lastMessage`. */
   function chaptersOf(id: string) {
@@ -359,48 +379,57 @@ export function startServer(options: {
   // shortcut: an abandoned world and its images stay until the app restarts, evict them if that ever adds up.
   const worlds = new Map<string, World & Pick<State, "storyTime"> & WorldChoices & WorldPc & { sheet: Awaited<ReturnType<typeof pcSheet>> }>();
   // By the id a form or its world goes by, as these can be drawn before either a world or a Save exists. The form's text is safe in its tab if a restart loses them.
-  const held: Record<ImageKind, Map<string, { drawn: Promise<DrawnImage>; artStyle: string; stop: AbortController }>> = {
+  const held: Record<ImageKind, Map<string, { drawn: Promise<DrawnImage>; stop: AbortController }>> = {
     cover: new Map(),
     portrait: new Map(),
   };
 
-  /** Replaces any unfinished image, and never rejects: a failure falls back on `before`, so a failed Redraw leaves the old image. */
-  function drawHeld(kind: ImageKind, id: string, prompt: string, artStyle: string, before: DrawnImage | Promise<DrawnImage>) {
+  /**
+   * Replaces any unfinished image, and never rejects: a failure falls back on `before`, so a failed Redraw leaves the old
+   * image, and with no `before` keeps its prompt for a retry. `prompt` is a player's own, or written by the text model first.
+   */
+  function drawHeld(kind: ImageKind, id: string, prompt: string | ((signal: AbortSignal) => Promise<string>), before?: DrawnImage | Promise<DrawnImage>) {
     held[kind].get(id)?.stop.abort();
     const stop = new AbortController();
     log.verbose("images", "Image started", { kind });
-    const drawn = images.drawEarly(kind, prompt, artStyle, stop.signal).then(
-      (bytes): DrawnImage => {
+    const drawn = (async (): Promise<DrawnImage> => {
+      let written = typeof prompt === "string" ? prompt : "";
+      try {
+        if (typeof prompt !== "string") written = await prompt(stop.signal);
+        // A Cover waits for the PC's portrait, if one is drawn or drawing, to draw the PC from it.
+        const portrait = kind === "cover" ? (await held.portrait.get(id)?.drawn)?.bytes : undefined;
+        const bytes = await images.drawEarly(kind, written, stop.signal, portrait);
         if (bytes) log.info("images", "Image drawn", { kind });
-        return { prompt, bytes: bytes as Uint8Array<ArrayBuffer> | undefined };
-      },
-      async (error: unknown): Promise<DrawnImage> => {
+        return { prompt: written, bytes: bytes as Uint8Array<ArrayBuffer> | undefined };
+      } catch (error) {
+        const old = (await before) ?? { prompt: written };
         if (stop.signal.aborted) {
           log.info("images", "Image dropped", { kind, reason: "replaced on the form" });
-          return before;
+          return old;
         }
         log.error("images", "Image failed", { kind, ...errorType(error) });
-        return { ...(await before), failure: shownFailure(error) };
-      },
-    );
-    held[kind].set(id, { drawn, artStyle, stop });
+        return { ...old, failure: shownFailure(error) };
+      }
+    })();
+    held[kind].set(id, { drawn, stop });
     return drawn;
   }
 
   /** In the background, so a slow image never holds up the world. An image drawn or drawing stays, and one that came to nothing gets another try. */
-  function drawIfMissing(kind: ImageKind, id: string, prompt: string, artStyle: string) {
+  function drawIfMissing(kind: ImageKind, id: string, ask: PictureAsk) {
     const image = held[kind].get(id);
-    if (!image) return void drawHeld(kind, id, prompt, artStyle, { prompt });
+    if (!image) return void drawHeld(kind, id, images.writer(ask));
     void image.drawn.then(({ bytes }) => {
-      if (!bytes && held[kind].get(id) === image) drawHeld(kind, id, prompt, artStyle, { prompt });
+      if (!bytes && held[kind].get(id) === image) drawHeld(kind, id, images.writer(ask));
     });
   }
 
-  function drawWorldImages(id: string, overview: string, { title, theme, artStyle = "" }: WorldChoices) {
-    drawIfMissing("cover", id, coverPrompt({ title, theme, world: overview }), artStyle);
+  function drawWorldImages(id: string, overview: string, { title, theme, worldBrief, artStyle = "", characters = [] }: WorldChoices) {
     const { pc, sheet } = worlds.get(id)!;
-    const portrait = images.pcPortraitPrompt(pc, sheet.inventory.wearing);
-    if (portrait) drawIfMissing("portrait", id, portrait, artStyle);
+    const { wearing } = sheet.inventory;
+    // The portrait first, as the Cover draws the PC from it. A PC with no physical traits gets no portrait.
+    if (pc.physicalTraits?.trim()) drawIfMissing("portrait", id, { kind: "portrait", looks: pcLooks(pc, wearing), theme, world: worldBrief, artStyle });
+    drawIfMissing("cover", id, { kind: "cover", title, theme, world: overview, artStyle, people: coverPeople(pc, wearing, characters) });
   }
 
   // Answers once the image is done, so an img tag can simply wait for it.
@@ -411,11 +440,12 @@ export function startServer(options: {
 
   // Answers when the Redraw is done, and the Begin that may come first takes whichever image wins.
   const redrawHeld = async (kind: ImageKind, id: string, req: Request) => {
-    const { prompt, artStyle } = await parseBody(req, HeldRedrawRequest);
+    const { prompt } = await parseBody(req, PromptRequest);
     const image = held[kind].get(id);
     if (!image) throw new WorldNotFound();
     if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
-    const { failure } = await drawHeld(kind, id, prompt, artStyle ?? image.artStyle, image.drawn);
+    // As written, as the prompt holds its own Art Style.
+    const { failure } = await drawHeld(kind, id, prompt, image.drawn);
     return Response.json(failure ? { error: failure } : {}, { status: failure ? 502 : 200 });
   };
 
@@ -636,11 +666,13 @@ export function startServer(options: {
           const ask = await parseBody(req, DrawRequest);
           if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
           const { id = crypto.randomUUID(), artStyle } = ask;
-          const prompt =
+          const setting = { theme: ask.theme, world: ask.worldBrief, artStyle };
+          const picture: PictureAsk =
             ask.kind === "cover"
-              ? coverPrompt({ title: ask.title, theme: ask.theme, world: ask.worldBrief })
-              : images.pcPortraitPrompt({ name: ask.name, physicalTraits: ask.physicalTraits }, []);
-          drawHeld(ask.kind, id, prompt, artStyle, { prompt });
+              ? { kind: "cover", title: ask.title, ...setting, people: coverPeople(ask.pc, [], ask.characters, ask.inventory) }
+              : { kind: "portrait", ...setting, looks: pcLooks({ name: ask.name, physicalTraits: ask.physicalTraits }, [], ask.inventory) };
+          // A Redo from the form that fails keeps the image it would have replaced.
+          drawHeld(ask.kind, id, images.writer(picture), held[ask.kind].get(id)?.drawn);
           return Response.json({ id }, { status: 201 });
         },
       },
@@ -649,9 +681,9 @@ export function startServer(options: {
           const { artStyle } = await parseBody(req, ArtStyleRequest);
           const world = worlds.get(req.params.id);
           if (!world) throw new WorldNotFound();
-          const { title, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, storyTime, sheet } = world;
+          const { title, theme, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, storyTime, sheet } = world;
           const opening = { worldBible, worldRules, plotThreads, storyTime, ...sheet };
-          const id = saves.create({ title, worldBrief, startingHook, pc, artStyle, opening });
+          const id = saves.create({ title, theme, worldBrief, startingHook, pc, artStyle, opening });
           worlds.delete(req.params.id);
           images.saveCreated(id, held.portrait.get(req.params.id)?.drawn);
           // Often still drawing. The Save may be gone by the time it lands, and a story without a cover loses nothing.
@@ -958,6 +990,31 @@ export function startServer(options: {
           if (!image) return Response.json({ error: "Image not found" }, { status: 404 });
           if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
           if (!images.redraw(id, { kind, ref }, image.messageId, prompt)) {
+            return Response.json({ error: "This image is already being redrawn." }, { status: 409 });
+          }
+          return Response.json({}, { status: 202 });
+        },
+      },
+      // A Redraw from a new Image Prompt, written from the story as it stands, by the same allowlist as the first.
+      "/saves/:id/gallery/redo": {
+        POST: async (req) => {
+          const { id } = req.params;
+          const { kind, ref } = await parseBody(req, RedoRequest);
+          const image = visibleImages(id).find((candidate) => candidate.kind === kind && candidate.ref === ref);
+          if (!image) return Response.json({ error: "Image not found" }, { status: 404 });
+          if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
+          const { pc, title, theme, artStyle } = saves.read(id);
+          const { inventory, npcs, scene, worldBrief, pcKnown } = saves.latestState(id);
+          const looksOf = (name: string) => npcs.find((npc) => npc.name === name)?.appearance.trim() ?? "";
+          const pcNow = pcLooks(pc, inventory.wearing);
+          // shortcut: the Important Characters aren't kept in a Save, so a Cover shows the PC and those met lately, keep them if covers miss them.
+          const met = [...new Set([...scene.visibleCast, ...saves.recentCast(id)])].filter((name) => pcKnown.npcs.includes(name)).slice(0, COVER_NPCS);
+          const ask: PictureAsk =
+            kind === "cover"
+              ? { kind, title, theme, world: worldBrief, artStyle, people: [pcNow, ...met.map(looksOf)].filter(Boolean) }
+              : { kind, theme, world: worldBrief, artStyle, looks: image.npc === null ? pcNow : looksOf(image.npc) };
+          if (ask.kind === "portrait" && !ask.looks) return Response.json({ error: "There are no looks to draw this from." }, { status: 409 });
+          if (!images.redraw(id, { kind, ref }, image.messageId, images.writer(ask))) {
             return Response.json({ error: "This image is already being redrawn." }, { status: 409 });
           }
           return Response.json({}, { status: 202 });

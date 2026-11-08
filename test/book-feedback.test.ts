@@ -66,7 +66,9 @@ test("a new world's cover is portrait book art from what the player reads, in th
   expect(new Uint8Array(await response.arrayBuffer())).toEqual(png(1));
   const [cover] = payloads;
   expect(cover!.aspect_ratio).toBe("2:3");
-  expect(cover!.style_preset).toBe("Ink wash");
+  // The Art Style is in the prompt itself, as its writer puts it there.
+  expect(cover!.style_preset).toBe("");
+  expect(cover!.prompt.startsWith("Ink wash")).toBe(true);
   expect(cover!.prompt).toContain("Rain never stops in Saltmere.");
   expect(cover!.prompt).toContain(JSON.stringify("The Salt Reckoning"));
   expect(cover!.negative_prompt).not.toContain("text");

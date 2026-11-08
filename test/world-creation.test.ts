@@ -67,6 +67,7 @@ test("a generated world reaches the player only as its World Overview, and its S
     worldBrief: "A drowned city",
     pc: { name: "Ash" },
     artStyle: "Ink wash",
+    theme: "Western",
     startingHook: "A body washes ashore",
     hasCover: false,
     coverRedraws: 0,
@@ -322,6 +323,42 @@ test("Enhance retries a Title too long for a cover", async () => {
 
   expect(await response.json()).toEqual({ text: "The Whale City" });
   expect(prompts).toHaveLength(2);
+});
+
+test.each(["name", "characterName"])("Enhance on a %s box writes only a name, retrying a reply that says more", async (field) => {
+  play(JSON.stringify({ text: "Mara Vell, a smuggler who owes the harbour guild" }), JSON.stringify({ text: "Mara Vell" }));
+
+  const response = await app.post("/enhance", { ...setup, field, text: "Mara", character: { name: "Mara", description: "A smuggler" } });
+
+  expect(await response.json()).toEqual({ text: "Mara Vell" });
+  expect(prompts).toHaveLength(2);
+  expect(prompts[0]![0]!.content).toContain("only the name, in at most 5 words");
+});
+
+test("Enhance on the looks box keeps to thirty words, or the player's own length if longer, retrying a longer reply", async () => {
+  play(JSON.stringify({ text: "tall ".repeat(31) }), JSON.stringify({ text: "Tall and lean, with a scar on one cheek." }), JSON.stringify({ text: "word ".repeat(40) }));
+
+  const short = await app.post("/enhance", { ...setup, field: "physicalTraits", text: "tall, scar" });
+  const long = await app.post("/enhance", { ...setup, field: "physicalTraits", text: "word ".repeat(40) });
+
+  expect(await short.json()).toEqual({ text: "Tall and lean, with a scar on one cheek." });
+  expect(prompts[0]![0]!.content).toContain("at most 30 words");
+  expect(prompts[0]![0]!.content).toContain("never clothing");
+  expect(long.status).toBe(200);
+  expect(prompts[2]![0]!.content).toContain("at most 40 words");
+});
+
+test("Enhance on the wearing and carrying box details only the player's items, as a list of at most forty words, retrying prose", async () => {
+  play(JSON.stringify({ text: "item ".repeat(41) }), JSON.stringify({ text: "Rain falls. Your coat hangs heavy." }), JSON.stringify({ text: "oilskin coat, narrow single-edged knife" }));
+
+  const response = await app.post("/enhance", { ...setup, field: "inventory", text: "a coat and a knife" });
+
+  expect(await response.json()).toEqual({ text: "oilskin coat, narrow single-edged knife" });
+  const [system] = prompts[0]!;
+  expect(system!.content).toContain("never add one");
+  expect(system!.content).toContain("never prose");
+  expect(system!.content).toContain("comma-separated list of items, in at most 40 words");
+  expect(prompts).toHaveLength(3);
 });
 
 test("Enhance needs a field it knows", async () => {

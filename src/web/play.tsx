@@ -603,7 +603,6 @@ export function Play({ id }: { id: string }) {
               </div>
             )}
           </Fold>
-          <a className="quiet" href="#/">Main Menu</a>
         </>
       }
       tabs={<BookTabs id={id} current="Story" />}

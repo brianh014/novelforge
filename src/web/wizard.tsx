@@ -112,8 +112,8 @@ const IMAGE_NAMES: Record<ImageKind, { name: string; alt: string }> = {
  * A Cover or portrait the server holds, which may still be painting. A failed one offers its prompt to try again.
  * `onLost` is for one the server no longer holds or never drew, so that the form can offer it again.
  */
-function HeldArt(props: { id: string; kind: ImageKind; version: number; artStyle: string; onRedrawn: () => void; onLost: () => void }) {
-  const { id, kind, version, artStyle, onRedrawn, onLost } = props;
+function HeldArt(props: { id: string; kind: ImageKind; version: number; onRedrawn: () => void; onLost: () => void }) {
+  const { id, kind, version, onRedrawn, onLost } = props;
   const [image, setImage] = useState<HeldImage>();
   const [redrawing, setRedrawing] = useState(false);
   const [failure, setFailure] = useState("");
@@ -140,7 +140,7 @@ function HeldArt(props: { id: string; kind: ImageKind; version: number; artStyle
   const redraw = (prompt: string) => {
     setRedrawing(true);
     setFailure("");
-    redrawHeldImage(id, kind, prompt, artStyle).then(onRedrawn, (error: Error) => setFailure(error.message)).finally(() => setRedrawing(false));
+    redrawHeldImage(id, kind, prompt).then(onRedrawn, (error: Error) => setFailure(error.message)).finally(() => setRedrawing(false));
   };
   const box = <PromptBox prompt={image.prompt} redrawing={redrawing} failure={failure} canRedraw={image.canRedraw} onRedraw={redraw} />;
 
@@ -255,7 +255,7 @@ export function NewStory({ step }: { step?: string }) {
       }));
     });
 
-  /** Only ever a first draw, as a drawn image then has its own Redraw. */
+  /** A first draw, or a Redo with a new prompt from the form as it is now. A drawn image's Redraw keeps its old prompt instead. */
   async function drawFirst(ask: Parameters<typeof drawOnForm>[0]) {
     setAsking(true);
     setError("");
@@ -354,7 +354,6 @@ export function NewStory({ step }: { step?: string }) {
       id={draft.id!}
       kind={kind}
       version={version}
-      artStyle={artStyle}
       // The player may have gone on by the time a Redraw ends, so these go by what the draft holds then.
       onRedrawn={() => setDraft((current) => ({ ...current, drawn: redrew(current.drawn, kind) }))}
       onLost={() =>
@@ -429,7 +428,14 @@ export function NewStory({ step }: { step?: string }) {
         {imagesReady === false ? (
           <p className="muted">Images are turned off or not set up in Settings.</p>
         ) : draft.id && version !== undefined ? (
-          heldArt(kind, version)
+          <>
+            {heldArt(kind, version)}
+            <div className="row">
+              <button type="button" className="quiet" disabled={!!missing || asking} title="Write a new prompt from the form as it is now, and draw it" onClick={() => drawFirst(ask)}>
+                Redo the {IMAGE_NAMES[kind].name}
+              </button>
+            </div>
+          </>
         ) : (
           <>
             <p className="muted">{missing || `Draw it now to see it, or leave it and it's drawn when the world is written.`}</p>
@@ -586,12 +592,18 @@ export function NewStory({ step }: { step?: string }) {
         title,
         theme: themeForNarrator,
         worldBrief,
+        pc: { name: draft.pc.name, physicalTraits },
+        characters: draft.characters,
+        inventory: draft.pc.inventory,
         artStyle,
       })}
       {imageSection("portrait", "Portrait", physicalTraits.trim() ? "" : "Say what your character looks like to draw this.", {
         kind: "portrait",
         name: draft.pc.name,
         physicalTraits,
+        inventory: draft.pc.inventory,
+        theme: themeForNarrator,
+        worldBrief,
         artStyle,
       })}
     </div>,

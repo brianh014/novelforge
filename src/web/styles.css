@@ -377,8 +377,9 @@ h2 {
 }
 
 .inline-image .portrait {
-  width: 120px;
-  height: 120px;
+  width: min(240px, 100%);
+  height: auto;
+  aspect-ratio: 1;
 }
 
 .inline-image.requested img {
@@ -1458,7 +1459,8 @@ a.action {
   color: var(--accent);
 }
 
-.icon[aria-disabled="true"] {
+.icon[aria-disabled="true"],
+.icon:disabled {
   color: var(--muted);
   opacity: 0.5;
   cursor: default;

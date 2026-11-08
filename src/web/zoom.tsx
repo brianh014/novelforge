@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { galleryUrl, type GalleryImage, type Portrait, portraitUrl, redrawImage } from "./api";
+import { galleryUrl, type GalleryImage, type Portrait, portraitUrl, redoImage, redrawImage } from "./api";
+import { DeleteIcon, EditIcon, RegenerateIcon } from "./icons";
 
 /** Someone's picture and name, with who they are when that's known. */
 export function Person({ id, name, portrait, who }: { id: string; name: string; portrait?: Portrait; who?: string }) {
@@ -57,7 +58,8 @@ export function PromptBox({
 }
 
 /** Keeps a viewed picture clear of its prompt until asked. It stays open to show a Redraw under way or failed, and shuts with the dialog. */
-export function RedrawPanel({ busy, children }: { busy: boolean; children: ReactNode }) {
+/** `actions` are more icon buttons for the row beside the Redraw pencil. */
+export function RedrawPanel({ busy, children, actions }: { busy: boolean; children: ReactNode; actions?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -69,13 +71,12 @@ export function RedrawPanel({ busy, children }: { busy: boolean; children: React
   const shown = open || busy;
   return (
     <>
-      {!shown && (
-        <div className="row">
-          <button type="button" className="action" onClick={() => setOpen(true)}>
-            Redraw…
-          </button>
-        </div>
-      )}
+      <div className="row">
+        <button type="button" className="icon" title="Redraw" aria-label="Redraw" aria-expanded={shown} disabled={busy} onClick={() => setOpen(!open)}>
+          {EditIcon}
+        </button>
+        {actions}
+      </div>
       {/* Hidden rather than removed, so a dialog closed and opened again keeps what was typed. */}
       <div ref={panel} className="redraw-panel" hidden={!shown}>
         {children}
@@ -84,34 +85,64 @@ export function RedrawPanel({ busy, children }: { busy: boolean; children: React
   );
 }
 
-/** An image of a Save, which opens larger with its prompt behind a button. `onRedrawn` is for reading the Gallery again, as drawing goes on in the background. */
+/**
+ * An image of a Save, which opens larger with its prompt behind a button. `onRedrawn` is for reading the Gallery again, as
+ * drawing goes on in the background. `canRedo` offers a new prompt from the story, and `onDelete` a Delete, inside the view.
+ */
 export function RedrawableImage({
   id,
   image,
   alt,
   canRedraw,
   onRedrawn,
+  canRedo = false,
+  onDelete,
 }: {
   id: string;
   image: GalleryImage;
   alt: string;
   canRedraw: boolean;
   onRedrawn: () => void;
+  canRedo?: boolean;
+  onDelete?: () => void;
 }) {
   const [refused, setRefused] = useState("");
-  const redraw = (prompt: string) => {
+  const started = (work: Promise<object>) => {
     setRefused("");
-    redrawImage(id, image, prompt).then(onRedrawn, (failure: Error) => setRefused(failure.message));
+    work.then(onRedrawn, (failure: Error) => setRefused(failure.message));
   };
   return (
     <Zoomable lazy src={galleryUrl(id, image)} alt={alt}>
-      <RedrawPanel busy={image.redrawing || !!image.failure || !!refused}>
+      <RedrawPanel
+        busy={image.redrawing || !!image.failure || !!refused}
+        actions={
+          <>
+            {canRedo && (
+              <button
+                type="button"
+                className="icon"
+                title="Redo: write a new prompt from the story as it is now, and draw it"
+                aria-label="Redo"
+                disabled={image.redrawing || !canRedraw}
+                onClick={() => started(redoImage(id, image))}
+              >
+                {RegenerateIcon}
+              </button>
+            )}
+            {onDelete && (
+              <button type="button" className="icon" title="Delete" aria-label="Delete" aria-haspopup="dialog" disabled={image.redrawing} onClick={onDelete}>
+                {DeleteIcon}
+              </button>
+            )}
+          </>
+        }
+      >
         <PromptBox
           prompt={image.prompt}
           redrawing={image.redrawing}
           failure={image.failure || refused}
           canRedraw={canRedraw}
-          onRedraw={redraw}
+          onRedraw={(prompt) => started(redrawImage(id, image, prompt))}
         />
       </RedrawPanel>
     </Zoomable>

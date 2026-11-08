@@ -85,7 +85,7 @@ test("the Gallery lists the PC, known NPCs and Scene Images with their prompts, 
   expect(gallery.images.every(({ redraws, redrawing, failure }) => redraws === 0 && !redrawing && failure === "")).toBe(true);
 });
 
-test("redrawing a Scene Image replaces only it, with its shape, references and the current Art Style", async () => {
+test("redrawing a Scene Image replaces only it, with its shape and references, drawing its prompt as written", async () => {
   await play(
     [turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("[Hesper] and [Ash] on a dry street", scene("The ferry", "Hesper"))],
     png(1),
@@ -108,7 +108,8 @@ test("redrawing a Scene Image replaces only it, with its shape, references and t
   expect(payload.prompt).toBe("A sunny street");
   expect(payload.aspect_ratio).toBe("16:9");
   expect(payload.negative_prompt).toContain("dice");
-  expect(payload.style_preset).toBe("Ink wash");
+  // A Redraw draws the prompt exactly as the player left it, as it holds its own Art Style.
+  expect(payload.style_preset).toBe("");
   expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc", "previous_scene", "pc"]);
   expect(find(after, "scene")).toMatchObject({ prompt: "A sunny street", redraws: 1 });
   expect(await bytesOf(`/saves/${id}/messages/${newest.ref}/image`)).toEqual(png(5));
@@ -283,7 +284,7 @@ test("a world's cover can be redrawn from an edited prompt, which goes into the 
   expect(details.prompt).toContain("Rain never stops in Saltmere.");
 
   expect((await app.post(`/worlds/${world}/cover`, { prompt: "A lighthouse" })).status).toBe(200);
-  expect(drawn.payloads[1]).toMatchObject({ prompt: "A lighthouse", aspect_ratio: "2:3", style_preset: "Ink wash", reference_images: [] });
+  expect(drawn.payloads[1]).toMatchObject({ prompt: "A lighthouse", aspect_ratio: "2:3", style_preset: "", reference_images: [] });
   expect(await bytesOf(`/worlds/${world}/cover`)).toEqual(png(2));
 
   const id = await accept(world);
@@ -294,6 +295,57 @@ test("a world's cover can be redrawn from an edited prompt, which goes into the 
   await redraw(id, gallery.images[0]!, "A storm");
   expect(await settled(id).then((after) => after.images[0])).toMatchObject({ prompt: "A storm", redraws: 1 });
   expect(saveStore(savesDir).read(id)).toMatchObject({ coverRedraws: 1 });
+});
+
+test("a Cover Redraw in the story draws the PC from their portrait, as the first Cover did", async () => {
+  await play([sheet, generated], png(1), png(2), png(3));
+  const world = ((await (await app.post("/worlds", { ...choices, pc: { name: "Ash", physicalTraits: "Short" } })).json()) as { id: string }).id;
+  await coverOf(world);
+  const id = await accept(world);
+  await storedCover(id);
+  const gallery = await settled(id);
+
+  await redraw(id, gallery.images.find(({ kind }) => kind === "cover")!, "A storm");
+  await settled(id);
+
+  expect(drawn.payloads[1]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
+  expect(drawn.payloads[2]).toMatchObject({ prompt: "A storm", aspect_ratio: "2:3" });
+  expect(drawn.payloads[2]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
+});
+
+const redo = (id: string, { kind, ref }: Item) => app.post(`/saves/${id}/gallery/redo`, { kind, ref });
+
+test("Redo draws a portrait again from a new prompt of the person's looks now, and only for a Cover or portrait", async () => {
+  await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], png(1), png(2), png(3), png(4));
+  const id = await newSave();
+  const before = await playTurn(id);
+  const hesper = before.images.find(({ label }) => label === "Hesper")!;
+
+  expect((await redo(id, hesper)).status).toBe(202);
+  const after = await settled(id);
+
+  expect(drawn.payloads.at(-1)).toMatchObject({ aspect_ratio: "1:1" });
+  expect(drawn.payloads.at(-1)!.prompt).toContain("Tall, in oilskins");
+  expect(after.images.find(({ label }) => label === "Hesper")).toMatchObject({ redraws: 1 });
+  expect((await redo(id, find(before, "scene"))).status).toBe(400);
+});
+
+test("Redo draws the Cover again from the title, the World Brief and the PC as they are now, with the PC's portrait", async () => {
+  await play([sheet, generated], png(1), png(2), png(3));
+  const world = ((await (await app.post("/worlds", { ...choices, pc: { name: "Ash", physicalTraits: "Short" } })).json()) as { id: string }).id;
+  await coverOf(world);
+  const id = await accept(world);
+  await storedCover(id);
+  const cover = (await settled(id)).images.find(({ kind }) => kind === "cover")!;
+
+  expect((await redo(id, cover)).status).toBe(202);
+  await settled(id);
+
+  const payload = drawn.payloads[2]!;
+  expect(payload.prompt).toContain(JSON.stringify(choices.title));
+  expect(payload.prompt).toContain("A drowned city");
+  expect(payload.prompt).toContain("Short");
+  expect(payload.reference_images.map(({ role }) => role)).toEqual(["pc"]);
 });
 
 test("a failed cover keeps its prompt for a retry, and a failed Redraw keeps the old cover", async () => {

@@ -46,7 +46,6 @@ export function Gallery({ id }: { id: string }) {
       rail={
         <>
           <h1 className="big" ref={heading} tabIndex={-1}>Gallery</h1>
-          <a className="quiet" href="#/">Main Menu</a>
         </>
       }
       tabs={<BookTabs id={id} current="Gallery" />}
@@ -67,21 +66,13 @@ export function Gallery({ id }: { id: string }) {
                     alt={image.label || "Scene Image"}
                     canRedraw={gallery!.canRedraw}
                     onRedrawn={reload}
+                    // Only these have a prompt the text model writes from the story, as a Scene Image's comes from its Turn.
+                    canRedo={image.kind === "cover" || image.kind === "portrait"}
+                    onDelete={deletable ? () => setDeleting(image) : undefined}
                   />
                   <span>{image.label}</span>
                   {image.redrawing && <span className="waiting">Redrawing…</span>}
                   {image.failure && <span className="error">Redraw failed</span>}
-                  {deletable && (
-                    <button
-                      className="quiet"
-                      aria-label={`Delete ${image.label || "Scene Image"}`}
-                      aria-haspopup="dialog"
-                      disabled={image.redrawing}
-                      onClick={() => setDeleting(image)}
-                    >
-                      Delete
-                    </button>
-                  )}
                 </li>
               ))}
             </ul>

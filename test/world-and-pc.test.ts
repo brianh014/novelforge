@@ -98,17 +98,21 @@ test("a failed PC sheet costs no world, and nothing is held", async () => {
   expect(prompts).toHaveLength(1);
 });
 
-test("writing the world draws the Cover from the World Overview and the portrait from the PC, in what they wear", async () => {
+test("writing the world draws the portrait from the PC in what they wear, then the Cover from the World Overview with the PC from that portrait", async () => {
   const { payloads } = await withImages([sheet, generated()], png(1), png(2));
 
   const { id } = await json(app.post("/worlds", form));
 
-  expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(1));
-  expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
-  expect(payloads[0]!.prompt).toContain("Rain never stops in Saltmere.");
-  expect(payloads[0]).toMatchObject({ aspect_ratio: "2:3", style_preset: "Ink wash" });
-  expect(payloads[1]!.prompt).toContain("Tall, this person has one grey eye, wearing oilskin coat");
-  expect(payloads[1]).toMatchObject({ aspect_ratio: "1:1", style_preset: "Ink wash" });
+  expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(1));
+  expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(2));
+  expect(payloads[0]!.prompt).toContain("Tall, this person has one grey eye, wearing oilskin coat");
+  // The Art Style opens each prompt, as its writer puts it there.
+  expect(payloads[0]).toMatchObject({ aspect_ratio: "1:1", style_preset: "", reference_images: [] });
+  expect(payloads[0]!.prompt.startsWith("Ink wash")).toBe(true);
+  expect(payloads[1]!.prompt).toContain("Rain never stops in Saltmere.");
+  expect(payloads[1]).toMatchObject({ aspect_ratio: "2:3", style_preset: "" });
+  expect(payloads[1]!.prompt.startsWith("Ink wash")).toBe(true);
+  expect(payloads[1]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
 });
 
 test("a PC with no physical traits gets no portrait", async () => {
@@ -132,7 +136,8 @@ test("a Cover drawn on the form comes from the Title, theme and World Brief, bef
   expect(payloads[0]!.prompt).toContain(JSON.stringify(choices.title));
   expect(payloads[0]!.prompt).toContain("Western");
   expect(payloads[0]!.prompt).toContain("A drowned city");
-  expect(payloads[0]).toMatchObject({ aspect_ratio: "2:3", style_preset: "Ink wash" });
+  expect(payloads[0]).toMatchObject({ aspect_ratio: "2:3", style_preset: "" });
+  expect(payloads[0]!.prompt.startsWith("Ink wash")).toBe(true);
   expect(prompts).toHaveLength(0);
 });
 
@@ -145,8 +150,57 @@ test("a portrait drawn on the form comes from the player's words alone, under th
   expect(portrait.id).toBe(id);
   expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
   expect(payloads[1]!.prompt).toContain("Tall, this person has one grey eye");
-  expect(payloads[1]!.prompt).not.toContain("wearing");
+  expect(payloads[1]!.prompt).toContain("fully clothed in everyday clothes");
   expect(payloads[1]).toMatchObject({ aspect_ratio: "1:1" });
+});
+
+test("a portrait drawn on the form is dressed from the wearing and carrying box, never bare", async () => {
+  const { payloads } = await withImages([], png(1));
+
+  const { id } = await json(app.post("/worlds/draw", { ...portraitAsk, inventory: "An oilskin coat, and a coil of rope." }));
+
+  await details(id, "portrait");
+  expect(payloads[0]!.prompt).toContain("fully clothed in what this says they wear, leaving out what they only carry: An oilskin coat, and a coil of rope.");
+});
+
+test("a Cover shows the PC and the Important Characters by looks alone, and only its title as words", async () => {
+  const { payloads } = await withImages([], png(1));
+  const characters = [{ name: "Mara", description: "Ash's sister, a smuggler in a red scarf" }, { name: "Orin", description: "" }];
+
+  const { id } = await json(app.post("/worlds/draw", { ...coverAsk, pc: { name: "Ash", physicalTraits: "Tall and grey-eyed" }, characters, inventory: "an oilskin coat" }));
+
+  await details(id, "cover");
+  const { prompt, negative_prompt } = payloads[0]!;
+  expect(prompt).toContain("the only writing anywhere on the cover");
+  expect(prompt).toContain("(Tall and grey-eyed, fully clothed in what this says they wear, leaving out what they only carry: an oilskin coat) (someone's sister, a smuggler in a red scarf)");
+  expect(prompt).not.toContain("Mara");
+  expect(prompt).not.toContain("Ash");
+  expect(negative_prompt).toContain("character names");
+});
+
+test("Redo draws an image on the form again from a new prompt, and one that fails keeps the old image", async () => {
+  const { payloads } = await withImages([], png(1), new Error("The image model is down"));
+  const { id } = await json(app.post("/worlds/draw", coverAsk));
+  await details(id, "cover");
+
+  await json(app.post("/worlds/draw", { ...coverAsk, id, title: "The Drowned Reckoning" }));
+
+  expect((await details(id, "cover")).failure).not.toBe("");
+  expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(1));
+  expect(payloads[1]!.prompt).toContain("The Drowned Reckoning");
+});
+
+test("a Cover drawn on the form after the portrait draws the PC from it, and one with no portrait goes without", async () => {
+  const { payloads } = await withImages([], png(1), png(2), png(3));
+  const { id } = await json(app.post("/worlds/draw", portraitAsk));
+  const { id: alone } = await json(app.post("/worlds/draw", coverAsk));
+  await details(alone, "cover");
+
+  await json(app.post("/worlds/draw", { ...coverAsk, id }));
+  await details(id, "cover");
+
+  expect(payloads[1]!.reference_images).toEqual([]);
+  expect(payloads[2]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
 });
 
 test("a portrait can be drawn before the PC has a name", async () => {
@@ -211,19 +265,19 @@ test("an image the server lost to a restart is drawn with the world, using the s
   expect(payloads).toHaveLength(2);
 });
 
-test("a held portrait has a Redraw from its edited Image Prompt, in the Art Style the form now has", async () => {
+test("a held portrait has a Redraw from its edited Image Prompt, drawn exactly as written", async () => {
   const { payloads } = await withImages([], png(1), png(2), new Error("Still busy"));
   const { id } = await json(app.post("/worlds/draw", portraitAsk));
   expect(await details(id, "portrait")).toMatchObject({ hasImage: true, failure: "", canRedraw: true });
 
   expect((await app.post(`/worlds/${id}/portrait`, { prompt: "A bust", artStyle: "Oils" })).status).toBe(200);
 
-  expect(payloads[1]).toMatchObject({ prompt: "A bust", aspect_ratio: "1:1", style_preset: "Oils" });
+  expect(payloads[1]).toMatchObject({ prompt: "A bust", aspect_ratio: "1:1", style_preset: "" });
   expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
   const failed = await app.post(`/worlds/${id}/portrait`, { prompt: "A statue" });
   expect(failed.status).toBe(502);
   expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
-  expect(payloads[2]).toMatchObject({ style_preset: "Oils" });
+  expect(payloads[2]).toMatchObject({ prompt: "A statue" });
   expect((await app.post("/worlds/nowhere/portrait", { prompt: "A bust" })).status).toBe(404);
 });
 
@@ -242,7 +296,7 @@ test("Regenerate keeps the PC and every image, with no new sheet, and the Redraw
   expect(payloads).toHaveLength(3);
   expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(3));
   expect(await details(id, "cover")).toMatchObject({ prompt: "A lighthouse" });
-  expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(2));
+  expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(1));
 });
 
 test("Regenerate leaves an image still drawing to finish", async () => {
@@ -254,13 +308,14 @@ test("Regenerate leaves an image still drawing to finish", async () => {
   await app.post(`/worlds/${id}/regenerate`, choices);
   finish(png(1));
 
-  expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(1));
+  expect(await bytesOf(`/worlds/${id}/portrait`)).toEqual(png(1));
+  expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(2));
   expect(aborted).toEqual([]);
   expect(payloads).toHaveLength(2);
 });
 
 test("Regenerate tries again for an image that failed, from the new World Overview", async () => {
-  const { payloads } = await withImages([sheet, generated(), generated("A new world.")], new Error("Busy"), png(2), png(3));
+  const { payloads } = await withImages([sheet, generated(), generated("A new world.")], png(1), new Error("Busy"), png(3));
   const { id } = await json(app.post("/worlds", form));
   expect(await details(id, "cover")).toMatchObject({ hasImage: false, failure: "Busy" });
 
@@ -273,7 +328,7 @@ test("Regenerate tries again for an image that failed, from the new World Overvi
 test("Begin creates the Save at once with the player's Art Style, and a portrait still drawing lands in it", async () => {
   let finish = (_: Uint8Array) => {};
   const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
-  const { payloads } = await withImages([sheet, generated()], png(1), slow);
+  const { payloads } = await withImages([sheet, generated()], slow, png(1));
   const { id: world } = await json(app.post("/worlds", form));
 
   const { id } = await begin(world, "Oils");
@@ -292,7 +347,7 @@ test("a Turn while the portrait draws waits for it rather than drawing a second"
   let finish = (_: Uint8Array) => {};
   const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
   const move = { op: "set_scene", location: "The Quay", visible_cast: [] };
-  const { payloads } = await withImages([sheet, generated(), narration("You rise.", move)], png(1), slow);
+  const { payloads } = await withImages([sheet, generated(), narration("You rise.", move)], slow, png(1));
   const { id: world } = await json(app.post("/worlds", form));
   const { id } = await begin(world);
 
@@ -319,7 +374,7 @@ test("a portrait stored at Begin survives every Revert", async () => {
 });
 
 test("a portrait that failed is tried once more when the Save is made", async () => {
-  const { payloads } = await withImages([sheet, generated()], png(1), new Error("Busy"), png(3));
+  const { payloads } = await withImages([sheet, generated()], new Error("Busy"), png(1), png(3));
   const { id: world } = await json(app.post("/worlds", form));
   await details(world, "portrait");
 

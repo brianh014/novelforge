@@ -172,7 +172,7 @@ test("the text call gets the recent story and the Scene's people with their look
   const call = callText();
   for (const secret of ["SECRET", "smuggler", "OFFSTAGE-LOOKS", "Offstage", "hidden_check"]) expect(call).not.toContain(secret);
   const data = JSON.parse(written.prompts.at(-1)!.at(-1)!.content) as Record<string, unknown>;
-  expect(Object.keys(data).toSorted()).toEqual(["location", "pc", "people", "recent_story", "request", "world_brief"]);
+  expect(Object.keys(data).toSorted()).toEqual(["art_style", "location", "pc", "people", "recent_story", "request", "theme", "world_brief"]);
   expect(data).toMatchObject({
     request: "the woman in the corner",
     world_brief: "A drowned city",
@@ -228,7 +228,8 @@ test("the prompt follows the Prompt Style, with marks only in prose", async () =
 
   const prose = written.prompts.at(-1)![0]!.content;
   expect(prose).toContain("[Name: phrase]");
-  expect(prose).toContain("at most 150 words");
+  expect(prose).toContain("at most 180 words");
+  expect(prose).toContain("Open the prompt with the picture's art style");
   expect(prose).toContain("someone who has never read it must be able to draw this moment");
   expect(prose).toContain("never write no, not or without");
   expect(prose).not.toContain("update_npc");
@@ -252,7 +253,8 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   const gallery = await asked(id, "Hesper and me");
 
   const payload = drawn.payloads.at(-1)!;
-  expect(payload.prompt).toBe("a tall woman in oilskins on a bench, by a short person with cropped hair, and a boy with a kite");
+  // The PC wears nothing listed, so is drawn dressed rather than bare.
+  expect(payload.prompt).toBe("a tall woman in oilskins on a bench, by a short person with cropped hair, fully clothed in everyday clothes that suit them, and a boy with a kite");
   expect(payload.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([
     ["npc", png(2)],
     ["previous_scene", png(3)],
@@ -530,5 +532,5 @@ test("an older Save opens with the new table, empty, and a request works on it",
 
   expect((await requestedOf(id)).images).toHaveLength(1);
   using db = new Database(path);
-  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 17 });
+  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 18 });
 });

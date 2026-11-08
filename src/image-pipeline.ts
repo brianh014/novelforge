@@ -1,9 +1,10 @@
 import { localIsSetUp, promptStyle, type PromptStyle, usesPortraits } from "./graph-builder";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
 import { errorType, log } from "./logger";
-import { type ImageTarget, OPENING_SNAPSHOT, type Pictured, type Save, SaveNotFound, type SaveStore } from "./save-store";
+import { type ImageTarget, imageType, OPENING_SNAPSHOT, type Pictured, type Save, SaveNotFound, type SaveStore } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import type { State } from "./state-applier";
+import type { PictureAsk } from "./world-creation";
 
 export type ImagePipeline = ReturnType<typeof imagePipeline>;
 
@@ -12,7 +13,7 @@ export type Scene = { changed: boolean; moved: boolean; description: string; loc
 /** A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. */
 type Job = { kind: string; messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string; scene?: boolean };
 /** `world` is what the player can read of it: the World Overview, or the World Brief before there is one. */
-type Cover = { title: string; theme: string; world: string };
+type Cover = { title: string; theme: string; world: string; people?: string[] };
 export type ImageKind = "cover" | "portrait";
 /** An image held for a world with no Save yet. */
 export type EarlyImage = { prompt: string; bytes?: Uint8Array<ArrayBuffer> };
@@ -27,7 +28,7 @@ type Moment = Pick<Scene, "description" | "location" | "npcs" | "wearing">;
 // Sent as the negative prompt, because a Scene Image must not show the player a Check's numbers or dice either.
 const AVOID = "text, captions, letters, numbers, dice";
 // Not AVOID, as a cover shows its title.
-const COVER_AVOID = "captions, author names, taglines, dice";
+const COVER_AVOID = "captions, author names, subtitles, taglines, labels, character names, dice";
 
 const castOf = ({ scene }: State) => JSON.stringify(scene.visibleCast.toSorted());
 
@@ -50,10 +51,21 @@ export function portraitsDue(before: State, after: State) {
   return [...new Set(due)].flatMap((name) => after.npcs.filter((npc) => npc.name === name));
 }
 
-export function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: string[]) {
-  const traits = physicalTraits.trim().replace(/\s*\n\s*/g, " ").replace(/\.$/, "");
+/**
+ * `outfit` is the form's own words for what the PC wears and carries, before the Narrator has sorted them. Something is
+ * always worn, as image models draw anyone they're not told is dressed without a shirt.
+ */
+export function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: string[], outfit = "") {
   // A PC on the form may have no name yet, and an empty search would match between every letter.
-  return [name ? traits.replaceAll(name, "this person") : traits, wearing.length > 0 && `wearing ${wearing.join(", ")}`].filter(Boolean).join(", ");
+  const unnamed = (text: string) => (name ? text.replaceAll(name, "this person") : text);
+  const traits = unnamed(physicalTraits.trim().replace(/\s*\n\s*/g, " ").replace(/\.$/, ""));
+  const dressed =
+    wearing.length > 0
+      ? `wearing ${wearing.join(", ")}`
+      : outfit.trim()
+        ? `fully clothed in what this says they wear, leaving out what they only carry: ${unnamed(outfit.trim().replace(/\s*\n\s*/g, " "))}`
+        : "fully clothed in everyday clothes that suit them";
+  return [traits, dressed].filter(Boolean).join(", ");
 }
 
 // Longer stored looks would crowd out the scene, as a player can write as much as they like for their PC.
@@ -103,23 +115,39 @@ type Role = ImagePayload["reference_images"][number]["role"];
 // A requested image follows its Message's own Scene Image, which may be the background to carry on from.
 const afterItsScene = (messageId: number) => messageId + 1;
 
-export const coverPrompt = ({ title, theme, world }: Cover) =>
-  `The front cover of a novel, one striking image of its world's mood and subject, not a moment from the story. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly, and it must be the only lettering on the cover: ${JSON.stringify(title)}\nTheme: ${theme}\nThe world: ${world}`;
+export const coverPrompt = ({ title, theme, world, people = [] }: Cover) =>
+  `The front cover of a novel, one striking image of its world and the people in it, not a moment from the story. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly: ${JSON.stringify(title)}
+The title is the only writing anywhere on the cover: no author name, subtitle, tagline, label, name or any other words.
+Theme: ${theme}
+The world: ${world}${people.length > 0 ? `\nShow these people on the cover, the first in front as its hero, each looking as described: ${people.map((looks) => `(${looks})`).join(" ")}` : ""}`;
 
-const coverPayload = (prompt: string, style_preset: string): ImagePayload => ({
+/**
+ * The PC and the Important Characters as a cover shows them, by looks alone, as a name in an image prompt gets lettered.
+ * shortcut: a character with no description is left off, and one is only as drawn as their description says, ask for looks if covers miss them.
+ */
+export function coverPeople(pc: Save["pc"], wearing: string[], characters: { name: string; description: string }[], outfit = "") {
+  const names = [pc.name, ...characters.map(({ name }) => name)].filter(Boolean);
+  const unnamed = (text: string) => names.reduce((words, name) => words.replaceAll(name, "someone"), text);
+  return [pcLooks(pc, wearing, outfit), ...characters.map(({ description }) => unnamed(description.trim()))].filter(Boolean);
+}
+
+/** `portrait` is the PC's, so the hero on the cover looks like them. */
+// No style_preset in any payload: each Image Prompt carries its own Art Style, as the text model writes the whole of it.
+// shortcut: an image from before that has no Art Style in its prompt, so its Redraw draws without one, Redo writes it in.
+const coverPayload = (prompt: string, portrait?: { bytes: Uint8Array; mediaType: string } | null): ImagePayload => ({
   prompt,
   negative_prompt: COVER_AVOID,
   aspect_ratio: "2:3",
-  reference_images: [],
-  style_preset,
+  reference_images: reference("pc", portrait),
+  style_preset: "",
 });
 
-const portraitPayload = (prompt: string, style_preset: string): ImagePayload => ({
+const portraitPayload = (prompt: string): ImagePayload => ({
   prompt,
   negative_prompt: AVOID,
   aspect_ratio: "1:1",
   reference_images: [],
-  style_preset,
+  style_preset: "",
 });
 
 /** The adapters' messages are written to be shown, but a failed connection is Bun's own, which has a `code`. */
@@ -135,11 +163,23 @@ const reference = (role: Role, image: { bytes: Uint8Array; mediaType: string } |
  * Decides when a Scene Image or portrait is drawn, and draws it in the background. Jobs live in memory, so stopping the
  * server loses the one in flight: its Turn stands and that scene just has no image, which is cheaper than redrawing it.
  */
+/** Writes a Cover's or portrait's Image Prompt for the image model's family, or gives back `fallback`. */
+export type PictureWriter = (ask: PictureAsk, style: PromptStyle, fallback: string, signal: AbortSignal) => Promise<string>;
+
 export function imagePipeline(
   saves: SaveStore,
   adapters: Record<ReturnType<SettingsStore["read"]>["imageProvider"], ImageAdapter>,
   settings: SettingsStore,
+  writePicture: PictureWriter = async (_ask, _style, fallback) => fallback,
 ) {
+  /** Waits to be called, so a held image can start drawing as soon as its prompt is written. Its template is the fallback. */
+  const writer = (ask: PictureAsk) => (signal: AbortSignal) => {
+    const style = promptStyle(settings.read());
+    const template = ask.kind === "cover" ? coverPrompt(ask) : portraitPrompt(ask.looks, style);
+    // The Art Style first, as the text model would have put it.
+    return writePicture(ask, style, [ask.artStyle.trim(), template].filter(Boolean).join("\n"), signal);
+  };
+
   const work = new Map<string, Work>();
   // shortcut: in memory, so a restart forgets a failed Redraw, which leaves the old image anyway.
   const failures = new Map<string, string>();
@@ -177,7 +217,7 @@ export function imagePipeline(
     negative_prompt: AVOID,
     aspect_ratio: "16:9",
     reference_images: references(id, messageId, location, pictured),
-    style_preset: saves.read(id).artStyle,
+    style_preset: "",
   });
 
   /** `before` is the Message whose earlier Scene Image, if any, can carry its background into this one. */
@@ -205,11 +245,11 @@ export function imagePipeline(
     }
     // shortcut: a person keeps their first portrait when update_npc changes their looks, redraw if that shows in play.
     const name = npc?.name ?? null;
-    const { pc, artStyle } = saves.read(id);
+    const { pc, artStyle, theme, worldBrief } = saves.read(id);
     const looks = npc ? npc.appearance : pc.physicalTraits?.trim() && pcLooks(pc, saves.latestState(id).inventory.wearing);
     if (!looks || saves.portraitOf(id, name)) return;
-    const prompt = portraitPrompt(looks, promptStyle(settings.read()));
-    const bytes = await adapter(portraitPayload(prompt, artStyle), signal);
+    const prompt = await writer({ kind: "portrait", looks, theme, world: worldBrief, artStyle })(signal);
+    const bytes = await adapter(portraitPayload(prompt), signal);
     session++;
     saves.addPortrait(id, messageId, name, bytes, prompt);
     log.info("images", "Image drawn", about(id, { kind: "portrait", messageId }));
@@ -223,7 +263,7 @@ export function imagePipeline(
       const pictured = saves.pictured(id, { kind, ref }) ?? [...visibleNpcs(state).map(({ name }) => name), null];
       return scenePayload(id, kind === "scene" ? messageId : afterItsScene(messageId), prompt, state.scene.location, pictured);
     }
-    return (kind === "cover" ? coverPayload : portraitPayload)(prompt, saves.read(id).artStyle);
+    return kind === "cover" ? coverPayload(prompt, saves.portraitOf(id, null)) : portraitPayload(prompt);
   }
 
   const redrawKey = (id: string, { kind, ref }: ImageTarget) => `${id}/${kind}/${ref}`;
@@ -273,27 +313,30 @@ export function imagePipeline(
      * A Cover or the PC's portrait, for a world that has no Save yet. Its prompt holds only what the player reads, as
      * nothing here knows the World Bible. Undefined when images are off, and a failure is the caller's to report.
      */
-    async drawEarly(kind: ImageKind, prompt: string, artStyle: string, signal: AbortSignal) {
+    async drawEarly(kind: ImageKind, prompt: string, signal: AbortSignal, portrait?: Uint8Array) {
       if (!ready()) return undefined;
-      const bytes = await adapter((kind === "cover" ? coverPayload : portraitPayload)(prompt, artStyle), signal);
+      const mediaType = portrait && imageType(portrait);
+      const payload = kind === "cover" ? coverPayload(prompt, mediaType ? { bytes: portrait!, mediaType } : null) : portraitPayload(prompt);
+      const bytes = await adapter(payload, signal);
       session++;
       return bytes;
     },
 
-    /** Empty for a PC with no physical traits, who gets no portrait. */
-    pcPortraitPrompt: (pc: Save["pc"], wearing: string[]) => (pc.physicalTraits?.trim() ? portraitPrompt(pcLooks(pc, wearing), promptStyle(settings.read())) : ""),
+    writer,
 
     /** False when that image is already being redrawn. Jobs live in memory, so stopping the server loses this one too, and the old image stands. */
-    redraw(id: string, target: ImageTarget, messageId: number, prompt: string) {
+    /** `prompt` is the player's own, or for a Redo, a writer that makes a new one when the job's turn comes. */
+    redraw(id: string, target: ImageTarget, messageId: number, prompt: string | ((signal: AbortSignal) => Promise<string>)) {
       const key = redrawKey(id, target);
       if (isRedrawing(id, key)) return false;
       failures.delete(key);
       const kind = `${target.kind} redraw`;
       const draw = async (signal: AbortSignal) => {
         try {
-          const bytes = await adapter(redrawPayload(id, target, messageId, prompt), signal);
+          const written = typeof prompt === "string" ? prompt : await prompt(signal);
+          const bytes = await adapter(redrawPayload(id, target, messageId, written), signal);
           session++;
-          saves.replaceImage(id, target, prompt, bytes);
+          saves.replaceImage(id, target, written, bytes);
           log.info("images", "Image drawn", about(id, { kind, messageId }));
         } catch (error) {
           if (!signal.aborted && !(error instanceof SaveNotFound)) failures.set(key, shownFailure(error));
