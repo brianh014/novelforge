@@ -104,6 +104,8 @@ test("an Image Prompt puts each person once in what they do, keeps props plain a
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("Make each mark the subject of the sentence that says what that person does");
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("never in a list of who is there");
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("keep their hands empty otherwise");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("Picture at most four people and leave anyone else out of view.");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("Leave out poses where people carry, lift or hold each other or share a seat or a horse");
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("each named plainly with its size, material and place");
   expect(IN_ITS_WORLD_AND_STYLE).toContain("Say which real era and region the place, buildings and clothing resemble");
   expect(IN_ITS_WORLD_AND_STYLE).toContain("in a world set before about 1600, such as an ancient or medieval one, never write coat");
