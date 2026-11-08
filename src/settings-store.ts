@@ -3,6 +3,19 @@ import { z } from "zod";
 import { LOG_LEVELS } from "./logger";
 
 const Lora = z.object({ name: z.string().min(1), strength: z.number().min(-100).max(100), triggerWords: z.string() });
+const Family = z.enum(["sd", "flux2", "qwen21"]);
+const Steps = z.number().int().min(1).max(150).nullable();
+const Cfg = z.number().min(0).max(30).nullable();
+// What the player last chose for a family, so switching back brings it all back.
+const FamilyPicks = z.object({
+  comfyDiffusionModel: z.string(),
+  comfyTextEncoder: z.string(),
+  comfyVae: z.string(),
+  comfyLoras: z.array(Lora),
+  comfySteps: Steps,
+  comfyCfg: Cfg,
+});
+const PicksByFamily = z.partialRecord(Family, FamilyPicks);
 
 export const SettingsUpdate = z
   .object({
@@ -26,7 +39,7 @@ export const SettingsUpdate = z
     imagesEnabled: z.boolean(),
     imageResolution: z.enum(["480p", "720p", "1080p", "4k"]),
     comfyUrl: z.url({ protocol: /^https?$/ }),
-    comfyFamily: z.enum(["sd", "flux2"]),
+    comfyFamily: Family,
     // A checkpoint file doesn't say which it is, and Settings warns when the resolution is too big for it.
     comfySdBase: z.enum(["sdxl", "sd15"]),
     comfyCheckpoint: z.string(),
@@ -34,6 +47,12 @@ export const SettingsUpdate = z
     comfyTextEncoder: z.string(),
     comfyVae: z.string(),
     comfyLoras: z.array(Lora),
+    // Null draws with the family's own default, so a family switch doesn't keep the old family's number.
+    comfySteps: Steps,
+    // FLUX.2 runs without CFG, so it ignores this.
+    comfyCfg: Cfg,
+    // The picks above are the current family's, and these are the others', kept for when the player switches back.
+    comfyFamilyPicks: PicksByFamily,
     comfyMode: z.enum(["simple", "advanced"]),
     // Kept as the player's text and checked when saved, because a bad one here must not stop every read of Settings.
     comfyWorkflow: z.string(),
@@ -73,6 +92,9 @@ const defaults = {
   comfyTextEncoder: "",
   comfyVae: "",
   comfyLoras: [] as z.infer<typeof Lora>[],
+  comfySteps: null,
+  comfyCfg: null,
+  comfyFamilyPicks: {} as z.infer<typeof PicksByFamily>,
   comfyMode: "simple",
   comfyWorkflow: "",
   chatStyle: "prose",

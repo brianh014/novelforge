@@ -58,12 +58,13 @@ export async function comfyModels(settings: SettingsStore, signal: AbortSignal) 
     const info = (await response.json()) as Record<string, { input?: { required?: Inputs } }>;
     return info[node]?.input?.required;
   };
-  const nodes = ["CheckpointLoaderSimple", "UNETLoader", "CLIPLoader", "VAELoader", "LoraLoader"];
-  const [checkpoint, unet, clip, vae, lora] = await Promise.all(nodes.map(required)).catch(() => []);
+  const nodes = ["CheckpointLoaderSimple", "UNETLoader", "CLIPLoader", "VAELoader", "LoraLoader", "TextEncodeQwenImage21"];
+  const [checkpoint, unet, clip, vae, lora, qwen21] = await Promise.all(nodes.map(required)).catch(() => []);
   return {
     reachable: !![checkpoint, unet, clip, vae, lora].find(Boolean),
     // ComfyUI gained this text encoder type with its FLUX.2 nodes.
     hasFlux2: options(clip?.type).includes("flux2"),
+    hasQwen21: !!qwen21,
     checkpoints: options(checkpoint?.ckpt_name),
     diffusionModels: options(unet?.unet_name),
     textEncoders: options(clip?.clip_name),

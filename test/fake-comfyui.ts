@@ -102,8 +102,9 @@ export function fakeComfyUI() {
           CLIPLoader: { clip_name: oldCombo(installed.textEncoders), type: newCombo(installed.clipTypes) },
           VAELoader: { vae_name: newCombo(installed.vaes) },
           LoraLoader: { model: ["MODEL", {}], lora_name: oldCombo(installed.loras) },
+          TextEncodeQwenImage21: { clip: ["CLIP", {}], prompt: ["STRING", { multiline: true }] },
         };
-        const required = inputs[req.params.node];
+        const required = control.uninstalled.includes(req.params.node) ? undefined : inputs[req.params.node];
         return Response.json(required ? { [req.params.node]: { input: { required } } } : {});
       },
       "/upload/image": {

@@ -45,6 +45,9 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     comfyTextEncoder: "",
     comfyVae: "",
     comfyLoras: [],
+    comfySteps: null,
+    comfyCfg: null,
+    comfyFamilyPicks: {},
     comfyMode: "simple",
     comfyWorkflow: "",
     workflowProblem: "",
@@ -67,6 +70,11 @@ test("every setting survives a restart, and no key comes back", async () => {
     comfyTextEncoder: "mistral.safetensors",
     comfyVae: "vae.safetensors",
     comfyLoras: [{ name: "ink.safetensors", strength: 0.7, triggerWords: "inkstyle" }],
+    comfySteps: 12,
+    comfyCfg: 4.5,
+    comfyFamilyPicks: {
+      qwen21: { comfyDiffusionModel: "qwen.safetensors", comfyTextEncoder: "vl.safetensors", comfyVae: "q.safetensors", comfyLoras: [], comfySteps: null, comfyCfg: 1 },
+    },
     comfyMode: "advanced",
     comfyWorkflow: JSON.stringify({ "1": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}" } } }),
   };

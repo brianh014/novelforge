@@ -1,7 +1,7 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { WORKFLOW_EXAMPLE } from "../comfy-workflow";
-import { chosenModels } from "../graph-builder";
+import { chosenModels, drawCfg, drawSteps, switchFamily } from "../graph-builder";
 import {
   askTextTest,
   type ComfyModels,
@@ -453,7 +453,7 @@ function ComfySettings({
   useEffect(() => {
     setModels(undefined);
     let current = true;
-    const none = { reachable: false, hasFlux2: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [] };
+    const none = { reachable: false, hasFlux2: false, hasQwen21: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [] };
     getComfyModels().then(
       (list) => current && setModels(list),
       () => current && setModels(none),
@@ -466,6 +466,7 @@ function ComfySettings({
   const addressSaved = draft.comfyUrl === saved.comfyUrl;
   const advanced = draft.comfyMode === "advanced";
   const flux2 = draft.comfyFamily === "flux2";
+  const qwen21 = draft.comfyFamily === "qwen21";
   const loras = models?.loras ?? [];
   const setLora = (index: number, change: Partial<Settings["comfyLoras"][number]>) =>
     set({ comfyLoras: draft.comfyLoras.map((lora, i) => (i === index ? { ...lora, ...change } : lora)) });
@@ -514,13 +515,14 @@ function ComfySettings({
             Model family
             <select
               value={draft.comfyFamily}
-              onChange={(e) => set({ comfyFamily: e.target.value as Settings["comfyFamily"] })}
+              onChange={(e) => set(switchFamily(draft, e.target.value as Settings["comfyFamily"]))}
             >
               <option value="sd">SD 1.5/SDXL (faces change between pictures)</option>
               <option value="flux2">FLUX.2</option>
+              <option value="qwen21">Qwen Image 2.1</option>
             </select>
           </label>
-          {flux2 ? (
+          {flux2 || qwen21 ? (
             <>
               <ModelSelect
                 label="Diffusion model"
@@ -562,10 +564,39 @@ function ComfySettings({
               {tooBig && <p className="notice">{tooBig}</p>}
               <p className="muted">
                 SD 1.5 and SDXL draw from words alone. They can't use portraits or edit an image, so faces change from
-                picture to picture, and Update draws a new face. FLUX.2 keeps faces the same.
+                picture to picture, and Update draws a new face. FLUX.2 and Qwen Image 2.1 keep faces the same.
               </p>
             </>
           )}
+          <label>
+            Steps
+            <input
+              type="number"
+              min={1}
+              max={150}
+              placeholder={`${drawSteps({ ...draft, comfySteps: null })} (model default)`}
+              value={draft.comfySteps ?? ""}
+              onChange={(e) => set({ comfySteps: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber })}
+            />
+          </label>
+          {!flux2 && (
+            <label>
+              CFG
+              <input
+                type="number"
+                min={0}
+                max={30}
+                step="any"
+                placeholder={`${drawCfg({ ...draft, comfyCfg: null })} (model default)`}
+                value={draft.comfyCfg ?? ""}
+                onChange={(e) => set({ comfyCfg: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber })}
+              />
+            </label>
+          )}
+          <p className="muted">
+            Leave blank for the default. Distilled models, such as Turbo or Lightning, need the settings their page gives.
+            {qwen21 && " Qwen Image 2.1's default is its Turbo model's, so set about 25 steps for the base model."}
+          </p>
           <fieldset>
             <legend>LoRAs</legend>
             {draft.comfyLoras.map((lora, index) => (
@@ -656,10 +687,15 @@ function ComfySettings({
       {addressSaved && !advanced && flux2 && models?.reachable && !models.hasFlux2 && (
         <p className="notice">This ComfyUI doesn't have FLUX.2's nodes yet. Update it to use this family.</p>
       )}
+      {addressSaved && !advanced && qwen21 && models?.reachable && !models.hasQwen21 && (
+        <p className="notice">This ComfyUI doesn't have Qwen Image 2.1's nodes yet. Update it to 0.37 or later to use this family.</p>
+      )}
       <p className="muted">
         {advanced
           ? "Your workflow decides which references it uses, and which models and LoRAs."
-          : flux2
+          : qwen21
+            ? "Uses the PC's and pictured NPCs' portraits as references, up to 10."
+            : flux2
             ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev and Klein 9B, so other Klein models may need an Advanced workflow."
             : "Uses the previous Scene Image as a reference. NPC references need FLUX.2 or an Advanced workflow."}
       </p>

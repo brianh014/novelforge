@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildGraph, type GraphChoices, type GraphRequest, type Graph, usableReferences } from "../src/graph-builder";
+import { buildGraph, type GraphChoices, type GraphRequest, type Graph, switchFamily, usableReferences, usesPortraits } from "../src/graph-builder";
 
 const sd: GraphChoices = {
   comfyFamily: "sd",
@@ -10,6 +10,8 @@ const sd: GraphChoices = {
   comfyTextEncoder: "",
   comfyVae: "",
   comfyLoras: [],
+  comfySteps: null,
+  comfyCfg: null,
 };
 const flux2: GraphChoices = {
   ...sd,
@@ -270,4 +272,91 @@ test("Klein 9B draws in 8 steps, and its base model and FLUX.2 Dev keep 20", () 
   expect(steps("flux-2-klein-9b-Q4_K_M.gguf")).toBe(8);
   expect(steps("flux-2-klein-base-9b.safetensors")).toBe(20);
   expect(steps("flux2_dev_fp8mixed.safetensors")).toBe(20);
+});
+
+test("the player's steps and CFG replace the family's defaults", () => {
+  const sampler = only(buildGraph({ ...sd, comfySteps: 6, comfyCfg: 1.5 }, request), "KSampler").inputs;
+  expect(sampler).toMatchObject({ steps: 6, cfg: 1.5 });
+  expect(only(buildGraph(sd, request), "KSampler").inputs).toMatchObject({ steps: 25, cfg: 7 });
+
+  const klein = { ...flux2, comfyDiffusionModel: "flux-2-klein-9b.safetensors", comfySteps: 4 };
+  expect(only(buildGraph(klein, request), "Flux2Scheduler").inputs.steps).toBe(4);
+});
+
+const qwen21: GraphChoices = {
+  ...flux2,
+  comfyFamily: "qwen21",
+  comfyDiffusionModel: "qwen_image_2.1_turbo_int8_convrot.safetensors",
+  comfyTextEncoder: "qwen3vl_8b_int8_convrot.safetensors",
+  comfyVae: "qwen_image_2.1_vae_bf16.safetensors",
+};
+
+test("Qwen Image 2.1 wires ComfyUI's Turbo template, at the request's size in multiples of 32", () => {
+  const graph = buildGraph(qwen21, request);
+
+  expect(only(graph, "CLIPLoader").inputs).toEqual({ clip_name: "qwen3vl_8b_int8_convrot.safetensors", type: "qwen_image", device: "default" });
+  const sampler = only(graph, "SamplerCustomAdvanced");
+  expect(source(graph, sampler.inputs.noise).inputs).toEqual({ noise_seed: 77 });
+  expect(source(graph, sampler.inputs.sampler).inputs).toEqual({ sampler_name: "euler" });
+  expect(source(graph, sampler.inputs.sigmas)).toEqual({
+    class_type: "ManualSigmas",
+    inputs: { sigmas: "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0" },
+  });
+  expect(source(graph, sampler.inputs.latent_image)).toEqual({
+    class_type: "EmptyLatentImage",
+    inputs: { width: 1280, height: 736, batch_size: 1 },
+  });
+
+  const guider = source(graph, sampler.inputs.guider);
+  expect(guider).toMatchObject({ class_type: "CFGGuider", inputs: { cfg: 1 } });
+  expect(source(graph, guider.inputs.model).class_type).toBe("UNETLoader");
+  expect([slot(guider.inputs.positive), slot(guider.inputs.negative)]).toEqual([0, 1]);
+  const encode = source(graph, guider.inputs.positive);
+  expect(source(graph, guider.inputs.negative)).toBe(encode);
+  expect(encode).toMatchObject({
+    class_type: "TextEncodeQwenImage21",
+    inputs: { prompt: "A harbour at dusk\nInk wash", negative_prompt: "text, dice", resolution: 1024 },
+  });
+  expect(source(graph, encode.inputs.vae).class_type).toBe("VAELoader");
+  expect(source(graph, only(graph, "VAEDecode").inputs.samples).class_type).toBe("SamplerCustomAdvanced");
+});
+
+test("Qwen Image 2.1 gives its encoder each reference in order, and a set Steps uses a scheduler", () => {
+  const graph = buildGraph({ ...qwen21, comfySteps: 25, comfyCfg: 4 }, { ...request, references: ["pc.png [temp]", "npc.png [temp]"] });
+
+  const encode = only(graph, "TextEncodeQwenImage21");
+  expect([encode.inputs["images.image_1"], encode.inputs["images.image_2"]].map((link) => source(graph, link).inputs.image)).toEqual([
+    "pc.png [temp]",
+    "npc.png [temp]",
+  ]);
+  expect(only(graph, "BasicScheduler").inputs).toMatchObject({ scheduler: "simple", steps: 25, denoise: 1 });
+  expect(all(graph, "ManualSigmas")).toHaveLength(0);
+  expect(only(graph, "CFGGuider").inputs.cfg).toBe(4);
+});
+
+test("Qwen Image 2.1 keeps up to ten references and uses portraits", () => {
+  const references = Array.from({ length: 12 }, (_, mark) => image("npc", mark));
+
+  expect(usableReferences(qwen21, references)).toHaveLength(10);
+  expect(usesPortraits({ imageProvider: "local", comfyMode: "simple", comfyFamily: "qwen21" })).toBe(true);
+});
+
+test("switching family keeps the old family's picks and brings back the new one's, or starts it empty", () => {
+  const klein = { ...flux2, comfySteps: 8, comfyLoras: [{ name: "klein.safetensors", strength: 0.8, triggerWords: "" }], comfyFamilyPicks: {} };
+
+  const toQwen = { ...klein, ...switchFamily(klein, "qwen21") };
+  expect(toQwen).toMatchObject({ comfyFamily: "qwen21", comfyDiffusionModel: "", comfyVae: "", comfyLoras: [], comfySteps: null, comfyCfg: null });
+
+  const picked = { ...toQwen, comfyDiffusionModel: "qwen.safetensors", comfyCfg: 1 };
+  const back = { ...picked, ...switchFamily(picked, "flux2") };
+  expect(back).toMatchObject({
+    comfyFamily: "flux2",
+    comfyDiffusionModel: "flux2_dev.safetensors",
+    comfyTextEncoder: "mistral_3.safetensors",
+    comfySteps: 8,
+    comfyLoras: klein.comfyLoras,
+  });
+
+  expect({ ...back, ...switchFamily(back, "qwen21") }).toMatchObject({ comfyDiffusionModel: "qwen.safetensors", comfyCfg: 1 });
+  expect(switchFamily(back, "flux2")).toEqual({});
 });

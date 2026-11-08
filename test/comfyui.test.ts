@@ -76,6 +76,7 @@ test("Settings lists what's installed from both forms of combo input", async () 
   expect(await listModels()).toEqual({
     reachable: true,
     hasFlux2: true,
+    hasQwen21: true,
     checkpoints: ["dream_xl.safetensors", "dream_15.safetensors"],
     diffusionModels: ["flux2_dev_fp8mixed.safetensors"],
     textEncoders: ["mistral_3_small_flux2_bf16.safetensors"],
@@ -99,7 +100,14 @@ test("an install without FLUX.2 support says so", async () => {
   expect((await listModels()).hasFlux2).toBe(false);
 });
 
-const nothing = { reachable: false, hasFlux2: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [] };
+test("a ComfyUI from before Qwen Image 2.1 says it lacks the nodes", async () => {
+  await play().patch("/settings", { comfyUrl: comfy.url });
+  comfy.control.uninstalled = ["TextEncodeQwenImage21"];
+
+  expect((await listModels()).hasQwen21).toBe(false);
+});
+
+const nothing = { reachable: false, hasFlux2: false, hasQwen21: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [] };
 
 test("a server that isn't running lists nothing and says it can't be reached", async () => {
   await play().patch("/settings", { comfyUrl: comfy.url });
