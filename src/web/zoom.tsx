@@ -59,7 +59,8 @@ export function PromptBox({
 
 /** Keeps a viewed picture clear of its prompt until asked. It stays open to show a Redraw under way or failed, and shuts with the dialog. */
 /** `actions` are more icon buttons for the row beside the Redraw pencil. */
-export function RedrawPanel({ busy, children, actions }: { busy: boolean; children: ReactNode; actions?: ReactNode }) {
+/** `status` shows while the panel is shut, so a drawing started from `actions` reports without opening the Image Prompt. */
+export function RedrawPanel({ busy, children, actions, status }: { busy: boolean; children: ReactNode; actions?: ReactNode; status?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -77,6 +78,7 @@ export function RedrawPanel({ busy, children, actions }: { busy: boolean; childr
         </button>
         {actions}
       </div>
+      {!shown && status}
       {/* Hidden rather than removed, so a dialog closed and opened again keeps what was typed. */}
       <div ref={panel} className="redraw-panel" hidden={!shown}>
         {children}
@@ -114,7 +116,13 @@ export function RedrawableImage({
   return (
     <Zoomable lazy src={galleryUrl(id, image)} alt={alt}>
       <RedrawPanel
-        busy={image.redrawing || !!image.failure || !!refused}
+        busy={false}
+        status={
+          <>
+            {(image.failure || refused) && <p role="alert" className="error">{image.failure || refused}</p>}
+            {image.redrawing && <p role="status" className="waiting">This image is being drawn…</p>}
+          </>
+        }
         actions={
           <>
             {canUpdate && (
