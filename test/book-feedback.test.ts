@@ -199,6 +199,27 @@ test("Decide for me with words in the box Enhances them, keeping the player's dr
   expect(prompt).not.toContain(SECRET);
 });
 
+test("Ask the Narrator answers from what the PC knows and the Lore it activates, never Plot Threads, and changes nothing", async () => {
+  const answer = "Everyone here knows magic is real.";
+  const script = scriptedTextProvider(sheet, generated, narration("A boat drifts near."), JSON.stringify({ text: "x ".repeat(81) }), JSON.stringify({ text: answer }));
+  app = startApp(savesDir, script.textProvider);
+  const world = await newWorld();
+  const id = await begin(world);
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
+  const before = saveStore(savesDir).messages(id);
+
+  const response = await app.post(`/saves/${id}/questions`, { question: "Is magic real here?" });
+
+  expect(await response.json()).toEqual({ text: answer });
+  const prompt = JSON.stringify(script.prompts.at(-1));
+  expect(prompt).toContain("Is magic real here?");
+  expect(prompt).toContain("magic is real.");
+  expect(prompt).toContain("A boat drifts near.");
+  expect(prompt).not.toContain("the mayor is a ghost");
+  expect(saveStore(savesDir).messages(id)).toEqual(before);
+  expect((await app.post(`/saves/${id}/questions`, { question: " " })).status).toBe(400);
+});
+
 test("the theme is a stored setting that follows the device until the player picks one", async () => {
   app = startApp(savesDir, scriptedTextProvider().textProvider);
   const read = async () => ((await (await app.get("/settings")).json()) as { theme: string }).theme;

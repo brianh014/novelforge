@@ -1,5 +1,6 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
+  askNarrator,
   decideForMe,
   duplicateFrom,
   failureMessage,
@@ -38,7 +39,7 @@ import {
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
@@ -168,6 +169,12 @@ export function Play({ id }: { id: string }) {
   const [draft, setDraft] = useState("");
   const [turn, setTurn] = useState<TurnInProgress>();
   const [deciding, setDeciding] = useState(false);
+  /** Ask the Narrator's field, and its one answer, which goes when the field closes or a Turn is sent. */
+  const [questioning, setQuestioning] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [wondering, setWondering] = useState(false);
+  const askButton = useRef<HTMLButtonElement>(null);
   /** The player's words before an Enhance, which Undo puts back while the box still holds the Enhanced text. */
   const [enhanced, setEnhanced] = useState<{ was: string; now: string }>();
   // The response being rewritten, by id, so the box goes if the story moves on from it.
@@ -349,6 +356,34 @@ export function Play({ id }: { id: string }) {
     if (!drawable) return;
     setAsking(!asking);
     setRewriting(undefined);
+    setQuestioning(false);
+  }
+
+  function toggleQuestioning() {
+    if (!askable) return;
+    setQuestioning(!questioning);
+    setAsking(false);
+    setRewriting(undefined);
+  }
+
+  function closeQuestion() {
+    setQuestioning(false);
+    setQuestion("");
+    setAnswer("");
+    askButton.current?.focus();
+  }
+
+  async function askQuestion(event: FormEvent) {
+    event.preventDefault();
+    if (!askable || wondering || !question.trim()) return;
+    setError("");
+    setWondering(true);
+    try {
+      setAnswer(await askNarrator(id, question, leaving.current.signal));
+    } catch (failure) {
+      if (!leaving.current.signal.aborted) setError((failure as Error).message);
+    }
+    setWondering(false);
   }
 
   function cancelAsking() {
@@ -394,6 +429,9 @@ export function Play({ id }: { id: string }) {
 
   // `before` is passed in because the load effect runs this before `messages` is set.
   function playInput(input: string, before: Message[], replaces?: Message) {
+    setQuestioning(false);
+    setQuestion("");
+    setAnswer("");
     return run({ input, narration: "", replaces }, before, (show, signal) =>
       replaces ? replaceResponse(id, replaces.id, input, show, signal) : playTurn(id, input, before.at(-1)?.id ?? 0, show, signal),
     );
@@ -434,6 +472,7 @@ export function Play({ id }: { id: string }) {
 
   // Before the story opens there's no Message for a picture to join.
   const drawable = imagesReady && !turn && messages.length > 0;
+  const askable = !turn && messages.length > 0;
 
   if (loadError) {
     return (
@@ -764,6 +803,32 @@ export function Play({ id }: { id: string }) {
           </div>
         </form>
       )}
+      {questioning && askable && (
+        <form className="ask" onSubmit={askQuestion}>
+          <label>
+            What do you ask the Narrator?
+            <textarea
+              autoFocus
+              rows={2}
+              maxLength={1000}
+              placeholder={`What would ${pc} know about this place?`}
+              value={question}
+              readOnly={wondering}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={sendOnEnter}
+            />
+          </label>
+          {(wondering || answer) && <p role="status" className="answer">{wondering ? "The Narrator is thinking…" : answer}</p>}
+          <div className="row">
+            <button type="button" className="quiet" onClick={closeQuestion}>
+              {answer ? "Close" : "Cancel"}
+            </button>
+            <button className="action" aria-disabled={wondering || !question.trim()}>
+              Ask
+            </button>
+          </div>
+        </form>
+      )}
       <form className="compose" onSubmit={send}>
         <label>
           <span className="visually-hidden">What does {pc} say or do?</span>
@@ -790,6 +855,18 @@ export function Play({ id }: { id: string }) {
             onClick={toggleAsking}
           >
             {DrawIcon}
+          </button>
+          <button
+            ref={askButton}
+            type="button"
+            className="icon"
+            title={askable ? "Ask the Narrator" : "Ask the Narrator: wait for the story"}
+            aria-label="Ask the Narrator"
+            aria-expanded={questioning && askable}
+            aria-disabled={!askable}
+            onClick={toggleQuestioning}
+          >
+            {AskIcon}
           </button>
           <button
             type="button"

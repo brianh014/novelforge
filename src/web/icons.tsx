@@ -9,6 +9,7 @@ export const ContinueIcon = icon("M4 12h16M13 5l7 7-7 7");
 export const DeleteIcon = icon("M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6");
 export const DecideIcon = icon("M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z");
 export const DrawIcon = icon("M3 5h18v14H3zM3 16l5-5 5 5 3-3 5 5M15.5 9.5h.01");
+export const AskIcon = icon("M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01");
 export const DownIcon = icon("M12 4v16M5 13l7 7 7-7");
 export const DuplicateIcon = icon("M8 3h9l3 3v12H8zM4 7v14h11");
 export const EditIcon = icon("M4 20l1-5L16 4l4 4L9 19zM14 6l4 4");

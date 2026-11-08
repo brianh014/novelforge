@@ -9,7 +9,7 @@ export type Prompt = { role: "system" | "user" | "assistant"; content: string }[
 /** The default for Settings' recent Messages, which a Save without one falls back to. */
 export const WINDOW_MESSAGES = 80;
 export const MEMORY_MESSAGES = 20;
-const LORE_TOKEN_BUDGET = 6000;
+export const LORE_TOKEN_BUDGET = 6000;
 const RESPONSES_PER_THREAD_NUDGE = 8;
 // Enough for the Narrator to copy the shape, as a list in every reply costs more than it teaches.
 const REPLIES_SHOWING_PEOPLE = 2;

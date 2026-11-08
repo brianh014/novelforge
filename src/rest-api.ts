@@ -28,7 +28,7 @@ import { type State, VisibleEdit, type World, type WorldEdit } from "./state-app
 import { askForChapterTitle, ContentRefused, editResponse, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import { readable } from "./web/chat-style";
 import spa from "./web/index.html";
-import { changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type PictureAsk, type WorldChoices, type WorldPc, writeImagePrompt, writePicturePrompt } from "./world-creation";
+import { answerQuestion, changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type PictureAsk, type WorldChoices, type WorldPc, writeImagePrompt, writePicturePrompt } from "./world-creation";
 
 const NamedPc = PcDetails.extend({ name: z.string().trim().min(1) });
 
@@ -97,6 +97,7 @@ const PickRequest = z.object({
 
 // A `draft` is the player's own move to Enhance. Without one, the PC's next move is written from scratch.
 const DecideRequest = z.object({ draft: z.string().trim().max(4000).default("") });
+const QuestionRequest = z.object({ question: z.string().trim().min(1).max(1000) });
 
 const CharacterBoxes = z.object({ name: z.string().trim().max(80), description: z.string().trim().max(1000) });
 
@@ -931,6 +932,14 @@ export function startServer(options: {
           const { id } = req.params;
           const story = { save: saves.read(id), state: saves.latestState(id), messages: saves.messages(id) };
           return Response.json({ text: await decideForPc(options, story, req.signal, draft) });
+        },
+      },
+      "/saves/:id/questions": {
+        POST: async (req) => {
+          const { question } = await parseBody(req, QuestionRequest);
+          const { id } = req.params;
+          const story = { save: saves.read(id), state: saves.latestState(id), messages: saves.messages(id) };
+          return Response.json({ text: await answerQuestion(options, story, question, req.signal) });
         },
       },
       "/saves/:id/messages": {

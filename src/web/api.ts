@@ -179,6 +179,10 @@ export const drawOnForm = (
 export const decideForMe = (id: string, draft: string, signal?: AbortSignal) =>
   request<{ text: string }>(`/saves/${id}/decide`, { ...jsonBody({ draft }), signal }).then(({ text }) => text);
 
+/** The Narrator's answer to a Question, which nothing keeps. */
+export const askNarrator = (id: string, question: string, signal?: AbortSignal) =>
+  request<{ text: string }>(`/saves/${id}/questions`, { ...jsonBody({ question }), signal }).then(({ text }) => text);
+
 export const portraitUrl = (id: string, { id: portraitId, redraws }: Pick<Portrait, "id" | "redraws">) =>
   `/saves/${id}/portraits/${portraitId}?v=${redraws}`;
 

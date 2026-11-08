@@ -126,6 +126,10 @@ _Avoid_: Retry, swipe
 A change to the world in the player's own plain words, to nudge the story or correct a mistake, given through Tell the Narrator in the Journal. The Narrator applies it to the World Bible, world rules and Plot Threads, and to the Journal's text where that no longer holds, including what the PC wears and carries and their status. The player never sees the inventory itself. The player sees only that it was done, and any change to the Journal.
 _Avoid_: Edit (that is a change to text the player can read)
 
+**Question**:
+An out-of-character question the player puts to the Narrator through Ask the Narrator, like a player asking their DM. It is answered only with what the PC would know from their background and the story so far, never from Plot Threads, and never settles a Check. It is not a Turn: the Narrator never hears about it, nothing in the story changes, and the answer is not kept.
+_Avoid_: World Change (that is Tell the Narrator, and changes the world)
+
 **Director's Note** (retired from play, see ticket 31):
 A standing out-of-character instruction to the Narrator for one Save, such as correcting a fact without Reverting.
 _Avoid_: Author's Note, edit
