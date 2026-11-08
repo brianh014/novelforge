@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>NovelForge</title>
+  <rect width="64" height="64" rx="14" fill="#1f3a2c"/>
+  <path d="M8 22V50C17 48 26 49 32 53C38 49 47 48 56 50V22C47 21 38 22 32 25C26 22 17 21 8 22Z" fill="#6b3f22"/>
+  <path d="M32 21C26 17 17 16 10 18V47C17 45 26 46 32 50Z" fill="#eadfc5"/>
+  <path d="M32 21C38 17 47 16 54 18V47C47 45 38 46 32 50Z" fill="#eadfc5"/>
+  <path d="M32 21V50" stroke="#9c8862" stroke-width="1.5"/>
+  <path d="M15 26H27M15 31H27M15 36H23" stroke="#9c8862" stroke-width="2" stroke-linecap="round"/>
+  <path d="M43 24L45 30L51 32L45 34L43 40L41 34L35 32L41 30Z" fill="#1f8a78"/>
+</svg>

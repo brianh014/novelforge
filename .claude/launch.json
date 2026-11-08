@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "novelforge",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["src/main.ts"],
+      "port": 4600
+    }
+  ]
+}

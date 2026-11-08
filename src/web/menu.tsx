@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { DownIcon } from "./icons";
+import logo from "./logo.svg";
 
 const LEFT_FOLDED = "novelforge-left-folded";
 
@@ -149,10 +150,11 @@ export function Menu() {
   return (
     <Book
       left={
-        <>
+        <div className="brand">
+          <img className="logo" src={logo} alt="" width="264" height="197" />
           <h1 className="big">NovelForge</h1>
           <p className="muted">A choose-your-own visual novel, written as you play.</p>
-        </>
+        </div>
       }
     >
       <nav className="menu" aria-label="Main Menu">

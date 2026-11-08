@@ -161,6 +161,15 @@ a {
   text-wrap: balance;
 }
 
+.brand {
+  text-align: center;
+}
+
+.logo {
+  display: block;
+  margin: 0 auto 20px;
+}
+
 .big:focus {
   outline: none;
 }
