@@ -968,6 +968,19 @@ function InstallSettings({
         />
       </label>
       <p className="muted">Sent in full on every Turn. Older Messages reach the Narrator as Scene Memories. More remembers detail better but makes each Turn cost more, and fewer saves money. A lower number catches up one Scene Memory a Turn.</p>
+      <label>
+        Longest Question answer, in words
+        <input
+          type="number"
+          required
+          min={80}
+          max={1000}
+          step={10}
+          value={draft.answerRejectWords}
+          onChange={(e) => set({ answerRejectWords: e.target.valueAsNumber })}
+        />
+      </label>
+      <p className="muted">The Narrator is asked for about 60 words and at most 80. An answer over this limit is thrown out and asked for again, up to three tries.</p>
       <TestBox
         title="Test text"
         hint="Sends this prompt to your saved model, with the saved Extra Narrator Instructions above. OpenRouter may charge for each test."

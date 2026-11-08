@@ -31,13 +31,15 @@ export const narration = (text: string, ...state_operations: unknown[]) =>
 /** Replies with each entry in turn, throwing Errors, and records every prompt. */
 export function scriptedTextProvider(...replies: (string | Error)[]) {
   const prompts: Prompt[] = [];
-  const textProvider: TextProvider = async (prompt) => {
+  const schemas: unknown[] = [];
+  const textProvider: TextProvider = async (prompt, request) => {
     prompts.push(prompt);
+    schemas.push(request.schema);
     const reply = replies.shift() ?? new Error("Text Provider script exhausted");
     if (reply instanceof Error) throw reply;
     return reply;
   };
-  return { textProvider, prompts };
+  return { textProvider, prompts, schemas };
 }
 
 /** A real one-pixel PNG. */

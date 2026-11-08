@@ -69,8 +69,7 @@ export function jsonSchemaOf(schema: z.ZodType) {
 
 // What the Narrator is asked for. It is flat because strict schema modes refuse a union at the root, and check
 // comes first so that a streamed reply shows it is not a Check request before any narration arrives.
-const responseSchema = jsonSchemaOf(
-  z.object({
+const ResponseShape = z.object({
     check: CheckRequest.nullable(),
     narration: z.string().nullable(),
     state_operations: z.array(StateOperation),
@@ -83,8 +82,10 @@ const responseSchema = jsonSchemaOf(
       .boolean()
       .nullable()
       .describe("true only when a Scene has just resolved and the story is about to move to a new place, a new time, or a new stage in a Plot Thread, which suggests ending the chapter here"),
-  }),
-);
+  });
+const responseSchema = jsonSchemaOf(ResponseShape);
+// Once a Check is rolled, or none can be, the schema itself forbids one, as the prompt's "do not request another check" was ignored three times running.
+const noCheckSchema = jsonSchemaOf(ResponseShape.extend({ check: z.null() }));
 
 // shortcut: a reply in another key order or after prose shows no narration until the Turn is done, loosen this only if real models do that often.
 const NARRATION_START = /^\s*(?:```(?:json)?\s*)?\{\s*"check"\s*:\s*null\s*,\s*"narration"\s*:\s*"/;
@@ -291,7 +292,7 @@ async function narrate(
       const reply = await askNarrator(
         textProvider,
         check ? [...prompt, resultInstruction(check)] : prompt,
-        { schema: responseSchema, onText, onGeneration: (id) => (generation = id), signal },
+        { schema: check || !rollCheck ? noCheckSchema : responseSchema, onText, onGeneration: (id) => (generation = id), signal },
         input,
         refusal,
       );
@@ -307,8 +308,11 @@ async function narrate(
       // The last attempt keeps such a reply, as losing the Turn costs more than a long speech.
       // A picture without set_scene takes the last location as its caption and its previous image as a reference.
       const unplaced = scene_changed && !state_operations.some(({ op }) => op === "set_scene") ? "a picture without set_scene" : undefined;
-      const fault = attempt < MAX_ATTEMPTS ? (unplaced ?? (edited === undefined ? spokenLineFault(narration) : undefined)) : undefined;
+      const spoken = edited === undefined ? spokenLineFault(narration) : undefined;
+      // A long speech is only logged, as rewriting it restarted too many Turns the player could see.
+      const fault = attempt < MAX_ATTEMPTS ? (unplaced ?? (spoken === LONG_SPEECH ? undefined : spoken)) : undefined;
       if (fault) throw new InvalidResponse(undefined, { cause: fault });
+      if (spoken === LONG_SPEECH) log.warning("turn", "Long speech kept", { attempt, generation });
       const memory = await pendingMemory;
       let moved = false;
       let location = "";
@@ -374,8 +378,9 @@ export function spokenLineFault(narration: string) {
     const speaker = line.match(/^\[([^[\]]+)\]:/)?.[1]!.trim();
     if (speaker) lines.set(speaker, (lines.get(speaker) ?? 0) + 1);
   }
-  return [...lines.values()].some((count) => count > 2) ? "someone speaks more than twice" : undefined;
+  return [...lines.values()].some((count) => count > 2) ? LONG_SPEECH : undefined;
 }
+const LONG_SPEECH = "someone speaks more than twice";
 
 type Refusal = { op: string; reason: string };
 const refusalText = (refusals: Refusal[]) => refusals.map(({ op, reason }) => `${op}: ${reason}`).join(", ");

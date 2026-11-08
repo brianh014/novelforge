@@ -638,27 +638,27 @@ test("invalid replies and refused operations share the two retries", async () =>
   expect(await messageTexts(app, id)).toEqual([]);
 });
 
-test("a reply where someone speaks a third time, or a tag lacks its [, is retried", async () => {
-  const thrice = narration('[Mara]: "One."\n[Mara]: "Two."\n[Mara]: "Three."');
-  const { app, prompts } = play(thrice, narration('???]: "Go back."'), narration('[Mara]: "One."\n[Mara]: "Two."'));
+test("a reply where a tag lacks its [ is retried", async () => {
+  const { app, prompts } = play(narration('???]: "Go back."'), narration('[Mara]: "One."\n[Mara]: "Two."'));
   const id = await app.createSave();
 
   const response = await app.post(`/saves/${id}/turns`, { input: "I wait." });
 
   expect(response.status).toBe(201);
-  expect(prompts).toHaveLength(3);
+  expect(prompts).toHaveLength(2);
   expect((await messageTexts(app, id)).at(-1)).toBe('[Mara]: "One."\n[Mara]: "Two."');
 });
 
-test("the last attempt keeps a reply where someone speaks a third time, rather than lose the Turn", async () => {
-  const thrice = narration('[Mara]: "One."\n[Mara]: "Two."\n[Mara]: "Three."');
-  const { app, prompts } = play(thrice, thrice, thrice);
+test("a reply where someone speaks a third time is kept on the first attempt, not rewritten", async () => {
+  const thrice = '[Mara]: "One."\n[Mara]: "Two."\n[Mara]: "Three."';
+  const { app, prompts } = play(narration(thrice));
   const id = await app.createSave();
 
   const response = await app.post(`/saves/${id}/turns`, { input: "I wait." });
 
   expect(response.status).toBe(201);
-  expect(prompts).toHaveLength(3);
+  expect(prompts).toHaveLength(1);
+  expect((await messageTexts(app, id)).at(-1)).toBe(thrice);
 });
 
 test("a content refusal is reported with the player's text, and is not retried", async () => {
@@ -735,8 +735,19 @@ const requestCheck = (difficulty: unknown, action = "Leap the flooded gap") =>
 const playWithDice = (rolls: number[], ...replies: (string | Error)[]) => {
   const script = scriptedTextProvider(...replies);
   app = startApp(savesDir, script.textProvider, scriptedDice(...rolls));
-  return { app, prompts: script.prompts };
+  return { app, prompts: script.prompts, schemas: script.schemas };
 };
+
+test("once the Check is rolled, the schema sent for the result allows no second Check request", async () => {
+  const { app, schemas } = playWithDice([12], requestCheck("Moderate"), narration("You land."));
+  const id = await app.createSave();
+
+  await app.post(`/saves/${id}/turns`, { input: "I leap the gap." });
+
+  const check = (schema: unknown) => (schema as { properties: { check: unknown } }).properties.check;
+  expect(JSON.stringify(check(schemas[0]))).toContain("action");
+  expect(check(schemas[1])).toEqual({ type: "null" });
+});
 
 test("a Check takes two calls, and the second receives the outcome and degree", async () => {
   const { app, prompts } = playWithDice([12], requestCheck("Moderate"), narration("You land hard but whole."));

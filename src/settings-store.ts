@@ -37,6 +37,8 @@ export const SettingsUpdate = z
     textReplyMinutes: z.number().positive().max(60),
     // Recent Messages sent in full each Turn. Older ones reach the Narrator as Scene Memories, written in batches of 20, so it can't go below two batches.
     textRecentMessages: z.number().int().min(40).max(400),
+    // A Question's answer over this many words is retried. Not below the 80 the prompt asks for.
+    answerRejectWords: z.number().int().min(80).max(1000),
     imageProvider: z.enum(["openrouter", "local"]),
     imageModel: z.string(),
     imageApiKey: z.string(),
@@ -88,6 +90,7 @@ const defaults = {
   // The slowest real reply so far took five.
   textReplyMinutes: 8,
   textRecentMessages: 80,
+  answerRejectWords: 120,
   imageProvider: "openrouter",
   imageModel: "",
   imageApiKey: "",

@@ -201,7 +201,7 @@ test("Decide for me with words in the box Enhances them, keeping the player's dr
 
 test("Ask the Narrator answers from what the PC knows and the Lore it activates, never Plot Threads, and changes nothing", async () => {
   const answer = "Everyone here knows magic is real.";
-  const script = scriptedTextProvider(sheet, generated, narration("A boat drifts near."), JSON.stringify({ text: "x ".repeat(81) }), JSON.stringify({ text: answer }));
+  const script = scriptedTextProvider(sheet, generated, narration("A boat drifts near."), JSON.stringify({ text: "x ".repeat(121) }), JSON.stringify({ text: answer }));
   app = startApp(savesDir, script.textProvider);
   const world = await newWorld();
   const id = await begin(world);
