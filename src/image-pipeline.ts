@@ -151,7 +151,7 @@ export function coverPeople(pc: Save["pc"], wearing: string[], characters: { nam
 
 /** `portrait` is the PC's, so the hero on the cover looks like them. */
 // No style_preset in any payload: each Image Prompt carries its own Art Style, as the text model writes the whole of it.
-// shortcut: an image from before that has no Art Style in its prompt, so its Redraw draws without one, Redo writes it in.
+// shortcut: an image from before that has no Art Style in its prompt, so its Redraw draws without one, Update writes it in.
 const coverPayload = (prompt: string, portrait?: { bytes: Uint8Array; mediaType: string } | null): ImagePayload => ({
   prompt,
   negative_prompt: COVER_AVOID,
@@ -160,11 +160,12 @@ const coverPayload = (prompt: string, portrait?: { bytes: Uint8Array; mediaType:
   style_preset: "",
 });
 
-const portraitPayload = (prompt: string): ImagePayload => ({
-  prompt,
+/** `face` is the portrait being updated, so the new one keeps that face and takes the clothing from the prompt. */
+const portraitPayload = (prompt: string, face: ImagePayload["reference_images"] = []): ImagePayload => ({
+  prompt: withReferenceRoles(prompt, face),
   negative_prompt: AVOID,
   aspect_ratio: "1:1",
-  reference_images: [],
+  reference_images: face,
   style_preset: "",
 });
 
@@ -272,14 +273,19 @@ export function imagePipeline(
   }
 
   /** The same kind of request that made the image, so only the prompt, the Art Style and the Settings can differ. */
-  function redrawPayload(id: string, { kind, ref }: ImageTarget, messageId: number, prompt: string) {
+  function redrawPayload(id: string, { kind, ref }: ImageTarget, messageId: number, prompt: string, keepFace = false) {
     if (kind === "scene" || kind === "requested") {
       const state = saves.snapshot(id, messageId);
       // An image from before this kept no record, and was drawn from the cast and the PC.
       const pictured = saves.pictured(id, { kind, ref }) ?? [...visibleNpcs(state).map(({ name }) => name), null];
       return scenePayload(id, prompt, pictured);
     }
-    return kind === "cover" ? coverPayload(prompt, saves.portraitOf(id, null)) : portraitPayload(prompt);
+    if (kind === "cover") return coverPayload(prompt, saves.portraitOf(id, null));
+    if (!keepFace) return portraitPayload(prompt);
+    const bytes = saves.portrait(id, ref);
+    const mediaType = imageType(bytes);
+    const role = saves.portraits(id).find((portrait) => portrait.id === ref)?.npc === null ? "pc" : "npc";
+    return portraitPayload(prompt, reference(role, mediaType && { bytes, mediaType }));
   }
 
   const redrawKey = (id: string, { kind, ref }: ImageTarget) => `${id}/${kind}/${ref}`;
@@ -341,8 +347,12 @@ export function imagePipeline(
     writer,
 
     /** False when that image is already being redrawn. Jobs live in memory, so stopping the server loses this one too, and the old image stands. */
-    /** `prompt` is the player's own, or for a Redo, a writer that makes a new one when the job's turn comes. */
+    /**
+     * `prompt` is the player's own, or for an Update, a writer that makes a new one when the job's turn comes. An Update of a
+     * portrait keeps its face, as the player wants the same person as they are now.
+     */
     redraw(id: string, target: ImageTarget, messageId: number, prompt: string | ((signal: AbortSignal) => Promise<string>)) {
+      const keepFace = typeof prompt !== "string" && target.kind === "portrait";
       const key = redrawKey(id, target);
       if (isRedrawing(id, key)) return false;
       failures.delete(key);
@@ -350,7 +360,7 @@ export function imagePipeline(
       const draw = async (signal: AbortSignal) => {
         try {
           const written = typeof prompt === "string" ? prompt : await prompt(signal);
-          const bytes = await adapter(redrawPayload(id, target, messageId, written), signal);
+          const bytes = await adapter(redrawPayload(id, target, messageId, written, keepFace), signal);
           session++;
           saves.replaceImage(id, target, written, bytes);
           log.info("images", "Image drawn", about(id, { kind, messageId }));

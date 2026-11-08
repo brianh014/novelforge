@@ -178,7 +178,7 @@ const PromptRequest = z.object({ prompt: z.string().trim().min(1) });
 const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene", "requested"]), ref: z.number().int().nonnegative() });
 
 // Only these have a prompt the text model writes from the story, as a Scene Image's comes from its Turn.
-const RedoRequest = z.object({ kind: z.enum(["cover", "portrait"]), ref: z.number().int().nonnegative() });
+const UpdateRequest = z.object({ kind: z.enum(["cover", "portrait"]), ref: z.number().int().nonnegative() });
 
 // Besides the PC, so a cover isn't crowded.
 const COVER_NPCS = 3;
@@ -1012,10 +1012,10 @@ export function startServer(options: {
         },
       },
       // A Redraw from a new Image Prompt, written from the story as it stands, by the same allowlist as the first.
-      "/saves/:id/gallery/redo": {
+      "/saves/:id/gallery/update": {
         POST: async (req) => {
           const { id } = req.params;
-          const { kind, ref } = await parseBody(req, RedoRequest);
+          const { kind, ref } = await parseBody(req, UpdateRequest);
           const image = visibleImages(id).find((candidate) => candidate.kind === kind && candidate.ref === ref);
           if (!image) return Response.json({ error: "Image not found" }, { status: 404 });
           if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { galleryUrl, type GalleryImage, type Portrait, portraitUrl, redoImage, redrawImage } from "./api";
+import { galleryUrl, type GalleryImage, type Portrait, portraitUrl, updateImage, redrawImage } from "./api";
 import { DeleteIcon, EditIcon, RegenerateIcon } from "./icons";
 
 /** Someone's picture and name, with who they are when that's known. */
@@ -87,7 +87,7 @@ export function RedrawPanel({ busy, children, actions }: { busy: boolean; childr
 
 /**
  * An image of a Save, which opens larger with its prompt behind a button. `onRedrawn` is for reading the Gallery again, as
- * drawing goes on in the background. `canRedo` offers a new prompt from the story, and `onDelete` a Delete, inside the view.
+ * drawing goes on in the background. `canUpdate` offers a new prompt from the story, and `onDelete` a Delete, inside the view.
  */
 export function RedrawableImage({
   id,
@@ -95,7 +95,7 @@ export function RedrawableImage({
   alt,
   canRedraw,
   onRedrawn,
-  canRedo = false,
+  canUpdate = false,
   onDelete,
 }: {
   id: string;
@@ -103,7 +103,7 @@ export function RedrawableImage({
   alt: string;
   canRedraw: boolean;
   onRedrawn: () => void;
-  canRedo?: boolean;
+  canUpdate?: boolean;
   onDelete?: () => void;
 }) {
   const [refused, setRefused] = useState("");
@@ -117,14 +117,18 @@ export function RedrawableImage({
         busy={image.redrawing || !!image.failure || !!refused}
         actions={
           <>
-            {canRedo && (
+            {canUpdate && (
               <button
                 type="button"
                 className="icon"
-                title="Redo: write a new prompt from the story as it is now, and draw it"
-                aria-label="Redo"
+                title={
+                  image.kind === "portrait"
+                    ? "Update: draw them as they are now in the story, keeping their face"
+                    : "Update: write a new prompt from the story as it is now, and draw it"
+                }
+                aria-label="Update"
                 disabled={image.redrawing || !canRedraw}
-                onClick={() => started(redoImage(id, image))}
+                onClick={() => started(updateImage(id, image))}
               >
                 {RegenerateIcon}
               </button>

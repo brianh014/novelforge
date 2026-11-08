@@ -313,24 +313,27 @@ test("a Cover Redraw in the story draws the PC from their portrait, as the first
   expect(drawn.payloads[2]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
 });
 
-const redo = (id: string, { kind, ref }: Item) => app.post(`/saves/${id}/gallery/redo`, { kind, ref });
+const update = (id: string, { kind, ref }: Item) => app.post(`/saves/${id}/gallery/update`, { kind, ref });
 
-test("Redo draws a portrait again from a new prompt of the person's looks now, and only for a Cover or portrait", async () => {
+test("Update draws a portrait again from a new prompt of the person's looks now, keeping their face, and only for a Cover or portrait", async () => {
   await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], png(1), png(2), png(3), png(4));
   const id = await newSave();
   const before = await playTurn(id);
   const hesper = before.images.find(({ label }) => label === "Hesper")!;
 
-  expect((await redo(id, hesper)).status).toBe(202);
+  expect((await update(id, hesper)).status).toBe(202);
   const after = await settled(id);
 
   expect(drawn.payloads.at(-1)).toMatchObject({ aspect_ratio: "1:1" });
   expect(drawn.payloads.at(-1)!.prompt).toContain("Tall, in oilskins");
+  expect(drawn.payloads.at(-1)!.prompt).toContain("The portraits show only each person's face and hair");
+  expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["npc"]);
+  expect(after.images.find(({ label }) => label === "Hesper")!.prompt).not.toContain("The portraits show only");
   expect(after.images.find(({ label }) => label === "Hesper")).toMatchObject({ redraws: 1 });
-  expect((await redo(id, find(before, "scene"))).status).toBe(400);
+  expect((await update(id, find(before, "scene"))).status).toBe(400);
 });
 
-test("Redo draws the Cover again from the title, the World Brief and the PC as they are now, with the PC's portrait", async () => {
+test("Update draws the Cover again from the title, the World Brief and the PC as they are now, with the PC's portrait", async () => {
   await play([sheet, generated], png(1), png(2), png(3));
   const world = ((await (await app.post("/worlds", { ...choices, pc: { name: "Ash", physicalTraits: "Short" } })).json()) as { id: string }).id;
   await coverOf(world);
@@ -338,7 +341,7 @@ test("Redo draws the Cover again from the title, the World Brief and the PC as t
   await storedCover(id);
   const cover = (await settled(id)).images.find(({ kind }) => kind === "cover")!;
 
-  expect((await redo(id, cover)).status).toBe(202);
+  expect((await update(id, cover)).status).toBe(202);
   await settled(id);
 
   const payload = drawn.payloads[2]!;

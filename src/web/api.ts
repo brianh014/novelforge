@@ -162,7 +162,7 @@ export const redrawImage = (id: string, { kind, ref }: GalleryImage, prompt: str
   request<object>(`/saves/${id}/gallery/redraw`, jsonBody({ kind, ref, prompt }));
 
 /** A Cover or portrait drawn again from a new Image Prompt, written from the story as it is now. */
-export const redoImage = (id: string, { kind, ref }: GalleryImage) => request<object>(`/saves/${id}/gallery/redo`, jsonBody({ kind, ref }));
+export const updateImage = (id: string, { kind, ref }: GalleryImage) => request<object>(`/saves/${id}/gallery/update`, jsonBody({ kind, ref }));
 
 export const deleteImage = (id: string, { kind, ref }: GalleryImage) => request<object>(`/saves/${id}/gallery/delete`, jsonBody({ kind, ref }));
 

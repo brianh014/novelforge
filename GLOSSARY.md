@@ -66,6 +66,10 @@ _Avoid_: Model family (that is the Settings choice of which models to load)
 Drawing one existing image again from its Image Prompt, replacing that image and changing nothing else in the story.
 _Avoid_: Regenerate (that redoes a Turn or a whole world)
 
+**Update**:
+Drawing a Cover or portrait again from a new Image Prompt written from the story as it stands. A portrait's Update keeps the face of the portrait it replaces; a Redraw draws a new one.
+_Avoid_: Redo
+
 **Check**:
 A hidden test of a risky PC action against a difficulty the Narrator sets before the outcome is known. The player never sees a Check.
 _Avoid_: Roll, skill check, saving throw
