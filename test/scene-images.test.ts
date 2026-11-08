@@ -79,8 +79,9 @@ test("a Turn that changes the scene gets a Scene Image in its Save, served as an
   expect(images.payloads[0]!.prompt).toContain("A flooded street at dusk");
 });
 
-test("scene_changed alone asks for an image, with the state as it was", async () => {
-  play([newScene(), turn({ scene_changed: true, visual_description: "The same street, now at night" })], png(1), png(2));
+test("scene_changed in the same place asks for an image", async () => {
+  const sameStreet = turn({ scene_changed: true, visual_description: "The same street, now at night", state_operations: moveTo("The drowned street") });
+  play([newScene(), sameStreet], png(1), png(2));
   await enableImages();
   const id = await app.createSave();
   await playTurn(id);
@@ -90,6 +91,21 @@ test("scene_changed alone asks for an image, with the state as it was", async ()
 
   expect((await settled(id)).images).toHaveLength(2);
   expect(images.payloads[1]!.prompt).toBe("The same street, now at night");
+});
+
+test("a picture without set_scene is retried, so it never takes the last place's caption and reference", async () => {
+  const unplaced = turn({ scene_changed: true, visual_description: "A ridge at dusk" });
+  play([newScene(), unplaced, newScene("A ridge at dusk", "The ridge")], png(1), png(2));
+  await enableImages();
+  const id = await app.createSave();
+  await playTurn(id);
+  await settled(id);
+
+  await playTurn(id);
+
+  expect(script.prompts).toHaveLength(3);
+  expect((await settled(id)).images.map(({ caption }) => caption)).toEqual(["The drowned street", "The ridge"]);
+  expect(images.payloads[1]!.reference_images).toEqual([]);
 });
 
 test("the server sees a change of location or visible cast without scene_changed", async () => {
@@ -275,7 +291,7 @@ test("a Scene Image in the same location keeps the previous one as its reference
   play(
     [
       turn({ state_operations: moveTo("The office"), scene_changed: true, visual_description: "Desks" }),
-      turn({ scene_changed: true, visual_description: "Desks at night" }),
+      turn({ scene_changed: true, visual_description: "Desks at night", state_operations: moveTo("The office") }),
     ],
     png(1),
     png(2),

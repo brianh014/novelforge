@@ -304,7 +304,9 @@ async function narrate(
       const { state_operations, people, summary, scene_changed, visual_description, chapter_ends } = response;
       const narration = edited ?? (response.narration as string);
       // The last attempt keeps such a reply, as losing the Turn costs more than a long speech.
-      const fault = edited === undefined && attempt < MAX_ATTEMPTS ? spokenLineFault(narration) : undefined;
+      // A picture without set_scene takes the last location as its caption and its previous image as a reference.
+      const unplaced = scene_changed && !state_operations.some(({ op }) => op === "set_scene") ? "a picture without set_scene" : undefined;
+      const fault = attempt < MAX_ATTEMPTS ? (unplaced ?? (edited === undefined ? spokenLineFault(narration) : undefined)) : undefined;
       if (fault) throw new InvalidResponse(undefined, { cause: fault });
       const memory = await pendingMemory;
       let moved = false;
