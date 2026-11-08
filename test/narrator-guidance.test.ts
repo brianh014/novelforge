@@ -159,6 +159,19 @@ test("a reply is held to one thing for the PC to answer, in numbers the Narrator
 
   await playTurn(id);
 
-  expect(lastSystem()).toContain("No one speaks more than twice in a reply");
+  expect(lastSystem()).toContain("Each person speaks once in a reply, and no one speaks more than twice.");
   expect(lastSystem()).toContain("at most one thing for the PC to answer");
+});
+
+test("no one echoes the PC, re-argues a case the PC turned down, or ends most replies on a choice of two", async () => {
+  play(summed("Ash reached the docks."));
+  const id = await app.createSave();
+
+  await playTurn(id);
+
+  expect(lastSystem()).toContain("no one opens by echoing what the PC just said");
+  expect(lastSystem()).toContain("that person doesn't make it again unless something new gives them reason");
+  expect(lastSystem()).toContain("they don't all argue for the same view");
+  expect(lastSystem()).toContain("few replies should end on a choice between two things");
+  expect(prompts.at(-1)!.map(({ content }) => content).join("\n")).toContain("[Voice in the light] for someone not yet named");
 });

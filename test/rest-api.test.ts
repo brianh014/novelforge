@@ -638,6 +638,29 @@ test("invalid replies and refused operations share the two retries", async () =>
   expect(await messageTexts(app, id)).toEqual([]);
 });
 
+test("a reply where someone speaks a third time, or a tag lacks its [, is retried", async () => {
+  const thrice = narration('[Mara]: "One."\n[Mara]: "Two."\n[Mara]: "Three."');
+  const { app, prompts } = play(thrice, narration('???]: "Go back."'), narration('[Mara]: "One."\n[Mara]: "Two."'));
+  const id = await app.createSave();
+
+  const response = await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(3);
+  expect((await messageTexts(app, id)).at(-1)).toBe('[Mara]: "One."\n[Mara]: "Two."');
+});
+
+test("the last attempt keeps a reply where someone speaks a third time, rather than lose the Turn", async () => {
+  const thrice = narration('[Mara]: "One."\n[Mara]: "Two."\n[Mara]: "Three."');
+  const { app, prompts } = play(thrice, thrice, thrice);
+  const id = await app.createSave();
+
+  const response = await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(response.status).toBe(201);
+  expect(prompts).toHaveLength(3);
+});
+
 test("a content refusal is reported with the player's text, and is not retried", async () => {
   const { app, prompts } = play(new ContentRefused("policy"), narration("Never asked for."));
   const id = await app.createSave();

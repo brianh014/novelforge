@@ -303,6 +303,9 @@ async function narrate(
       }
       const { state_operations, people, summary, scene_changed, visual_description, chapter_ends } = response;
       const narration = edited ?? (response.narration as string);
+      // The last attempt keeps such a reply, as losing the Turn costs more than a long speech.
+      const fault = edited === undefined && attempt < MAX_ATTEMPTS ? spokenLineFault(narration) : undefined;
+      if (fault) throw new InvalidResponse(undefined, { cause: fault });
       const memory = await pendingMemory;
       let moved = false;
       let location = "";
@@ -360,11 +363,23 @@ async function narrate(
   }
 }
 
+/** Why the spoken lines break the reply's shape, if they do: a tag missing its "[", or someone speaking more than twice. */
+export function spokenLineFault(narration: string) {
+  const lines = new Map<string, number>();
+  for (const line of narration.split("\n").map((text) => text.trim())) {
+    if (/^[^[\]\s][^[\]]*\]:/.test(line)) return "a speaker tag without its [";
+    const speaker = line.match(/^\[([^[\]]+)\]:/)?.[1]!.trim();
+    if (speaker) lines.set(speaker, (lines.get(speaker) ?? 0) + 1);
+  }
+  return [...lines.values()].some((count) => count > 2) ? "someone speaks more than twice" : undefined;
+}
+
 type Refusal = { op: string; reason: string };
 const refusalText = (refusals: Refusal[]) => refusals.map(({ op, reason }) => `${op}: ${reason}`).join(", ");
 
 /** What was wrong with a reply, without any of its text. */
 function whyInvalid({ cause }: InvalidResponse) {
+  if (typeof cause === "string") return cause;
   if (cause instanceof z.ZodError) return cause.issues.map(({ path, code }) => `${path.join(".")}: ${code}`).join(", ");
   if (Array.isArray(cause)) return `refused operations: ${refusalText(cause)}`;
   // Not the parser's message, which quotes the reply.
