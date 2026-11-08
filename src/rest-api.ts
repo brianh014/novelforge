@@ -23,7 +23,7 @@ import {
 } from "./save-store";
 import { type SettingsChange, type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textHosts, textModels } from "./text-provider";
-import { type BegunTurn, liveTurns, TurnRunning, WorldChanging } from "./live-turns";
+import { type BegunTurn, liveTurns, STOPPED_STATUS, TurnRunning, WorldChanging } from "./live-turns";
 import { type State, VisibleEdit, type World, type WorldEdit } from "./state-applier";
 import { askForChapterTitle, ContentRefused, editResponse, playOpening, playTurn, replaceResponse, type TextProvider, TextProviderFailed, TurnFailed, type TurnEvents } from "./turn-engine";
 import { readable } from "./web/chat-style";
@@ -242,12 +242,10 @@ const imageResponse = (bytes: Uint8Array<ArrayBuffer>) =>
     headers: { "Content-Type": imageType(bytes) ?? "application/octet-stream", "X-Content-Type-Options": "nosniff" },
   });
 
-// A Turn outlives its request, so the player can switch away. The Text Provider's silence limit still ends a stuck one.
-// shortcut: nothing can stop a running Turn, so one the player abandons is still paid for, add a Stop button if that adds up.
-const NEVER = new AbortController().signal;
+// A Turn outlives its request, so the player can switch away. Only Stop or the Text Provider's silence limit ends one early.
 
 /** Answers with the committed Messages, as one JSON body or, if the client asks, as a stream of the Turn. */
-async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvents) => Promise<Message[]>) {
+async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvents, signal: AbortSignal) => Promise<Message[]>) {
   const streaming = req.headers.get("accept")?.includes("text/event-stream");
   let client: TurnEvents = () => {};
   // Not started yet, as a reply can begin at once and the stream below must be there to hear it.
@@ -256,7 +254,7 @@ async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvent
       run((event, data) => {
         turn.heard(event, data);
         client(event, data);
-      }),
+      }, turn.signal),
     )
     .then(
       (messages) => {
@@ -264,6 +262,12 @@ async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvent
         return { messages };
       },
       async (error: unknown) => {
+        if (turn.signal.aborted) {
+          log.info("turn", "A Turn was stopped");
+          const body = { error: "", input: turn.input };
+          turn.end(streaming ? { ...body, replaces: turn.replaces, status: STOPPED_STATUS } : undefined);
+          return { status: STOPPED_STATUS, body };
+        }
         // In this log, as the client's copy is gone once the page moves on.
         if (!(error instanceof TurnFailed)) log.error("turn", "A Turn failed", errorFields(error));
         const response = errorResponse(error);
@@ -909,8 +913,8 @@ export function startServer(options: {
         POST: async (req) => {
           const { input } = await parseBody(req, NewTurnRequest);
           const { id } = req.params;
-          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), input), (emit) =>
-            playTurn(saves, engine, id, input, NEVER, emit),
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), input), (emit, signal) =>
+            playTurn(saves, engine, id, input, signal, emit),
           );
         },
       },
@@ -918,13 +922,14 @@ export function startServer(options: {
         POST: async (req) => {
           await parseBody(req, NoFields);
           const { id } = req.params;
-          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), ""), (emit) =>
-            playOpening(saves, engine, id, NEVER, emit),
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), ""), (emit, signal) =>
+            playOpening(saves, engine, id, signal, emit),
           );
         },
       },
       "/saves/:id/turn": {
         GET: (req) => Response.json(turns.status(req.params.id)),
+        DELETE: (req) => new Response(null, { status: turns.stop(req.params.id) ? 204 : 404 }),
       },
       "/saves/:id/decide": {
         POST: async (req) => {
@@ -1065,8 +1070,8 @@ export function startServer(options: {
         POST: async (req) => {
           const { feedback } = await parseBody(req, RewriteRequest);
           const { id, messageId } = req.params;
-          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), feedback, Number(messageId)), (emit) =>
-            replaceResponse(saves, engine, id, Number(messageId), feedback, NEVER, emit),
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), feedback, Number(messageId)), (emit, signal) =>
+            replaceResponse(saves, engine, id, Number(messageId), feedback, signal, emit),
           );
         },
       },
@@ -1074,8 +1079,8 @@ export function startServer(options: {
         POST: async (req) => {
           const { text } = await parseBody(req, EditRequest);
           const { id, messageId } = req.params;
-          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), text, Number(messageId)), (emit) =>
-            editResponse(saves, engine, id, Number(messageId), text, NEVER, emit),
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), text, Number(messageId)), (emit, signal) =>
+            editResponse(saves, engine, id, Number(messageId), text, signal, emit),
           );
         },
       },
@@ -1083,8 +1088,8 @@ export function startServer(options: {
         POST: async (req) => {
           await parseBody(req, NoFields);
           const { id, messageId } = req.params;
-          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), "", Number(messageId)), (emit) =>
-            replaceResponse(saves, engine, id, Number(messageId), undefined, NEVER, emit),
+          return turnResponse(req, turns.begin(id, saves.latestMessageId(id), "", Number(messageId)), (emit, signal) =>
+            replaceResponse(saves, engine, id, Number(messageId), undefined, signal, emit),
           );
         },
       },

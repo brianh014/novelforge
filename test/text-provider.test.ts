@@ -71,6 +71,33 @@ test("a spoken line streams intact, even when a chunk ends inside its line break
   expect((await storedMessages(id)).at(-1)!.text).toBe(text);
 });
 
+test("Stop ends a running Turn: the model call is cancelled, nothing is stored, and the player's words come back", async () => {
+  const { promise: never } = Promise.withResolvers<void>();
+  play([
+    async function* () {
+      yield delta('{"check":null,"narration":"The tide ');
+      await never;
+    },
+    narrated("The tide falls."),
+  ]);
+  const id = await app.createSave();
+  expect((await app.delete(`/saves/${id}/turn`)).status).toBe(404);
+
+  const response = await streamTurn(id, "I wait.");
+  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+  expect((await reader.read()).value).toContain("The tide ");
+  expect((await app.delete(`/saves/${id}/turn`)).status).toBe(204);
+  let rest = "";
+  for (let part = await reader.read(); !part.done; part = await reader.read()) rest += part.value;
+
+  expect(rest).toContain("event: error");
+  expect(rest).toContain('"status":499');
+  expect(rest).toContain('"input":"I wait."');
+  expect(await storedMessages(id)).toEqual([]);
+  // The Save is free again for the next Turn.
+  expect((await turnEvents(await streamTurn(id, "I wait again."))).at(-1)!.event).toBe("done");
+});
+
 test("narration reaches the client as it is written, and nothing is stored until the Turn is valid", async () => {
   const { promise: released, resolve: release } = Promise.withResolvers<void>();
   play([

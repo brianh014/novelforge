@@ -1,6 +1,7 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   askNarrator,
+  stopTurn,
   decideForMe,
   duplicateFrom,
   failureMessage,
@@ -39,7 +40,7 @@ import {
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, StopIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
@@ -900,10 +901,17 @@ export function Play({ id }: { id: string }) {
               {ContinueIcon}
             </button>
           )}
-          {/* aria-disabled, because a disabled button would drop keyboard focus at every Send. */}
-          <button className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !draft.trim()}>
-            {SendIcon}
-          </button>
+          {/* Not for the Opening, as a page with no Messages has nothing to start it again. */}
+          {turn && messages.length > 0 ? (
+            <button type="button" className="icon send" title="Stop the Narrator" aria-label="Stop" onClick={() => stopTurn(id).catch(() => {})}>
+              {StopIcon}
+            </button>
+          ) : (
+            // aria-disabled, because a disabled button would drop keyboard focus at every Send.
+            <button className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !draft.trim()}>
+              {SendIcon}
+            </button>
+          )}
         </div>
       </form>
       {reverting && (

@@ -287,6 +287,9 @@ export const replaceResponse = (
 export const editResponse = (id: string, messageId: number, text: string, signal: AbortSignal) =>
   streamTurn(id, `messages/${messageId}/edit`, { text }, text, messageId, "Try again.", () => {}, signal);
 
+/** Ends the running Turn. Its page hears it end with the player's words given back, and no error. */
+export const stopTurn = (id: string) => fetch(`/saves/${id}/turn`, { method: "DELETE" }).then(() => {});
+
 /** The state of a Turn on the server, which goes on without this page. Reading a failure takes it. */
 export const getTurn = (id: string) => request<TurnStatus>(`/saves/${id}/turn`);
 

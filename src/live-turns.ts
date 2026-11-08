@@ -11,6 +11,9 @@ export type LiveTurn = {
 };
 export type FailedTurn = { status: number; error: string; input: string; replaces?: number };
 
+// Not an error to the player, who pressed Stop: the page puts their words back and shows nothing.
+export const STOPPED_STATUS = 499;
+
 export class TurnRunning extends Error {}
 export class WorldChanging extends Error {}
 
@@ -20,6 +23,7 @@ export class WorldChanging extends Error {}
  */
 export function liveTurns() {
   const running = new Map<string, LiveTurn>();
+  const stoppers = new Map<string, AbortController>();
   const failed = new Map<string, FailedTurn>();
   const changing = new Set<string>();
 
@@ -44,19 +48,30 @@ export function liveTurns() {
       failed.delete(id);
       const turn: LiveTurn = { input, narration: "", after, ...(replaces !== undefined && { replaces }) };
       running.set(id, turn);
+      const stopper = new AbortController();
+      stoppers.set(id, stopper);
       return {
         id,
         input,
         replaces,
+        /** Aborted when the player presses Stop, and by nothing else, as leaving the page doesn't end a Turn. */
+        signal: stopper.signal,
         heard: (...[event, data]: Parameters<TurnEvents>) => {
           turn.narration = event === "restart" ? "" : turn.narration + (data as { text: string }).text;
         },
         /** A `failure` waits for the player, who may not have been there to see it. */
         end(failure?: FailedTurn) {
           running.delete(id);
+          stoppers.delete(id);
           if (failure) failed.set(id, failure);
         },
       };
+    },
+
+    /** Whether there was a Turn to stop. It ends as a failure, so its page gets the player's words back. */
+    stop(id: string) {
+      stoppers.get(id)?.abort();
+      return stoppers.has(id);
     },
 
     /** Reading a failure takes it, so it's told once. */
