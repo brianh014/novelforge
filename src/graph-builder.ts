@@ -14,6 +14,9 @@ export type GraphChoices = Pick<
   | "comfyLoras"
   | "comfySteps"
   | "comfyCfg"
+  | "comfyDefaults"
+  | "comfySampler"
+  | "comfyScheduler"
 >;
 /** `references` are the names ComfyUI gave the uploaded images, in the order of `usableReferences`. */
 export type GraphRequest = Omit<ImagePayload, "reference_images"> & { references: string[]; seed: number };
@@ -31,6 +34,7 @@ const MOST_QWEN_REFERENCES = 10;
 
 // The Qwen Image 2.1 Turbo template's own eight-step schedule, as the distilled model wants these and not a scheduler's.
 const QWEN_TURBO_SIGMAS = "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0";
+const QWEN_TURBO_STEPS = 8;
 
 // The side of a square with each resolution's pixels, so every shape of image gets the same area.
 const SQUARE = { "480p": 640, "720p": 960, "1080p": 1440, "4k": 2880 };
@@ -38,28 +42,67 @@ const SQUARE = { "480p": 640, "720p": 960, "1080p": 1440, "4k": 2880 };
 // Keeps the previous Scene's layout and palette but leaves room for what has changed in it.
 const IMG2IMG_DENOISE = 0.65;
 
-// A model is only known by its filename, so a renamed Klein 9B needs the Steps setting.
+// A model is only known by its filename, so a renamed Klein 9B needs its steps set by hand.
 const fluxSteps = (model: string) => (/klein.*9b/i.test(model) && !/base/i.test(model) ? 8 : 20);
 
-/** How many steps Simple Mode draws these choices in: the player's number, or the family's default. Qwen Image 2.1's is its Turbo's. */
-export const drawSteps = ({ comfyFamily, comfyDiffusionModel, comfySteps }: GraphChoices) =>
-  comfySteps ?? (comfyFamily === "flux2" ? fluxSteps(comfyDiffusionModel) : comfyFamily === "qwen21" ? 8 : 25);
+/**
+ * What a family draws with when the player leaves it to the defaults. An empty scheduler is the family's own schedule.
+ * FLUX.2 has no CFG. Qwen Image 2.1's templates keep 1, which leaves its negative prompt unused, and its steps are its Turbo's.
+ */
+export function familyDefaults({ comfyFamily, comfyDiffusionModel }: Pick<GraphChoices, "comfyFamily" | "comfyDiffusionModel">) {
+  if (comfyFamily === "sd") return { steps: 25, cfg: 7, sampler: "dpmpp_2m", scheduler: "karras" };
+  return { steps: comfyFamily === "flux2" ? fluxSteps(comfyDiffusionModel) : 8, cfg: 1, sampler: "euler", scheduler: "" };
+}
 
-/** The CFG Simple Mode draws with. FLUX.2 has none. Qwen Image 2.1's templates keep 1, which leaves its negative prompt unused. */
-export const drawCfg = ({ comfyFamily, comfyCfg }: GraphChoices) => comfyCfg ?? (comfyFamily === "sd" ? 7 : 1);
+/** What Simple Mode draws these choices with: the family's defaults, or the player's own where they've set them. */
+export function drawSettings(choices: GraphChoices) {
+  const own = familyDefaults(choices);
+  if (choices.comfyDefaults) return own;
+  return {
+    steps: choices.comfySteps ?? own.steps,
+    cfg: choices.comfyCfg ?? own.cfg,
+    sampler: choices.comfySampler || own.sampler,
+    scheduler: choices.comfyScheduler || own.scheduler,
+  };
+}
+
+export const drawSteps = (choices: GraphChoices) => drawSettings(choices).steps;
 
 // What a family remembers when the player switches away from it.
-const PICKS = ["comfyDiffusionModel", "comfyTextEncoder", "comfyVae", "comfyLoras", "comfySteps", "comfyCfg"] as const;
+const PICKS = [
+  "comfyDiffusionModel",
+  "comfyTextEncoder",
+  "comfyVae",
+  "comfyLoras",
+  "comfySteps",
+  "comfyCfg",
+  "comfyDefaults",
+  "comfySampler",
+  "comfyScheduler",
+] as const;
 type Picks = Pick<Settings, (typeof PICKS)[number]>;
-const FRESH: Picks = { comfyDiffusionModel: "", comfyTextEncoder: "", comfyVae: "", comfyLoras: [], comfySteps: null, comfyCfg: null };
+const FRESH: Picks = {
+  comfyDiffusionModel: "",
+  comfyTextEncoder: "",
+  comfyVae: "",
+  comfyLoras: [],
+  comfySteps: null,
+  comfyCfg: null,
+  comfyDefaults: true,
+  comfySampler: "",
+  comfyScheduler: "",
+};
 
 /** Settings moved to another family: the old family's picks are kept, and the new one's come back, or start empty. */
 export function switchFamily(settings: Pick<Settings, "comfyFamily" | "comfyFamilyPicks"> & Picks, family: Settings["comfyFamily"]) {
   if (family === settings.comfyFamily) return {};
   const leaving = Object.fromEntries(PICKS.map((key) => [key, settings[key]])) as Picks;
+  const kept = settings.comfyFamilyPicks[family];
   return {
     ...FRESH,
-    ...settings.comfyFamilyPicks[family],
+    ...kept,
+    // Picks kept before the toggle start it off only if they held a number the player typed.
+    ...(kept && kept.comfyDefaults === undefined && { comfyDefaults: kept.comfySteps === null && kept.comfyCfg === null }),
     comfyFamily: family,
     comfyFamilyPicks: { ...settings.comfyFamilyPicks, [settings.comfyFamily]: leaving },
   };
@@ -108,6 +151,7 @@ export function dimensions(aspectRatio: string, resolution: GraphChoices["imageR
 }
 
 function sdImage(add: Add, choices: GraphChoices, request: GraphRequest, text: string) {
+  const drawn = drawSettings(choices);
   const checkpoint = add("CheckpointLoaderSimple", { ckpt_name: choices.comfyCheckpoint });
   const vae: Link = [checkpoint[0], 2];
   let model = checkpoint;
@@ -144,10 +188,10 @@ function sdImage(add: Add, choices: GraphChoices, request: GraphRequest, text: s
     negative: add("CLIPTextEncode", { text: request.negative_prompt ?? "", clip }),
     latent_image,
     seed: request.seed,
-    steps: drawSteps(choices),
-    cfg: drawCfg(choices),
-    sampler_name: "dpmpp_2m",
-    scheduler: "karras",
+    steps: drawn.steps,
+    cfg: drawn.cfg,
+    sampler_name: drawn.sampler,
+    scheduler: drawn.scheduler,
     denoise: previous ? IMG2IMG_DENOISE : 1,
   });
   return add("VAEDecode", { samples, vae });
@@ -155,6 +199,7 @@ function sdImage(add: Add, choices: GraphChoices, request: GraphRequest, text: s
 
 /** ComfyUI's own FLUX.2 Dev template, with its reference step repeated for each reference. */
 function flux2Image(add: Add, choices: GraphChoices, request: GraphRequest, text: string) {
+  const drawn = drawSettings(choices);
   let model = add("UNETLoader", { unet_name: choices.comfyDiffusionModel, weight_dtype: "default" });
   for (const { name, strength } of choices.comfyLoras) {
     model = add("LoraLoaderModelOnly", { model, lora_name: name, strength_model: strength });
@@ -177,8 +222,11 @@ function flux2Image(add: Add, choices: GraphChoices, request: GraphRequest, text
   const samples = add("SamplerCustomAdvanced", {
     noise: add("RandomNoise", { noise_seed: request.seed }),
     guider: add("BasicGuider", { model, conditioning }),
-    sampler: add("KSamplerSelect", { sampler_name: "euler" }),
-    sigmas: add("Flux2Scheduler", { steps: drawSteps(choices), ...size }),
+    sampler: add("KSamplerSelect", { sampler_name: drawn.sampler }),
+    // Its own scheduler shifts the schedule by the image's size, which ComfyUI's named ones don't.
+    sigmas: drawn.scheduler
+      ? add("BasicScheduler", { model, scheduler: drawn.scheduler, steps: drawn.steps, denoise: 1 })
+      : add("Flux2Scheduler", { steps: drawn.steps, ...size }),
     latent_image: add("EmptyFlux2LatentImage", { ...size, batch_size: 1 }),
   });
   return add("VAEDecode", { samples, vae });
@@ -186,6 +234,7 @@ function flux2Image(add: Add, choices: GraphChoices, request: GraphRequest, text
 
 /** ComfyUI's own Qwen Image 2.1 templates, drawing at the request's size rather than the first reference's. */
 function qwen21Image(add: Add, choices: GraphChoices, request: GraphRequest, text: string) {
+  const drawn = drawSettings(choices);
   let model = add("UNETLoader", { unet_name: choices.comfyDiffusionModel, weight_dtype: "default" });
   for (const { name, strength } of choices.comfyLoras) {
     model = add("LoraLoaderModelOnly", { model, lora_name: name, strength_model: strength });
@@ -204,15 +253,16 @@ function qwen21Image(add: Add, choices: GraphChoices, request: GraphRequest, tex
   });
 
   const size = dimensions(request.aspect_ratio, choices.imageResolution, 32);
-  // shortcut: blank Steps assumes Turbo, so a base model draws badly until the player sets Steps, guess from the filename if that trips people.
-  const sigmas =
-    choices.comfySteps === null
-      ? add("ManualSigmas", { sigmas: QWEN_TURBO_SIGMAS })
-      : add("BasicScheduler", { model, scheduler: "simple", steps: drawSteps(choices), denoise: 1 });
+  // shortcut: its own schedule assumes Turbo, so a base model needs its own settings, guess from the filename if that trips people.
+  // The Turbo sigmas are eight steps, so any other count falls back to the simple scheduler.
+  const turbo = !drawn.scheduler && drawn.steps === QWEN_TURBO_STEPS;
+  const sigmas = turbo
+    ? add("ManualSigmas", { sigmas: QWEN_TURBO_SIGMAS })
+    : add("BasicScheduler", { model, scheduler: drawn.scheduler || "simple", steps: drawn.steps, denoise: 1 });
   const samples = add("SamplerCustomAdvanced", {
     noise: add("RandomNoise", { noise_seed: request.seed }),
-    guider: add("CFGGuider", { model, positive: encoded, negative: [encoded[0], 1], cfg: drawCfg(choices) }),
-    sampler: add("KSamplerSelect", { sampler_name: "euler" }),
+    guider: add("CFGGuider", { model, positive: encoded, negative: [encoded[0], 1], cfg: drawn.cfg }),
+    sampler: add("KSamplerSelect", { sampler_name: drawn.sampler }),
     sigmas,
     latent_image: add("EmptyLatentImage", { ...size, batch_size: 1 }),
   });

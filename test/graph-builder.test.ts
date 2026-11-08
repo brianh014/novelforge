@@ -12,6 +12,9 @@ const sd: GraphChoices = {
   comfyLoras: [],
   comfySteps: null,
   comfyCfg: null,
+  comfyDefaults: true,
+  comfySampler: "",
+  comfyScheduler: "",
 };
 const flux2: GraphChoices = {
   ...sd,
@@ -275,12 +278,18 @@ test("Klein 9B draws in 8 steps, and its base model and FLUX.2 Dev keep 20", () 
 });
 
 test("the player's steps and CFG replace the family's defaults", () => {
-  const sampler = only(buildGraph({ ...sd, comfySteps: 6, comfyCfg: 1.5 }, request), "KSampler").inputs;
-  expect(sampler).toMatchObject({ steps: 6, cfg: 1.5 });
-  expect(only(buildGraph(sd, request), "KSampler").inputs).toMatchObject({ steps: 25, cfg: 7 });
+  const own = { comfyDefaults: false, comfySteps: 6, comfyCfg: 1.5, comfySampler: "euler_a", comfyScheduler: "simple" };
+  expect(only(buildGraph({ ...sd, ...own }, request), "KSampler").inputs).toMatchObject({ steps: 6, cfg: 1.5, sampler_name: "euler_a", scheduler: "simple" });
+  expect(only(buildGraph(sd, request), "KSampler").inputs).toMatchObject({ steps: 25, cfg: 7, sampler_name: "dpmpp_2m", scheduler: "karras" });
+  // With the defaults on, what the player typed is kept but not drawn with.
+  expect(only(buildGraph({ ...sd, ...own, comfyDefaults: true }, request), "KSampler").inputs).toMatchObject({ steps: 25, cfg: 7 });
 
-  const klein = { ...flux2, comfyDiffusionModel: "flux-2-klein-9b.safetensors", comfySteps: 4 };
+  const klein = { ...flux2, comfyDiffusionModel: "flux-2-klein-9b.safetensors", comfyDefaults: false, comfySteps: 4 };
   expect(only(buildGraph(klein, request), "Flux2Scheduler").inputs.steps).toBe(4);
+  const named = buildGraph({ ...klein, comfySampler: "dpmpp_2m", comfyScheduler: "beta" }, request);
+  expect(only(named, "BasicScheduler").inputs).toMatchObject({ scheduler: "beta", steps: 4, denoise: 1 });
+  expect(only(named, "KSamplerSelect").inputs).toEqual({ sampler_name: "dpmpp_2m" });
+  expect(all(named, "Flux2Scheduler")).toHaveLength(0);
 });
 
 const qwen21: GraphChoices = {
@@ -322,7 +331,7 @@ test("Qwen Image 2.1 wires ComfyUI's Turbo template, at the request's size in mu
 });
 
 test("Qwen Image 2.1 gives its encoder each reference in order, and a set Steps uses a scheduler", () => {
-  const graph = buildGraph({ ...qwen21, comfySteps: 25, comfyCfg: 4 }, { ...request, references: ["pc.png [temp]", "npc.png [temp]"] });
+  const graph = buildGraph({ ...qwen21, comfyDefaults: false, comfySteps: 25, comfyCfg: 4 }, { ...request, references: ["pc.png [temp]", "npc.png [temp]"] });
 
   const encode = only(graph, "TextEncodeQwenImage21");
   expect([encode.inputs["images.image_1"], encode.inputs["images.image_2"]].map((link) => source(graph, link).inputs.image)).toEqual([
@@ -359,4 +368,12 @@ test("switching family keeps the old family's picks and brings back the new one'
 
   expect({ ...back, ...switchFamily(back, "qwen21") }).toMatchObject({ comfyDiffusionModel: "qwen.safetensors", comfyCfg: 1 });
   expect(switchFamily(back, "flux2")).toEqual({});
+});
+
+test("Qwen Turbo's own schedule is drawn at 8 steps whether typed or left to the defaults, and any other count uses simple", () => {
+  const custom = { ...qwen21, comfyDefaults: false, comfyCfg: 1, comfySampler: "euler" };
+
+  expect(all(buildGraph({ ...custom, comfySteps: 8 }, request), "ManualSigmas")).toHaveLength(1);
+  expect(only(buildGraph({ ...custom, comfySteps: 12 }, request), "BasicScheduler").inputs).toMatchObject({ scheduler: "simple", steps: 12 });
+  expect(only(buildGraph({ ...custom, comfySteps: 8, comfyScheduler: "beta" }, request), "BasicScheduler").inputs).toMatchObject({ scheduler: "beta" });
 });

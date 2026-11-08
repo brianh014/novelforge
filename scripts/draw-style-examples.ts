@@ -2,7 +2,7 @@
 // Run it yourself, from the project folder, so that the API key stays with you:
 //   bun run scripts/draw-style-examples.ts <output folder> [--local flux2|qwen21] [style number...]
 // Without --local it draws on the OpenRouter model in Settings. With it, it draws free on local ComfyUI with the models last
-// picked in Settings for that family, without LoRAs, in the wording that family gets, on one seed so only the wording differs.
+// picked in Settings for that family, on its defaults and without LoRAs, in the wording that family gets, on one seed so only the wording differs.
 // A style whose file already exists is skipped, so a rerun only pays for what is missing. Delete a file to redraw it.
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -33,7 +33,7 @@ const draw = family ? comfyImages(localSettings(family)) : openRouterImages(sett
 function localSettings(local: "flux2" | "qwen21") {
   const current = settings.read();
   const copy = settingsStore(join(mkdtempSync(join(tmpdir(), "style-examples-")), "settings.json"));
-  copy.update({ ...current, ...switchFamily(current, local), imageProvider: "local", comfyMode: "simple", comfyLoras: [] });
+  copy.update({ ...current, ...switchFamily(current, local), imageProvider: "local", comfyMode: "simple", comfyLoras: [], comfyDefaults: true });
   if (!copy.read().comfyDiffusionModel) throw new Error(`Pick ${local}'s models in Settings first`);
   return copy;
 }

@@ -1,7 +1,7 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { WORKFLOW_EXAMPLE } from "../comfy-workflow";
-import { chosenModels, drawCfg, drawSteps, switchFamily } from "../graph-builder";
+import { chosenModels, familyDefaults, switchFamily } from "../graph-builder";
 import { ArtStylePicker, artStyleText, readArtStyle } from "./art-style-picker";
 import {
   askTextTest,
@@ -456,7 +456,7 @@ function ComfySettings({
   useEffect(() => {
     setModels(undefined);
     let current = true;
-    const none = { reachable: false, hasFlux2: false, hasQwen21: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [] };
+    const none = { reachable: false, hasFlux2: false, hasQwen21: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [], samplers: [], schedulers: [] };
     getComfyModels().then(
       (list) => current && setModels(list),
       () => current && setModels(none),
@@ -571,35 +571,67 @@ function ComfySettings({
               </p>
             </>
           )}
-          <label>
-            Steps
+          <label className="toggle">
             <input
-              type="number"
-              min={1}
-              max={150}
-              placeholder={`${drawSteps({ ...draft, comfySteps: null })} (model default)`}
-              value={draft.comfySteps ?? ""}
-              onChange={(e) => set({ comfySteps: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber })}
+              type="checkbox"
+              checked={draft.comfyDefaults}
+              onChange={(e) => {
+                // Turning it off starts from the defaults, so the player tweaks what the model was using.
+                const own = familyDefaults(draft);
+                const filled = { comfySteps: own.steps, comfyCfg: own.cfg, comfySampler: own.sampler, comfyScheduler: own.scheduler };
+                set(e.target.checked ? { comfyDefaults: true } : { comfyDefaults: false, ...filled });
+              }}
             />
+            Use model defaults for steps, CFG, sampler and scheduler
           </label>
-          {!flux2 && (
-            <label>
-              CFG
-              <input
-                type="number"
-                min={0}
-                max={30}
-                step="any"
-                placeholder={`${drawCfg({ ...draft, comfyCfg: null })} (model default)`}
-                value={draft.comfyCfg ?? ""}
-                onChange={(e) => set({ comfyCfg: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber })}
+          {!draft.comfyDefaults && (
+            <>
+              <label>
+                Steps
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  max={150}
+                  value={draft.comfySteps ?? ""}
+                  onChange={(e) => set({ comfySteps: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber })}
+                />
+              </label>
+              {!flux2 && (
+                <label>
+                  CFG
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    max={30}
+                    step="any"
+                    value={draft.comfyCfg ?? ""}
+                    onChange={(e) => set({ comfyCfg: Number.isNaN(e.target.valueAsNumber) ? null : e.target.valueAsNumber })}
+                  />
+                </label>
+              )}
+              <ModelSelect
+                label="Sampler"
+                value={draft.comfySampler}
+                list={models?.samplers ?? []}
+                onChange={(comfySampler) => set({ comfySampler })}
               />
-            </label>
+              <label>
+                Scheduler
+                <select value={draft.comfyScheduler} onChange={(e) => set({ comfyScheduler: e.target.value })}>
+                  {(flux2 || qwen21) && <option value="">{flux2 ? "FLUX.2's own (default)" : "Qwen Turbo's own (default)"}</option>}
+                  {[...new Set([draft.comfyScheduler, ...(models?.schedulers ?? [])])].filter(Boolean).map((scheduler) => (
+                    <option key={scheduler}>{scheduler}</option>
+                  ))}
+                </select>
+              </label>
+              <p className="muted">
+                Distilled models, such as Turbo or Lightning, need the settings their page gives.
+                {qwen21 && " Qwen Turbo's own scheduler is for 8 steps, and other counts use simple. The base model wants about 25 steps."}
+              </p>
+            </>
           )}
-          <p className="muted">
-            Leave blank for the default. Distilled models, such as Turbo or Lightning, need the settings their page gives.
-            {qwen21 && " Qwen Image 2.1's default is its Turbo model's, so set about 25 steps for the base model."}
-          </p>
           <fieldset>
             <legend>LoRAs</legend>
             {draft.comfyLoras.map((lora, index) => (

@@ -14,6 +14,10 @@ const FamilyPicks = z.object({
   comfyLoras: z.array(Lora),
   comfySteps: Steps,
   comfyCfg: Cfg,
+  // Missing from picks kept before the defaults toggle, so they are optional here.
+  comfyDefaults: z.boolean().optional(),
+  comfySampler: z.string().optional(),
+  comfyScheduler: z.string().optional(),
 });
 const PicksByFamily = z.partialRecord(Family, FamilyPicks);
 
@@ -51,6 +55,11 @@ export const SettingsUpdate = z
     comfySteps: Steps,
     // FLUX.2 runs without CFG, so it ignores this.
     comfyCfg: Cfg,
+    // On, the family's own steps, CFG, sampler and schedule are used, and the player's are kept but ignored.
+    comfyDefaults: z.boolean(),
+    comfySampler: z.string(),
+    // Empty is the family's own schedule: Flux2Scheduler for FLUX.2, the Turbo sigmas for Qwen Image 2.1, karras for SD.
+    comfyScheduler: z.string(),
     // The picks above are the current family's, and these are the others', kept for when the player switches back.
     comfyFamilyPicks: PicksByFamily,
     comfyMode: z.enum(["simple", "advanced"]),
@@ -94,6 +103,9 @@ const defaults = {
   comfyLoras: [] as z.infer<typeof Lora>[],
   comfySteps: null,
   comfyCfg: null,
+  comfyDefaults: true,
+  comfySampler: "",
+  comfyScheduler: "",
   comfyFamilyPicks: {} as z.infer<typeof PicksByFamily>,
   comfyMode: "simple",
   comfyWorkflow: "",
@@ -106,7 +118,12 @@ export type SettingsStore = ReturnType<typeof settingsStore>;
 
 /** Per-install settings, including API keys. They live in one file outside the Saves folder, so no Save can carry them. */
 export function settingsStore(path: string) {
-  const read = () => ({ ...defaults, ...SettingsUpdate.parse(existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {}) });
+  const read = () => {
+    const stored = SettingsUpdate.parse(existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {});
+    // Settings from before the toggle keep a number the player typed by starting with the toggle off.
+    const typed = stored.comfySteps != null || stored.comfyCfg != null;
+    return { ...defaults, comfyDefaults: !typed, ...stored };
+  };
 
   return {
     read,

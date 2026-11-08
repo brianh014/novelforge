@@ -82,6 +82,8 @@ test("Settings lists what's installed from both forms of combo input", async () 
     textEncoders: ["mistral_3_small_flux2_bf16.safetensors"],
     vaes: ["flux2-vae.safetensors"],
     loras: ["ink.safetensors", "sub\\sea.safetensors"],
+    samplers: ["euler", "dpmpp_2m"],
+    schedulers: ["simple", "karras"],
   });
 });
 
@@ -107,7 +109,7 @@ test("a ComfyUI from before Qwen Image 2.1 says it lacks the nodes", async () =>
   expect((await listModels()).hasQwen21).toBe(false);
 });
 
-const nothing = { reachable: false, hasFlux2: false, hasQwen21: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [] };
+const nothing = { reachable: false, hasFlux2: false, hasQwen21: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [], samplers: [], schedulers: [] };
 
 test("a server that isn't running lists nothing and says it can't be reached", async () => {
   await play().patch("/settings", { comfyUrl: comfy.url });

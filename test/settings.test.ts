@@ -47,6 +47,9 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     comfyLoras: [],
     comfySteps: null,
     comfyCfg: null,
+    comfyDefaults: true,
+    comfySampler: "",
+    comfyScheduler: "",
     comfyFamilyPicks: {},
     comfyMode: "simple",
     comfyWorkflow: "",
@@ -72,6 +75,9 @@ test("every setting survives a restart, and no key comes back", async () => {
     comfyLoras: [{ name: "ink.safetensors", strength: 0.7, triggerWords: "inkstyle" }],
     comfySteps: 12,
     comfyCfg: 4.5,
+    comfyDefaults: false,
+    comfySampler: "euler",
+    comfyScheduler: "karras",
     comfyFamilyPicks: {
       qwen21: { comfyDiffusionModel: "qwen.safetensors", comfyTextEncoder: "vl.safetensors", comfyVae: "q.safetensors", comfyLoras: [], comfySteps: null, comfyCfg: 1 },
     },
@@ -160,6 +166,14 @@ test("an install's settings file from before these settings gets their defaults"
   await Bun.write(join(folder.path, "settings.json"), JSON.stringify({ textModel: "old/model" }));
 
   expect(await settings()).toMatchObject({ textModel: "old/model", imagesEnabled: true, fontSize: "medium" });
+});
+
+test("a Steps or CFG typed before the defaults toggle keeps it off, so the number still draws", async () => {
+  await Bun.write(join(folder.path, "settings.json"), JSON.stringify({ comfySteps: 12 }));
+  expect(await settings()).toMatchObject({ comfyDefaults: false, comfySteps: 12 });
+
+  await Bun.write(join(folder.path, "settings.json"), JSON.stringify({ comfySteps: null, comfyCfg: null }));
+  expect(await settings()).toMatchObject({ comfyDefaults: true });
 });
 
 const artStyleOf = async (id: string) => ((await app.get(`/saves/${id}`).then((r) => r.json())) as { artStyle: string }).artStyle;

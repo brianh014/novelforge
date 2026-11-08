@@ -2,7 +2,7 @@
 
 **What to build:** Qwen Image 2.1 draws on Turbo's own eight-step sigmas only while Steps is blank. Any typed number, the default 8 included, switches to ComfyUI's generic "simple" scheduler, so typing the default quietly changes the picture.
 
-**Status:** needs-triage
+**Status:** resolved
 
 **Found:** 2026-11-08, while drawing the Art Style examples with Steps set to 8.
 
@@ -14,3 +14,7 @@
 ## Likely fix
 
 - Use the Turbo sigmas whenever Qwen draws at 8 steps, blank or typed, and the scheduler for any other number. One line and a test in `test/graph-builder.test.ts`.
+
+## Comments
+
+2026-11-08: Fixed by the "Use model defaults" toggle. Qwen draws on the Turbo sigmas whenever its own scheduler meets 8 steps, typed or default, and on simple for any other count.
