@@ -225,12 +225,13 @@ export function imagePipeline(
   }
 
   /**
-   * Identity comes first when a model takes few references. A portrait of someone not in the picture can get pasted into it.
+   * The PC comes first, then the NPCs in the prompt's order, so a model that takes few references, such as Klein, drops an
+   * NPC rather than the PC. A portrait of someone not in the picture can get pasted into it, so only those pictured go in.
    * No earlier Scene Image goes in, as FLUX.2 copied its people, poses and clothing into the new one whatever the prompt said.
    */
   const references = (id: string, pictured: Pictured) => [
-    ...pictured.flatMap((name) => (name === null ? [] : reference("npc", saves.portraitOf(id, name)))),
     ...(pictured.includes(null) ? reference("pc", saves.portraitOf(id, null)) : []),
+    ...pictured.flatMap((name) => (name === null ? [] : reference("npc", saves.portraitOf(id, name)))),
   ];
 
   const scenePayload = (id: string, prompt: string, pictured: Pictured): ImagePayload => {

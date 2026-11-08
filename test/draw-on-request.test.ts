@@ -256,8 +256,8 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   // The PC wears nothing listed, so is drawn dressed rather than bare.
   expect(payload.prompt).toStartWith("a tall woman in oilskins on a bench, by a short person with cropped hair, fully clothed in everyday clothes that suit them, and a boy with a kite");
   expect(payload.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([
-    ["npc", png(2)],
     ["pc", png(1)],
+    ["npc", png(2)],
   ]);
 
   const item = gallery.images.find(({ kind }) => kind === "requested")!;
@@ -265,7 +265,7 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   const after = await settled(id);
 
   expect(drawn.payloads.at(-1)).toMatchObject({ prompt: expect.stringMatching(/^Redrawn/), aspect_ratio: "16:9" });
-  expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["npc", "pc"]);
+  expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["pc", "npc"]);
   expect(after.images.find(({ kind }) => kind === "requested")).toMatchObject({ prompt: "Redrawn", redraws: 1 });
   expect(await requestedOf(id)).toMatchObject({ images: [{ redraws: 1 }] });
   expect(await bytesOf(`/saves/${id}/requested-images/${item.ref}/image`)).toEqual(png(5));

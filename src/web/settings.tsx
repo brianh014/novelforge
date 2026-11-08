@@ -291,7 +291,7 @@ function WorkflowGuide() {
         <dt>
           <code>{"{{reference_1}}"}</code>, <code>{"{{reference_2}}"}</code> and on
         </dt>
-        <dd>Every reference in order of priority: NPCs, then the PC.</dd>
+        <dd>Every reference in order of priority: the PC, then NPCs.</dd>
         <dt>
           <code>{"{{has_npc_1}}"}</code>, <code>{"{{has_reference_1}}"}</code> and so
           on
