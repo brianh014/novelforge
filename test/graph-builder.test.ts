@@ -254,6 +254,14 @@ test("FLUX.2 keeps the first ten references, in their order of priority", () => 
   expect(kept[9]!.bytes).toEqual(Uint8Array.of(9));
 });
 
+test("FLUX.2 Klein keeps the first four references, as BFL lists that as its limit", () => {
+  const references = [...Array.from({ length: 4 }, (_, mark) => image("npc", mark)), image("pc", 99)];
+
+  const kept = usableReferences({ ...flux2, comfyDiffusionModel: "flux-2-klein-9b.safetensors" }, references);
+
+  expect(kept.map(({ bytes }) => bytes[0])).toEqual([0, 1, 2, 3]);
+});
+
 test("Klein 9B draws in 8 steps, and its base model and FLUX.2 Dev keep 20", () => {
   const steps = (comfyDiffusionModel: string) =>
     only(buildGraph({ ...flux2, comfyDiffusionModel }, request), "Flux2Scheduler").inputs.steps;

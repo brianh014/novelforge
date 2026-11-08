@@ -15,6 +15,8 @@ type Add = (classType: string, inputs: Record<string, unknown>) => Link;
 
 // ComfyUI's FLUX.2 page gives this as the most references the model keeps consistent.
 const MOST_FLUX2_REFERENCES = 10;
+// BFL's prompt reference lists Klein 4B and 9B at up to 4.
+const MOST_KLEIN_REFERENCES = 4;
 
 // The side of a square with each resolution's pixels, so every shape of image gets the same area.
 const SQUARE = { "480p": 640, "720p": 960, "1080p": 1440, "4k": 2880 };
@@ -49,9 +51,9 @@ export const localIsSetUp = (choices: GraphChoices & Pick<Settings, "comfyMode" 
   choices.comfyMode === "advanced" ? choices.comfyWorkflow !== "" : chosenModels(choices).every(Boolean);
 
 /** The references a family can use, in the payload's order of priority. */
-export function usableReferences({ comfyFamily }: GraphChoices, references: ImagePayload["reference_images"]) {
+export function usableReferences({ comfyFamily, comfyDiffusionModel }: GraphChoices, references: ImagePayload["reference_images"]) {
   return comfyFamily === "flux2"
-    ? references.slice(0, MOST_FLUX2_REFERENCES)
+    ? references.slice(0, /klein/i.test(comfyDiffusionModel) ? MOST_KLEIN_REFERENCES : MOST_FLUX2_REFERENCES)
     : references.filter(({ role }) => role === "previous_scene").slice(0, 1);
 }
 
