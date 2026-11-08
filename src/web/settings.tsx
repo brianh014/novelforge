@@ -516,7 +516,7 @@ function ComfySettings({
               value={draft.comfyFamily}
               onChange={(e) => set({ comfyFamily: e.target.value as Settings["comfyFamily"] })}
             >
-              <option value="sd">SD 1.5/SDXL</option>
+              <option value="sd">SD 1.5/SDXL (faces change between pictures)</option>
               <option value="flux2">FLUX.2</option>
             </select>
           </label>
@@ -560,6 +560,10 @@ function ComfySettings({
                 </select>
               </label>
               {tooBig && <p className="notice">{tooBig}</p>}
+              <p className="muted">
+                SD 1.5 and SDXL draw from words alone. They can't use portraits or edit an image, so faces change from
+                picture to picture, and Update draws a new face. FLUX.2 keeps faces the same.
+              </p>
             </>
           )}
           <fieldset>
