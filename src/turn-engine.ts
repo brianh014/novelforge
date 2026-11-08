@@ -2,6 +2,7 @@ import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
 import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
+import { withArtStyleFor } from "./web/art-styles";
 import { log } from "./logger";
 import { assemblePrompt, chapterTitlePrompt, CONTINUE_INPUT, editInstruction, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
@@ -144,7 +145,7 @@ export async function playTurn(
   const messages = saves.messages(id);
   const memoryStart = saves.memoryStart(id);
   const prompt = assemblePrompt({
-    save: saves.read(id),
+    save: withArtStyleFor(saves.read(id), settings.read()),
     state,
     messages,
     memoryStart,
@@ -195,7 +196,7 @@ export async function replaceResponse(
   const hadPicture = !!sceneImage || images.sceneDrawing(id, messageId);
   const memoryStart = saves.memoryStart(id);
   const prompt = assemblePrompt({
-    save: saves.read(id),
+    save: withArtStyleFor(saves.read(id), settings.read()),
     state,
     messages,
     memoryStart,

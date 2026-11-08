@@ -1,4 +1,5 @@
-import { localIsSetUp, promptStyle, type PromptStyle, usesPortraits } from "./graph-builder";
+import { drawingFamily, localIsSetUp, promptStyle, type PromptStyle, usesPortraits } from "./graph-builder";
+import { artStyleFor } from "./web/art-styles";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
 import { errorType, log } from "./logger";
 import { type ImageTarget, imageType, OPENING_SNAPSHOT, type Pictured, type Save, SaveNotFound, type SaveStore } from "./save-store";
@@ -195,8 +196,9 @@ export function imagePipeline(
   const writer = (ask: PictureAsk) => (signal: AbortSignal) => {
     const style = promptStyle(settings.read());
     const template = ask.kind === "cover" ? coverPrompt(ask) : portraitPrompt(ask.looks, style);
+    const styled = { ...ask, artStyle: artStyleFor(ask.artStyle, drawingFamily(settings.read())) };
     // The Art Style first, as the text model would have put it.
-    return writePicture(ask, style, [ask.artStyle.trim(), template].filter(Boolean).join("\n"), signal);
+    return writePicture(styled, style, [styled.artStyle.trim(), template].filter(Boolean).join("\n"), signal);
   };
 
   const work = new Map<string, Work>();

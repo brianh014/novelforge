@@ -2,6 +2,7 @@ import { type FormEvent, type KeyboardEvent, type ReactNode, useEffect, useId, u
 import { flushSync } from "react-dom";
 import { WORKFLOW_EXAMPLE } from "../comfy-workflow";
 import { chosenModels, drawCfg, drawSteps, switchFamily } from "../graph-builder";
+import { ArtStylePicker, artStyleText, readArtStyle } from "./art-style-picker";
 import {
   askTextTest,
   type ComfyModels,
@@ -70,25 +71,27 @@ function useSubmit(save: () => Promise<string>) {
 }
 
 function ArtStyle({ id }: { id: string }) {
-  const [artStyle, setArtStyle] = useState<string>();
+  const [artStyle, setArtStyle] = useState<ReturnType<typeof readArtStyle>>();
   const [loadError, setLoadError] = useState("");
   const { busy, submit, feedback } = useSubmit(async () => {
-    await saveArtStyle(id, artStyle!);
+    await saveArtStyle(id, artStyleText(artStyle!.name, artStyle!.own));
     return "Art Style saved.";
   });
 
   useEffect(() => {
-    getSave(id).then((save) => setArtStyle(save.artStyle), (failure: Error) => setLoadError(failure.message));
+    getSave(id).then((save) => setArtStyle(readArtStyle(save.artStyle)), (failure: Error) => setLoadError(failure.message));
   }, [id]);
 
   if (loadError) return <p role="alert" className="error">{loadError}</p>;
   if (artStyle === undefined) return null;
   return (
     <form className="fields" onSubmit={submit}>
-      <label>
-        Art Style
-        <textarea rows={4} value={artStyle} onChange={(e) => setArtStyle(e.target.value)} />
-      </label>
+      <ArtStylePicker
+        name={artStyle.name}
+        own={artStyle.own}
+        onName={(name) => setArtStyle({ ...artStyle, name })}
+        onOwn={(own) => setArtStyle({ ...artStyle, own })}
+      />
       <p className="muted">This Save only. Changing it affects new images, not existing ones.</p>
       {feedback}
       <button className="action" aria-disabled={busy}>

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ART_EXAMPLES } from "./art-examples";
+import { ArtStylePicker, artStyleText, Choices } from "./art-style-picker";
 import { ART_STYLES } from "./art-styles";
 import {
   beginStory,
@@ -44,8 +44,6 @@ const THEMES: Record<string, string> = {
 
 const OWN_THEME = "Create your own";
 
-const OWN_ART_STYLE = "Describe your own art style";
-
 const blank = {
   theme: "High Fantasy",
   ownTheme: "",
@@ -76,30 +74,6 @@ const stored = () => {
 };
 
 const MAX_CHARACTERS = 10;
-
-function Choices(props: { legend: string; options: string[]; value: string; art?: boolean; onChange: (value: string) => void }) {
-  return (
-    <fieldset>
-      <legend>{props.legend}</legend>
-      <div className={props.art ? "chips art" : "chips"}>
-        {props.options.map((option) => (
-          <label key={option}>
-            <input
-              className="visually-hidden"
-              type="radio"
-              name={props.legend}
-              checked={props.value === option}
-              onChange={() => props.onChange(option)}
-            />
-            {props.art &&
-              (ART_EXAMPLES[option] ? <img src={ART_EXAMPLES[option]} alt="" /> : <span className="no-example" aria-hidden="true">No example</span>)}
-            {option}
-          </label>
-        ))}
-      </div>
-    </fieldset>
-  );
-}
 
 const redrew = (drawn: typeof blank.drawn, kind: ImageKind) => ({ ...drawn, [kind]: (drawn[kind] ?? 0) + 1 });
 
@@ -221,7 +195,7 @@ export function NewStory({ step }: { step?: string }) {
   const theme = draft.theme === OWN_THEME ? draft.ownTheme.trim() : draft.theme;
   const description = THEMES[draft.theme];
   const themeForNarrator = description ? `${theme}: ${description}` : theme;
-  const artStyle = draft.artStyle === OWN_ART_STYLE ? draft.ownArtStyle : `${draft.artStyle}: ${ART_STYLES[draft.artStyle]}`;
+  const artStyle = artStyleText(draft.artStyle, draft.ownArtStyle);
 
   /** A failure changes nothing here, so everything the player wrote stays on the page to retry. */
   async function run(waiting: string, work: (signal: AbortSignal) => Promise<void>) {
@@ -570,21 +544,12 @@ export function NewStory({ step }: { step?: string }) {
         )}
       </div>
       <div id="art-style" className="fields wizard">
-        <Choices
-          legend="Art Style"
-          art
-          options={[...Object.keys(ART_STYLES), OWN_ART_STYLE]}
-          value={draft.artStyle}
-          onChange={(artStyle) => set({ artStyle })}
+        <ArtStylePicker
+          name={draft.artStyle}
+          own={draft.ownArtStyle}
+          onName={(artStyle) => set({ artStyle })}
+          onOwn={(ownArtStyle) => set({ ownArtStyle })}
         />
-        {draft.artStyle === OWN_ART_STYLE ? (
-          <label>
-            Your Art Style
-            <textarea rows={3} value={draft.ownArtStyle} onChange={(e) => set({ ownArtStyle: e.target.value })} />
-          </label>
-        ) : (
-          <p className="muted">{ART_STYLES[draft.artStyle]}</p>
-        )}
         <p className="muted">You can change this during the story. It affects new images only.</p>
       </div>
       {imageSection("cover", "Cover", theme && title.trim() && worldBrief.trim() ? "" : "Fill in the Title, theme and World Brief to draw this.", {

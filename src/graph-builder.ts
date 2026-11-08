@@ -73,6 +73,10 @@ export type PromptStyle = "prose" | "keywords";
 export const promptStyle = ({ imageProvider, comfyMode, comfyFamily }: Pick<Settings, "imageProvider" | "comfyMode" | "comfyFamily">): PromptStyle =>
   imageProvider === "local" && comfyMode === "simple" && comfyFamily === "sd" ? "keywords" : "prose";
 
+/** The family Simple Mode draws with, or null when OpenRouter or a workflow draws, which Art Styles can't be tuned for. */
+export const drawingFamily = ({ imageProvider, comfyMode, comfyFamily }: Pick<Settings, "imageProvider" | "comfyMode" | "comfyFamily">) =>
+  imageProvider === "local" && comfyMode === "simple" ? comfyFamily : null;
+
 /** Whether a portrait is sure to reach the model. OpenRouter's models and a workflow may ignore one, so those need the words. */
 export const usesPortraits = ({ imageProvider, comfyMode, comfyFamily }: Pick<Settings, "imageProvider" | "comfyMode" | "comfyFamily">) =>
   imageProvider === "local" && comfyMode === "simple" && isSplit(comfyFamily);

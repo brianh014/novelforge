@@ -83,8 +83,14 @@ export const OPENROUTER_URL = "https://openrouter.ai/api/v1";
 
 export const getSettings = () => request<Settings>("/settings");
 
-export const saveSettings = (change: SettingsChange) =>
-  request<Settings>("/settings", { ...jsonBody(change), method: "PATCH" });
+/** Fired with the saved Settings, so what is already on screen can follow a change, such as a new image family. */
+export const SETTINGS_SAVED = "novelforge-settings-saved";
+
+export const saveSettings = async (change: SettingsChange) => {
+  const saved = await request<Settings>("/settings", { ...jsonBody(change), method: "PATCH" });
+  globalThis.dispatchEvent?.(new CustomEvent(SETTINGS_SAVED, { detail: saved }));
+  return saved;
+};
 
 export type ComfyModels = Awaited<ReturnType<typeof comfyModels>>;
 export const getComfyModels = () => request<ComfyModels>("/settings/comfy-models");

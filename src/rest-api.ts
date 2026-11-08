@@ -3,6 +3,7 @@ import type { Dice } from "./check-resolver";
 import { InvalidWorkflow, parseWorkflow } from "./comfy-workflow";
 import { comfyImages, comfyModels, randomSeed } from "./comfyui";
 import { chosenModels, drawSteps, localIsSetUp, promptStyle } from "./graph-builder";
+import { withArtStyleFor } from "./web/art-styles";
 import { defaultLogLevel, errorFields, errorType, log, setLogLevel, withLogContext } from "./logger";
 import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
@@ -972,7 +973,7 @@ export function startServer(options: {
           turns.assertIdle(id);
           const messageId = saves.latestMessageId(id);
           if (messageId === 0) return Response.json({ error: "There's no story to draw from yet." }, { status: 409 });
-          const story = { save: saves.read(id), state: saves.latestState(id), messages: saves.messages(id) };
+          const story = { save: withArtStyleFor(saves.read(id), settings.read()), state: saves.latestState(id), messages: saves.messages(id) };
           const style = promptStyle(settings.read());
           // Only those in the Scene, so a mark can't put anyone else's stored looks in a prompt the player reads.
           const moment = { location: story.state.scene.location, npcs: visibleNpcs(story.state), wearing: story.state.inventory.wearing };
