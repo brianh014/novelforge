@@ -1,8 +1,8 @@
-import type { TurnResult } from "./api";
+import type { Show, TurnResult } from "./api";
 import type { TurnInProgress } from "./chat-style";
 
 type Failure = Extract<TurnResult, { error: string }> & { replaces?: number };
-type Play = (show: (narration: string) => void, signal: AbortSignal) => Promise<TurnResult>;
+type Play = (show: Show, signal: AbortSignal) => Promise<TurnResult>;
 
 export type RunningTurn = {
   turn: TurnInProgress;
@@ -31,8 +31,8 @@ export function startTurn(id: string, started: TurnInProgress, play: Play) {
     },
   };
   running.set(id, entry);
-  const show = (narration: string) => {
-    entry.turn = { ...started, narration };
+  const show: Show = (narration, retry) => {
+    entry.turn = { ...started, narration, ...(retry && { retry }) };
     watcher?.(entry.turn);
   };
   // Never aborted, as leaving the screen doesn't end a Turn.

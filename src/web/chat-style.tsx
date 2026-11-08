@@ -8,7 +8,7 @@ export type Beat = { speaker?: string; player?: boolean; rule?: boolean; text: s
 export const isContinue = ({ role, text }: Pick<Message, "role" | "text">) => role === "player" && text === CONTINUE_INPUT;
 export const ContinueRule = () => <hr className="continued" aria-label="The story continues" />;
 /** A `replaces` response is left out of the story while its replacement arrives. */
-export type TurnInProgress = { input: string; narration: string; replaces?: Message; edit?: boolean };
+export type TurnInProgress = { input: string; narration: string; replaces?: Message; edit?: boolean; retry?: string };
 export type StageBeat = { beat: Beat; message?: Message; number: number; of: number };
 
 // shortcut: a bare name is any capitalized words before a colon and a quote, so "Sign: “Closed”" gets a speaker and "Jan van Dijk" doesn't, match against the state's names if that shows up.

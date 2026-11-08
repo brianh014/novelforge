@@ -275,8 +275,10 @@ async function narrate(
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check = storedCheck;
   let narrationSent = 0;
+  let retry = "";
   for (let attempt = 1; ; attempt++) {
-    if (narrationSent > 0) emit("restart", {});
+    // Without a reason the player sees text vanish, which looks like a glitch.
+    if (narrationSent > 0) emit("restart", { reason: retry });
     narrationSent = 0;
     let generation: string | undefined;
     let partial = "";
@@ -365,7 +367,7 @@ async function narrate(
       }));
       return messages;
     } catch (cause) {
-      retryIfInvalid(cause, attempt, input, generation);
+      retry = `${retryIfInvalid(cause, attempt, input, generation)}, so the Narrator is writing it again (try ${attempt + 1} of ${MAX_ATTEMPTS}).`;
     }
   }
 }
@@ -394,7 +396,16 @@ function whyInvalid({ cause }: InvalidResponse) {
   return cause instanceof SyntaxError ? "not JSON" : "a Check request where none is allowed";
 }
 
-/** Returns if another attempt should run. Anything but an invalid reply goes on up. */
+/** What a player is told of an invalid reply, never quoting it, as a reply may hold secrets. */
+function playerReason({ cause }: InvalidResponse) {
+  if (cause === "a speaker tag without its [") return "A spoken line in the last reply was missing its speaker";
+  if (cause === "a picture without set_scene") return "The last reply moved to a new scene without saying where";
+  if (Array.isArray(cause)) return "The last reply changed the story in a way that doesn't fit what's already true";
+  if (cause === undefined) return "The last reply asked for a second dice roll";
+  return "The last reply came back garbled";
+}
+
+/** Returns, if another attempt should run, why it's needed in the player's words. Anything but an invalid reply goes on up. */
 function retryIfInvalid(cause: unknown, attempt: number, input: string, generation: string | undefined) {
   if (!(cause instanceof InvalidResponse)) throw cause;
   const reason = whyInvalid(cause);
@@ -402,6 +413,7 @@ function retryIfInvalid(cause: unknown, attempt: number, input: string, generati
   if (attempt === MAX_ATTEMPTS) {
     throw new TurnFailed("The Narrator gave no usable response", "retryable", input, { cause: new Error(reason) });
   }
+  return playerReason(cause);
 }
 
 async function askNarrator(

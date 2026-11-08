@@ -187,6 +187,8 @@ export function Play({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [reverting, setReverting] = useState<Message>();
+  /** With a Revert to the Message before one of the player's: their words, to edit and send again from there. */
+  const [replaying, setReplaying] = useState<string>();
   const [chapterOffer, setChapterOffer] = useState(false);
   const [endingChapter, setEndingChapter] = useState(false);
   const [closingChapter, setClosingChapter] = useState(false);
@@ -534,9 +536,24 @@ export function Play({ id }: { id: string }) {
     return <BeatLine key={key} beat={beat} style={chatStyle} pc={pc} face={portrait && portraitUrl(id, portrait)} />;
   };
 
+  const before = (message: Message) => messages[messages.indexOf(message) - 1];
+
   const controls = (message: Message) =>
     !turn && (
       <div className="row actions">
+        {message.role === "player" && before(message) && (
+          <button
+            className="icon"
+            title="Edit and replay from here"
+            aria-label={`Edit and replay from your words: ${message.text.slice(0, 40)}`}
+            onClick={() => {
+              setReplaying(message.text === CONTINUE_INPUT ? "" : message.text);
+              setReverting(before(message));
+            }}
+          >
+            {EditIcon}
+          </button>
+        )}
         {message !== latest && (
           <button
             className="icon revert"
@@ -657,6 +674,7 @@ export function Play({ id }: { id: string }) {
           controls={controls}
           rows={requestedRows}
           waiting={!!turn && !turn.narration}
+          retry={turn?.retry}
         >
           {/* Back should show what that moment looked like, not the newest image. */}
           {(message) => sceneImage(message && images.images.findLast(({ messageId }) => messageId <= message.id))}
@@ -692,6 +710,7 @@ export function Play({ id }: { id: string }) {
               )}
               {/* Mounted before any text arrives, or screen readers would not announce it. */}
               <div aria-live="polite" className="message narrator">
+                {turn?.retry && <p className="notice">{turn.retry}</p>}
                 {turn &&
                   (turn.narration ? (
                     messageBeats({ role: "narrator", text: turn.narration }).map(line)
@@ -918,15 +937,21 @@ export function Play({ id }: { id: string }) {
         <RevertDialog
           id={id}
           message={reverting}
-          onClose={() => setReverting(undefined)}
-          onReverted={() => {
-            setMessages(messages.filter((message) => message.id <= reverting.id));
+          replay={replaying}
+          onClose={() => {
+            setReverting(undefined);
+            setReplaying(undefined);
+          }}
+          onReverted={(input) => {
+            const kept = messages.filter((message) => message.id <= reverting.id);
+            setMessages(kept);
             setChosenBeat(undefined);
             checkChapter();
             getJournal(id).then(setJournal, () => {});
             checkImages();
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.
             inputBox.current!.focus();
+            if (input) playInput(input, kept);
           }}
         />
       )}
@@ -944,6 +969,7 @@ function StageBox(props: {
   controls: (message: Message) => ReactNode;
   rows: (message: Message) => ReactNode;
   waiting: boolean;
+  retry?: string;
   children: (message?: Message) => ReactNode;
 }) {
   const { beats, chosen, onChoose, waiting } = props;
@@ -967,6 +993,7 @@ function StageBox(props: {
             </div>
           ),
         )}
+        {props.retry && <p className="notice">{props.retry}</p>}
         {waiting && <p className="waiting">{WRITING}</p>}
         {current.message && props.rows(current.message)}
         <div className="row stage-foot">
@@ -988,8 +1015,16 @@ function StageBox(props: {
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
-function RevertDialog(props: { id: string; message: Message; onClose: () => void; onReverted: () => void }) {
-  const { id, message } = props;
+/** With `replay`, the Revert goes to `message`, just before the player's words, and sends them again as edited. */
+function RevertDialog(props: {
+  id: string;
+  message: Message;
+  replay?: string;
+  onClose: () => void;
+  onReverted: (input?: string) => void;
+}) {
+  const { id, message, replay } = props;
+  const [input, setInput] = useState(replay ?? "");
   const dialog = useRef<HTMLDialogElement>(null);
   const [preview, setPreview] = useState<{ messages: number; images: number; portraits: number }>();
   const [busy, setBusy] = useState(false);
@@ -1016,7 +1051,7 @@ function RevertDialog(props: { id: string; message: Message; onClose: () => void
       await revert(id, message.id);
       // Gone if the player pressed Escape while this was in flight, and the Revert happened all the same.
       dialog.current?.close();
-      props.onReverted();
+      props.onReverted(replay === undefined ? undefined : input.trim());
     });
 
   const duplicate = () =>
@@ -1026,27 +1061,46 @@ function RevertDialog(props: { id: string; message: Message; onClose: () => void
 
   return (
     <dialog ref={dialog} onClose={props.onClose} aria-labelledby="revert-title">
-      <h2 id="revert-title">Revert to this Message?</h2>
-      <blockquote>{message.text}</blockquote>
-      {preview && (
+      {replay === undefined ? (
+        <>
+          <h2 id="revert-title">Revert to this Message?</h2>
+          <blockquote>{message.text}</blockquote>
+        </>
+      ) : (
+        <>
+          <h2 id="revert-title">Edit and replay from here?</h2>
+          <textarea aria-label="Your words" rows={4} value={input} onChange={(event) => setInput(event.target.value)} />
+        </>
+      )}
+      {preview && replay !== undefined && (
+        <p>
+          Sending permanently deletes{" "}
+          {preview.messages === 1 ? "this Message" : `this Message and the ${plural(preview.messages - 1, "Message")} after it`}
+          {preview.images > 0 && ` and ${plural(preview.images, "image")}`}
+          {preview.portraits > 0 && ` and ${plural(preview.portraits, "portrait")}`}, then the Narrator answers your new words.
+        </p>
+      )}
+      {preview && replay === undefined && (
         <p>
           This permanently deletes the {plural(preview.messages, "Message")} after it
           {preview.images > 0 && ` and ${plural(preview.images, "image")}`}
           {preview.portraits > 0 && ` and ${plural(preview.portraits, "portrait")}`}.
         </p>
       )}
-      <p className="muted">“Duplicate from here” keeps this story and carries on in a new Save instead.</p>
+      {replay === undefined && <p className="muted">“Duplicate from here” keeps this story and carries on in a new Save instead.</p>}
       {error && <p role="alert" className="error">{error}</p>}
       {/* Cancel comes first because a modal focuses its first control, and that must not be the deleting one. */}
       <div className="row">
         <button className="quiet" onClick={() => dialog.current!.close()}>
           Cancel
         </button>
-        <button className="quiet" disabled={busy || !preview} onClick={duplicate}>
-          Duplicate from here
-        </button>
-        <button className="action" disabled={busy || !preview} onClick={confirmRevert}>
-          Revert
+        {replay === undefined && (
+          <button className="quiet" disabled={busy || !preview} onClick={duplicate}>
+            Duplicate from here
+          </button>
+        )}
+        <button className="action" disabled={busy || !preview || (replay !== undefined && !input.trim())} onClick={confirmRevert}>
+          {replay === undefined ? "Revert" : "Send"}
         </button>
       </div>
     </dialog>

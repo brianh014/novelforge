@@ -35,6 +35,8 @@ export type Gallery = { images: GalleryImage[]; pending: boolean; canRedraw: boo
 export type HeldImage = { prompt: string; hasImage: boolean; failure: string; canRedraw: boolean };
 export type TurnResult = { messages: Message[] } | { error: string; input: string };
 export type TurnStatus = { running?: LiveTurn; failed?: FailedTurn };
+/** Hears the text so far, and why it started over if it did. */
+export type Show = (narration: string, retry?: string) => void;
 
 const jsonBody = (body: object): RequestInit => ({
   method: "POST",
@@ -262,12 +264,12 @@ export const playTurn = (
   id: string,
   input: string,
   after: number,
-  show: (narration: string) => void,
+  show: Show,
   signal: AbortSignal,
 ) => streamTurn(id, "turns", { input }, input, after, "Send it again to retry.", show, signal);
 
 /** The story's first Message. A failure hands back no input, as the player wrote nothing. */
-export const playOpening = (id: string, show: (narration: string) => void, signal: AbortSignal) =>
+export const playOpening = (id: string, show: Show, signal: AbortSignal) =>
   streamTurn(id, "opening", {}, "", 0, "Try again.", show, signal);
 
 /** Rewrite, with feedback, or Regenerate. A replacement commits under a new id, so `messageId` works as `after` does. */
@@ -275,7 +277,7 @@ export const replaceResponse = (
   id: string,
   messageId: number,
   feedback: string,
-  show: (narration: string) => void,
+  show: Show,
   signal: AbortSignal,
 ) =>
   streamTurn(
@@ -317,7 +319,7 @@ async function awaitTurn(
   input: string,
   after: number,
   retryHint: string,
-  show: (narration: string) => void,
+  show: Show,
 ): Promise<TurnResult> {
   reportEvent("polling-fallback", { save: id, after });
   for (let misses = 0; misses < turnPolling.tries; ) {
@@ -330,7 +332,7 @@ async function awaitTurn(
         return { error: `The connection dropped and this wasn't saved. ${retryHint}`, input };
       }
       misses = 0;
-      show(running.narration);
+      show(running.narration, running.retry);
     } catch {
       misses++;
     }
@@ -341,7 +343,7 @@ async function awaitTurn(
 }
 
 /** Picks up a Turn this page didn't start or no longer holds, such as after a reload. */
-export function resumeTurn(id: string, turn: LiveTurn, show: (narration: string) => void) {
+export function resumeTurn(id: string, turn: LiveTurn, show: Show) {
   reportEvent("turn-resumed", { save: id, after: turn.after });
   return awaitTurn(id, turn.input, turn.after, retryHintFor(turn), show);
 }
@@ -353,7 +355,7 @@ async function streamTurn(
   input: string,
   after: number,
   retryHint: string,
-  show: (narration: string) => void,
+  show: Show,
   signal: AbortSignal,
 ): Promise<TurnResult> {
   // A phone can kill a stream while it sleeps without ever failing it, so a page coming back asks the server instead.
@@ -370,10 +372,12 @@ async function streamTurn(
     });
     if (!response.ok) return { error: await errorMessage(response), input };
     let narration = "";
+    let retry: string | undefined;
     for await (const { event, data } of turnEvents(response.body!)) {
-      if (event === "narration") show((narration += data.text));
+      if (event === "narration") show((narration += data.text), retry);
       if (event === "restart") {
-        show((narration = ""));
+        retry = data.reason;
+        show((narration = ""), retry);
         reportEvent("narration-restarted", { save: id, after });
       }
       if (event === "done") return { messages: data.messages };

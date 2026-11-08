@@ -8,6 +8,8 @@ export type LiveTurn = {
   after: number;
   /** The Message a Rewrite or Regenerate replaces. */
   replaces?: number;
+  /** Why the text so far started over, if it did. */
+  retry?: string;
 };
 export type FailedTurn = { status: number; error: string; input: string; replaces?: number };
 
@@ -57,7 +59,10 @@ export function liveTurns() {
         /** Aborted when the player presses Stop, and by nothing else, as leaving the page doesn't end a Turn. */
         signal: stopper.signal,
         heard: (...[event, data]: Parameters<TurnEvents>) => {
-          turn.narration = event === "restart" ? "" : turn.narration + (data as { text: string }).text;
+          if (event === "restart") {
+            turn.narration = "";
+            turn.retry = (data as { reason: string }).reason;
+          } else turn.narration += (data as { text: string }).text;
         },
         /** A `failure` waits for the player, who may not have been there to see it. */
         end(failure?: FailedTurn) {

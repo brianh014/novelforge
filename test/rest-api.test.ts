@@ -2106,6 +2106,8 @@ test("a stream of a replacement follows the Turn's contract, restarting after an
 
   const events = await turnEvents(response);
   expect(events.map(({ event }) => event)).toEqual(["narration", "restart", "done"]);
+  // The player is told why the text went, without any of the reply.
+  expect(events[1]!.data).toEqual({ reason: "The last reply came back garbled, so the Narrator is writing it again (try 2 of 3)." });
   expect(events.at(-1)!.data).toEqual({ messages: [{ id: 3, role: "narrator", text: "Snow." }] });
 });
 
