@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { promptStyle } from "../src/graph-builder";
-import { expandMarks, withReferenceRoles } from "../src/image-pipeline";
+import { chestUp, expandMarks, withReferenceRoles } from "../src/image-pipeline";
 import { assemblePrompt, IN_ITS_WORLD_AND_STYLE, REQUESTED_IMAGE_PROMPT } from "../src/prompt-assembler";
 import { openingState } from "../src/state-applier";
 
@@ -106,4 +106,13 @@ test("an Image Prompt puts each person once in what they do, keeps props plain a
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("keep their hands empty otherwise");
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("each named plainly with its size, material and place");
   expect(IN_ITS_WORLD_AND_STYLE).toContain("Say which real era and region the place, buildings and clothing resemble");
+  expect(IN_ITS_WORLD_AND_STYLE).toContain("in a world set before about 1600, such as an ancient or medieval one, never write coat");
+  expect(IN_ITS_WORLD_AND_STYLE).toContain("or for a future or invented world which real styles it borrows from");
+});
+
+test("a portrait's template keeps only what a head and shoulders frame shows", () => {
+  const seren =
+    "a woman in her late twenties, gaunt and hollow-cheeked, with long dark hair, pale bare feet streaked with mud, swallowed in a hooded brown wool cloak, her wrists bound behind her back";
+  expect(chestUp(seren)).toBe("a woman in her late twenties, gaunt and hollow-cheeked, with long dark hair, swallowed in a hooded brown wool cloak");
+  expect(chestUp("a man with charms on a thong, in those clothes")).toBe("a man with charms on a thong, in those clothes");
 });

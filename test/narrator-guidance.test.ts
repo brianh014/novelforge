@@ -174,4 +174,5 @@ test("no one echoes the PC, re-argues a case the PC turned down, or ends most re
   expect(lastSystem()).toContain("they don't all argue for the same view");
   expect(lastSystem()).toContain("few replies should end on a choice between two things");
   expect(prompts.at(-1)!.map(({ content }) => content).join("\n")).toContain("[Voice in the light] for someone not yet named");
+  expect(prompts.at(-1)!.map(({ content }) => content).join("\n")).toContain("with its colours and materials, and name each garment by its period form");
 });

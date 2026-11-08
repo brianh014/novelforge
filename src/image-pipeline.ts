@@ -105,10 +105,21 @@ export function expandMarks(text: string, npcs: Npc[], pc: { name: string; looks
   return { prompt, pictured };
 }
 
+// What a head and shoulders frame can't show, as an image model squeezes the whole body in to fit a mention of feet.
+const BELOW_THE_FRAME = /\b(?:hands?|wrists?|fingers?|arms?|legs?|knees?|feet|foot|barefoot|toes?|boots?|shoes?|sandals?|hose|breeches|trousers|pants|skirt|holding|carrying|clutching|gripping)\b/i;
+
+/** shortcut: drops whole comma clauses, so a clause naming hair and feet together loses the hair, split finer if fallbacks get common. */
+export const chestUp = (looks: string) =>
+  looks
+    .split(",")
+    .filter((clause) => !BELOW_THE_FRAME.test(clause))
+    .join(",")
+    .trim();
+
 const portraitPrompt = (looks: string, style: PromptStyle) =>
   style === "keywords"
-    ? `head and shoulders portrait, one person, plain background, ${looks}`
-    : `A head and shoulders portrait of one person, ${looks}, facing the viewer against a plain neutral background in soft even light.`;
+    ? `head and shoulders portrait, one person, plain background, ${chestUp(looks)}`
+    : `A head and shoulders portrait of one person, ${chestUp(looks)}, facing the viewer against a plain neutral background in soft even light.`;
 
 type Role = ImagePayload["reference_images"][number]["role"];
 

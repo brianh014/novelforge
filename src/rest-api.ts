@@ -874,7 +874,7 @@ export function startServer(options: {
           const basedOn = saves.latestMessageId(id);
           const release = turns.hold(id);
           try {
-            const { world_brief, summary, facts, npc_summaries, inventory, status, ...update } = await changeWorld(options, saves.latestState(id), change, req.signal);
+            const { world_brief, summary, facts, npc_summaries, npc_looks, inventory, status, ...update } = await changeWorld(options, saves.latestState(id), change, req.signal);
             if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
             const journal: WorldEdit[] = [
               ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),
@@ -884,7 +884,8 @@ export function startServer(options: {
               ...(inventory === null ? [] : [{ edit: "inventory" as const, ...inventory }]),
               ...(status === null ? [] : [{ edit: "status" as const, ...status }]),
             ];
-            for (const edit of [{ edit: "world" as const, update }, ...journal]) saves.addEdit(id, edit);
+            const looks = npc_looks.map(({ name, appearance }) => ({ edit: "npcLooks" as const, name, appearance }));
+            for (const edit of [{ edit: "world" as const, update }, ...looks, ...journal]) saves.addEdit(id, edit);
             // Counts only, so that the log never repeats the world.
             log.info("world", "World Change applied", () => ({
               lore: update.lore_entries.length,
@@ -892,6 +893,7 @@ export function startServer(options: {
               rules: update.world_rules.length,
               threads: update.plot_threads.length,
               journal: journal.length,
+              looks: looks.length,
             }));
             return Response.json({});
           } catch (error) {

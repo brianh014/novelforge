@@ -359,6 +359,8 @@ export const WorldEdit = z.discriminatedUnion("edit", [
   // Whole lists, as a World Change rewrites what the player says is wrong rather than one item at a time.
   z.object({ edit: z.literal("inventory"), wearing: z.array(z.string()), carrying: z.array(z.string()) }),
   z.object({ edit: z.literal("status"), health: z.string(), injuries: z.array(z.string()), conditions: z.array(z.string()) }),
+  // Hidden like the rest of an NPC's looks, so only a World Change writes it.
+  z.object({ edit: z.literal("npcLooks"), name: z.string(), appearance: z.string() }),
   // Only the server closes a Chapter, as it writes the title.
   z.object({ edit: z.literal("closeChapter"), title: z.string() }),
 ]);
@@ -383,6 +385,8 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, ...mergeWorldUpdate(state, edit.update) };
     case "inventory":
       return { ...state, inventory: { wearing: edit.wearing, carrying: edit.carrying } };
+    case "npcLooks":
+      return { ...state, npcs: state.npcs.map((npc) => (npc.name === edit.name ? { ...npc, appearance: edit.appearance } : npc)) };
     case "status":
       return { ...state, status: { health: edit.health, injuries: edit.injuries.slice(-MAX_STATUS), conditions: edit.conditions.slice(-MAX_STATUS) } };
     case "storyTime":

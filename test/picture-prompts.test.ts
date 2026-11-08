@@ -52,7 +52,7 @@ test.each([
   const { written, prompts } = write(portrait, style, text("tall ".repeat(words + 1)), text("A tall woman in an oilskin coat."));
 
   expect(await written).toBe("A tall woman in an oilskin coat.");
-  expect(prompts[0]![0]!.content).toContain(`in at most ${words} words`);
+  expect(prompts[0]![0]!.content).toContain(`about ${Math.round(words * 0.75)} words and never over ${words}`);
   expect(prompts[0]![0]!.content).toContain(style === "keywords" ? "comma-separated keyword phrases" : "connected sentences");
 });
 

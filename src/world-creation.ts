@@ -3,7 +3,7 @@ import type { PromptStyle } from "./graph-builder";
 import { pcLooks, visibleNpcs } from "./image-pipeline";
 import { errorType, log } from "./logger";
 import { activateLore } from "./lore-activation";
-import { IN_ITS_WORLD_AND_STYLE, LORE_TOKEN_BUDGET, type Prompt, REQUESTED_IMAGE_PROMPT } from "./prompt-assembler";
+import { IN_ITS_WORLD_AND_STYLE, LOOKS, LORE_TOKEN_BUDGET, type Prompt, REQUESTED_IMAGE_PROMPT } from "./prompt-assembler";
 import type { SettingsStore } from "./settings-store";
 import type { Message, Save } from "./save-store";
 import { applyOperations, hasNumber, ListChange, LoreEntryReply, openingState, type State, type StateOperation, type World, WorldUpdate } from "./state-applier";
@@ -301,8 +301,8 @@ const pictureRules = (kind: PictureAsk["kind"], style: PromptStyle, words: numbe
       keywords: `text is the prompt for a novel's front cover, as comma-separated keyword phrases, most important first, in at most ${words} words: book cover, the title as title text in quotation marks exactly as given, the people by their looks and clothing with the hero first, then the world, its mood and its light.`,
     },
     portrait: {
-      prose: `text is the prompt for a head and shoulders portrait of this one person, facing the viewer against a plain neutral background in soft even light, showing their looks and the clothing they have on. Write connected sentences, in at most ${words} words.`,
-      keywords: `text is the prompt for a head and shoulders portrait of this one person, as comma-separated keyword phrases, most important first, in at most ${words} words: their looks and the clothing they have on, facing the viewer, plain neutral background, soft even light.`,
+      prose: `text is the prompt for a head and shoulders portrait of this one person, facing the viewer against a plain neutral background in soft even light, showing their face, hair and the clothing they have on from the chest up. Leave out whatever that frame can't show, such as their hands, legs, feet and anything they hold. Write connected sentences, about ${Math.round(words * 0.75)} words and never over ${words}.`,
+      keywords: `text is the prompt for a head and shoulders portrait of this one person, as comma-separated keyword phrases, most important first, about ${Math.round(words * 0.75)} words and never over ${words}: their face, hair and the clothing they have on from the chest up, facing the viewer, plain neutral background, soft even light. Leave out whatever that frame can't show, such as their hands, legs, feet and anything they hold.`,
     },
   })[kind][style];
 
@@ -363,15 +363,16 @@ const WorldChange = WorldUpdate.extend({
   summary: words.nullable().default(null),
   facts: z.array(ListChange).default([]),
   npc_summaries: z.array(z.object({ name: words, summary: words })).default([]),
+  npc_looks: z.array(z.object({ name: words, appearance: words })).default([]),
   inventory: z.object({ wearing: z.array(words), carrying: z.array(words) }).nullable().default(null),
   status: z.object({ health: words, injuries: z.array(words), conditions: z.array(words) }).nullable().default(null),
 });
 
 // A misquoted entry can't be matched, and a reply with no change would tell the player it was done when it wasn't.
-const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown }: State) =>
-  WorldChange.refine(({ lore_entries, removed_lore, world_rules, plot_threads, world_brief, summary, facts, npc_summaries, inventory, status }) => {
+const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown, npcs }: State) =>
+  WorldChange.refine(({ lore_entries, removed_lore, world_rules, plot_threads, world_brief, summary, facts, npc_summaries, npc_looks, inventory, status }) => {
     const quotes = (list: string[], changes: typeof world_rules) => changes.every(({ old }) => old === null || list.includes(old));
-    const changed = [lore_entries, removed_lore, world_rules, plot_threads, facts, npc_summaries].some((list) => list.length > 0) || [world_brief, summary, inventory, status].some((part) => part !== null);
+    const changed = [lore_entries, removed_lore, world_rules, plot_threads, facts, npc_summaries, npc_looks].some((list) => list.length > 0) || [world_brief, summary, inventory, status].some((part) => part !== null);
     // The same rule as a Turn's status.
     const statusInWords = status === null || ![status.health, ...status.injuries, ...status.conditions].some(hasNumber);
     return (
@@ -381,11 +382,12 @@ const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown }: State) =>
       quotes(worldRules, world_rules) &&
       quotes(plotThreads, plot_threads) &&
       quotes(pcKnown.facts, facts) &&
-      npc_summaries.every(({ name }) => pcKnown.npcs.includes(name))
+      npc_summaries.every(({ name }) => pcKnown.npcs.includes(name)) &&
+      npc_looks.every(({ name }) => npcs.some((npc) => npc.name === name))
     );
   });
 
-const worldChangePrompt = (context: Context, { worldBrief, worldBible, worldRules, plotThreads, summary, pcKnown, inventory, status }: State, change: string): Prompt => [
+const worldChangePrompt = (context: Context, { worldBrief, worldBible, worldRules, plotThreads, summary, pcKnown, inventory, status, npcs }: State, change: string): Prompt => [
   {
     role: "system",
     // The world comes last, as a provider's error can echo the start of this and the server log keeps that.
@@ -396,12 +398,14 @@ lore_entries holds each entry you add or rewrite. To rewrite one, use its exact 
 Each change in world_rules, plot_threads and facts has old, copied exactly from the world or null to add a new one, and new, the text to put there or null to remove it.
 world_brief, summary, facts and npc_summaries are the Journal, which the player reads. Change them only where they no longer hold, and give null or an empty list otherwise. Write them as the PC knows the world: a secret stays out of them, even when the player's instruction names it, and goes in the hidden parts. Each of npc_summaries holds a new summary with the exact name of an NPC already in the Journal.
 inventory and status are what the PC wears and carries, and their health, injuries and conditions, which the player also reads. Give the whole new inventory or status only when the instruction changes it, keeping everything it doesn't change, and null otherwise. Write status in words with no digits: health in at most five words, and at most three injuries and three conditions of at most eight words each.
+npc_looks holds new looks only for each NPC whose looks or clothing the instruction changes, with their exact name from npcs, ${LOOKS}. These are hidden, and they are what pictures of that NPC are drawn from.
 ${modelInstructions(context)}
 The world as it stands, as JSON: ${JSON.stringify({
       world_brief: worldBrief,
       lore_entries: worldBible.map(({ title, keywords, content }) => ({ title, keywords, content })),
       world_rules: worldRules,
       plot_threads: plotThreads,
+      npcs: Object.fromEntries(npcs.map(({ name, appearance }) => [name, appearance])),
       journal: {
         summary,
         facts: pcKnown.facts,

@@ -396,6 +396,20 @@ test("a World Change can fix what the PC wears and carries, and their status, wh
   expect(prompts[0]![0]!.content).toContain('"inventory":{"wearing":[],"carrying":[]}');
 });
 
+test("a World Change can rewrite an NPC's looks, which stay hidden, and one for a name it doesn't know is retried", async () => {
+  play(update({ npc_looks: [{ name: "Nobody", appearance: "a ghost" }] }), update({ npc_looks: [{ name: "Corvin", appearance: "a man in a hooded wool cloak" }] }));
+  const id = createSave();
+
+  const response = await change(id, "Corvin dresses for his era");
+
+  expect(response.status).toBe(200);
+  expect(prompts).toHaveLength(2);
+  expect(store().latestState(id).npcs).toEqual([NPCS[0]!, { name: "Corvin", appearance: "a man in a hooded wool cloak" }]);
+  expect(prompts[0]![0]!.content).toContain('"npcs":{"Hesper":"a woman","Corvin":"a man"}');
+  expect(prompts[0]![0]!.content).toContain("name each garment by its period form");
+  expect(JSON.stringify(await journal(id))).not.toContain("hooded wool cloak");
+});
+
 test("a World Change's status with a numeral is retried, and one left out changes nothing", async () => {
   play(update({ status: { health: "2 hit points", injuries: [], conditions: [] } }), update({ summary: "It rained harder." }));
   const id = createSave();
