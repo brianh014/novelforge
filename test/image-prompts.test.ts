@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { promptStyle } from "../src/graph-builder";
-import { expandMarks } from "../src/image-pipeline";
-import { assemblePrompt } from "../src/prompt-assembler";
+import { expandMarks, withReferenceRoles } from "../src/image-pipeline";
+import { assemblePrompt, IN_ITS_WORLD_AND_STYLE, REQUESTED_IMAGE_PROMPT } from "../src/prompt-assembler";
 import { openingState } from "../src/state-applier";
 
 const npcs = [
@@ -92,4 +92,18 @@ test("with images off the Narrator writes no prompt", () => {
   const system = systemPrompt(null);
   expect(system).toContain("Images are off");
   expect(system).not.toContain("connected sentences");
+});
+
+test("the image model is told the portraits are only for faces, so it copies no clothing from them", () => {
+  expect(withReferenceRoles("A quay at dusk.", [])).toBe("A quay at dusk.");
+  expect(withReferenceRoles("A quay at dusk", [{ role: "npc" }])).toBe("A quay at dusk. The portraits show only each person's face and hair: dress and pose everyone as written here.");
+  expect(withReferenceRoles("A quay.", [{ role: "pc" }])).toContain("The portraits show only");
+});
+
+test("an Image Prompt puts each person once in what they do, keeps props plain and sized, and holds to a real era", () => {
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("Make each mark the subject of the sentence that says what that person does");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("never in a list of who is there");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("keep their hands empty otherwise");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("each named plainly with its size, material and place");
+  expect(IN_ITS_WORLD_AND_STYLE).toContain("Say which real era and region the place, buildings and clothing resemble");
 });

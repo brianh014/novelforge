@@ -90,7 +90,7 @@ test("scene_changed in the same place asks for an image", async () => {
   await playTurn(id);
 
   expect((await settled(id)).images).toHaveLength(2);
-  expect(images.payloads[1]!.prompt).toBe("The same street, now at night");
+  expect(images.payloads[1]!.prompt).toStartWith("The same street, now at night");
 });
 
 test("a picture without set_scene is retried, so it never takes the last place's caption and reference", async () => {
@@ -254,19 +254,20 @@ test("the Narrator writes each Scene Image in the current Art Style, and stored 
   expect(await imageBytes(id, 4)).toEqual(png(2));
 });
 
-test("the previous Scene Image goes along as a role-tagged reference", async () => {
-  play([newScene(), newScene("The same street, later")], png(1), png(2));
+test("a Scene Image in the same place, and its Redraw, go without the earlier one, which the image model copied people from", async () => {
+  play([newScene(), newScene("The same street, later")], png(1), png(2), png(3));
   await enableImages();
   const id = await app.createSave();
   await playTurn(id);
   await settled(id);
 
   await playTurn(id);
+  const { images: drawn } = await settled(id);
+  await app.post(`/saves/${id}/gallery/redraw`, { kind: "scene", ref: drawn[1]!.messageId, prompt: "Redrawn" });
   await settled(id);
 
-  const [reference] = images.payloads[1]!.reference_images;
-  expect(reference).toMatchObject({ role: "previous_scene", mediaType: "image/png" });
-  expect(new Uint8Array(reference!.bytes)).toEqual(png(1));
+  expect(images.payloads.map(({ reference_images }) => reference_images)).toEqual([[], [], []]);
+  expect(images.payloads[2]!.prompt).toBe("Redrawn");
 });
 
 test("a new location has no previous Scene Image as a reference, and returning to one doesn't either", async () => {
@@ -287,31 +288,7 @@ test("a new location has no previous Scene Image as a reference, and returning t
   expect(images.payloads.map(({ reference_images }) => reference_images)).toEqual([[], [], []]);
 });
 
-test("a Scene Image in the same location keeps the previous one as its reference, and so does its Redraw", async () => {
-  play(
-    [
-      turn({ state_operations: moveTo("The office"), scene_changed: true, visual_description: "Desks" }),
-      turn({ scene_changed: true, visual_description: "Desks at night", state_operations: moveTo("The office") }),
-    ],
-    png(1),
-    png(2),
-    png(3),
-  );
-  await enableImages();
-  const id = await app.createSave();
-
-  await playTurn(id);
-  await settled(id);
-  await playTurn(id);
-  const { images: drawn } = await settled(id);
-  expect(images.payloads[1]!.reference_images).toMatchObject([{ role: "previous_scene", bytes: png(1) }]);
-
-  await app.post(`/saves/${id}/gallery/redraw`, { kind: "scene", ref: drawn[1]!.messageId, prompt: "Redrawn" });
-  await settled(id);
-  expect(images.payloads[2]).toMatchObject({ prompt: "Redrawn", reference_images: [{ role: "previous_scene", bytes: png(1) }] });
-});
-
-test("quick Turns pay only for the image in flight and the newest scene, which builds on it", async () => {
+test("quick Turns pay only for the image in flight and the newest scene", async () => {
   const { promise, resolve } = Promise.withResolvers<Uint8Array>();
   play([newScene("One", "The pier"), newScene("Two", "The pier"), newScene("Three", "The pier")], promise, png(3));
   await enableImages();
@@ -323,8 +300,7 @@ test("quick Turns pay only for the image in flight and the newest scene, which b
   resolve(png(1));
 
   expect(await settled(id)).toMatchObject({ images: [{ caption: "The pier" }, { caption: "The pier" }], session: 2 });
-  expect(images.payloads.map(({ prompt }) => prompt)).toEqual(["One", "Three"]);
-  expect(new Uint8Array(images.payloads[1]!.reference_images[0]!.bytes)).toEqual(png(1));
+  expect(images.payloads.map(({ prompt }) => prompt.split(".")[0])).toEqual(["One", "Three"]);
 });
 
 test("the session count covers every Save, lives outside them, and starts again with the server", async () => {

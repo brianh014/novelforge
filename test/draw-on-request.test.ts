@@ -91,7 +91,7 @@ test("a request draws from the text call's prompt, joins the latest Message and 
   const gallery = await asked(id, "the woman in the corner");
 
   expect(await requestedOf(id)).toEqual({ images: [{ ref: 1, messageId: 2, caption: "the woman in the corner", redraws: 0 }], drawing: 0 });
-  expect(drawn.payloads.at(-1)).toMatchObject({ prompt: "A woman on a bench", aspect_ratio: "16:9", negative_prompt: expect.stringContaining("dice") });
+  expect(drawn.payloads.at(-1)).toMatchObject({ prompt: expect.stringMatching(/^A woman on a bench/), aspect_ratio: "16:9", negative_prompt: expect.stringContaining("dice") });
   expect(await bytesOf(`/saves/${id}/requested-images/1/image`)).toEqual(png(3));
   expect(await bytesOf(`/saves/${id}/messages/2/image`)).toEqual(png(2));
   expect(gallery.images.map(({ kind, label, prompt }) => [kind, label, prompt?.slice(0, 20)])).toEqual([
@@ -200,8 +200,8 @@ test("a mark for someone outside the Scene gets no stored looks and no portrait"
   await asked(id, "the two of them");
 
   const payload = drawn.payloads.at(-1)!;
-  expect(payload.prompt).toBe("a stranger in grey and a tall woman in oilskins on a bench");
-  expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc", "previous_scene"]);
+  expect(payload.prompt).toStartWith("a stranger in grey and a tall woman in oilskins on a bench");
+  expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc"]);
 });
 
 test("the player's words are data, however they try to be instructions", async () => {
@@ -254,10 +254,9 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
 
   const payload = drawn.payloads.at(-1)!;
   // The PC wears nothing listed, so is drawn dressed rather than bare.
-  expect(payload.prompt).toBe("a tall woman in oilskins on a bench, by a short person with cropped hair, fully clothed in everyday clothes that suit them, and a boy with a kite");
+  expect(payload.prompt).toStartWith("a tall woman in oilskins on a bench, by a short person with cropped hair, fully clothed in everyday clothes that suit them, and a boy with a kite");
   expect(payload.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([
     ["npc", png(2)],
-    ["previous_scene", png(3)],
     ["pc", png(1)],
   ]);
 
@@ -265,8 +264,8 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   expect((await app.post(`/saves/${id}/gallery/redraw`, { kind: item.kind, ref: item.ref, prompt: "Redrawn" })).status).toBe(202);
   const after = await settled(id);
 
-  expect(drawn.payloads.at(-1)).toMatchObject({ prompt: "Redrawn", aspect_ratio: "16:9" });
-  expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["npc", "previous_scene", "pc"]);
+  expect(drawn.payloads.at(-1)).toMatchObject({ prompt: expect.stringMatching(/^Redrawn/), aspect_ratio: "16:9" });
+  expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["npc", "pc"]);
   expect(after.images.find(({ kind }) => kind === "requested")).toMatchObject({ prompt: "Redrawn", redraws: 1 });
   expect(await requestedOf(id)).toMatchObject({ images: [{ redraws: 1 }] });
   expect(await bytesOf(`/saves/${id}/requested-images/${item.ref}/image`)).toEqual(png(5));

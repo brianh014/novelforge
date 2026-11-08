@@ -285,15 +285,15 @@ function WorkflowGuide() {
           not a set person, and the slot changes as the cast does.
         </dd>
         <dt>
-          <code>{"{{previous_scene}}"}</code>, <code>{"{{pc}}"}</code>
+          <code>{"{{pc}}"}</code>
         </dt>
-        <dd>The previous Scene Image and the PC's portrait.</dd>
+        <dd>The PC's portrait.</dd>
         <dt>
           <code>{"{{reference_1}}"}</code>, <code>{"{{reference_2}}"}</code> and on
         </dt>
-        <dd>Every reference in order of priority: NPCs, then the previous Scene Image, then the PC.</dd>
+        <dd>Every reference in order of priority: NPCs, then the PC.</dd>
         <dt>
-          <code>{"{{has_npc_1}}"}</code>, <code>{"{{has_previous_scene}}"}</code>, <code>{"{{has_reference_1}}"}</code> and so
+          <code>{"{{has_npc_1}}"}</code>, <code>{"{{has_reference_1}}"}</code> and so
           on
         </dt>
         <dd>1 if that reference exists for this image, otherwise 0. Use one as an IPAdapter weight to turn its slot off.</dd>

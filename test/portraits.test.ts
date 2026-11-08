@@ -249,7 +249,7 @@ test("an unfinished Local setup makes no portrait calls, and the OpenRouter adap
   expect(images.payloads).toEqual([]);
 });
 
-test("a Scene Image gets the portraits of those marked in it, then the previous scene, then the PC, and their looks without names", async () => {
+test("a Scene Image gets the portraits of those marked in it, then the PC's, and their looks without names", async () => {
   const pictured = (visual_description: string, ...state_operations: object[]) =>
     JSON.stringify({ check: null, narration: "The tide rises.", state_operations, scene_changed: true, visual_description });
   play(
@@ -283,7 +283,6 @@ test("a Scene Image gets the portraits of those marked in it, then the previous 
   expect(second.reference_images).toEqual([
     { role: "npc", bytes: png(3), mediaType: "image/png" },
     { role: "npc", bytes: png(4), mediaType: "image/png" },
-    { role: "previous_scene", bytes: png(2), mediaType: "image/png" },
     { role: "pc", bytes: png(1), mediaType: "image/png" },
   ]);
   expect(second.prompt).toContain("Stooped, red scarf nods to Tall, in oilskins while");

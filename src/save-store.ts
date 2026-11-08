@@ -784,19 +784,6 @@ export function saveStore(savesDir: string) {
       return image.bytes;
     },
 
-    /** The latest image before `messageId`, to carry its background into the next one. A different place has no background to carry. */
-    previousSceneImage(id: string, messageId: number, location: string) {
-      using db = open(id);
-      const image = db
-        .query<{ bytes: Uint8Array; caption: string }, [number]>(
-          "SELECT bytes, caption FROM scene_images WHERE message_id < ? ORDER BY message_id DESC LIMIT 1",
-        )
-        .get(messageId);
-      if (image?.caption !== location) return undefined;
-      const mediaType = imageType(image.bytes);
-      return mediaType && { bytes: image.bytes, mediaType };
-    },
-
     /** Stores nothing if the Message has gone, so a generation can't outlive a Revert or a replaced response. */
     addSceneImage(id: string, messageId: number, caption: string, bytes: Uint8Array, prompt: string | null = null, pictured: Pictured = []) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");

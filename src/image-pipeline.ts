@@ -23,7 +23,7 @@ export type EarlyImage = { prompt: string; bytes?: Uint8Array<ArrayBuffer> };
  */
 type Work = { running?: Job & { controller: AbortController }; queue: Job[]; waiting?: Job };
 /** What one image of a moment is drawn from, with `description` as the prompt before its marks are expanded. */
-type Moment = Pick<Scene, "description" | "location" | "npcs" | "wearing">;
+type Moment = Pick<Scene, "description" | "npcs" | "wearing">;
 
 // Sent as the negative prompt, because a Scene Image must not show the player a Check's numbers or dice either.
 const AVOID = "text, captions, letters, numbers, dice";
@@ -112,8 +112,15 @@ const portraitPrompt = (looks: string, style: PromptStyle) =>
 
 type Role = ImagePayload["reference_images"][number]["role"];
 
-// A requested image follows its Message's own Scene Image, which may be the background to carry on from.
-const afterItsScene = (messageId: number) => messageId + 1;
+/**
+ * Says what the portraits are for, as an image model otherwise copies a portrait's clothing into the picture.
+ */
+export function withReferenceRoles(prompt: string, references: { role: Role }[]) {
+  const roles = new Set(references.map(({ role }) => role));
+  const portraits = roles.has("npc") || roles.has("pc") ? " The portraits show only each person's face and hair: dress and pose everyone as written here." : "";
+  if (!portraits) return prompt;
+  return `${prompt.trim().replace(/[^.!?]$/, "$&.")}${portraits}`;
+}
 
 export const coverPrompt = ({ title, theme, world, people = [] }: Cover) =>
   `The front cover of a novel, one striking image of its world and the people in it, not a moment from the story. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly: ${JSON.stringify(title)}
@@ -205,34 +212,32 @@ export function imagePipeline(
     return current.imagesEnabled && setUp;
   }
 
-  /** Identity comes first when a model takes few references. A portrait of someone not in the picture can get pasted into it. */
-  const references = (id: string, messageId: number, location: string, pictured: Pictured) => [
+  /**
+   * Identity comes first when a model takes few references. A portrait of someone not in the picture can get pasted into it.
+   * No earlier Scene Image goes in, as FLUX.2 copied its people, poses and clothing into the new one whatever the prompt said.
+   */
+  const references = (id: string, pictured: Pictured) => [
     ...pictured.flatMap((name) => (name === null ? [] : reference("npc", saves.portraitOf(id, name)))),
-    ...reference("previous_scene", saves.previousSceneImage(id, messageId, location)),
     ...(pictured.includes(null) ? reference("pc", saves.portraitOf(id, null)) : []),
   ];
 
-  const scenePayload = (id: string, messageId: number, prompt: string, location: string, pictured: Pictured): ImagePayload => ({
-    prompt,
-    negative_prompt: AVOID,
-    aspect_ratio: "16:9",
-    reference_images: references(id, messageId, location, pictured),
-    style_preset: "",
-  });
+  const scenePayload = (id: string, prompt: string, pictured: Pictured): ImagePayload => {
+    const reference_images = references(id, pictured);
+    return { prompt: withReferenceRoles(prompt, reference_images), negative_prompt: AVOID, aspect_ratio: "16:9", reference_images, style_preset: "" };
+  };
 
-  /** `before` is the Message whose earlier Scene Image, if any, can carry its background into this one. */
-  async function drawMoment(id: string, before: number, { description, location, npcs, wearing }: Moment, signal: AbortSignal) {
+  async function drawMoment(id: string, { description, npcs, wearing }: Moment, signal: AbortSignal) {
     const { pc } = saves.read(id);
     const hasReference = (person: string | null) => usesPortraits(settings.read()) && !!saves.portraitOf(id, person);
     const { prompt, pictured } = expandMarks(description, npcs, { name: pc.name, looks: pcLooks(pc, wearing) }, hasReference);
-    const bytes = await adapter(scenePayload(id, before, prompt, location, pictured), signal);
+    const bytes = await adapter(scenePayload(id, prompt, pictured), signal);
     // Counted before storing, as the player has paid for it whether or not its Message is still there.
     session++;
     return { prompt, pictured, bytes };
   }
 
   async function drawScene(id: string, messageId: number, scene: Scene, signal: AbortSignal) {
-    const { prompt, pictured, bytes } = await drawMoment(id, messageId, scene, signal);
+    const { prompt, pictured, bytes } = await drawMoment(id, scene, signal);
     saves.addSceneImage(id, messageId, scene.location, bytes, prompt, pictured);
     log.info("images", "Image drawn", about(id, { kind: "scene", messageId }));
   }
@@ -261,7 +266,7 @@ export function imagePipeline(
       const state = saves.snapshot(id, messageId);
       // An image from before this kept no record, and was drawn from the cast and the PC.
       const pictured = saves.pictured(id, { kind, ref }) ?? [...visibleNpcs(state).map(({ name }) => name), null];
-      return scenePayload(id, kind === "scene" ? messageId : afterItsScene(messageId), prompt, state.scene.location, pictured);
+      return scenePayload(id, prompt, pictured);
     }
     return kind === "cover" ? coverPayload(prompt, saves.portraitOf(id, null)) : portraitPayload(prompt);
   }
@@ -364,7 +369,7 @@ export function imagePipeline(
         try {
           const description = await write(signal);
           step = "drawing it";
-          const { prompt, pictured, bytes } = await drawMoment(id, afterItsScene(messageId), { ...moment, description }, signal);
+          const { prompt, pictured, bytes } = await drawMoment(id, { ...moment, description }, signal);
           saves.addRequestedImage(id, messageId, words, bytes, prompt, pictured);
           log.info("images", "Image drawn", about(id, { kind: "requested", messageId }));
         } catch (error) {

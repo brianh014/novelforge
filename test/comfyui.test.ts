@@ -162,7 +162,7 @@ test("the image key never reaches ComfyUI", async () => {
   expect(comfy.requests.every(({ authorization }) => authorization === null)).toBe(true);
 });
 
-test("the next SD scene uploads the previous Scene Image and uses it through img2img", async () => {
+test("the next SD scene in the same place draws afresh, uploading no earlier picture", async () => {
   const running = play(newScene("One"), newScene("Two"));
   await running.patch("/settings", sdSetup());
   const id = await running.createSave();
@@ -172,16 +172,13 @@ test("the next SD scene uploads the previous Scene Image and uses it through img
   await playTurn(id);
   await settled(id);
 
-  expect(comfy.jobs.uploads).toHaveLength(1);
-  const [upload] = comfy.jobs.uploads;
-  expect(upload).toMatchObject({ subfolder: "novelforge", type: "temp" });
-  expect(upload!.bytes).toEqual(new Uint8Array(PNG));
+  expect(comfy.jobs.uploads).toEqual([]);
   const graph = comfy.jobs.prompts.at(-1)!;
-  expect(nodes(graph, "LoadImage")[0]!.inputs.image).toBe(`novelforge/${upload!.name} [temp]`);
-  expect(nodes(graph, "EmptyLatentImage")).toEqual([]);
+  expect(nodes(graph, "LoadImage")).toEqual([]);
+  expect(nodes(graph, "EmptyLatentImage")).toHaveLength(1);
 });
 
-test("FLUX.2 sends the previous scene and the PC's portrait, each under its own name", async () => {
+test("FLUX.2 sends the PC's portrait and no earlier scene", async () => {
   const running = play(newScene("[Ash] on the quay"), newScene("[Ash] by the water"));
   await running.patch("/settings", flux2Setup());
   const created = await running.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "Tall" } });
@@ -196,10 +193,9 @@ test("FLUX.2 sends the previous scene and the PC's portrait, each under its own 
   await settled(id);
 
   const graph = comfy.jobs.prompts.at(-1)!;
-  expect(nodes(graph, "ReferenceLatent")).toHaveLength(2);
-  expect(new Set(nodes(graph, "LoadImage").map(({ inputs }) => inputs.image)).size).toBe(2);
-  expect(comfy.jobs.uploads.at(-2)!.bytes).toEqual(png(1));
+  expect(nodes(graph, "ReferenceLatent")).toHaveLength(1);
   expect(comfy.jobs.uploads.at(-1)!.bytes).toEqual(new Uint8Array(PNG));
+  expect(comfy.jobs.uploads.some(({ bytes }) => bytes.at(-1) === 1)).toBe(false);
   expect((await imagesOf(id)).images.map(({ caption }) => caption)).toEqual(["The street", "The street"]);
 });
 
@@ -396,16 +392,15 @@ test("Simple Mode ignores a stored workflow", async () => {
 
 test("references reach a workflow by role, with a blank in an empty slot", async () => {
   const workflow = graphWith({
-    "2": { class_type: "LoadImage", inputs: { image: "{{previous_scene}}" } },
+    "2": { class_type: "LoadImage", inputs: { image: "{{pc}}" } },
     "3": { class_type: "LoadImage", inputs: { image: "{{npc_1}}" } },
-    "4": { class_type: "Weight", inputs: { scene: "{{has_previous_scene}}", npc: "{{has_npc_1}}" } },
+    "4": { class_type: "Weight", inputs: { pc: "{{has_pc}}", npc: "{{has_npc_1}}" } },
     "5": { class_type: "PreviewImage", inputs: {} },
   });
-  const running = play(newScene("One"), newScene("Two"));
+  const running = play(newScene("[Ash] on the quay"));
   await running.patch("/settings", advancedSetup(workflow));
-  const id = await running.createSave();
-  comfy.control.image = png(1);
-  await playTurn(id);
+  const created = await running.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "Tall" } });
+  const { id } = (await created.json()) as { id: string };
   await settled(id);
   comfy.jobs.uploads.splice(0);
 
@@ -413,10 +408,10 @@ test("references reach a workflow by role, with a blank in an empty slot", async
   await settled(id);
 
   const graph = comfy.jobs.prompts.at(-1)!;
-  expect(graph["4"]!.inputs).toEqual({ scene: 1, npc: 0 });
-  const previous = comfy.jobs.uploads.find(({ bytes }) => bytes.at(-1) === 1)!;
-  const blank = comfy.jobs.uploads.find((upload) => upload !== previous)!;
-  expect(graph["2"]!.inputs.image).toBe(`novelforge/${previous.name} [temp]`);
+  expect(graph["4"]!.inputs).toEqual({ pc: 1, npc: 0 });
+  const portrait = comfy.jobs.uploads.find(({ bytes }) => bytes.length === PNG.length && bytes.every((byte, index) => byte === PNG[index]))!;
+  const blank = comfy.jobs.uploads.find((upload) => upload !== portrait)!;
+  expect(graph["2"]!.inputs.image).toBe(`novelforge/${portrait.name} [temp]`);
   expect(graph["3"]!.inputs.image).toBe(`novelforge/${blank.name} [temp]`);
   expect(blank).toMatchObject({ subfolder: "novelforge", type: "temp" });
 });

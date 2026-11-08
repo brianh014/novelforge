@@ -105,12 +105,12 @@ test("redrawing a Scene Image replaces only it, with its shape and references, d
   const after = await settled(id);
 
   const payload = drawn.payloads.at(-1)!;
-  expect(payload.prompt).toBe("A sunny street");
+  expect(payload.prompt).toStartWith("A sunny street");
   expect(payload.aspect_ratio).toBe("16:9");
   expect(payload.negative_prompt).toContain("dice");
   // A Redraw draws the prompt exactly as the player left it, as it holds its own Art Style.
   expect(payload.style_preset).toBe("");
-  expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc", "previous_scene", "pc"]);
+  expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc", "pc"]);
   expect(find(after, "scene")).toMatchObject({ prompt: "A sunny street", redraws: 1 });
   expect(await bytesOf(`/saves/${id}/messages/${newest.ref}/image`)).toEqual(png(5));
   expect(await app.get(`/saves/${id}/journal`).then((r) => r.text())).toBe(state);

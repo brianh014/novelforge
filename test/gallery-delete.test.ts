@@ -64,7 +64,6 @@ const remove = (id: string, { kind, ref }: { kind: unknown; ref: unknown }) => a
 const redraw = (id: string, { kind, ref }: Item, prompt: string) => app.post(`/saves/${id}/gallery/redraw`, { kind, ref, prompt });
 const labels = (gallery: Gallery) => gallery.images.map(({ label }) => label);
 const find = (gallery: Gallery, label: string) => gallery.images.find((item) => item.label === label)!;
-const previousScene = (payload: (typeof drawn.payloads)[number]) => payload.reference_images.find(({ role }) => role === "previous_scene")?.bytes;
 
 test("the Gallery goes Cover, the PC, NPCs newest first, then Scenes newest first", async () => {
   await play(
@@ -198,7 +197,7 @@ test("an image being Redrawn can't be deleted, running or queued, and can be onc
   expect(labels(await galleryOf(id))).toEqual(["Ash"]);
 });
 
-test("a deleted image can't be Redrawn, and a Redraw of a later one uses an earlier reference", async () => {
+test("a deleted image can't be Redrawn, and a later one still can", async () => {
   await play(
     [turn("One", scene("The ferry")), turn("Two", scene("The ferry")), turn("Three", scene("The ferry"))],
     png(1),
@@ -216,61 +215,9 @@ test("a deleted image can't be Redrawn, and a Redraw of a later one uses an earl
   await remove(id, middle!);
 
   expect((await redraw(id, middle!, "Gone")).status).toBe(404);
-  await redraw(id, latest!, "Again");
+  expect((await redraw(id, latest!, "Again")).status).toBe(202);
   await settled(id);
-  expect(previousScene(drawn.payloads.at(-1)!)).toEqual(png(2));
-});
-
-test("the next Scene Image in a place uses an earlier one, or none", async () => {
-  await play(
-    [turn("One", scene("The ferry")), turn("Two", scene("The ferry")), turn("Three", scene("The ferry")), turn("Four", scene("The ferry"))],
-    png(1),
-    png(2),
-    png(3),
-    png(4),
-    png(5),
-  );
-  const id = await newSave();
-  await playTurn(id);
-  const { images } = await playTurn(id);
-  const [second, first] = images.filter(({ kind }) => kind === "scene");
-
-  await remove(id, second!);
-  await playTurn(id);
-  expect(previousScene(drawn.payloads.at(-1)!)).toEqual(png(2));
-
-  const [third] = (await galleryOf(id)).images.filter(({ kind }) => kind === "scene");
-  await remove(id, third!);
-  await remove(id, first!);
-  await playTurn(id);
-  expect(previousScene(drawn.payloads.at(-1)!)).toBeUndefined();
-});
-
-test("a Scene Image waiting to draw doesn't use one deleted while it waited", async () => {
-  let finish = (_: Uint8Array) => {};
-  const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
-  await play(
-    [turn("One", scene("The ferry")), turn("Two", scene("The ferry")), turn("Three", scene("The ferry"))],
-    png(1),
-    png(2),
-    png(3),
-    slow,
-    png(5),
-  );
-  const id = await newSave();
-  await playTurn(id);
-  const gallery = await playTurn(id);
-  const [second, first] = gallery.images.filter(({ kind }) => kind === "scene");
-
-  // Holds the queue, so the Turn's Scene Image is still to draw.
-  await redraw(id, first!, "Holding");
-  await send(id);
-  await remove(id, second!);
-  finish(png(4));
-  await settled(id);
-
-  expect(drawn.payloads.at(-1)!.prompt).toBe("Three");
-  expect(previousScene(drawn.payloads.at(-1)!)).toEqual(png(4));
+  expect(drawn.payloads.at(-1)!.prompt).toStartWith("Again");
 });
 
 test("a Scene Image being drawn lands even if the one it used is deleted", async () => {
@@ -289,7 +236,7 @@ test("a Scene Image being drawn lands even if the one it used is deleted", async
   expect(await app.get(`/saves/${id}/messages/4/image`).then((r) => r.bytes())).toEqual(png(3));
 });
 
-test("a Requested Image in the queue survives its Message's Scene Image being deleted, and doesn't use it", async () => {
+test("a Requested Image in the queue survives its Message's Scene Image being deleted", async () => {
   let finish = (_: Uint8Array) => {};
   const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
   await play([turn("One", scene("The ferry")), written("One")], png(1), png(2), slow, png(4));
@@ -304,7 +251,6 @@ test("a Requested Image in the queue survives its Message's Scene Image being de
   finish(png(3));
 
   expect(labels(await settled(id))).toEqual(["Ash", "a gull"]);
-  expect(previousScene(drawn.payloads.at(-1)!)).toBeUndefined();
 });
 
 test("a Revert doesn't bring a deleted image back", async () => {
