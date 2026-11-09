@@ -1266,6 +1266,12 @@ a.action {
   justify-content: flex-start;
 }
 
+/* Holds its own floated buttons, so they never sit beside the response below. */
+.message.player {
+  display: flow-root;
+  margin-top: 16px;
+}
+
 .message.player p {
   padding-left: 0.8em;
   border-left: 2px solid var(--line);
@@ -1524,12 +1530,12 @@ a.action {
 }
 
 @media (hover: hover) {
-  .message .revert {
+  .message .actions button {
     opacity: 0;
   }
 
-  .message:hover .revert,
-  .message .revert:focus-visible {
+  .message:hover .actions button,
+  .message .actions button:focus-visible {
     opacity: 1;
   }
 }
