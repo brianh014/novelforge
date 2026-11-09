@@ -152,6 +152,7 @@ export async function playTurn(
     memoryStart,
     windowMessages: settings.read().textRecentMessages,
     modelInstructions: settings.read().modelInstructions,
+    directions: saves.directions(id, basedOn),
     input,
     responseSchema: JSON.stringify(responseSchema),
     promptStyle: images.ready() ? promptStyle(settings.read()) : null,
@@ -203,6 +204,8 @@ export async function replaceResponse(
     memoryStart,
     windowMessages: settings.read().textRecentMessages,
     modelInstructions: settings.read().modelInstructions,
+    // The response being replaced keeps its own, which a Regenerate carries over.
+    directions: saves.directions(id, messageId),
     input,
     responseSchema: JSON.stringify(responseSchema),
     promptStyle: images.ready() ? promptStyle(settings.read()) : null,
@@ -216,7 +219,7 @@ export async function replaceResponse(
     pcName: saves.read(id).pc.name,
     check,
     memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, settings.read().textRecentMessages, signal),
-    commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance),
+    commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance, feedback?.trim() || undefined),
     committed: (replacement, scene) => {
       images.forget(id, messageId - 1, kind);
       // shortcut: a Narrator that writes no prompt gets the old one, which shows the old moment and draws with no portraits. Retry the reply if real models do this.

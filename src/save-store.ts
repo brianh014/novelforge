@@ -314,8 +314,13 @@ const toVersion18 = (db: Database) => {
   if (!hasColumn(db, "save", "theme")) db.run("ALTER TABLE save ADD COLUMN theme TEXT NOT NULL DEFAULT ''");
 };
 
+/** A Rewrite's direction, kept on the response it made so that later Turns still follow it. */
+const toVersion19 = (db: Database) => {
+  if (!hasColumn(db, "messages", "direction")) db.run("ALTER TABLE messages ADD COLUMN direction TEXT");
+};
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16, toVersion17, toVersion18];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16, toVersion17, toVersion18, toVersion19];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -359,6 +364,8 @@ const rowId = z.number().int().nonnegative();
 
 // Far past any model's output at the sizes asked for, but a Save from outside can claim anything.
 const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
+/** How many responses a Rewrite's direction lasts, counting the one it made. */
+export const RESPONSES_KEEPING_DIRECTIONS = 5;
 
 const startsWith = (bytes: Uint8Array, signature: number[], offset = 0) =>
   signature.every((byte, index) => bytes[offset + index] === byte);
@@ -404,6 +411,7 @@ function assertValidSave(db: Database) {
     text: z.string(),
     hidden_check: jsonText(StoredCheck).nullable(),
     edits: jsonText(z.array(WorldEdit)).nullable(),
+    direction: z.string().nullable(),
     created_at: z.iso.datetime().nullable(),
   });
   const content = new Map(
@@ -484,8 +492,8 @@ export type Message = { id: number; role: "player" | "narrator"; text: string };
 /** The latest Turn, if its Narrator Message is still `messageId`, so a page behind the story can't replace what it never showed. */
 function latestTurn(db: Database, messageId: number) {
   const [narrator, player] = db
-    .query<Message & { hidden_check: string | null; edits: string | null }, []>(
-      "SELECT id, role, text, hidden_check, edits FROM messages ORDER BY id DESC LIMIT 2",
+    .query<Message & { hidden_check: string | null; edits: string | null; direction: string | null }, []>(
+      "SELECT id, role, text, hidden_check, edits, direction FROM messages ORDER BY id DESC LIMIT 2",
     )
     .all();
   // After a Revert to a player Message, the latest Message has no response to replace.
@@ -714,6 +722,18 @@ export function saveStore(savesDir: string) {
     latestMessageId(id: string) {
       using db = open(id);
       return latestMessage(db);
+    },
+
+    /** Rewrite directions on the latest responses up to `upTo`, oldest first, as they still hold for a while. */
+    directions(id: string, upTo: number) {
+      using db = open(id);
+      return db
+        .query<{ direction: string }, [number, number]>(
+          `SELECT direction FROM (SELECT id, direction FROM messages WHERE role = 'narrator' AND id <= ? ORDER BY id DESC LIMIT ?)
+           WHERE direction IS NOT NULL ORDER BY id`,
+        )
+        .all(upTo, RESPONSES_KEEPING_DIRECTIONS)
+        .map(({ direction }) => direction);
     },
 
     /** Without the bytes, so a page can list every image cheaply. */
@@ -1057,16 +1077,17 @@ export function saveStore(savesDir: string) {
       })();
     },
 
-    replaceTurn(id: string, messageId: number, narration: string, advance: (state: State) => State) {
+    /** A Rewrite's `direction` replaces the old response's, and a Regenerate keeps it. */
+    replaceTurn(id: string, messageId: number, narration: string, advance: (state: State) => State, direction?: string) {
       using db = open(id);
       return db.transaction(() => {
         const { narrator, player, state, edits } = latestTurn(db, messageId);
         deleteAfter(db, player.id);
         const replacement = db
-          .query<Message, [string, string | null, string | null]>(
-            `INSERT INTO messages (role, text, hidden_check, edits, created_at) VALUES ('narrator', ?, ?, ?, ${NOW}) RETURNING id, role, text`,
+          .query<Message, [string, string | null, string | null, string | null]>(
+            `INSERT INTO messages (role, text, hidden_check, edits, direction, created_at) VALUES ('narrator', ?, ?, ?, ?, ${NOW}) RETURNING id, role, text`,
           )
-          .get(narration, narrator.hidden_check, edits.length > 0 ? JSON.stringify(edits) : null)!;
+          .get(narration, narrator.hidden_check, edits.length > 0 ? JSON.stringify(edits) : null, direction ?? narrator.direction)!;
         writeSnapshot(db, replacement.id, advance(state));
         return [replacement];
       })();

@@ -170,7 +170,8 @@ test("no one echoes the PC, re-argues a case the PC turned down, or ends most re
   await playTurn(id);
 
   expect(lastSystem()).toContain("no one opens by echoing what the PC just said");
-  expect(lastSystem()).toContain("that person doesn't make it again unless something new gives them reason");
+  expect(lastSystem()).toContain("that person doesn't raise it again unless something new gives them reason");
+  expect(lastSystem()).toContain("once the PC has said there's time, no one asks how long is left or counts it down");
   expect(lastSystem()).toContain("they don't all argue for the same view");
   expect(lastSystem()).toContain("few replies should end on a choice between two things");
   expect(prompts.at(-1)!.map(({ content }) => content).join("\n")).toContain("[Voice in the light] for someone not yet named");

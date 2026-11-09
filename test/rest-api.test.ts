@@ -1690,6 +1690,20 @@ const journal = (app: ReturnType<typeof startApp>, id: string) =>
 const inventory = (app: ReturnType<typeof startApp>, id: string) =>
   app.get(`/saves/${id}/inventory`).then((r) => r.json());
 
+test("a Rewrite's direction holds for the next responses, survives a Regenerate, then drops", async () => {
+  const { app, prompts } = play(...Array.from({ length: 9 }, (_, n) => narration(`Reply ${n}.`)));
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I talk with Seren." });
+  await rewrite(app, id, 2, "It isn't time to leave yet.");
+  await regenerate(app, id, 3);
+  for (let turn = 0; turn < 6; turn++) await app.post(`/saves/${id}/turns`, { input: "I ask another question." });
+
+  const directed = prompts.map((prompt) => JSON.stringify(prompt).includes("They still hold"));
+  // The first Turn came before it; the Rewrite has it as feedback instead; the response it made and the four after it carry it.
+  expect(directed).toEqual([false, false, true, true, true, true, true, true, false]);
+  expect(JSON.stringify(prompts[7])).toContain("It isn't time to leave yet.");
+});
+
 test("Regenerate replaces the latest Narrator response and its state, leaving nothing stale", async () => {
   const { app, prompts } = play(
     narration("You find a lantern.", { op: "add_item", slot: "carrying", item: "lantern" }, { op: "set_summary", summary: "Found a lantern." }, { op: "add_known_fact", fact: "Lanterns float." }),

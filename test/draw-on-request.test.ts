@@ -531,5 +531,5 @@ test("an older Save opens with the new table, empty, and a request works on it",
 
   expect((await requestedOf(id)).images).toHaveLength(1);
   using db = new Database(path);
-  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 18 });
+  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 19 });
 });
