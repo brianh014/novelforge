@@ -1012,6 +1012,16 @@ function InstallSettings({
       </label>
       <p className="muted">Pictures that arrive while you play open by themselves. After a load or refresh, every picture starts folded.</p>
       <label>
+        Extra Image Instructions
+        <textarea
+          rows={4}
+          placeholder="Keep faces in soft light; favour wide shots."
+          value={draft.imageInstructions}
+          onChange={(e) => set({ imageInstructions: e.target.value })}
+        />
+      </label>
+      <p className="muted">Your own guidance for every picture's prompt, for every Save. Extra Narrator Instructions don't reach pictures.</p>
+      <label>
         Image provider
         <select
           value={draft.imageProvider}

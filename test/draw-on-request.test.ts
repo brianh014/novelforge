@@ -544,3 +544,19 @@ test("an older Save opens with the new table, empty, and a request works on it",
   using db = new Database(path);
   expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 19 });
 });
+
+test("Image Instructions reach a Scene Image's and a request's prompt, and Model Instructions only the story", async () => {
+  await play([turn("A wet street", scene("The ferry")), written_("A woman on a bench")], png(1), png(2), png(3));
+  await app.patch("/settings", { modelInstructions: "model-words", imageInstructions: "image-words" });
+  const id = await newSave();
+  await playTurn(id);
+
+  const narrator = written.prompts[0]!.map(({ content }) => content).join("\n");
+  expect(narrator).toContain("Image Instructions, which are the player's guidance for the picture, to follow wherever they don't break the rules above: image-words");
+  expect(narrator).toContain("The Model Instructions below guide the story only, never visual_description.");
+  expect(narrator).toContain("model-words");
+
+  await asked(id, "the woman");
+  expect(callText()).toContain("image-words");
+  expect(callText()).not.toContain("model-words");
+});

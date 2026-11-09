@@ -80,3 +80,15 @@ test("the server draws a form's portrait from the written prompt, and shows that
   expect(details.prompt).toBe("A tall woman in an oilskin coat, facing the viewer.");
   expect(script.prompts[0]![1]!.content).not.toContain("Ash");
 });
+
+test("a Cover or portrait follows the Image Instructions, and never the Model Instructions", async () => {
+  const script = scriptedTextProvider(text("A tall woman in soft light."));
+  const settings = settingsStore(join(folder.path, "settings.json"));
+  settings.update({ modelInstructions: "model-words", imageInstructions: "image-words" });
+
+  await writePicturePrompt({ textProvider: script.textProvider, settings }, portrait, "prose", "the template", new AbortController().signal);
+
+  const sent = JSON.stringify(script.prompts[0]);
+  expect(sent).toContain("image-words");
+  expect(sent).not.toContain("model-words");
+});

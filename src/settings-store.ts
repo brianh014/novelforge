@@ -31,6 +31,8 @@ export const SettingsUpdate = z
     textHost: z.string(),
     textHostFallback: z.boolean(),
     modelInstructions: z.string(),
+    // Reach only image prompts, as Model Instructions reach only story text.
+    imageInstructions: z.string(),
     // Limits on one reply, so a model that never stops can't hang a Turn or run up a bill. The provider stops billing at the token limit.
     textMaxTokens: z.number().int().min(1000).max(200_000),
     // Counted from the first byte, as loading a model can take minutes.
@@ -87,6 +89,7 @@ const defaults = {
   textHost: "",
   textHostFallback: true,
   modelInstructions: "",
+  imageInstructions: "",
   // Over twice the longest real reply, reasoning included, so only a runaway reaches it.
   textMaxTokens: 16_000,
   // The slowest real reply so far took five.

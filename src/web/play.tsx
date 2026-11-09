@@ -713,8 +713,8 @@ export function Play({ id }: { id: string }) {
               {told.map((message) => (
                 <div key={message.id} className={`message ${message.role}`}>
                   {messageBeats(message).map(line)}
-                  {inlineImages(message)}
                   {controls(message)}
+                  {inlineImages(message)}
                 </div>
               ))}
               {turn?.input && !turn.replaces && (

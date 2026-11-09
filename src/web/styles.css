@@ -1101,8 +1101,10 @@ a.action {
   }
 }
 
+/* Holds its own floated buttons, so they never sit beside the Message below, and every gap between Messages is the same. */
 .message {
   margin-bottom: 8px;
+  display: flow-root;
 }
 
 .message p,
@@ -1264,12 +1266,6 @@ a.action {
 
 .stage-box .row {
   justify-content: flex-start;
-}
-
-/* Holds its own floated buttons, so they never sit beside the response below. */
-.message.player {
-  display: flow-root;
-  margin-top: 16px;
 }
 
 .message.player p {
@@ -1444,11 +1440,16 @@ a.action {
   overflow-wrap: anywhere;
 }
 
-/* Floated, so these never add a row of space between Messages, and appearing on hover moves no text. */
+/* Floated, so they sit beside the last line when it leaves room, and appearing on hover moves no text. */
 .message .actions {
   float: right;
   margin-top: 0;
   gap: 0;
+}
+
+/* Pictures start under the buttons, not beside them. */
+.message .actions ~ .inline-image {
+  clear: right;
 }
 
 .story > div::after {

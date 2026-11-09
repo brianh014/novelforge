@@ -152,6 +152,7 @@ export async function playTurn(
     memoryStart,
     windowMessages: settings.read().textRecentMessages,
     modelInstructions: settings.read().modelInstructions,
+    imageInstructions: settings.read().imageInstructions,
     directions: saves.directions(id, basedOn),
     input,
     responseSchema: JSON.stringify(responseSchema),
@@ -204,6 +205,7 @@ export async function replaceResponse(
     memoryStart,
     windowMessages: settings.read().textRecentMessages,
     modelInstructions: settings.read().modelInstructions,
+    imageInstructions: settings.read().imageInstructions,
     // The response being replaced keeps its own, which a Regenerate carries over.
     directions: saves.directions(id, messageId),
     input,
@@ -250,6 +252,7 @@ export async function editResponse(
     memoryStart,
     windowMessages: settings.read().textRecentMessages,
     modelInstructions: settings.read().modelInstructions,
+    imageInstructions: settings.read().imageInstructions,
     input,
     responseSchema: JSON.stringify(responseSchema),
     // No picture is drawn, so the Narrator needn't write a prompt for one.
