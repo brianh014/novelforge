@@ -788,7 +788,12 @@ export function Play({ id }: { id: string }) {
       {/* An Edit shows its words at once, so this is all that says the Narrator is still at work. */}
       {turn?.edit && <p role="status" className="waiting">The Narrator is updating the story…</p>}
       {/* Pending covers every picture on the way, Scene Images and portraits too, and only requested ones are counted. */}
-      {(images.pending || requested.drawing > 0) && <p role="status" className="waiting">Drawing {plural(Math.max(requested.drawing, 1), "picture")}…</p>}
+      {(images.pending || requested.drawing > 0) && (
+        <p role="status" className="waiting">
+          Drawing {DRAWING[images.drawing ?? ""] ?? "a picture"}
+          {(images.more ?? 0) > 0 && `, then ${plural(images.more!, "more picture")}`}…
+        </p>
+      )}
       {replaceable && rewriting === replaceable.id && (
         <form className="ask" onSubmit={sendFeedback}>
           <label>
@@ -1025,6 +1030,17 @@ function StageBox(props: {
     </div>
   );
 }
+
+/** What the story says is being drawn, by the kind of job drawing it. */
+const DRAWING: Record<string, string> = {
+  scene: "the scene",
+  portrait: "a portrait",
+  requested: "the picture you asked for",
+  "scene redraw": "a scene again",
+  "requested redraw": "a picture again",
+  "portrait redraw": "a portrait again",
+  "cover redraw": "the Cover again",
+};
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 

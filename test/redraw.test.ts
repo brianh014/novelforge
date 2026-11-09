@@ -417,3 +417,58 @@ test("regenerating a world keeps a cover's edited prompt", async () => {
 
   expect((await coverOf(world)).prompt).toBe("A lighthouse");
 });
+
+const looksAgain = (name: string) =>
+  JSON.stringify({ check: null, narration: "The tide rises.", state_operations: [{ op: "update_npc", name, appearance: "Tall, soaked, a fresh scar across one cheek" }], scene_changed: false, visual_description: "" });
+
+test("with Update portraits on, a Turn that changes someone's looks draws their portrait again, keeping the face", async () => {
+  await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), looksAgain("Hesper")], png(1), png(2), png(3), png(4));
+  await app.patch("/settings", { updatePortraits: true });
+  const id = await newSave();
+  const before = (await playTurn(id)).images.find(({ label }) => label === "Hesper")!;
+
+  const after = (await playTurn(id)).images.find(({ label }) => label === "Hesper")!;
+
+  expect(after.redraws).toBe(before.redraws + 1);
+  expect(drawn.payloads.at(-1)!.prompt).toContain("a fresh scar across one cheek");
+  expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["npc"]);
+});
+
+test("Update portraits is off by default, and so is anything drawn for new looks", async () => {
+  await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), looksAgain("Hesper")], png(1), png(2), png(3));
+  const id = await newSave();
+  await playTurn(id);
+  const drawnBefore = drawn.payloads.length;
+
+  const after = (await playTurn(id)).images.find(({ label }) => label === "Hesper")!;
+
+  expect(after.redraws).toBe(0);
+  expect(drawn.payloads).toHaveLength(drawnBefore);
+});
+
+test("with Draw scene pictures off, a Turn draws portraits but no Scene Image", async () => {
+  await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], png(1), png(2), png(3));
+  await app.patch("/settings", { drawScenes: false });
+  const id = await newSave();
+
+  const gallery = await playTurn(id);
+
+  expect(gallery.images.map(({ kind }) => kind).toSorted()).toEqual(["portrait", "portrait"]);
+  expect(drawn.payloads.every(({ aspect_ratio }) => aspect_ratio === "1:1")).toBe(true);
+});
+
+test("while pictures draw, the story is told what kind is drawing and how many wait, but never whose", async () => {
+  let finish = (_: Uint8Array) => {};
+  const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
+  await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], slow, png(2), png(3));
+  const id = await newSave();
+  await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+
+  const drawing = await app.get(`/saves/${id}/images`).then((r) => r.json());
+
+  // The PC's portrait, then a check for it on the move that draws nothing as it exists, Hesper's portrait and the scene.
+  expect(drawing).toMatchObject({ pending: true, drawing: "portrait", more: 3 });
+  expect(JSON.stringify(drawing)).not.toContain("Hesper");
+  finish(png(1));
+  expect(await settled(id)).not.toHaveProperty("drawing");
+});

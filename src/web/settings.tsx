@@ -1011,6 +1011,16 @@ function InstallSettings({
         Open new pictures in the story
       </label>
       <p className="muted">Pictures that arrive while you play open by themselves. After a load or refresh, every picture starts folded.</p>
+      <label className="toggle">
+        <input type="checkbox" checked={draft.drawScenes} onChange={(e) => set({ drawScenes: e.target.checked })} />
+        Draw scene pictures
+      </label>
+      <p className="muted">A picture of the scene as the story moves. Off, only the pictures you ask for and portraits are drawn.</p>
+      <label className="toggle">
+        <input type="checkbox" checked={draft.updatePortraits} onChange={(e) => set({ updatePortraits: e.target.checked })} />
+        Update portraits as the story goes
+      </label>
+      <p className="muted">When the story changes how someone looks, or what your character wears, their portrait is drawn again, keeping their face. Each one is a new picture, which may cost money, and it replaces a portrait you uploaded.</p>
       <label>
         Extra Image Instructions
         <textarea

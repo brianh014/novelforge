@@ -26,7 +26,8 @@ export type Chapter = { title: string; lastMessage: number | null };
 /** A null `npc` is the PC. */
 export type Portrait = ReturnType<SaveStore["portraits"]>[number];
 export type SceneImageInfo = ReturnType<SaveStore["sceneImages"]>[number];
-export type SceneImages = { images: SceneImageInfo[]; pending: boolean; session: number };
+/** `drawing` is the kind of picture drawing now and `more` how many wait after it, both only while `pending`. */
+export type SceneImages = { images: SceneImageInfo[]; pending: boolean; session: number; drawing?: string; more?: number };
 export type RequestedImage = ReturnType<SaveStore["requestedImages"]>[number];
 /** `drawing` counts those still on the way. */
 export type RequestedImages = { images: RequestedImage[]; drawing: number };

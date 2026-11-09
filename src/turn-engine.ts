@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resolver";
-import { type ImagePipeline, movedScene, portraitsDue, type Scene } from "./image-pipeline";
+import { type ImagePipeline, movedScene, portraitsDue, restyledBy, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
 import { withArtStyleFor } from "./web/art-styles";
 import { log } from "./logger";
@@ -329,6 +329,7 @@ async function narrate(
       let npcs: Scene["npcs"] = [];
       let wearing: Scene["wearing"] = [];
       let portraits: Scene["portraits"] = [];
+      let restyled: Scene["restyled"] = [];
       let repeated = 0;
       let ignored: Refusal[] = [];
       const messages = commit(narration, check, (state) => {
@@ -347,6 +348,7 @@ async function narrate(
         npcs = next.npcs;
         wearing = next.inventory.wearing;
         portraits = portraitsDue(state, next);
+        restyled = restyledBy(state, next);
         return next;
       });
       committed(messages.at(-1)!.id, {
@@ -357,6 +359,7 @@ async function narrate(
         npcs,
         wearing,
         portraits,
+        restyled,
       });
       if (repeated > 0) log.info("turn", "Repeats ignored", { count: repeated });
       if (ignored.length > 0) log.warning("turn", "Operations ignored", { reason: refusalText(ignored) });

@@ -47,6 +47,10 @@ export const SettingsUpdate = z
     imagesEnabled: z.boolean(),
     // Only pictures drawn this session open; a load or refresh shows every picture folded.
     openNewImages: z.boolean(),
+    // Off, a Turn draws no Scene Image of its own. Pictures the player asks for, and portraits, still come.
+    drawScenes: z.boolean(),
+    // On, a portrait is drawn again, keeping its face, whenever a Turn changes how that person looks.
+    updatePortraits: z.boolean(),
     imageResolution: z.enum(["480p", "720p", "1080p", "4k"]),
     comfyUrl: z.url({ protocol: /^https?$/ }),
     comfyFamily: Family,
@@ -101,6 +105,8 @@ const defaults = {
   imageApiKey: "",
   imagesEnabled: true,
   openNewImages: true,
+  drawScenes: true,
+  updatePortraits: false,
   comfyUrl: "http://127.0.0.1:8188",
   comfyFamily: "sd",
   comfySdBase: "sdxl",

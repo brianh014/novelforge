@@ -10,7 +10,8 @@ import type { PictureAsk } from "./world-creation";
 export type ImagePipeline = ReturnType<typeof imagePipeline>;
 
 type Npc = State["npcs"][number];
-export type Scene = { changed: boolean; moved: boolean; description: string; location: string; npcs: Npc[]; wearing: string[]; portraits: Npc[] };
+/** `restyled` is everyone whose looks the Turn changed, with null for the PC, whose portrait may be updated to match. */
+export type Scene = { changed: boolean; moved: boolean; description: string; location: string; npcs: Npc[]; wearing: string[]; portraits: Npc[]; restyled?: (Npc | null)[] };
 /** A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. */
 type Job = { kind: string; messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string; scene?: boolean };
 /** `world` is what the player can read of it: the World Overview, or the World Brief before there is one. */
@@ -50,6 +51,13 @@ export function portraitsDue(before: State, after: State) {
     ? [...scene.visibleCast, ...pcKnown.npcs]
     : pcKnown.npcs.filter((name) => !before.pcKnown.npcs.includes(name));
   return [...new Set(due)].flatMap((name) => after.npcs.filter((npc) => npc.name === name));
+}
+
+/** Everyone whose looks a Turn changed: an NPC given new looks, and the PC, as null, when what they wear changed. */
+export function restyledBy(before: State, after: State): (Npc | null)[] {
+  const npcs = after.npcs.filter(({ name, appearance }) => before.npcs.some((npc) => npc.name === name && npc.appearance !== appearance));
+  const pc = JSON.stringify(before.inventory.wearing) !== JSON.stringify(after.inventory.wearing);
+  return [...(pc ? [null] : []), ...npcs];
 }
 
 /**
@@ -345,10 +353,25 @@ export function imagePipeline(
     void drain(id, jobs);
   }
 
+  /**
+   * Draws someone's portrait again as they look now, keeping their face, as the Gallery's Update does. Someone with no
+   * portrait yet is left to their first. One the player uploaded is replaced too, as they turned this on.
+   */
+  function updatePortrait(id: string, npc: Npc | null, wearing: string[]) {
+    const portrait = saves.portraits(id).find((candidate) => candidate.npc === (npc?.name ?? null));
+    if (!portrait) return;
+    const { pc, theme, worldBrief, artStyle } = saves.read(id);
+    const looks = npc ? npc.appearance.trim() : pc.physicalTraits?.trim() && pcLooks(pc, wearing);
+    if (!looks) return;
+    if (pipeline.redraw(id, { kind: "portrait", ref: portrait.id }, portrait.messageId, writer({ kind: "portrait", looks, theme, world: worldBrief, artStyle }))) {
+      log.info("images", "Portrait updated to new looks", about(id, { kind: "portrait", messageId: portrait.messageId }));
+    }
+  }
+
   const portraitJob = (id: string, messageId: number, npc?: Npc, early?: Promise<EarlyImage>): Job =>
     queued(id, { kind: "portrait", messageId, draw: (signal) => drawPortrait(id, messageId, npc, signal, early) });
 
-  return {
+  const pipeline = {
     ready: () => Boolean(ready()),
 
     /**
@@ -448,14 +471,17 @@ export function imagePipeline(
      * portrait, so a person missed while images were off, or by a failed generation, is drawn when the Scene next moves.
      */
     sceneChanged(id: string, messageId: number, scene: Scene) {
+      const { drawScenes, updatePortraits } = settings.read();
       enqueue(id, (jobs) => {
         if (scene.moved) jobs.queue.push(portraitJob(id, OPENING_SNAPSHOT));
         jobs.queue.push(...scene.portraits.map((npc) => portraitJob(id, messageId, npc)));
-        if (scene.changed && scene.description) {
+        if (drawScenes && scene.changed && scene.description) {
           if (jobs.waiting) dropped(id, jobs.waiting, "a newer scene");
           jobs.waiting = queued(id, { kind: "scene", messageId, scene: true, draw: (signal) => drawScene(id, messageId, scene, signal) });
         }
       });
+      // Only when images are on, as a Redraw draws whatever the Settings say, and nobody asked for this one.
+      if (updatePortraits && ready()) for (const person of scene.restyled ?? []) updatePortrait(id, person, scene.wearing);
     },
 
     /** Whether `messageId`'s Scene Image is still on the way. */
@@ -478,6 +504,17 @@ export function imagePipeline(
       if (jobs.running && jobs.running.messageId > messageId) jobs.running.controller.abort();
     },
 
-    status: (id: string) => ({ pending: work.has(id), session }),
+    /**
+     * While anything is on the way, `drawing` is the kind of job drawing now, or next, and `more` how many wait after it.
+     * Only kinds, never whose portrait, as one may be of someone the PC doesn't know yet.
+     * shortcut: `more` counts a portrait job for someone who already has one, which finishes at once, check first if the count misleads.
+     */
+    status: (id: string) => {
+      const jobs = work.get(id);
+      if (!jobs) return { pending: false, session };
+      const all = [jobs.running, ...jobs.queue, jobs.waiting].filter((job) => job !== undefined);
+      return { pending: true, session, drawing: all[0]?.kind ?? "", more: Math.max(all.length - 1, 0) };
+    },
   };
+  return pipeline;
 }
