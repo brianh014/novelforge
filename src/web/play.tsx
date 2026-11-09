@@ -638,10 +638,10 @@ export function Play({ id }: { id: string }) {
               {save.title && <p className="muted">{pc}</p>}
               {journal?.storyTime && <p className="muted">{journal.storyTime.date}, {journal.storyTime.timeOfDay}</p>}
             </div>
-            {journal?.summary && (
+            {journal?.recentSummary && (
               <div className="story-recap">
-                <h2>So far</h2>
-                <p className="brief">{journal.summary}</p>
+                <h2>Recently</h2>
+                <p>{journal.recentSummary}</p>
               </div>
             )}
             {!!journal?.looseEnds.length && (

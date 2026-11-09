@@ -20,7 +20,7 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   workflowProblem: string;
 };
 export type TextHost = Awaited<ReturnType<typeof textHosts>>[number];
-export type Journal = { status: Status; storyTime: { date: string; timeOfDay: string } | null; summary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[]; chapters: Chapter[] };
+export type Journal = { status: Status; storyTime: { date: string; timeOfDay: string } | null; summary: string; recentSummary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[]; chapters: Chapter[] };
 /** The open Chapter is last, with a null `lastMessage`. */
 export type Chapter = { title: string; lastMessage: number | null };
 /** A null `npc` is the PC. */

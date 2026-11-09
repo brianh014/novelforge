@@ -39,6 +39,20 @@ test("each finished Turn's summary becomes the story's, over any set_summary", a
   expect(await summaryOf(id)).toBe("Ash left the docks.");
 });
 
+test("each finished Turn's recent_summary becomes the Journal's recent summary, and a blank one keeps the last", async () => {
+  const recent = (text: string | null) => JSON.stringify({ check: null, narration: "Rain.", state_operations: [], summary: "All of it.", recent_summary: text });
+  play(recent("Ash reached the docks."), recent(null));
+  const id = await app.createSave();
+  const journal = async () => (await app.get(`/saves/${id}/journal`).then((r) => r.json())) as { summary: string; recentSummary: string };
+
+  await playTurn(id);
+  expect(await journal()).toMatchObject({ summary: "All of it.", recentSummary: "Ash reached the docks." });
+  await playTurn(id);
+
+  expect((await journal()).recentSummary).toBe("Ash reached the docks.");
+  expect(lastSystem()).not.toContain("recentSummary");
+});
+
 for (const [label, missing] of [
   ["blank", "  "],
   ["malformed", 7],

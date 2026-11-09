@@ -797,12 +797,13 @@ export function startServer(options: {
         GET: (req) => {
           // An allowlist, so the World Bible, Plot Threads and NPC appearance text can never reach the player by default.
           // shortcut: the summary, facts, Loose Ends and Scene Memories are Narrator free text, kept clean only by its prompt, screen them if models leak.
-          const { summary, pcKnown, looseEnds, sceneMemories, scene, storyTime, status } = saves.latestState(req.params.id);
+          const { summary, recentSummary, pcKnown, looseEnds, sceneMemories, scene, storyTime, status } = saves.latestState(req.params.id);
           return Response.json({
             status,
             // Without the day count, which only the Narrator uses.
             storyTime: storyTime && { date: storyTime.date, timeOfDay: storyTime.timeOfDay },
             summary,
+            recentSummary,
             facts: pcKnown.facts,
             looseEnds,
             sceneMemories,

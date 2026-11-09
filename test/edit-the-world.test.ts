@@ -57,6 +57,7 @@ test("the World Brief, Recent summary and an NPC's summary can be edited", async
   for (const change of [
     { edit: "worldBrief", text: "  A city of glass  " },
     { edit: "summary", text: "It stopped raining." },
+    { edit: "recentSummary", text: "Ash found a dry step." },
     { edit: "npcSummary", name: "Hesper", text: "A smuggler, as far as Ash can tell." },
   ]) {
     const response = await edit(id, change);
@@ -68,6 +69,7 @@ test("the World Brief, Recent summary and an NPC's summary can be edited", async
   expect((await json(app.get("/saves"))).saves).toMatchObject([{ id, worldBrief: "A city of glass" }]);
   expect(await journal(id)).toMatchObject({
     summary: "It stopped raining.",
+    recentSummary: "Ash found a dry step.",
     npcSummaries: { Hesper: "A smuggler, as far as Ash can tell." },
   });
 });

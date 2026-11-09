@@ -19,6 +19,8 @@ export type State = {
   worldRules: string[];
   plotThreads: string[];
   summary: string;
+  /** Just the last few scenes, for the player. The Narrator never reads it back. */
+  recentSummary: string;
   directorsNotes: string[];
   /** Here rather than on the Save, so a Revert undoes an edit to it. */
   worldBrief: string;
@@ -47,6 +49,7 @@ export const openingState: State = {
   worldRules: [],
   plotThreads: [],
   summary: "",
+  recentSummary: "",
   directorsNotes: [],
   worldBrief: "",
   chapters: [],
@@ -71,6 +74,7 @@ export const StateSections = {
   worldRules: stringList,
   plotThreads: stringList,
   summary: z.string(),
+  recentSummary: z.string(),
   directorsNotes: stringList,
   worldBrief: z.string(),
   chapters: z.array(z.object({ lastMessage: z.number().int().nullable(), title: z.string() })),
@@ -339,6 +343,7 @@ export function mergeWorldUpdate(world: World, update: WorldUpdate): World {
 export const VisibleEdit = z.discriminatedUnion("edit", [
   z.object({ edit: z.literal("worldBrief"), text: words }),
   z.object({ edit: z.literal("summary"), text: words }),
+  z.object({ edit: z.literal("recentSummary"), text: words }),
   z.object({ edit: z.literal("fact"), old: quote.nullable(), new: words.nullable() }).refine(namesSomething),
   z.object({ edit: z.literal("looseEnd"), old: quote.nullable(), new: words.nullable() }).refine(namesSomething),
   z.object({ edit: z.literal("npcSummary"), name: words, text: words }),
@@ -372,6 +377,8 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, worldBrief: edit.text };
     case "summary":
       return { ...state, summary: edit.text };
+    case "recentSummary":
+      return { ...state, recentSummary: edit.text };
     case "fact":
       return { ...state, pcKnown: { ...state.pcKnown, facts: changeList(state.pcKnown.facts, edit) } };
     case "looseEnd":

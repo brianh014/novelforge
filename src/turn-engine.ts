@@ -41,6 +41,7 @@ const FinishedTurn = z.object({
   state_operations: z.array(StateOperation).default([]),
   people: z.array(Person).catch([]),
   summary: z.string().catch(""),
+  recent_summary: z.string().nullish().catch(""),
   scene_changed: z.boolean().nullish(),
   visual_description: z.string().nullish(),
   chapter_ends: z.boolean().nullish(),
@@ -75,6 +76,7 @@ const ResponseShape = z.object({
     state_operations: z.array(StateOperation),
     people: z.array(Person),
     summary: z.string(),
+    recent_summary: z.string(),
     scene_changed: z.boolean().nullable(),
     visual_description: z.string().nullable(),
     // Defined here, beside the field, as a rule mid-prompt is the kind Narrators ignore.
@@ -311,7 +313,7 @@ async function narrate(
         attempt = 0; // The result call gets its own retries.
         continue;
       }
-      const { state_operations, people, summary, scene_changed, visual_description, chapter_ends } = response;
+      const { state_operations, people, summary, recent_summary, scene_changed, visual_description, chapter_ends } = response;
       const narration = edited ?? (response.narration as string);
       // The last attempt keeps such a reply, as losing the Turn costs more than a long speech.
       // A picture without set_scene takes the last location as its caption and its previous image as a reference.
@@ -337,6 +339,7 @@ async function narrate(
         repeated = repeats;
         ignored = harmless;
         if (summary.trim()) next.summary = summary.trim();
+        if (recent_summary?.trim()) next.recentSummary = recent_summary.trim();
         if (memory) next.sceneMemories.push(memory);
         next.chapterReady = !!chapter_ends;
         moved = movedScene(state, next);

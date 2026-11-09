@@ -321,7 +321,7 @@ test("the schema keeps to what strict schema modes accept, with check first", as
   const { schema } = provider.requests[0]!.body.response_format.json_schema;
 
   expect(schema.type).toBe("object");
-  expect(Object.keys(schema.properties)).toEqual(["check", "narration", "state_operations", "people", "summary", "scene_changed", "visual_description", "chapter_ends"]);
+  expect(Object.keys(schema.properties)).toEqual(["check", "narration", "state_operations", "people", "summary", "recent_summary", "scene_changed", "visual_description", "chapter_ends"]);
   const visit = (node: any) => {
     if (typeof node !== "object" || node === null) return;
     for (const refused of ["oneOf", "minLength", "$schema"]) expect(Object.keys(node)).not.toContain(refused);

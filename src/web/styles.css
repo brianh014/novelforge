@@ -510,7 +510,7 @@ h2 {
   line-height: 1.3;
 }
 
-.story-recap .brief {
+.brief.clamp-3 {
   -webkit-line-clamp: 3;
 }
 

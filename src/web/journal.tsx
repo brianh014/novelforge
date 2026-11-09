@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { editJournal, getImages, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, statusWords, tellNarrator } from "./api";
 import { ContinueRule, isContinue, readable } from "./chat-style";
 import { EditIcon } from "./icons";
@@ -22,6 +22,27 @@ function NewestFirst<T>({ items, className, children }: { items: T[]; className?
         </button>
       )}
     </>
+  );
+}
+
+/** Long text cut to three lines, with More to show it all. More appears only when the text runs past them. */
+function Clamped({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const [cut, setCut] = useState(false);
+  const shown = useRef<HTMLParagraphElement>(null);
+  useLayoutEffect(() => {
+    const paragraph = shown.current;
+    if (paragraph && !open) setCut(paragraph.scrollHeight > paragraph.clientHeight);
+  }, [text, open]);
+  return (
+    <div>
+      <p ref={shown} className={open ? undefined : "brief clamp-3"}>{text}</p>
+      {(cut || open) && (
+        <button className="quiet show-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "Less" : "More"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -229,12 +250,32 @@ export function Journal({ id }: { id: string }) {
             </p>
             <h2>World Brief</h2>
             <Editable label="World Brief" text={save.worldBrief} onSave={(text) => edit({ edit: "worldBrief", text })}>
-              <p>{save.worldBrief}</p>
+              <Clamped text={save.worldBrief} />
             </Editable>
             <h2>Recent summary</h2>
-            <Editable label="Recent summary" text={journal.summary} onSave={(text) => edit({ edit: "summary", text })}>
-              {journal.summary ? <p>{journal.summary}</p> : <p className="muted">Nothing to look back on yet.</p>}
+            <Editable label="Recent summary" text={journal.recentSummary} onSave={(text) => edit({ edit: "recentSummary", text })}>
+              {journal.recentSummary ? <p>{journal.recentSummary}</p> : <p className="muted">Nothing recent yet.</p>}
             </Editable>
+            <h2>Loose Ends</h2>
+            {journal.looseEnds.length > 0 ? (
+              <NewestFirst items={journal.looseEnds}>
+                {(looseEnd) => (
+                  <li key={looseEnd}>
+                    <Editable
+                      label="Loose End"
+                      text={looseEnd}
+                      onSave={(text) => edit({ edit: "looseEnd", old: looseEnd, new: text })}
+                      onRemove={() => edit({ edit: "looseEnd", old: looseEnd, new: null })}
+                    >
+                      <span>{looseEnd}</span>
+                    </Editable>
+                  </li>
+                )}
+              </NewestFirst>
+            ) : (
+              <p className="muted">Nothing left open.</p>
+            )}
+            <Editable label="New Loose End" text="" opener="Add a Loose End" onSave={(text) => edit({ edit: "looseEnd", old: null, new: text })} />
             <h2>Scene Memories</h2>
             {journal.sceneMemories.length > 0 ? (
               <NewestFirst items={journal.sceneMemories}>
@@ -269,26 +310,6 @@ export function Journal({ id }: { id: string }) {
               <p className="muted">Nothing certain yet.</p>
             )}
             <Editable label={`New fact ${save.pc.name} knows`} text="" opener="Add a fact" onSave={(text) => edit({ edit: "fact", old: null, new: text })} />
-            <h2>Loose Ends</h2>
-            {journal.looseEnds.length > 0 ? (
-              <NewestFirst items={journal.looseEnds}>
-                {(looseEnd) => (
-                  <li key={looseEnd}>
-                    <Editable
-                      label="Loose End"
-                      text={looseEnd}
-                      onSave={(text) => edit({ edit: "looseEnd", old: looseEnd, new: text })}
-                      onRemove={() => edit({ edit: "looseEnd", old: looseEnd, new: null })}
-                    >
-                      <span>{looseEnd}</span>
-                    </Editable>
-                  </li>
-                )}
-              </NewestFirst>
-            ) : (
-              <p className="muted">Nothing left open.</p>
-            )}
-            <Editable label="New Loose End" text="" opener="Add a Loose End" onSave={(text) => edit({ edit: "looseEnd", old: null, new: text })} />
             <h2>NPCs</h2>
             {journal.npcs.length > 0 ? (
               <NewestFirst items={journal.npcs} className="people">
@@ -312,6 +333,10 @@ export function Journal({ id }: { id: string }) {
     >
       {reading === undefined ? (
         <>
+          <h2>Story Summary</h2>
+          <Editable label="Story Summary" text={journal.summary} onSave={(text) => edit({ edit: "summary", text })}>
+            {journal.summary ? <Clamped text={journal.summary} /> : <p className="muted">Nothing to look back on yet.</p>}
+          </Editable>
           <h2>Chapters</h2>
           <ol className="chapters">
             {chapters
