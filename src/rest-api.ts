@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
 import { InvalidWorkflow, parseWorkflow } from "./comfy-workflow";
@@ -7,7 +9,7 @@ import { withArtStyleFor } from "./web/art-styles";
 import { defaultLogLevel, errorFields, errorType, log, setLogLevel, withLogContext } from "./logger";
 import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
-import { coverPeople, type EarlyImage, type ImageKind, imagePipeline, pcLooks, type PictureWriter, shownFailure, visibleNpcs } from "./image-pipeline";
+import { coverPeople, type EarlyImage, type ImageKind, imagePipeline, pcLooks, type PictureWriter, shownFailure, unnamed, visibleNpcs } from "./image-pipeline";
 import {
   EditNotFound,
   imageType,
@@ -16,12 +18,14 @@ import {
   type Message,
   MessageNotFound,
   NoteNotFound,
+  OPENING_SNAPSHOT,
   PcDetails,
   PortraitNotFound,
   SaveNotFound,
   saveStore,
   StaleTurn,
 } from "./save-store";
+import { LONG_TEXT } from "./limits";
 import { type SettingsChange, type SettingsStore, SettingsUpdate } from "./settings-store";
 import { textHosts, textModels } from "./text-provider";
 import { type BegunTurn, liveTurns, STOPPED_STATUS, TurnRunning, WorldChanging } from "./live-turns";
@@ -31,7 +35,13 @@ import { readable } from "./web/chat-style";
 import spa from "./web/index.html";
 import { answerQuestion, changeWorld, decideForPc, ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type PictureAsk, type WorldChoices, type WorldPc, writeImagePrompt, writePicturePrompt } from "./world-creation";
 
+/** What a form's pictures may be held under, as it names their folder. */
+const HELD_ID = /^[\w-]{1,64}$/;
+
 const NamedPc = PcDetails.extend({ name: z.string().trim().min(1) });
+
+/** A multiline box of the New Story form, which holds at most this much. */
+const longText = z.string().trim().max(LONG_TEXT);
 
 const NewSaveRequest = z.object({
   worldBrief: z.string().min(1),
@@ -40,59 +50,81 @@ const NewSaveRequest = z.object({
   startingHook: z.string().optional(),
 });
 
+/** What the form holds an Important Character's portrait under. */
+const Ref = z.string().regex(/^[\w-]{1,40}$/);
+
 const WorldRequest = z.object({
   title: z.string().trim().min(1).max(80),
   theme: z.string().trim().min(1),
-  worldBrief: z.string().trim().min(1),
-  startingHook: z.string().trim(),
-  characters: z.array(z.object({ name: z.string().trim().min(1).max(80), description: z.string().trim().max(1000) })).max(10).default([]),
-  artStyle: z.string().optional(),
+  worldBrief: longText.min(1),
+  startingHook: longText,
+  characters: z.array(z.object({ name: z.string().trim().min(1).max(80), description: longText, ref: Ref.optional(), onCover: z.boolean().optional() })).max(10).default([]),
+  artStyle: z.string().max(LONG_TEXT).optional(),
+  pcOnCover: z.boolean().default(true),
 });
 
 /** `id` holds the images already drawn on the form, if any. One the server has lost simply starts again. */
 const NewWorldRequest = WorldRequest.extend({
-  id: z.string().optional(),
-  pc: NamedPc,
-  inventory: z.string().trim().max(4000).default(""),
+  id: z.string().regex(HELD_ID).optional(),
+  pc: NamedPc.extend({ background: z.string().max(LONG_TEXT).optional(), physicalTraits: z.string().max(LONG_TEXT).optional() }),
+  inventory: longText.default(""),
 });
 
 const someWords = z.string().trim().min(1);
+/** The player's own few words for one picture's new prompt, such as "smiling". */
+const Nudge = z.string().trim().max(200).default("");
 
 // `id` as in `NewWorldRequest`. The form offers these only once their boxes are filled, and this holds it to that.
 const DrawRequest = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("cover"),
-    id: z.string().optional(),
+    id: z.string().regex(HELD_ID).optional(),
     title: someWords.max(80),
     theme: someWords,
     worldBrief: someWords,
     // Whoever the form holds so far, to be on the cover.
-    pc: z.object({ name: z.string().trim().max(80), physicalTraits: z.string().trim().max(4000) }).default({ name: "", physicalTraits: "" }),
-    characters: z.array(z.object({ name: z.string().trim().max(80), description: z.string().trim().max(1000) })).max(10).default([]),
+    pc: z.object({ name: z.string().trim().max(80), physicalTraits: longText }).default({ name: "", physicalTraits: "" }),
+    pcOnCover: z.boolean().default(true),
+    characters: z.array(z.object({ name: z.string().trim().max(80), description: longText, ref: Ref.optional(), onCover: z.boolean().optional() })).max(10).default([]),
     // The form's wearing and carrying box, so the PC is drawn dressed before the Narrator has sorted it.
-    inventory: z.string().trim().max(4000).default(""),
-    artStyle: z.string().default(""),
+    inventory: longText.default(""),
+    artStyle: z.string().max(LONG_TEXT).default(""),
+    nudge: Nudge,
   }),
   z.object({
     kind: z.literal("portrait"),
-    id: z.string().optional(),
+    id: z.string().regex(HELD_ID).optional(),
     name: z.string().trim(),
-    physicalTraits: someWords,
-    inventory: z.string().trim().max(4000).default(""),
+    physicalTraits: someWords.max(LONG_TEXT),
+    inventory: longText.default(""),
     // The world the PC belongs to, so they're drawn in its era. Either may be empty while the form is.
     theme: z.string().trim().max(4000).default(""),
     worldBrief: z.string().trim().max(4000).default(""),
-    artStyle: z.string().default(""),
+    artStyle: z.string().max(LONG_TEXT).default(""),
+    nudge: Nudge,
+  }),
+  // An Important Character's portrait, drawn from what the player wrote of them. `pcName` is kept out of it, like their own.
+  z.object({
+    kind: z.literal("npc"),
+    id: z.string().regex(HELD_ID).optional(),
+    ref: Ref,
+    name: z.string().trim().max(80),
+    pcName: z.string().trim().max(80).default(""),
+    description: someWords.max(LONG_TEXT),
+    theme: z.string().trim().max(4000).default(""),
+    worldBrief: z.string().trim().max(4000).default(""),
+    artStyle: z.string().max(LONG_TEXT).default(""),
+    nudge: Nudge,
   }),
 ]);
 
-const PcBoxes = z.record(z.enum(PC_FIELDS), z.string().trim());
+const PcBoxes = z.record(z.enum(PC_FIELDS), longText);
 
 const PickRequest = z.object({
   theme: z.string().trim().min(1),
   title: z.string().trim().max(80),
-  worldBrief: z.string().trim(),
-  startingHook: z.string().trim().optional(),
+  worldBrief: longText,
+  startingHook: longText.optional(),
   pc: PcBoxes.optional(),
 });
 
@@ -100,16 +132,16 @@ const PickRequest = z.object({
 const DecideRequest = z.object({ draft: z.string().trim().max(4000).default("") });
 const QuestionRequest = z.object({ question: z.string().trim().min(1).max(1000) });
 
-const CharacterBoxes = z.object({ name: z.string().trim().max(80), description: z.string().trim().max(1000) });
+const CharacterBoxes = z.object({ name: z.string().trim().max(80), description: longText });
 
 // Any box may be empty, and an empty `text` asks for that box to be written from scratch. `character` is the row an Important Character's box is in.
 const EnhanceRequest = z.object({
   field: z.enum(ENHANCE_FIELDS),
-  text: z.string().trim(),
+  text: longText,
   theme: z.string().trim(),
   title: z.string().trim(),
-  worldBrief: z.string().trim(),
-  startingHook: z.string().trim(),
+  worldBrief: longText,
+  startingHook: longText,
   // Half-written rows, as the form holds them while the player works on them.
   characters: z.array(CharacterBoxes).max(10).default([]),
   character: CharacterBoxes.optional(),
@@ -118,10 +150,42 @@ const EnhanceRequest = z.object({
 
 class WorldNotFound extends Error {}
 
+/** Removes the pictures of forms untouched for `age` milliseconds. A failure only leaves them for next time. */
+function pruneHeld(dir: string, age: number) {
+  try {
+    for (const entry of readdirSync(dir)) {
+      const folder = join(dir, entry);
+      if (Date.now() - statSync(folder).mtimeMs > age) rmSync(folder, { recursive: true, force: true });
+    }
+  } catch (error) {
+    if ((error as { code?: string }).code !== "ENOENT") log.warning("images", "Old pictures from the form weren't cleared", errorType(error));
+  }
+}
+
+class UploadRefused extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+/** A picture the player chose themselves. Sent as a type no form can send, so other websites need a CORS preflight, like an import. */
+async function uploaded(req: Request) {
+  if (req.headers.get("content-type") !== "application/octet-stream") throw new UploadRefused("A picture must be sent as application/octet-stream", 415);
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new UploadRefused("That picture is over 10 MB.", 413);
+  if (!imageType(bytes)) throw new UploadRefused("That picture isn't a PNG, JPEG or WebP.", 415);
+  return bytes;
+}
+
 const IMAGES_OFF = "Images are turned off or not set up in Settings.";
 
-/** A failure falls back on the image before it, whose prompt stands too. */
-type DrawnImage = EarlyImage & { failure?: string };
+/** A failure falls back on the image before it, whose prompt stands too. A Cover's `pictured` are the held portraits it was drawn from. */
+type DrawnImage = EarlyImage & { failure?: string; pictured?: string[] };
 
 // What the page may say. Strict and numbers only, as the app listens on the network, so nothing the page holds can reach the log.
 const PAGE_EVENTS = {
@@ -179,7 +243,7 @@ const PromptRequest = z.object({ prompt: z.string().trim().min(1) });
 const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene", "requested"]), ref: z.number().int().nonnegative() });
 
 // Only these have a prompt the text model writes from the story, as a Scene Image's comes from its Turn.
-const UpdateRequest = z.object({ kind: z.enum(["cover", "portrait"]), ref: z.number().int().nonnegative() });
+const UpdateRequest = z.object({ kind: z.enum(["cover", "portrait"]), ref: z.number().int().nonnegative(), nudge: Nudge });
 
 // Besides the PC, so a cover isn't crowded.
 const COVER_NPCS = 3;
@@ -201,7 +265,7 @@ function spliceNote(notes: string[], index: string, ...replacement: string[]) {
 
 const WorldChangeRequest = z.object({ change: someWords });
 
-const ArtStyleRequest = z.object({ artStyle: z.string() });
+const ArtStyleRequest = z.object({ artStyle: z.string().max(LONG_TEXT) });
 
 const DuplicateRequest = z.object({ fromMessage: z.number().optional() });
 
@@ -219,6 +283,7 @@ function errorResponse(error: unknown) {
   }
   if (error instanceof SaveNotFound) return Response.json({ error: "Save not found" }, { status: 404 });
   if (error instanceof MessageNotFound) return Response.json({ error: "Message not found" }, { status: 404 });
+  if (error instanceof UploadRefused) return Response.json({ error: error.message }, { status: error.status });
   if (error instanceof PortraitNotFound) return Response.json({ error: "Portrait not found" }, { status: 404 });
   if (error instanceof NoteNotFound) return Response.json({ error: "Note not found" }, { status: 404 });
   if (error instanceof EditNotFound) return Response.json({ error: "That's no longer in the Journal" }, { status: 404 });
@@ -363,7 +428,7 @@ export function startServer(options: {
     saves,
     { openrouter: options.imageAdapter, local },
     settings,
-    options.writePicture ?? ((ask, style, fallback, signal) => writePicturePrompt(options, ask, style, fallback, signal)),
+    options.writePicture ?? ((ask, style, _template, signal) => writePicturePrompt(options, ask, style, signal)),
   );
 
   /** Every Chapter, oldest first, ending with the open one, whose `lastMessage` is null. A Chapter holds the Messages after the one before it, up to its own `lastMessage`. */
@@ -385,31 +450,79 @@ export function startServer(options: {
   // Held here until Begin because a Save holds it all at once, and so that the client never holds the secrets.
   // shortcut: an abandoned world and its images stay until the app restarts, evict them if that ever adds up.
   const worlds = new Map<string, World & Pick<State, "storyTime"> & WorldChoices & WorldPc & { sheet: Awaited<ReturnType<typeof pcSheet>> }>();
-  // By the id a form or its world goes by, as these can be drawn before either a world or a Save exists. The form's text is safe in its tab if a restart loses them.
-  const held: Record<ImageKind, Map<string, { drawn: Promise<DrawnImage>; stop: AbortController }>> = {
-    cover: new Map(),
-    portrait: new Map(),
-  };
+  // By the id a form or its world goes by, then the image: "cover", "portrait" for the PC's, or "npcs/<ref>" for an Important Character's.
+  // These can be drawn before either a world or a Save exists.
+  const held = new Map<string, { drawn: Promise<DrawnImage>; stop: AbortController }>();
+  const heldAt = (id: string, image: string) => `${id}/${image}`;
+
+  // Each finished picture is kept on disk too, as the player paid for it, and a crash or restart would otherwise lose it.
+  const heldDir = join(dirname(options.savesDir), "held-images");
+  // shortcut: a form abandoned for a month loses its pictures at the next start, keep them longer if players come back later.
+  pruneHeld(heldDir, 30 * 24 * 60 * 60 * 1000);
+  // An id or ref reaches a file name only once it's this plain, so no request can name a path of its own.
+  const heldFile = (id: string, image: string) => (HELD_ID.test(id) && /^(cover|portrait|npcs\/[\w-]{1,40})$/.test(image) ? join(heldDir, id, image.replace("/", "-")) : undefined);
+
+  function keepHeld(id: string, image: string, { prompt, bytes, pictured }: DrawnImage) {
+    const file = heldFile(id, image);
+    if (!file || !bytes) return;
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(`${file}.image`, bytes);
+      writeFileSync(`${file}.json`, JSON.stringify({ prompt, pictured }));
+    } catch (error) {
+      log.warning("images", "A picture on the form wasn't kept on disk", { kind: kindOf(image), ...errorType(error) });
+    }
+  }
+
+  /** What the server holds of this picture, from memory or else from disk. A picture kept on disk comes back as it was finished. */
+  function heldOf(id: string, image: string) {
+    const current = held.get(heldAt(id, image));
+    const file = heldFile(id, image);
+    if (current || !file || !existsSync(`${file}.json`)) return current;
+    try {
+      const { prompt, pictured } = JSON.parse(readFileSync(`${file}.json`, "utf8")) as { prompt: string; pictured?: string[] };
+      const kept = { drawn: Promise.resolve<DrawnImage>({ prompt, pictured, bytes: new Uint8Array(readFileSync(`${file}.image`)) }), stop: new AbortController() };
+      held.set(heldAt(id, image), kept);
+      return kept;
+    } catch (error) {
+      log.warning("images", "A picture on the form couldn't be read back", { kind: kindOf(image), ...errorType(error) });
+      return undefined;
+    }
+  }
+  const kindOf = (image: string): ImageKind => (image === "cover" ? "cover" : "portrait");
+  /** The held portrait each of a Cover's people is drawn from. */
+  const castOf = (people: ReturnType<typeof coverPeople>) => people.map(({ ref }) => (ref === null ? "portrait" : `npcs/${ref}`));
+  const characterLooks = (pcName: string, { name, description }: { name: string; description: string }) => unnamed([pcName, name], description);
 
   /**
    * Replaces any unfinished image, and never rejects: a failure falls back on `before`, so a failed Redraw leaves the old
    * image, and with no `before` keeps its prompt for a retry. `prompt` is a player's own, or written by the text model first.
+   * `cast` is a Cover's people by held portrait. A Cover drawn from a player's own prompt shows whoever it showed before.
    */
-  function drawHeld(kind: ImageKind, id: string, prompt: string | ((signal: AbortSignal) => Promise<string>), before?: DrawnImage | Promise<DrawnImage>) {
-    held[kind].get(id)?.stop.abort();
+  function drawHeld(id: string, image: string, prompt: string | ((signal: AbortSignal) => Promise<string>), before?: DrawnImage | Promise<DrawnImage>, cast?: string[]) {
+    const key = heldAt(id, image);
+    const kind = kindOf(image);
+    held.get(key)?.stop.abort();
     const stop = new AbortController();
     log.verbose("images", "Image started", { kind });
     const drawn = (async (): Promise<DrawnImage> => {
       let written = typeof prompt === "string" ? prompt : "";
+      let pictured: string[] | undefined;
       try {
         if (typeof prompt !== "string") written = await prompt(stop.signal);
-        // A Cover waits for the PC's portrait, if one is drawn or drawing, to draw the PC from it.
-        const portrait = kind === "cover" ? (await held.portrait.get(id)?.drawn)?.bytes : undefined;
-        const bytes = await images.drawEarly(kind, written, stop.signal, portrait);
+        if (kind === "cover") pictured = cast ?? (await before)?.pictured ?? ["portrait"];
+        // A Cover waits for the portraits of those it shows, drawn or drawing, to draw them from.
+        const portraits = await Promise.all(
+          (pictured ?? []).map(async (who) => ({ role: who === "portrait" ? ("pc" as const) : ("npc" as const), bytes: (await heldOf(id, who)?.drawn)?.bytes })),
+        );
+        const bytes = await images.drawEarly(kind, written, stop.signal, portraits.flatMap(({ role, bytes }) => (bytes ? [{ role, bytes }] : [])));
         if (bytes) log.info("images", "Image drawn", { kind });
-        return { prompt: written, bytes: bytes as Uint8Array<ArrayBuffer> | undefined };
+        const finished = { prompt: written, bytes: bytes as Uint8Array<ArrayBuffer> | undefined, pictured };
+        // Unless the form has moved on to another, as this one is no longer the player's.
+        if (held.get(key)?.stop === stop) keepHeld(id, image, finished);
+        return finished;
       } catch (error) {
-        const old = (await before) ?? { prompt: written };
+        const old = (await before) ?? { prompt: written, pictured };
         if (stop.signal.aborted) {
           log.info("images", "Image dropped", { kind, reason: "replaced on the form" });
           return old;
@@ -418,49 +531,64 @@ export function startServer(options: {
         return { ...old, failure: shownFailure(error) };
       }
     })();
-    held[kind].set(id, { drawn, stop });
+    held.set(key, { drawn, stop });
     return drawn;
   }
 
   /** In the background, so a slow image never holds up the world. An image drawn or drawing stays, and one that came to nothing gets another try. */
-  function drawIfMissing(kind: ImageKind, id: string, ask: PictureAsk) {
-    const image = held[kind].get(id);
-    if (!image) return void drawHeld(kind, id, images.writer(ask));
-    void image.drawn.then(({ bytes }) => {
-      if (!bytes && held[kind].get(id) === image) drawHeld(kind, id, images.writer(ask));
+  function drawIfMissing(id: string, image: string, ask: PictureAsk, cast?: string[]) {
+    const current = heldOf(id, image);
+    if (!current) return void drawHeld(id, image, images.writer(ask), undefined, cast);
+    void current.drawn.then(({ bytes }) => {
+      if (!bytes && heldOf(id, image) === current) drawHeld(id, image, images.writer(ask), undefined, cast);
     });
   }
 
-  function drawWorldImages(id: string, overview: string, { title, theme, worldBrief, artStyle = "", characters = [] }: WorldChoices) {
+  function drawWorldImages(id: string, overview: string, { title, theme, worldBrief, artStyle = "", characters = [], pcOnCover = true }: WorldChoices) {
     const { pc, sheet } = worlds.get(id)!;
     const { wearing } = sheet.inventory;
-    // The portrait first, as the Cover draws the PC from it. A PC with no physical traits gets no portrait.
-    if (pc.physicalTraits?.trim()) drawIfMissing("portrait", id, { kind: "portrait", looks: pcLooks(pc, wearing), theme, world: worldBrief, artStyle });
-    drawIfMissing("cover", id, { kind: "cover", title, theme, world: overview, artStyle, people: coverPeople(pc, wearing, characters) });
+    const setting = { theme, world: worldBrief, artStyle };
+    // The portraits first, as the Cover draws its people from them. Someone with no looks gets no portrait.
+    if (pc.physicalTraits?.trim()) drawIfMissing(id, "portrait", { kind: "portrait", looks: pcLooks(pc, wearing), ...setting });
+    for (const character of characters) {
+      if (character.ref && character.description.trim()) drawIfMissing(id, `npcs/${character.ref}`, { kind: "portrait", looks: characterLooks(pc.name, character), ...setting });
+    }
+    const people = coverPeople(pc, wearing, characters, "", pcOnCover);
+    drawIfMissing(id, "cover", { kind: "cover", title, ...setting, world: overview, people: people.map(({ looks }) => looks) }, castOf(people));
   }
 
   // Answers once the image is done, so an img tag can simply wait for it.
-  const heldImage = async (kind: ImageKind, id: string) => {
-    const bytes = (await held[kind].get(id)?.drawn)?.bytes;
-    return bytes ? imageResponse(bytes) : Response.json({ error: `This world has no ${kind}` }, { status: 404 });
+  const heldImage = async (id: string, image: string) => {
+    const bytes = (await heldOf(id, image)?.drawn)?.bytes;
+    return bytes ? imageResponse(bytes) : Response.json({ error: `This world has no ${kindOf(image)}` }, { status: 404 });
   };
 
   // Answers when the Redraw is done, and the Begin that may come first takes whichever image wins.
-  const redrawHeld = async (kind: ImageKind, id: string, req: Request) => {
+  const redrawHeld = async (id: string, image: string, req: Request) => {
     const { prompt } = await parseBody(req, PromptRequest);
-    const image = held[kind].get(id);
-    if (!image) throw new WorldNotFound();
+    const current = heldOf(id, image);
+    if (!current) throw new WorldNotFound();
     if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
     // As written, as the prompt holds its own Art Style.
-    const { failure } = await drawHeld(kind, id, prompt, image.drawn);
+    const { failure } = await drawHeld(id, image, prompt, current.drawn);
     return Response.json(failure ? { error: failure } : {}, { status: failure ? 502 : 200 });
   };
 
+  // The player's own picture in place of any drawn or drawing. It has no prompt, so a Redraw starts from what they write.
+  const uploadHeld = async (id: string, image: string, req: Request) => {
+    const bytes = await uploaded(req);
+    heldOf(id, image)?.stop.abort();
+    held.set(heldAt(id, image), { drawn: Promise.resolve({ prompt: "", bytes }), stop: new AbortController() });
+    keepHeld(id, image, { prompt: "", bytes });
+    log.info("images", "Image uploaded", { kind: kindOf(image) });
+    return Response.json({});
+  };
+
   // Answers once the image is done, like the image.
-  const heldDetails = async (kind: ImageKind, id: string) => {
-    const image = await held[kind].get(id)?.drawn;
-    if (!image) throw new WorldNotFound();
-    const { prompt, bytes, failure = "" } = image;
+  const heldDetails = async (id: string, image: string) => {
+    const drawn = await heldOf(id, image)?.drawn;
+    if (!drawn) throw new WorldNotFound();
+    const { prompt, bytes, failure = "" } = drawn;
     return Response.json({ prompt, hasImage: bytes !== undefined, failure, canRedraw: images.ready() });
   };
 
@@ -691,13 +819,17 @@ export function startServer(options: {
           const ask = await parseBody(req, DrawRequest);
           if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
           const { id = crypto.randomUUID(), artStyle } = ask;
-          const setting = { theme: ask.theme, world: ask.worldBrief, artStyle };
-          const picture: PictureAsk =
-            ask.kind === "cover"
-              ? { kind: "cover", title: ask.title, ...setting, people: coverPeople(ask.pc, [], ask.characters, ask.inventory) }
-              : { kind: "portrait", ...setting, looks: pcLooks({ name: ask.name, physicalTraits: ask.physicalTraits }, [], ask.inventory) };
+          const setting = { theme: ask.theme, world: ask.worldBrief, artStyle, ...(ask.nudge && { nudge: ask.nudge }) };
           // A Redo from the form that fails keeps the image it would have replaced.
-          drawHeld(ask.kind, id, images.writer(picture), held[ask.kind].get(id)?.drawn);
+          const redo = (image: string, picture: PictureAsk, cast?: string[]) => drawHeld(id, image, images.writer(picture), heldOf(id, image)?.drawn, cast);
+          if (ask.kind === "cover") {
+            const people = coverPeople(ask.pc, [], ask.characters, ask.inventory, ask.pcOnCover);
+            redo("cover", { kind: "cover", title: ask.title, ...setting, people: people.map(({ looks }) => looks) }, castOf(people));
+          } else if (ask.kind === "npc") {
+            redo(`npcs/${ask.ref}`, { kind: "portrait", ...setting, looks: characterLooks(ask.pcName, ask) });
+          } else {
+            redo("portrait", { kind: "portrait", ...setting, looks: pcLooks({ name: ask.name, physicalTraits: ask.physicalTraits }, [], ask.inventory) });
+          }
           return Response.json({ id }, { status: 201 });
         },
       },
@@ -706,31 +838,52 @@ export function startServer(options: {
           const { artStyle } = await parseBody(req, ArtStyleRequest);
           const world = worlds.get(req.params.id);
           if (!world) throw new WorldNotFound();
-          const { title, theme, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, storyTime, sheet } = world;
+          const { title, theme, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, storyTime, sheet, characters = [] } = world;
           const opening = { worldBible, worldRules, plotThreads, storyTime, ...sheet };
           const id = saves.create({ title, theme, worldBrief, startingHook, pc, artStyle, opening });
           worlds.delete(req.params.id);
-          images.saveCreated(id, held.portrait.get(req.params.id)?.drawn);
-          // Often still drawing. The Save may be gone by the time it lands, and a story without a cover loses nothing.
-          held.cover.get(req.params.id)?.drawn.then(({ bytes, prompt }) => bytes && saves.setCover(id, bytes, prompt)).catch((error) => log.warning("images", "The Cover wasn't stored", { save: id, ...errorType(error) }));
-          held.cover.delete(req.params.id);
-          held.portrait.delete(req.params.id);
+          const taken = (image: string) => heldOf(req.params.id, image)?.drawn;
+          images.saveCreated(id, taken("portrait"));
+          // Often still drawing. The Save may be gone by the time each lands, and a story without one loses nothing.
+          const keep = (image: string, store: (drawn: DrawnImage & { bytes: Uint8Array }) => void) =>
+            taken(image)
+              ?.then((drawn) => drawn.bytes && store(drawn as DrawnImage & { bytes: Uint8Array }))
+              .catch((error) => log.warning("images", "A picture from the form wasn't stored", { save: id, kind: kindOf(image), ...errorType(error) }));
+          keep("cover", ({ bytes, prompt }) => saves.setCover(id, bytes, prompt));
+          // By name, as the Narrator's NPCs go. One a Turn has drawn already keeps that portrait.
+          // shortcut: an NPC the Narrator names differently from the form gets a portrait of their own, match looser if that shows.
+          for (const { name, ref } of characters) {
+            if (ref) keep(`npcs/${ref}`, ({ bytes, prompt }) => !saves.portraitOf(id, name) && saves.addPortrait(id, OPENING_SNAPSHOT, name, bytes, prompt));
+          }
+          for (const key of held.keys()) if (key.startsWith(`${req.params.id}/`)) held.delete(key);
+          // After each picture above has been read, as heldOf reads from disk what isn't in memory.
+          if (HELD_ID.test(req.params.id)) rmSync(join(heldDir, req.params.id), { recursive: true, force: true });
           return Response.json({ id }, { status: 201 });
         },
       },
       "/worlds/:id/cover": {
-        GET: (req) => heldImage("cover", req.params.id),
-        POST: (req) => redrawHeld("cover", req.params.id, req),
+        GET: (req) => heldImage(req.params.id, "cover"),
+        POST: (req) => redrawHeld(req.params.id, "cover", req),
+        PUT: (req) => uploadHeld(req.params.id, "cover", req),
       },
       "/worlds/:id/cover/details": {
-        GET: (req) => heldDetails("cover", req.params.id),
+        GET: (req) => heldDetails(req.params.id, "cover"),
       },
       "/worlds/:id/portrait": {
-        GET: (req) => heldImage("portrait", req.params.id),
-        POST: (req) => redrawHeld("portrait", req.params.id, req),
+        GET: (req) => heldImage(req.params.id, "portrait"),
+        POST: (req) => redrawHeld(req.params.id, "portrait", req),
+        PUT: (req) => uploadHeld(req.params.id, "portrait", req),
       },
       "/worlds/:id/portrait/details": {
-        GET: (req) => heldDetails("portrait", req.params.id),
+        GET: (req) => heldDetails(req.params.id, "portrait"),
+      },
+      "/worlds/:id/npcs/:ref": {
+        GET: (req) => heldImage(req.params.id, `npcs/${req.params.ref}`),
+        POST: (req) => redrawHeld(req.params.id, `npcs/${req.params.ref}`, req),
+        PUT: (req) => uploadHeld(req.params.id, `npcs/${req.params.ref}`, req),
+      },
+      "/worlds/:id/npcs/:ref/details": {
+        GET: (req) => heldDetails(req.params.id, `npcs/${req.params.ref}`),
       },
       "/worlds/pick": {
         POST: async (req) => Response.json(await pickForMe(options, await parseBody(req, PickRequest), req.signal)),
@@ -1037,7 +1190,7 @@ export function startServer(options: {
       "/saves/:id/gallery/update": {
         POST: async (req) => {
           const { id } = req.params;
-          const { kind, ref } = await parseBody(req, UpdateRequest);
+          const { kind, ref, nudge } = await parseBody(req, UpdateRequest);
           const image = visibleImages(id).find((candidate) => candidate.kind === kind && candidate.ref === ref);
           if (!image) return Response.json({ error: "Image not found" }, { status: 404 });
           if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
@@ -1047,15 +1200,31 @@ export function startServer(options: {
           const pcNow = pcLooks(pc, inventory.wearing);
           // shortcut: the Important Characters aren't kept in a Save, so a Cover shows the PC and those met lately, keep them if covers miss them.
           const met = [...new Set([...scene.visibleCast, ...saves.recentCast(id)])].filter((name) => pcKnown.npcs.includes(name)).slice(0, COVER_NPCS);
+          const setting = { theme, world: worldBrief, artStyle, ...(nudge && { nudge }) };
           const ask: PictureAsk =
             kind === "cover"
-              ? { kind, title, theme, world: worldBrief, artStyle, people: [pcNow, ...met.map(looksOf)].filter(Boolean) }
-              : { kind, theme, world: worldBrief, artStyle, looks: image.npc === null ? pcNow : looksOf(image.npc) };
+              ? { kind, title, ...setting, people: [pcNow, ...met.map(looksOf)].filter(Boolean) }
+              : { kind, ...setting, looks: image.npc === null ? pcNow : looksOf(image.npc) };
           if (ask.kind === "portrait" && !ask.looks) return Response.json({ error: "There are no looks to draw this from." }, { status: 409 });
           if (!images.redraw(id, { kind, ref }, image.messageId, images.writer(ask))) {
             return Response.json({ error: "This image is already being redrawn." }, { status: 409 });
           }
           return Response.json({}, { status: 202 });
+        },
+      },
+      // The player's own picture in place of a Cover or portrait. It keeps the old prompt, for a Redraw to go back to drawing.
+      "/saves/:id/gallery/:kind/:ref": {
+        PUT: async (req) => {
+          const { id, kind } = req.params;
+          const ref = Number(req.params.ref);
+          const image = visibleImages(id).find((candidate) => candidate.kind === kind && candidate.ref === ref);
+          if (!image || (kind !== "cover" && kind !== "portrait")) return Response.json({ error: "Image not found" }, { status: 404 });
+          if (images.redrawState(id, { kind, ref }).redrawing) {
+            return Response.json({ error: "This image is being redrawn. Try again when it's done." }, { status: 409 });
+          }
+          saves.replaceImage(id, { kind, ref }, image.prompt, await uploaded(req));
+          log.info("images", "Image uploaded", { save: id, kind });
+          return Response.json({});
         },
       },
       "/saves/:id/gallery/delete": {

@@ -134,30 +134,47 @@ export function withReferenceRoles(prompt: string, references: { role: Role }[])
   return `${prompt.trim().replace(/[^.!?]$/, "$&.")}${portraits}`;
 }
 
+// The opening of the world and of each person only, as a whole World Overview and the player's long descriptions made a prompt of nearly a thousand words, and the image model lost the cover in it.
+const COVER_WORLD_WORDS = 80;
+const COVER_PERSON_WORDS = 40;
+const opening = (text: string, words: number) => text.split(/\s+/).filter(Boolean).slice(0, words).join(" ");
+
 export const coverPrompt = ({ title, theme, world, people = [] }: Cover) =>
-  `The front cover of a novel, one striking image of its world and the people in it, not a moment from the story. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly: ${JSON.stringify(title)}
+  `The front cover of a novel: dramatic, eye-catching cover art of a charged moment that captures the story's premise, its people in dynamic poses in a vivid place from its world, with bold composition, dramatic lighting and rich detail. Letter its title as part of the artwork, in the upper third of the cover. The title is this JSON string, spelled exactly: ${JSON.stringify(title)}
 The title is the only writing anywhere on the cover: no author name, subtitle, tagline, label, name or any other words.
 Theme: ${theme}
-The world: ${world}${people.length > 0 ? `\nShow these people on the cover, the first in front as its hero, each looking as described: ${people.map((looks) => `(${looks})`).join(" ")}` : ""}`;
+The world: ${opening(world, COVER_WORLD_WORDS)}${people.length > 0 ? `\nShow these people on the cover, the first in front as its hero, each looking as described: ${people.map((looks) => `(${opening(looks, COVER_PERSON_WORDS)})`).join(" ")}` : ""}`;
+
+/** `text` with each of `names` taken out, as a name in an image prompt gets lettered into the picture. */
+export const unnamed = (names: string[], text: string) => names.filter(Boolean).reduce((words, name) => words.replaceAll(name, "someone"), text.trim());
 
 /**
- * The PC and the Important Characters as a cover shows them, by looks alone, as a name in an image prompt gets lettered.
+ * The PC, unless `withPc` is false, and the Important Characters the player put on it, as a cover shows them, by looks alone. `ref` is whose portrait each is drawn from: null for the PC.
  * shortcut: a character with no description is left off, and one is only as drawn as their description says, ask for looks if covers miss them.
  */
-export function coverPeople(pc: Save["pc"], wearing: string[], characters: { name: string; description: string }[], outfit = "") {
-  const names = [pc.name, ...characters.map(({ name }) => name)].filter(Boolean);
-  const unnamed = (text: string) => names.reduce((words, name) => words.replaceAll(name, "someone"), text);
-  return [pcLooks(pc, wearing, outfit), ...characters.map(({ description }) => unnamed(description.trim()))].filter(Boolean);
+export function coverPeople(pc: Save["pc"], wearing: string[], characters: { name: string; description: string; ref?: string; onCover?: boolean }[], outfit = "", withPc = true) {
+  const names = [pc.name, ...characters.map(({ name }) => name)];
+  const hero = withPc ? [{ looks: pcLooks(pc, wearing, outfit), ref: null as string | null | undefined }] : [];
+  const others = characters.filter(({ onCover = true }) => onCover);
+  const people = [...hero, ...others.map(({ description, ref }) => ({ looks: unnamed(names, description), ref }))];
+  return people.filter(({ looks }) => looks);
 }
 
-/** `portrait` is the PC's, so the hero on the cover looks like them. */
+/** `people` are the portraits of those it shows, the PC's first, so each looks like themselves. */
 // No style_preset in any payload: each Image Prompt carries its own Art Style, as the text model writes the whole of it.
 // shortcut: an image from before that has no Art Style in its prompt, so its Redraw draws without one, Update writes it in.
-const coverPayload = (prompt: string, portrait?: { bytes: Uint8Array; mediaType: string } | null): ImagePayload => ({
-  prompt,
+/**
+ * Says first what the portraits are for, as Qwen, given them with a note at the end or none, drew the cover as an edit of a
+ * portrait: the same framing and pose with a glitch. A note before the scene moves the people into it.
+ */
+export const COVER_FROM_PORTRAITS =
+  "A completely new picture, not an edit of the reference portraits. Take only the face and hair of each person in the portraits, and move those people into the new scene described here, with new poses, new clothing, a new setting and a new composition:";
+
+const coverPayload = (prompt: string, people: ImagePayload["reference_images"]): ImagePayload => ({
+  prompt: people.length > 0 ? `${COVER_FROM_PORTRAITS}\n${prompt.trim()}` : prompt,
   negative_prompt: COVER_AVOID,
   aspect_ratio: "2:3",
-  reference_images: reference("pc", portrait),
+  reference_images: people,
   style_preset: "",
 });
 
@@ -183,22 +200,22 @@ const reference = (role: Role, image: { bytes: Uint8Array; mediaType: string } |
  * Decides when a Scene Image or portrait is drawn, and draws it in the background. Jobs live in memory, so stopping the
  * server loses the one in flight: its Turn stands and that scene just has no image, which is cheaper than redrawing it.
  */
-/** Writes a Cover's or portrait's Image Prompt for the image model's family, or gives back `fallback`. */
-export type PictureWriter = (ask: PictureAsk, style: PromptStyle, fallback: string, signal: AbortSignal) => Promise<string>;
+/** Writes a Cover's or portrait's Image Prompt for the image model's family. `template` is a plain one, which tests draw from in place of a text model. */
+export type PictureWriter = (ask: PictureAsk, style: PromptStyle, template: string, signal: AbortSignal) => Promise<string>;
 
 export function imagePipeline(
   saves: SaveStore,
   adapters: Record<ReturnType<SettingsStore["read"]>["imageProvider"], ImageAdapter>,
   settings: SettingsStore,
-  writePicture: PictureWriter = async (_ask, _style, fallback) => fallback,
+  writePicture: PictureWriter = async (_ask, _style, template) => template,
 ) {
-  /** Waits to be called, so a held image can start drawing as soon as its prompt is written. Its template is the fallback. */
+  /** Waits to be called, so a held image can start drawing as soon as its prompt is written. */
   const writer = (ask: PictureAsk) => (signal: AbortSignal) => {
     const style = promptStyle(settings.read());
     const template = ask.kind === "cover" ? coverPrompt(ask) : portraitPrompt(ask.looks, style);
     const styled = { ...ask, artStyle: artStyleFor(ask.artStyle, drawingFamily(settings.read())) };
     // The Art Style first, as the text model would have put it.
-    return writePicture(styled, style, [styled.artStyle.trim(), template].filter(Boolean).join("\n"), signal);
+    return writePicture(styled, style, [styled.artStyle.trim(), template, ask.nudge?.trim()].filter(Boolean).join("\n"), signal);
   };
 
   const work = new Map<string, Work>();
@@ -283,7 +300,7 @@ export function imagePipeline(
       const pictured = saves.pictured(id, { kind, ref }) ?? [...visibleNpcs(state).map(({ name }) => name), null];
       return scenePayload(id, prompt, pictured);
     }
-    if (kind === "cover") return coverPayload(prompt, saves.portraitOf(id, null));
+    if (kind === "cover") return coverPayload(prompt, reference("pc", saves.portraitOf(id, null)));
     if (!keepFace) return portraitPayload(prompt);
     const bytes = saves.portrait(id, ref);
     const mediaType = imageType(bytes);
@@ -335,13 +352,13 @@ export function imagePipeline(
     ready: () => Boolean(ready()),
 
     /**
-     * A Cover or the PC's portrait, for a world that has no Save yet. Its prompt holds only what the player reads, as
+     * A Cover or a portrait, for a world that has no Save yet. Its prompt holds only what the player reads, as
      * nothing here knows the World Bible. Undefined when images are off, and a failure is the caller's to report.
      */
-    async drawEarly(kind: ImageKind, prompt: string, signal: AbortSignal, portrait?: Uint8Array) {
+    async drawEarly(kind: ImageKind, prompt: string, signal: AbortSignal, people: { role: "pc" | "npc"; bytes: Uint8Array }[] = []) {
       if (!ready()) return undefined;
-      const mediaType = portrait && imageType(portrait);
-      const payload = kind === "cover" ? coverPayload(prompt, mediaType ? { bytes: portrait!, mediaType } : null) : portraitPayload(prompt);
+      const references = people.flatMap(({ role, bytes }) => reference(role, imageType(bytes) && { bytes, mediaType: imageType(bytes)! }));
+      const payload = kind === "cover" ? coverPayload(prompt, references) : portraitPayload(prompt);
       const bytes = await adapter(payload, signal);
       session++;
       return bytes;

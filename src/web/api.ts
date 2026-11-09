@@ -147,7 +147,17 @@ export const storyName = ({ title, pc }: { title: string; pc: { name: string } }
 export const coverUrl = (id: string, redraws: number) => `/saves/${id}/cover?v=${redraws}`;
 
 /** Answers only once the image is done. The version makes a redrawn image a new address. */
-export const heldImageUrl = (id: string, kind: ImageKind, version: number) => `/worlds/${id}/${kind}?v=${version}`;
+/** A picture on the New Story form: "cover", "portrait" for the PC's, or "npcs/<ref>" for an Important Character's. */
+export type HeldPicture = string;
+
+export const heldImageUrl = (id: string, picture: HeldPicture, version: number) => `/worlds/${id}/${picture}?v=${version}`;
+
+/** The player's own picture file, in place of a drawn one. */
+const upload = (path: string, file: Blob) => request<object>(path, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file });
+
+export const uploadHeldImage = (id: string, picture: HeldPicture, file: Blob) => upload(`/worlds/${id}/${picture}`, file);
+
+export const uploadGalleryImage = (id: string, { kind, ref }: GalleryImage, file: Blob) => upload(`/saves/${id}/gallery/${kind}/${ref}`, file);
 
 export const getRequestedImages = (id: string) => request<RequestedImages>(`/saves/${id}/requested-images`);
 
@@ -170,18 +180,22 @@ export const redrawImage = (id: string, { kind, ref }: GalleryImage, prompt: str
   request<object>(`/saves/${id}/gallery/redraw`, jsonBody({ kind, ref, prompt }));
 
 /** A Cover or portrait drawn again from a new Image Prompt, written from the story as it is now. */
-export const updateImage = (id: string, { kind, ref }: GalleryImage) => request<object>(`/saves/${id}/gallery/update`, jsonBody({ kind, ref }));
+export const updateImage = (id: string, { kind, ref }: GalleryImage, nudge = "") => request<object>(`/saves/${id}/gallery/update`, jsonBody({ kind, ref, nudge }));
 
 export const deleteImage = (id: string, { kind, ref }: GalleryImage) => request<object>(`/saves/${id}/gallery/delete`, jsonBody({ kind, ref }));
 
 /** Answers only once the image is done. */
-export const getHeldImage = (id: string, kind: ImageKind) => request<HeldImage>(`/worlds/${id}/${kind}/details`);
+export const getHeldImage = (id: string, picture: HeldPicture) => request<HeldImage>(`/worlds/${id}/${picture}/details`);
 
-export const redrawHeldImage = (id: string, kind: ImageKind, prompt: string) => request<object>(`/worlds/${id}/${kind}`, jsonBody({ prompt }));
+export const redrawHeldImage = (id: string, picture: HeldPicture, prompt: string) => request<object>(`/worlds/${id}/${picture}`, jsonBody({ prompt }));
 
 /** Starts drawing on the form and answers at once. `id` is the one this form's images are held under, if it has one yet. */
 export const drawOnForm = (
-  ask: { id?: string; artStyle: string } & ({ kind: "cover"; title: string; theme: string; worldBrief: string; pc: { name: string; physicalTraits: string }; characters: Character[]; inventory: string } | { kind: "portrait"; name: string; physicalTraits: string; inventory: string; theme: string; worldBrief: string }),
+  ask: { id?: string; artStyle: string; nudge?: string } & (
+    | { kind: "cover"; title: string; theme: string; worldBrief: string; pc: { name: string; physicalTraits: string }; pcOnCover: boolean; characters: Character[]; inventory: string }
+    | { kind: "portrait"; name: string; physicalTraits: string; inventory: string; theme: string; worldBrief: string }
+    | { kind: "npc"; ref: string; name: string; pcName: string; description: string; theme: string; worldBrief: string }
+  ),
 ) => request<{ id: string }>("/worlds/draw", jsonBody(ask));
 
 export const decideForMe = (id: string, draft: string, signal?: AbortSignal) =>

@@ -1,6 +1,6 @@
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import { galleryUrl, type GalleryImage, type Portrait, portraitUrl, updateImage, redrawImage } from "./api";
-import { DeleteIcon, EditIcon, RegenerateIcon } from "./icons";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { galleryUrl, type GalleryImage, type Portrait, portraitUrl, updateImage, redrawImage, uploadGalleryImage } from "./api";
+import { DeleteIcon, EditIcon, NudgeIcon, RegenerateIcon, UploadIcon } from "./icons";
 
 /** Someone's picture and name, with who they are when that's known. */
 export function Person({ id, name, portrait, who }: { id: string; name: string; portrait?: Portrait; who?: string }) {
@@ -57,6 +57,84 @@ export function PromptBox({
   );
 }
 
+/**
+ * An icon that opens a dialog for a few words of the player's own, such as "smiling", worked into the picture's next prompt,
+ * which is then drawn. `initial` is the nudge used last, where one is kept.
+ */
+export function NudgeButton({ label, disabled, initial = "", onNudge }: { label: string; disabled?: boolean; initial?: string; onNudge: (nudge: string) => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [nudge, setNudge] = useState(initial);
+  const title = useId();
+  return (
+    <>
+      <button
+        type="button"
+        className="icon"
+        title="Nudge: draw it again with a few words of your own"
+        aria-label={label}
+        aria-haspopup="dialog"
+        disabled={disabled}
+        onClick={() => {
+          setNudge(initial);
+          dialog.current!.showModal();
+        }}
+      >
+        {NudgeIcon}
+      </button>
+      <dialog ref={dialog} aria-labelledby={title}>
+        <form
+          method="dialog"
+          className="fields"
+          onSubmit={() => {
+            // The dialog shuts itself, as the form's method says.
+            onNudge(nudge.trim());
+          }}
+        >
+          <h2 id={title}>Nudge</h2>
+          <label>
+            What should be different?
+            <input maxLength={200} placeholder="such as smiling" value={nudge} onChange={(event) => setNudge(event.target.value)} />
+          </label>
+          <p className="muted">A new prompt is written with your words in it, and the picture is drawn again. Each picture drawn may cost money.</p>
+          {/* Cancel first, as a modal focuses its first control, and that mustn't be the one that draws. */}
+          <div className="row">
+            <button type="button" className="quiet" onClick={() => dialog.current!.close()}>
+              Cancel
+            </button>
+            <button type="submit" className="action" disabled={!nudge.trim()}>
+              Draw it
+            </button>
+          </div>
+        </form>
+      </dialog>
+    </>
+  );
+}
+
+/** An icon button that picks a picture file of the player's own, in place of a drawn one. */
+export function UploadButton({ label, disabled, onFile }: { label: string; disabled?: boolean; onFile: (file: File) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <button type="button" className="icon" title="Upload your own picture" aria-label={label} disabled={disabled} onClick={() => input.current!.click()}>
+        {UploadIcon}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          // Cleared, so choosing the same file again still counts as a change.
+          event.target.value = "";
+          if (file) onFile(file);
+        }}
+      />
+    </>
+  );
+}
+
 /** Keeps a viewed picture clear of its prompt until asked. It stays open to show a Redraw under way or failed, and shuts with the dialog. */
 /** `actions` are more icon buttons for the row beside the Redraw pencil. */
 /** `status` shows while the panel is shut, so a drawing started from `actions` reports without opening the Image Prompt. */
@@ -89,7 +167,7 @@ export function RedrawPanel({ busy, children, actions, status }: { busy: boolean
 
 /**
  * An image of a Save, which opens larger with its prompt behind a button. `onRedrawn` is for reading the Gallery again, as
- * drawing goes on in the background. `canUpdate` offers a new prompt from the story, and `onDelete` a Delete, inside the view.
+ * drawing goes on in the background. `canUpdate` offers a new prompt from the story and an upload of the player's own, and `onDelete` a Delete, inside the view.
  */
 export function RedrawableImage({
   id,
@@ -141,6 +219,8 @@ export function RedrawableImage({
                 {RegenerateIcon}
               </button>
             )}
+            {canUpdate && <NudgeButton label={`Nudge: ${alt}`} disabled={image.redrawing || !canRedraw} onNudge={(nudge) => started(updateImage(id, image, nudge))} />}
+            {canUpdate && <UploadButton label={`Upload your own picture: ${alt}`} disabled={image.redrawing} onFile={(file) => started(uploadGalleryImage(id, image, file))} />}
             {onDelete && (
               <button type="button" className="icon" title="Delete" aria-label="Delete" aria-haspopup="dialog" disabled={image.redrawing} onClick={onDelete}>
                 {DeleteIcon}

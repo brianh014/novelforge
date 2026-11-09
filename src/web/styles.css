@@ -823,6 +823,29 @@ input {
   color: var(--accent);
 }
 
+/* A choice's explanation under its heading, kept clear of the choices. */
+#art-style legend + .muted {
+  margin-bottom: 10px;
+}
+
+.review dl {
+  margin: 0;
+}
+
+.review dt {
+  color: var(--accent);
+}
+
+.review dd {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.review h2 {
+  margin: 0;
+}
+
 .chips {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1760,6 +1783,11 @@ dialog blockquote {
 
   .sheet-rail nav .jump,
   .so-far {
+    display: none;
+  }
+
+  /* The steps say where the player is on a desktop, and the heading's "Step 2 of 3" does it on a phone. */
+  .sheet-rail:has(> .wizard-steps) {
     display: none;
   }
 

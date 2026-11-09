@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
+import { COVER_FROM_PORTRAITS } from "../src/image-pipeline";
 import { saveStore } from "../src/save-store";
 import { png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
@@ -309,7 +310,8 @@ test("a Cover Redraw in the story draws the PC from their portrait, as the first
   await settled(id);
 
   expect(drawn.payloads[1]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
-  expect(drawn.payloads[2]).toMatchObject({ prompt: "A storm", aspect_ratio: "2:3" });
+  expect(drawn.payloads[2]).toMatchObject({ prompt: `${COVER_FROM_PORTRAITS}
+A storm`, aspect_ratio: "2:3" });
   expect(drawn.payloads[2]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
 });
 
@@ -331,6 +333,18 @@ test("Update draws a portrait again from a new prompt of the person's looks now,
   expect(after.images.find(({ label }) => label === "Hesper")!.prompt).not.toContain("The portraits show only");
   expect(after.images.find(({ label }) => label === "Hesper")).toMatchObject({ redraws: 1 });
   expect((await update(id, find(before, "scene"))).status).toBe(400);
+});
+
+test("Update works the player's nudge into a portrait's new prompt", async () => {
+  await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], png(1), png(2), png(3), png(4));
+  const id = await newSave();
+  const hesper = (await playTurn(id)).images.find(({ label }) => label === "Hesper")!;
+
+  expect((await app.post(`/saves/${id}/gallery/update`, { kind: hesper.kind, ref: hesper.ref, nudge: "smiling" })).status).toBe(202);
+  await settled(id);
+
+  expect(drawn.payloads.at(-1)!.prompt).toContain("smiling");
+  expect((await app.post(`/saves/${id}/gallery/update`, { kind: hesper.kind, ref: hesper.ref, nudge: "x".repeat(201) })).status).toBe(400);
 });
 
 test("Update draws the Cover again from the title, the World Brief and the PC as they are now, with the PC's portrait", async () => {

@@ -777,7 +777,7 @@ export function saveStore(savesDir: string) {
     },
 
     /** Changes nothing if the image has gone, like `addSceneImage`. */
-    replaceImage(id: string, { kind, ref }: ImageTarget, prompt: string, bytes: Uint8Array) {
+    replaceImage(id: string, { kind, ref }: ImageTarget, prompt: string | null, bytes: Uint8Array) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       const [table, key] = REDRAWABLE[kind];
       using db = open(id);
@@ -872,8 +872,9 @@ export function saveStore(savesDir: string) {
     addPortrait(id: string, messageId: number, npc: string | null, bytes: Uint8Array, prompt: string | null = null) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       using db = open(id);
-      if (npc === null) {
-        db.run(`INSERT INTO portraits (message_id, bytes, prompt) VALUES (${OPENING_SNAPSHOT}, ?, ?)`, [bytes, prompt]);
+      // The opening's, like the PC's, as one drawn before the story outlives every Revert.
+      if (npc === null || messageId === OPENING_SNAPSHOT) {
+        db.run(`INSERT INTO portraits (npc, message_id, bytes, prompt) VALUES (?, ${OPENING_SNAPSHOT}, ?, ?)`, [npc, bytes, prompt]);
         return;
       }
       db.run(

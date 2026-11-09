@@ -16,6 +16,9 @@ export const ART_STYLES: Record<string, string> = {
     "Bold graphic aesthetic defined by clean ink linework, stylized cell-shading, dynamic speed lines, sharp silhouettes, and saturated flat tones with optional Ben-Day halftone dot patterns.",
   "Modern Anime & Manga Illustration":
     "Polished Japanese graphic art style featuring sharp ink contour lines, vibrant cell-shading, expressive eye dynamics, clean hair clumps, and dramatic action-line perspective.",
+  // Said as what is there, as an image model draws whatever it's told to leave out.
+  "Everyday Phone Photo":
+    "An everyday smartphone snapshot: true-to-life colours, plain natural or indoor light, deep focus with the background as sharp as the subject, flat even contrast, a casual eye-level angle, an unposed candid moment and the slight noise and sharpening of a phone camera, like a photo in someone's camera roll.",
   "Cybertech & Retro-Futuristic Neon":
     "High-contrast, rain-slicked sci-fi aesthetic blending 1980s low-life street aesthetics with glowing neon-cyan and magenta palettes, hard-edged cyberware detail, dark atmospheric chiaroscuro, and wireframe perspective grids.",
   "Traditional Impasto Oil Painting":

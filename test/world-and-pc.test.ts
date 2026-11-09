@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { COVER_FROM_PORTRAITS } from "../src/image-pipeline";
 import { saveStore } from "../src/save-store";
 import { narration, png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
@@ -111,7 +113,8 @@ test("writing the world draws the portrait from the PC in what they wear, then t
   expect(payloads[0]!.prompt.startsWith("Ink wash")).toBe(true);
   expect(payloads[1]!.prompt).toContain("Rain never stops in Saltmere.");
   expect(payloads[1]).toMatchObject({ aspect_ratio: "2:3", style_preset: "" });
-  expect(payloads[1]!.prompt.startsWith("Ink wash")).toBe(true);
+  expect(payloads[1]!.prompt.startsWith(`${COVER_FROM_PORTRAITS}
+Ink wash`)).toBe(true);
   expect(payloads[1]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
 });
 
@@ -201,6 +204,15 @@ test("a Cover drawn on the form after the portrait draws the PC from it, and one
 
   expect(payloads[1]!.reference_images).toEqual([]);
   expect(payloads[2]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
+});
+
+test("a nudge on the form goes into that picture's prompt", async () => {
+  const { payloads } = await withImages([], png(1));
+
+  const { id } = await json(app.post("/worlds/draw", { ...portraitAsk, nudge: "smiling" }));
+
+  await details(id, "portrait");
+  expect(payloads[0]!.prompt).toContain("smiling");
 });
 
 test("a portrait can be drawn before the PC has a name", async () => {
@@ -470,3 +482,146 @@ test.each([
   expect(JSON.parse(user!.content)).toEqual(setup);
 });
 
+
+const mara = { name: "Mara", description: "Ash's sister, a smuggler in a red scarf", ref: "m1" };
+const put = (path: string, bytes: Uint8Array<ArrayBuffer>, type = "application/octet-stream") => fetch(app.url(path), { method: "PUT", headers: { "content-type": type }, body: bytes });
+
+test("an Important Character's portrait is drawn on the form from their description, with nobody named", async () => {
+  const { payloads } = await withImages([], png(1));
+
+  const { id } = await json(app.post("/worlds/draw", { kind: "npc", ref: "m1", name: "Mara", pcName: "Ash", description: mara.description, theme: "Western", artStyle: "Ink wash" }));
+
+  expect(await bytesOf(`/worlds/${id}/npcs/m1`)).toEqual(png(1));
+  expect(payloads[0]).toMatchObject({ aspect_ratio: "1:1", reference_images: [] });
+  expect(payloads[0]!.prompt).toContain("someone's sister, a smuggler in a red scarf");
+  expect(payloads[0]!.prompt).not.toContain("Ash");
+});
+
+test("writing the world draws each Important Character's portrait, then the Cover from all of them", async () => {
+  const { payloads } = await withImages([sheet, generated()], png(1), png(2), png(3));
+
+  const { id } = await json(app.post("/worlds", { ...form, characters: [mara] }));
+
+  expect(await bytesOf(`/worlds/${id}/npcs/m1`)).toEqual(png(2));
+  expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(3));
+  expect(payloads[2]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([
+    ["pc", png(1)],
+    ["npc", png(2)],
+  ]);
+});
+
+test("a Cover shows only the characters the player put on it, from their portraits, and its Redraw keeps to them", async () => {
+  const { payloads } = await withImages([sheet, generated()], png(1), png(2), png(3), png(4), png(5));
+  const mother = { name: "Ida", description: "Ash's mother, long dead", ref: "i1", onCover: false };
+
+  const { id } = await json(app.post("/worlds", { ...form, characters: [mother, { ...mara, onCover: true }] }));
+  await details(id, "cover");
+  await app.post(`/worlds/${id}/cover`, { prompt: "A cover, again" });
+
+  const cover = payloads.find(({ aspect_ratio }) => aspect_ratio === "2:3")!;
+  const roles = (payload: typeof cover) => payload.reference_images.map(({ role, bytes }) => [role, bytes]);
+  expect(roles(cover)).toEqual([["pc", png(1)], ["npc", await bytesOf(`/worlds/${id}/npcs/m1`)]]);
+  expect(cover.prompt).toContain("someone's sister");
+  expect(cover.prompt).not.toContain("long dead");
+  expect(cover.prompt.startsWith(COVER_FROM_PORTRAITS)).toBe(true);
+  expect(roles(payloads.at(-1)!)).toEqual(roles(cover));
+});
+
+test("a Cover with nobody on it waits for no portrait", async () => {
+  const { payloads } = await withImages([], png(1));
+
+  const { id } = await json(app.post("/worlds/draw", { ...coverAsk, pcOnCover: false, pc: { name: "Ash", physicalTraits: "Tall" }, characters: [{ ...mara, onCover: false }] }));
+
+  expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(1));
+  expect(payloads[0]!.reference_images).toEqual([]);
+  expect(payloads[0]!.prompt).not.toContain("Show these people");
+});
+
+test("the player's own picture takes the place of one on the form, and nothing else is taken", async () => {
+  const { payloads } = await withImages([]);
+
+  expect((await put("/worlds/form/npcs/m1", png(7))).status).toBe(200);
+
+  expect(await bytesOf("/worlds/form/npcs/m1")).toEqual(png(7));
+  expect(await details("form", "npcs/m1")).toMatchObject({ hasImage: true, prompt: "" });
+  expect((await put("/worlds/form/cover", new TextEncoder().encode("not a picture"))).status).toBe(415);
+  expect((await put("/worlds/form/cover", png(7), "image/png")).status).toBe(415);
+  expect((await put("/worlds/form/cover", new Uint8Array(10 * 1024 * 1024 + 1))).status).toBe(413);
+  expect((await app.get("/worlds/form/cover")).status).toBe(404);
+  expect(payloads).toHaveLength(0);
+});
+
+test("Begin keeps each Important Character's portrait under their name, through every Revert", async () => {
+  await withImages([sheet, generated(), narration("You rise.")], png(1), png(2), png(3));
+  const { id: world } = await json(app.post("/worlds", { ...form, characters: [mara] }));
+  await details(world, "cover");
+
+  const { id } = await begin(world);
+  await settled(id);
+  await app.post(`/saves/${id}/turns`, { input: "I rise." });
+  await app.post(`/saves/${id}/messages/1/revert`, {});
+
+  expect(saveStore(savesDir).portraitOf(id, "Mara")?.bytes).toEqual(png(2));
+  expect((await app.get(`/worlds/${world}/npcs/m1`)).status).toBe(404);
+});
+
+test("the player's own picture replaces a Cover in the Gallery, keeping its prompt", async () => {
+  await withImages([sheet, generated()], png(1), png(2));
+  const { id: world } = await json(app.post("/worlds", form));
+  await details(world, "cover");
+  const { id } = await begin(world);
+  for (let tries = 0; tries < 100 && !saveStore(savesDir).read(id).hasCover; tries++) await Bun.sleep(5);
+  const cover = () => json<{ images: { kind: string; ref: number; prompt: string }[] }>(app.get(`/saves/${id}/gallery`)).then(({ images }) => images.find(({ kind }) => kind === "cover")!);
+  const before = await cover();
+
+  expect((await put(`/saves/${id}/gallery/cover/${before.ref}`, png(9))).status).toBe(200);
+
+  expect(await bytesOf(`/saves/${id}/cover`)).toEqual(png(9));
+  expect((await cover()).prompt).toBe(before.prompt);
+  expect((await put(`/saves/${id}/gallery/scene/${before.ref}`, png(9))).status).toBe(404);
+});
+
+test("pictures drawn or uploaded on the form survive a restart, and Begin takes them and clears them away", async () => {
+  const { payloads } = await withImages([sheet, generated()], png(1), png(2));
+  const { id } = await json(app.post("/worlds/draw", { kind: "npc", ref: "m1", name: "Mara", pcName: "Ash", description: mara.description, theme: "Western", artStyle: "Ink wash" }));
+  expect((await details(id, "npcs/m1")).hasImage).toBe(true);
+  await put(`/worlds/${id}/cover`, png(7));
+
+  await app.restart();
+
+  expect(await bytesOf(`/worlds/${id}/npcs/m1`)).toEqual(png(1));
+  expect(await details(id, "npcs/m1")).toMatchObject({ hasImage: true, prompt: payloads[0]!.prompt });
+  expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(7));
+  await json(app.post("/worlds", { ...form, id, characters: [mara] }));
+  const { id: save } = await begin(id);
+  await settled(save);
+  expect(saveStore(savesDir).portraitOf(save, "Mara")?.bytes).toEqual(png(1));
+  expect(existsSync(join(folder.path, "held-images", id))).toBe(false);
+  // Only the PC's portrait was missing.
+  expect(payloads).toHaveLength(2);
+});
+
+test("a form's id that could name a folder of its own is refused, and never reaches the disk", async () => {
+  await withImages([]);
+
+  expect((await app.post("/worlds/draw", { ...coverAsk, id: "../escape" })).status).toBe(400);
+  // Held in memory, but never on disk under a name it chose.
+  await put("/worlds/..%2Fescape/cover", png(7));
+  expect(existsSync(join(folder.path, "escape"))).toBe(false);
+  expect(existsSync(join(folder.path, "held-images"))).toBe(false);
+});
+
+test("a picture whose prompt can't be written isn't drawn, and says why", async () => {
+  const script = scriptedTextProvider();
+  const drawn = scriptedImages(png(1));
+  const writer = async () => {
+    throw new Error("The text model couldn't write this picture's prompt. Try again.");
+  };
+  app = startApp(savesDir, script.textProvider, scriptedDice(), 2, drawn.imageAdapter, writer);
+  await app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
+
+  const { id } = await json(app.post("/worlds/draw", coverAsk));
+
+  expect(await details(id, "cover")).toMatchObject({ hasImage: false, failure: "The text model couldn't write this picture's prompt. Try again." });
+  expect(drawn.payloads).toHaveLength(0);
+});

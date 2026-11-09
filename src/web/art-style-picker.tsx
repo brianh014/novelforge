@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { drawingFamily } from "../graph-builder";
+import { LONG_TEXT } from "../limits";
 import { getSettings, type Settings, SETTINGS_SAVED } from "./api";
 import { ART_EXAMPLES, QWEN_ART_EXAMPLES } from "./art-examples";
 import { ART_STYLES, artStyleFor } from "./art-styles";
@@ -15,11 +16,12 @@ export function readArtStyle(text: string) {
   return name ? { name, own: "" } : { name: OWN_ART_STYLE, own: text };
 }
 
-/** Radio buttons drawn as chips, with each option's example image when `art` gives them. */
-export function Choices(props: { legend: string; options: string[]; value: string; art?: Record<string, string>; onChange: (value: string) => void }) {
+/** Radio buttons drawn as chips, with each option's example image when `art` gives them. An `intro` sits under the legend, which becomes a heading. */
+export function Choices(props: { legend: string; intro?: ReactNode; options: string[]; value: string; art?: Record<string, string>; onChange: (value: string) => void }) {
   return (
     <fieldset>
-      <legend>{props.legend}</legend>
+      <legend>{props.intro ? <h2>{props.legend}</h2> : props.legend}</legend>
+      {props.intro}
       <div className={props.art ? "chips art" : "chips"}>
         {props.options.map((option) => (
           <label key={option}>
@@ -41,7 +43,7 @@ export function Choices(props: { legend: string; options: string[]; value: strin
 }
 
 /** Every Art Style with its example, shown as the family in Settings draws it. A family without examples of its own shows FLUX.2's. */
-export function ArtStylePicker(props: { name: string; own: string; onName: (name: string) => void; onOwn: (own: string) => void }) {
+export function ArtStylePicker(props: { name: string; own: string; intro?: ReactNode; onName: (name: string) => void; onOwn: (own: string) => void }) {
   const [family, setFamily] = useState<ReturnType<typeof drawingFamily>>(null);
   useEffect(() => {
     const follow = (settings: Settings) => setFamily(drawingFamily(settings));
@@ -56,6 +58,7 @@ export function ArtStylePicker(props: { name: string; own: string; onName: (name
     <>
       <Choices
         legend="Art Style"
+        intro={props.intro}
         art={family === "qwen21" ? QWEN_ART_EXAMPLES : ART_EXAMPLES}
         options={[...Object.keys(ART_STYLES), OWN_ART_STYLE]}
         value={props.name}
@@ -64,7 +67,7 @@ export function ArtStylePicker(props: { name: string; own: string; onName: (name
       {props.name === OWN_ART_STYLE ? (
         <label>
           Your Art Style
-          <textarea rows={3} value={props.own} onChange={(e) => props.onOwn(e.target.value)} />
+          <textarea rows={3} maxLength={LONG_TEXT} value={props.own} onChange={(e) => props.onOwn(e.target.value)} />
         </label>
       ) : (
         // The wording this family gets, which differs from the shared one only for a style tuned for it.
