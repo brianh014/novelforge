@@ -1002,6 +1002,15 @@ function InstallSettings({
         Create new images
       </label>
       <p className="muted">Images you already have stay on show either way.</p>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={draft.openNewImages}
+          onChange={(e) => set({ openNewImages: e.target.checked })}
+        />
+        Open new pictures in the story
+      </label>
+      <p className="muted">Pictures that arrive while you play open by themselves. After a load or refresh, every picture starts folded.</p>
       <label>
         Image provider
         <select

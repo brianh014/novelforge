@@ -187,7 +187,8 @@ const COVER_NPCS = 3;
 // An allowlist, as the Cover and portraits are never the player's to delete.
 const DeleteImageRequest = z.object({ kind: z.enum(["scene", "requested"]), ref: z.number().int().nonnegative() });
 
-const ImageRequest = z.object({ words: someWords.max(300) });
+// Blank draws the scene as it stands.
+const ImageRequest = z.object({ words: z.string().trim().max(300) });
 
 const NoteRequest = z.object({ text: z.string().trim().min(1) });
 
@@ -493,6 +494,7 @@ export function startServer(options: {
       imageModel,
       imageApiKey,
       imagesEnabled,
+      openNewImages,
       comfyUrl,
       comfyFamily,
       comfySdBase,
@@ -531,6 +533,7 @@ export function startServer(options: {
       imageModel,
       hasImageApiKey: imageApiKey !== "",
       imagesEnabled,
+      openNewImages,
       imagesReady: images.ready(),
       comfyUrl,
       comfyFamily,
@@ -976,6 +979,7 @@ export function startServer(options: {
         // Answers at once, as the player can go on while it's written and drawn. What it's drawn from is read now, as this moment is the one they meant.
         POST: async (req) => {
           const { words } = await parseBody(req, ImageRequest);
+          const ask = words || "the whole scene, as the latest Message leaves it";
           const { id } = req.params;
           if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
           turns.assertIdle(id);
@@ -985,7 +989,7 @@ export function startServer(options: {
           const style = promptStyle(settings.read());
           // Only those in the Scene, so a mark can't put anyone else's stored looks in a prompt the player reads.
           const moment = { location: story.state.scene.location, npcs: visibleNpcs(story.state), wearing: story.state.inventory.wearing };
-          images.drawRequested(id, messageId, words, moment, (signal) => writeImagePrompt(options, story, words, style, signal));
+          images.drawRequested(id, messageId, words, moment, (signal) => writeImagePrompt(options, story, ask, style, signal));
           return Response.json({}, { status: 202 });
         },
       },

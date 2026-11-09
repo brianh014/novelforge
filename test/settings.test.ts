@@ -36,6 +36,7 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     imageModel: "",
     hasImageApiKey: false,
     imagesEnabled: true,
+    openNewImages: true,
     imagesReady: false,
     comfyUrl: "http://127.0.0.1:8188",
     comfyFamily: "sd",
@@ -101,6 +102,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     imageModel: "image/model",
     imageApiKey: "image-key-value",
     imagesEnabled: false,
+    openNewImages: false,
     imagesReady: false,
     ...comfy,
     chatStyle: "prose",
@@ -123,6 +125,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     imageModel: "image/model",
     hasImageApiKey: true,
     imagesEnabled: false,
+    openNewImages: false,
     imagesReady: false,
     ...comfy,
     workflowProblem: "",
@@ -168,7 +171,7 @@ test.each(["script", "prose", "bubbles", "stage"])("the %s Chat style persists t
 test("an install's settings file from before these settings gets their defaults", async () => {
   await Bun.write(join(folder.path, "settings.json"), JSON.stringify({ textModel: "old/model" }));
 
-  expect(await settings()).toMatchObject({ textModel: "old/model", imagesEnabled: true, fontSize: "medium" });
+  expect(await settings()).toMatchObject({ textModel: "old/model", imagesEnabled: true, openNewImages: true, fontSize: "medium" });
 });
 
 test("a Steps or CFG typed before the defaults toggle keeps it off, so the number still draws", async () => {

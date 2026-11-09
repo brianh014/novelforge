@@ -43,6 +43,8 @@ export const SettingsUpdate = z
     imageModel: z.string(),
     imageApiKey: z.string(),
     imagesEnabled: z.boolean(),
+    // Only pictures drawn this session open; a load or refresh shows every picture folded.
+    openNewImages: z.boolean(),
     imageResolution: z.enum(["480p", "720p", "1080p", "4k"]),
     comfyUrl: z.url({ protocol: /^https?$/ }),
     comfyFamily: Family,
@@ -95,6 +97,7 @@ const defaults = {
   imageModel: "",
   imageApiKey: "",
   imagesEnabled: true,
+  openNewImages: true,
   comfyUrl: "http://127.0.0.1:8188",
   comfyFamily: "sd",
   comfySdBase: "sdxl",

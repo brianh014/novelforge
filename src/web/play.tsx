@@ -165,6 +165,9 @@ export function Play({ id }: { id: string }) {
   const [setupNotice, setSetupNotice] = useState<string>();
   const [chatStyle, setChatStyle] = useState<ChatStyle>("prose");
   const [journal, setJournal] = useState<Journal>();
+  const [openNewImages, setOpenNewImages] = useState(true);
+  // Pictures each list held when first fetched. They stay folded, and only ones drawn later open by themselves.
+  const loaded = useRef<Record<"scene" | "requested" | "portrait", Set<number>>>({} as never);
   // Unset until the player moves, so that each new response opens on its first beat.
   const [chosenBeat, setChosenBeat] = useState<number>();
   const [draft, setDraft] = useState("");
@@ -215,6 +218,7 @@ export function Play({ id }: { id: string }) {
         setSetupNotice(setupProblem(settings));
         setChatStyle(settings.chatStyle);
         setImagesReady(settings.imagesReady);
+        setOpenNewImages(settings.openNewImages);
       }
       setSave(save);
       setMessages(messages);
@@ -244,6 +248,11 @@ export function Play({ id }: { id: string }) {
     };
   }, [id]);
 
+  function takeJournal(next: Journal) {
+    loaded.current.portrait ??= new Set(next.portraits.map(({ id }) => id));
+    setJournal(next);
+  }
+
   function checkChapter() {
     getChapters(id).then(({ offer }) => setChapterOffer(offer), () => {});
   }
@@ -266,12 +275,14 @@ export function Play({ id }: { id: string }) {
   function checkImages() {
     clearTimeout(imageCheck.current);
     Promise.all([getImages(id), getRequestedImages(id)]).then(([next, asked]) => {
+      loaded.current.scene ??= new Set(next.images.map(({ messageId }) => messageId));
+      loaded.current.requested ??= new Set(asked.images.map(({ ref }) => ref));
       setImages(next);
       setRequested(asked);
       if (next.pending && !leaving.current.signal.aborted) imageCheck.current = setTimeout(checkImages, IMAGE_CHECK_MS);
       else {
         // Once, when drawing stops, as this holds the whole Full Log.
-        getJournal(id).then(setJournal, () => {});
+        getJournal(id).then(takeJournal, () => {});
         // Not on the way out, as nothing would be left to tell the player.
         if (leaving.current.signal.aborted) return;
         takeImageFailure(id).then((failure) => {
@@ -397,7 +408,7 @@ export function Play({ id }: { id: string }) {
 
   async function askForPicture(event: FormEvent) {
     event.preventDefault();
-    if (!drawable || !words.trim()) return;
+    if (!drawable) return;
     setError("");
     try {
       await requestImage(id, words);
@@ -495,12 +506,13 @@ export function Play({ id }: { id: string }) {
   const told = readable(turn?.replaces ? messages.slice(0, -1) : messages);
   const staged = chatStyle === "stage" && (told.length > 0 || !!turn);
   const sceneImage = (image = scene) => image && <SceneImage id={id} image={image} />;
+  const opens = (list: keyof typeof loaded.current, key: number) => openNewImages && !loaded.current[list]?.has(key);
   /** Pictures the player asked for, which have no other place in the story. */
   const requestedRows = (message: Message) =>
     requested.images
       .filter(({ messageId }) => messageId === message.id)
       .map((image) => (
-        <details key={image.ref} className="inline-image requested" onToggle={refit}>
+        <details key={image.ref} className="inline-image requested" open={opens("requested", image.ref)} onToggle={refit}>
           <summary>Picture: {image.caption}</summary>
           <Zoomable lazy src={requestedImageUrl(id, image)} alt={requestedAlt(image)} onLoad={refit} />
         </details>
@@ -512,7 +524,7 @@ export function Play({ id }: { id: string }) {
     return (
       <>
         {image && (
-          <details className="inline-image" onToggle={refit}>
+          <details className="inline-image" open={opens("scene", image.messageId)} onToggle={refit}>
             <summary>Picture{image.caption && `: ${image.caption}`}</summary>
             {/* Only an open row loads its picture, and only then is its height known. */}
             <SceneImage id={id} image={image} onLoad={refit} />
@@ -521,7 +533,7 @@ export function Play({ id }: { id: string }) {
         {portraits
           .filter(({ npc, messageId }) => npc && messageId === message.id)
           .map((portrait) => (
-            <details key={portrait.id} className="inline-image" onToggle={refit}>
+            <details key={portrait.id} className="inline-image" open={opens("portrait", portrait.id)} onToggle={refit}>
               <summary>Portrait: {portrait.npc}</summary>
               <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={portrait.npc!} onLoad={refit} />
             </details>
@@ -807,7 +819,7 @@ export function Play({ id }: { id: string }) {
               autoFocus
               rows={2}
               maxLength={300}
-              placeholder="The woman in the corner"
+              placeholder="Describe what you want or leave blank to draw the current scene"
               value={words}
               onChange={(e) => setWords(e.target.value)}
               onKeyDown={sendOnEnter}
@@ -817,7 +829,7 @@ export function Play({ id }: { id: string }) {
             <button type="button" className="quiet" onClick={cancelAsking}>
               Cancel
             </button>
-            <button className="action" aria-disabled={!words.trim()}>
+            <button className="action">
               Draw
             </button>
           </div>
@@ -947,7 +959,7 @@ export function Play({ id }: { id: string }) {
             setMessages(kept);
             setChosenBeat(undefined);
             checkChapter();
-            getJournal(id).then(setJournal, () => {});
+            getJournal(id).then(takeJournal, () => {});
             checkImages();
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.
             inputBox.current!.focus();

@@ -386,15 +386,15 @@ export function imagePipeline(
      * `write` makes the Image Prompt, so the player needn't wait for it. A failure is held for the player, and only the step that failed
      * reaches the log, as a provider's error can repeat the prompt and the story.
      */
-    drawRequested(id: string, messageId: number, words: string, moment: Omit<Moment, "description">, write: (signal: AbortSignal) => Promise<string>) {
+    drawRequested(id: string, messageId: number, words: string, moment: Omit<Moment, "description">, write: (signal: AbortSignal) => Promise<{ text: string; title: string }>) {
       requestFailures.delete(id);
       const draw = async (signal: AbortSignal) => {
         let step = "writing its prompt";
         try {
-          const description = await write(signal);
+          const { text: description, title } = await write(signal);
           step = "drawing it";
           const { prompt, pictured, bytes } = await drawMoment(id, { ...moment, description }, signal);
-          saves.addRequestedImage(id, messageId, words, bytes, prompt, pictured);
+          saves.addRequestedImage(id, messageId, words || title.trim().slice(0, 80) || "The current scene", bytes, prompt, pictured);
           log.info("images", "Image drawn", about(id, { kind: "requested", messageId }));
         } catch (error) {
           if (signal.aborted || error instanceof SaveNotFound) return;

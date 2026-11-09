@@ -101,6 +101,18 @@ test("a request draws from the text call's prompt, joins the latest Message and 
   ]);
 });
 
+test.each(["", "   "])("a blank request (%p) draws the scene the latest Message leaves, captioned with the Narrator's title", async (words) => {
+  await play([turn("A wet street", scene("The ferry")), JSON.stringify({ text: "The ferry deck in rain", title: "Rain on the ferry deck" })], png(1), png(2), png(3));
+  const id = await newSave();
+  await playTurn(id);
+
+  await asked(id, words);
+
+  expect(await requestedOf(id)).toEqual({ images: [{ ref: 1, messageId: 2, caption: "Rain on the ferry deck", redraws: 0 }], drawing: 0 });
+  expect(callText()).toContain("the whole scene, as the latest Message leaves it");
+  expect(drawn.payloads.at(-1)).toMatchObject({ prompt: expect.stringMatching(/^The ferry deck in rain/) });
+});
+
 test("a Message can have several, and the Gallery keeps them in story order", async () => {
   await play(
     [turn("A wet street", scene("The ferry")), written_("One"), written_("Two"), turn("A pier", scene("The pier")), written_("Three")],
@@ -343,7 +355,7 @@ test("a failed Redraw of a requested image keeps it, says why, and keeps the pro
   expect(lines).not.toContain("sunny bench");
 });
 
-test("a request is refused with images off, during a Turn, with no story, or with no words", async () => {
+test("a request is refused with images off, during a Turn, with no story, or with too many words", async () => {
   let finish = () => {};
   await play([JSON.stringify({ check: null, narration: "Slow.", state_operations: [] }), written_("A woman")], png(1), png(2));
   const id = await newSave();
@@ -359,7 +371,6 @@ test("a request is refused with images off, during a Turn, with no story, or wit
   await running;
   held = undefined;
 
-  expect((await request(id, "   ")).status).toBe(400);
   expect((await request(id, "x".repeat(301))).status).toBe(400);
   expect((await request("nowhere", "the woman")).status).toBe(404);
 
