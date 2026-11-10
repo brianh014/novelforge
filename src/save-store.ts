@@ -70,11 +70,13 @@ const Pictured = z.array(z.string().nullable());
 export type Pictured = z.infer<typeof Pictured>;
 
 /** One image of a Save: `ref` is the Cover's row, a portrait's id, a Scene Image's Message, or a requested image's id. */
-export type ImageTarget = { kind: "cover" | "portrait" | "scene" | "requested"; ref: number };
+/** An "original" is the first image of the portrait with the same `ref`, kept once that portrait is replaced. */
+export type ImageTarget = { kind: "cover" | "portrait" | "original" | "scene" | "requested"; ref: number };
 
 const REDRAWABLE = {
   cover: ["cover", "id"],
   portrait: ["portraits", "id"],
+  original: ["portrait_originals", "id"],
   scene: ["scene_images", "message_id"],
   requested: ["requested_images", "id"],
 } as const;
@@ -171,6 +173,7 @@ function deleteAfter(db: Database, messageId: number) {
   db.run("DELETE FROM scene_images WHERE message_id > ?", [messageId]);
   db.run("DELETE FROM requested_images WHERE message_id > ?", [messageId]);
   db.run("DELETE FROM portraits WHERE message_id > ?", [messageId]);
+  db.run("DELETE FROM portrait_originals WHERE id NOT IN (SELECT id FROM portraits)");
   sweepSections(db);
   clearPending(db);
 }
@@ -322,8 +325,15 @@ const toVersion19 = (db: Database) => {
 /** The recent summary, empty until the next Turn writes one. */
 const toVersion20 = addMissingSections;
 
+/**
+ * A portrait's first image, kept when it's first replaced, so every Update draws the face from it rather than from a copy
+ * of a copy. `id` is the portrait's. A Save from before this has none, so its current portraits become the originals.
+ */
+const toVersion21 = (db: Database) =>
+  db.run("CREATE TABLE IF NOT EXISTS portrait_originals (id INTEGER PRIMARY KEY, bytes BLOB NOT NULL, prompt TEXT, redraws INTEGER NOT NULL DEFAULT 0)");
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16, toVersion17, toVersion18, toVersion19, toVersion20];
+const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16, toVersion17, toVersion18, toVersion19, toVersion20, toVersion21];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -345,7 +355,7 @@ function migrate(db: Database, save?: string) {
 
 const NOT_A_SAVE = "This file isn't a valid Save.";
 
-const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images", "requested_images", "portraits", "cover"];
+const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images", "requested_images", "portraits", "portrait_originals", "cover"];
 
 /** Anything in an imported file that could act while it is migrated, so it must be refused first. */
 function assertSafeToMigrate(db: Database) {
@@ -444,6 +454,7 @@ function assertValidSave(db: Database) {
     bytes: storedImage,
     ...redrawable,
   });
+  rowsOf(db, "portrait_originals", { id: rowId.positive(), bytes: storedImage, ...redrawable });
   rowsOf(db, "cover", { id: z.literal(1), bytes: storedImage, ...redrawable });
 
   // Replacing a response needs the player Message before it. Two player Messages in a row are fine, after a Revert.
@@ -767,11 +778,14 @@ export function saveStore(savesDir: string) {
       using db = open(id);
       return db
         .query<ImageTarget & { npc: string | null; messageId: number; caption: string; prompt: string | null; redraws: number }, []>(
-          `SELECT 'cover' AS kind, id AS ref, NULL AS npc, 0 AS messageId, '' AS caption, prompt, redraws, 0 AS place FROM cover
+          // A subquery, so the order can put each original after its portrait.
+          `SELECT * FROM (SELECT 'cover' AS kind, id AS ref, NULL AS npc, 0 AS messageId, '' AS caption, prompt, redraws, 0 AS place FROM cover
            UNION ALL SELECT 'portrait', id, npc, message_id, '', prompt, redraws, 1 + (npc IS NOT NULL) FROM portraits
+           UNION ALL SELECT 'original', o.id, p.npc, p.message_id, '', o.prompt, o.redraws, 1 + (p.npc IS NOT NULL)
+             FROM portrait_originals o JOIN portraits p ON p.id = o.id
            UNION ALL SELECT 'scene', message_id, NULL, message_id, caption, prompt, redraws, 3 FROM scene_images
-           UNION ALL SELECT 'requested', id, NULL, message_id, caption, prompt, redraws, 3 FROM requested_images
-           ORDER BY place, messageId DESC, kind, ref DESC`,
+           UNION ALL SELECT 'requested', id, NULL, message_id, caption, prompt, redraws, 3 FROM requested_images)
+           ORDER BY place, messageId DESC, kind = 'original', kind, ref DESC`,
         )
         .all();
     },
@@ -781,6 +795,8 @@ export function saveStore(savesDir: string) {
       if (!imageType(bytes)) throw new Error("The image model returned something that isn't a PNG, JPEG or WebP");
       const [table, key] = REDRAWABLE[kind];
       using db = open(id);
+      // Whatever replaces a portrait, its first image stays as the original.
+      if (kind === "portrait") db.run("INSERT OR IGNORE INTO portrait_originals (id, bytes, prompt) SELECT id, bytes, prompt FROM portraits WHERE id = ?", [ref]);
       db.run(`UPDATE ${table} SET bytes = ?, prompt = ?, redraws = redraws + 1 WHERE ${key} = ?`, [bytes, prompt, ref]);
     },
 
@@ -858,6 +874,12 @@ export function saveStore(savesDir: string) {
         .get(portraitId);
       if (!portrait) throw new PortraitNotFound();
       return portrait.bytes;
+    },
+
+    /** A portrait's first image, or undefined while the portrait has never been replaced. */
+    original(id: string, portraitId: number) {
+      using db = open(id);
+      return db.query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM portrait_originals WHERE id = ?").get(portraitId)?.bytes;
     },
 
     /** Goes by exact name, as the state does. A null `npc` is the PC. */

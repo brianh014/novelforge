@@ -240,10 +240,10 @@ const EditRequest = z.object({ text: z.string().trim().min(1) });
 const PromptRequest = z.object({ prompt: z.string().trim().min(1) });
 
 // The form's Art Style can change after a first draw.
-const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "scene", "requested"]), ref: z.number().int().nonnegative() });
+const RedrawRequest = PromptRequest.extend({ kind: z.enum(["cover", "portrait", "original", "scene", "requested"]), ref: z.number().int().nonnegative() });
 
 // Only these have a prompt the text model writes from the story, as a Scene Image's comes from its Turn.
-const UpdateRequest = z.object({ kind: z.enum(["cover", "portrait"]), ref: z.number().int().nonnegative(), nudge: Nudge });
+const UpdateRequest = z.object({ kind: z.enum(["cover", "portrait", "original"]), ref: z.number().int().nonnegative(), nudge: Nudge });
 
 // Besides the PC, so a cover isn't crowded.
 const COVER_NPCS = 3;
@@ -1166,7 +1166,7 @@ export function startServer(options: {
           const { id } = req.params;
           const { pc } = saves.read(id);
           const label = ({ kind, npc, caption }: ReturnType<typeof visibleImages>[number]) =>
-            kind === "cover" ? "Cover" : kind === "portrait" ? (npc ?? pc.name) : caption;
+            kind === "cover" ? "Cover" : kind === "portrait" || kind === "original" ? (npc ?? pc.name) : caption;
           return Response.json({
             images: visibleImages(id).map((image) => {
               const { kind, ref, prompt, redraws } = image;
@@ -1208,7 +1208,7 @@ export function startServer(options: {
           const ask: PictureAsk =
             kind === "cover"
               ? { kind, title, ...setting, people: [pcNow, ...met.map(looksOf)].filter(Boolean) }
-              : { kind, ...setting, looks: image.npc === null ? pcNow : looksOf(image.npc) };
+              : { kind: "portrait", ...setting, looks: image.npc === null ? pcNow : looksOf(image.npc) };
           if (ask.kind === "portrait" && !ask.looks) return Response.json({ error: "There are no looks to draw this from." }, { status: 409 });
           if (!images.redraw(id, { kind, ref }, image.messageId, images.writer(ask))) {
             return Response.json({ error: "This image is already being redrawn." }, { status: 409 });
@@ -1222,7 +1222,7 @@ export function startServer(options: {
           const { id, kind } = req.params;
           const ref = Number(req.params.ref);
           const image = visibleImages(id).find((candidate) => candidate.kind === kind && candidate.ref === ref);
-          if (!image || (kind !== "cover" && kind !== "portrait")) return Response.json({ error: "Image not found" }, { status: 404 });
+          if (!image || (kind !== "cover" && kind !== "portrait" && kind !== "original")) return Response.json({ error: "Image not found" }, { status: 404 });
           if (images.redrawState(id, { kind, ref }).redrawing) {
             return Response.json({ error: "This image is being redrawn. Try again when it's done." }, { status: 409 });
           }
@@ -1254,6 +1254,15 @@ export function startServer(options: {
           const portraitId = Number(req.params.portraitId);
           if (!knownPortraits(id).some((portrait) => portrait.id === portraitId)) throw new PortraitNotFound();
           return imageResponse(saves.portrait(id, portraitId));
+        },
+      },
+      "/saves/:id/portraits/:portraitId/original": {
+        GET: (req) => {
+          const { id } = req.params;
+          const portraitId = Number(req.params.portraitId);
+          const bytes = knownPortraits(id).some((portrait) => portrait.id === portraitId) && saves.original(id, portraitId);
+          if (!bytes) throw new PortraitNotFound();
+          return imageResponse(bytes);
         },
       },
       "/saves/:id/messages/:messageId/snapshot": {

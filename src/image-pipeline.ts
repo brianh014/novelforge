@@ -310,7 +310,8 @@ export function imagePipeline(
     }
     if (kind === "cover") return coverPayload(prompt, reference("pc", saves.portraitOf(id, null)));
     if (!keepFace) return portraitPayload(prompt);
-    const bytes = saves.portrait(id, ref);
+    // From the original, so the face doesn't drift through copies of copies.
+    const bytes = saves.original(id, ref) ?? saves.portrait(id, ref);
     const mediaType = imageType(bytes);
     const role = saves.portraits(id).find((portrait) => portrait.id === ref)?.npc === null ? "pc" : "npc";
     return portraitPayload(prompt, reference(role, mediaType && { bytes, mediaType }));
@@ -395,7 +396,7 @@ export function imagePipeline(
      * portrait keeps its face, as the player wants the same person as they are now.
      */
     redraw(id: string, target: ImageTarget, messageId: number, prompt: string | ((signal: AbortSignal) => Promise<string>)) {
-      const keepFace = typeof prompt !== "string" && target.kind === "portrait";
+      const keepFace = typeof prompt !== "string" && (target.kind === "portrait" || target.kind === "original");
       const key = redrawKey(id, target);
       if (isRedrawing(id, key)) return false;
       failures.delete(key);

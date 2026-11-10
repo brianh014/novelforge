@@ -542,7 +542,7 @@ test("an older Save opens with the new table, empty, and a request works on it",
 
   expect((await requestedOf(id)).images).toHaveLength(1);
   using db = new Database(path);
-  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 20 });
+  expect(db.query("PRAGMA user_version").get()).toEqual({ user_version: 21 });
 });
 
 test("Image Instructions reach a Scene Image's and a request's prompt, and Model Instructions only the story", async () => {

@@ -174,6 +174,7 @@ export const getGallery = (id: string) => request<Gallery>(`/saves/${id}/gallery
 export const galleryUrl = (id: string, { kind, ref, redraws }: GalleryImage) => {
   if (kind === "cover") return coverUrl(id, redraws);
   if (kind === "requested") return requestedImageUrl(id, { ref, redraws });
+  if (kind === "original") return `/saves/${id}/portraits/${ref}/original?v=${redraws}`;
   return kind === "portrait" ? portraitUrl(id, { id: ref, redraws }) : imageUrl(id, { messageId: ref, redraws });
 };
 

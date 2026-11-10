@@ -335,6 +335,36 @@ test("Update draws a portrait again from a new prompt of the person's looks now,
   expect((await update(id, find(before, "scene"))).status).toBe(400);
 });
 
+test("a replaced portrait keeps its first image as the original, which every Update takes the face from and which can be edited too", async () => {
+  await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], png(1), png(2), png(3), png(4), png(5), png(6));
+  const id = await newSave();
+  const before = await playTurn(id);
+  const hesper = before.images.find(({ kind, label }) => kind === "portrait" && label === "Hesper")!;
+  const first = await bytesOf(`/saves/${id}/portraits/${hesper.ref}`);
+  expect(before.images.some(({ kind }) => kind === "original")).toBe(false);
+  expect((await app.get(`/saves/${id}/portraits/${hesper.ref}/original`)).status).toBe(404);
+
+  await update(id, hesper);
+  const once = await settled(id);
+  await update(id, hesper);
+  const twice = await settled(id);
+
+  expect(drawn.payloads.at(-1)!.reference_images.map(({ bytes }) => bytes)).toEqual([first]);
+  expect(await bytesOf(`/saves/${id}/portraits/${hesper.ref}`)).not.toEqual(first);
+  expect(await bytesOf(`/saves/${id}/portraits/${hesper.ref}/original`)).toEqual(first);
+  const original = twice.images.find(({ kind }) => kind === "original")!;
+  expect(original).toMatchObject({ ref: hesper.ref, label: "Hesper", redraws: 0 });
+  expect(once.images.filter(({ kind }) => kind === "original")).toHaveLength(1);
+
+  expect((await redraw(id, original, "A new face")).status).toBe(202);
+  await settled(id);
+  const redrawn = await bytesOf(`/saves/${id}/portraits/${hesper.ref}/original`);
+  expect(redrawn).not.toEqual(first);
+  await update(id, hesper);
+  await settled(id);
+  expect(drawn.payloads.at(-1)!.reference_images.map(({ bytes }) => bytes)).toEqual([redrawn]);
+});
+
 test("Update works the player's nudge into a portrait's new prompt", async () => {
   await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], png(1), png(2), png(3), png(4));
   const id = await newSave();

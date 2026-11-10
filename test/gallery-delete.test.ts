@@ -62,7 +62,7 @@ const asked = async (id: string, words: string) => {
 
 const remove = (id: string, { kind, ref }: { kind: unknown; ref: unknown }) => app.post(`/saves/${id}/gallery/delete`, { kind, ref });
 const redraw = (id: string, { kind, ref }: Item, prompt: string) => app.post(`/saves/${id}/gallery/redraw`, { kind, ref, prompt });
-const labels = (gallery: Gallery) => gallery.images.map(({ label }) => label);
+const labels = (gallery: Gallery) => gallery.images.filter(({ kind }) => kind !== "original").map(({ label }) => label);
 const find = (gallery: Gallery, label: string) => gallery.images.find((item) => item.label === label)!;
 
 test("the Gallery goes Cover, the PC, NPCs newest first, then Scenes newest first", async () => {

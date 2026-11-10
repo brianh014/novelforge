@@ -133,7 +133,7 @@ test("a Save at an older version is upgraded on opening, at any version", async 
     db.run("DELETE FROM snapshot_sections WHERE name IN ('looseEnds', 'recentSummary'); PRAGMA user_version = 13");
   }
   await run(pathOf(id), ...manyMemories()).finished;
-  expect(version(pathOf(id))).toBe(20);
+  expect(version(pathOf(id))).toBe(21);
   expect(memories(id)).toHaveLength(6);
   expect(store().latestState(id).looseEnds).toEqual([]);
   expect(store().latestState(id).recentSummary).toBe("");
@@ -328,7 +328,7 @@ test("a Save anywhere with any name can be the copy", async () => {
   await run(copy, ...manyMemories()).finished;
   expect(readFileSync(pathOf(id)).equals(original)).toBe(true);
   using db = new Database(copy);
-  expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(20);
+  expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(21);
 });
 
 test("any spelling of a path inside the main Saves folder is refused, and the file isn't opened", async () => {

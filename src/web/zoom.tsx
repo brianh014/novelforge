@@ -177,9 +177,11 @@ export function RedrawableImage({
   onRedrawn,
   canUpdate = false,
   onDelete,
+  original,
 }: {
   id: string;
   image: GalleryImage;
+  original?: GalleryImage;
   alt: string;
   canRedraw: boolean;
   onRedrawn: () => void;
@@ -187,18 +189,37 @@ export function RedrawableImage({
   onDelete?: () => void;
 }) {
   const [refused, setRefused] = useState("");
+  const [seeOriginal, setSeeOriginal] = useState(false);
   const started = (work: Promise<object>) => {
     setRefused("");
     work.then(onRedrawn, (failure: Error) => setRefused(failure.message));
   };
+  // The latest shows first, and the buttons below act on whichever is shown.
+  const latest = image;
+  const shown = seeOriginal && original ? original : latest;
+  const shownAlt = shown === latest ? alt : `${alt}, original`;
   return (
-    <Zoomable lazy src={galleryUrl(id, image)} alt={alt}>
+    <Zoomable lazy src={galleryUrl(id, latest)} largeSrc={galleryUrl(id, shown)} alt={alt} onClose={() => setSeeOriginal(false)}>
+      {original && (
+        <div className="row">
+          <button
+            type="button"
+            className="quiet"
+            onClick={() => {
+              setRefused("");
+              setSeeOriginal(!seeOriginal);
+            }}
+          >
+            {shown === latest ? "See the original" : "See the latest"}
+          </button>
+        </div>
+      )}
       <RedrawPanel
         busy={false}
         status={
           <>
-            {(image.failure || refused) && <p role="alert" className="error">{image.failure || refused}</p>}
-            {image.redrawing && <p role="status" className="waiting">This image is being drawn…</p>}
+            {(shown.failure || refused) && <p role="alert" className="error">{shown.failure || refused}</p>}
+            {shown.redrawing && <p role="status" className="waiting">This image is being drawn…</p>}
           </>
         }
         actions={
@@ -208,21 +229,21 @@ export function RedrawableImage({
                 type="button"
                 className="icon"
                 title={
-                  image.kind === "portrait"
+                  shown.kind !== "cover"
                     ? "Update: draw them as they are now in the story, keeping their face"
                     : "Update: write a new prompt from the story as it is now, and draw it"
                 }
                 aria-label="Update"
-                disabled={image.redrawing || !canRedraw}
-                onClick={() => started(updateImage(id, image))}
+                disabled={shown.redrawing || !canRedraw}
+                onClick={() => started(updateImage(id, shown))}
               >
                 {RegenerateIcon}
               </button>
             )}
-            {canUpdate && <NudgeButton label={`Nudge: ${alt}`} disabled={image.redrawing || !canRedraw} onNudge={(nudge) => started(updateImage(id, image, nudge))} />}
-            {canUpdate && <UploadButton label={`Upload your own picture: ${alt}`} disabled={image.redrawing} onFile={(file) => started(uploadGalleryImage(id, image, file))} />}
+            {canUpdate && <NudgeButton label={`Nudge: ${shownAlt}`} disabled={shown.redrawing || !canRedraw} onNudge={(nudge) => started(updateImage(id, shown, nudge))} />}
+            {canUpdate && <UploadButton label={`Upload your own picture: ${shownAlt}`} disabled={shown.redrawing} onFile={(file) => started(uploadGalleryImage(id, shown, file))} />}
             {onDelete && (
-              <button type="button" className="icon" title="Delete" aria-label="Delete" aria-haspopup="dialog" disabled={image.redrawing} onClick={onDelete}>
+              <button type="button" className="icon" title="Delete" aria-label="Delete" aria-haspopup="dialog" disabled={shown.redrawing} onClick={onDelete}>
                 {DeleteIcon}
               </button>
             )}
@@ -230,11 +251,11 @@ export function RedrawableImage({
         }
       >
         <PromptBox
-          prompt={image.prompt}
-          redrawing={image.redrawing}
-          failure={image.failure || refused}
+          prompt={shown.prompt}
+          redrawing={shown.redrawing}
+          failure={shown.failure || refused}
           canRedraw={canRedraw}
-          onRedraw={(prompt) => started(redrawImage(id, image, prompt))}
+          onRedraw={(prompt) => started(redrawImage(id, shown, prompt))}
         />
       </RedrawPanel>
     </Zoomable>
@@ -250,6 +271,9 @@ export function Zoomable(props: {
   onLoad?: () => void;
   onError?: () => void;
   children?: ReactNode;
+  /** What the opened view shows, when not `src`. */
+  largeSrc?: string;
+  onClose?: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   return (
@@ -264,8 +288,8 @@ export function Zoomable(props: {
           onError={props.onError}
         />
       </button>
-      <dialog ref={dialog} className="viewer" aria-label={props.alt} onClick={(event) => event.target === dialog.current && dialog.current.close()}>
-        <img src={props.src} alt={props.alt} loading="lazy" />
+      <dialog ref={dialog} className="viewer" aria-label={props.alt} onClose={props.onClose} onClick={(event) => event.target === dialog.current && dialog.current.close()}>
+        <img src={props.largeSrc ?? props.src} alt={props.alt} loading="lazy" />
         {props.children}
         <div className="row">
           <button type="button" className={props.children ? "quiet" : "action"} onClick={() => dialog.current!.close()}>

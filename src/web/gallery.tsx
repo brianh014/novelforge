@@ -68,6 +68,7 @@ export function Gallery({ id }: { id: string }) {
                     onRedrawn={reload}
                     // Only these have a prompt the text model writes from the story, as a Scene Image's comes from its Turn.
                     canUpdate={image.kind === "cover" || image.kind === "portrait"}
+                    original={gallery!.images.find(({ kind, ref }) => kind === "original" && ref === image.ref && image.kind === "portrait")}
                     onDelete={deletable ? () => setDeleting(image) : undefined}
                   />
                   <span>{image.label}</span>
