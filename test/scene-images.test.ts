@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ImageAdapter } from "../src/image-adapter";
 import { PNG, png, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
-type Images = { images: { messageId: number; caption: string, redraws: 0 }[]; pending: boolean; session: number };
+type Images = { images: { messageId: number; caption: string, redraws: 0 }[]; pending: boolean; session: number; drawing?: string; more?: number };
 
 let folder: ReturnType<typeof tempFolder>;
 let app: ReturnType<typeof startApp>;

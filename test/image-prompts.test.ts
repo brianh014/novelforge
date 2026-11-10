@@ -96,7 +96,7 @@ test("with images off the Narrator writes no prompt", () => {
 
 test("the image model is told the portraits are only for faces, so it copies no clothing from them", () => {
   expect(withReferenceRoles("A quay at dusk.", [])).toBe("A quay at dusk.");
-  expect(withReferenceRoles("A quay at dusk", [{ role: "npc" }])).toBe("A quay at dusk. The portraits show only each person's face and hair: dress and pose everyone as written here.");
+  expect(withReferenceRoles("A quay at dusk", [{ role: "npc" }])).toBe("A quay at dusk. The portraits show only each person's face and hair: keep who they are, but give everyone the facial expression, dress and pose written here.");
   expect(withReferenceRoles("A quay.", [{ role: "pc" }])).toContain("The portraits show only");
 });
 

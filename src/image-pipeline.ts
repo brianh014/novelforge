@@ -137,7 +137,7 @@ type Role = ImagePayload["reference_images"][number]["role"];
  */
 export function withReferenceRoles(prompt: string, references: { role: Role }[]) {
   const roles = new Set(references.map(({ role }) => role));
-  const portraits = roles.has("npc") || roles.has("pc") ? " The portraits show only each person's face and hair: dress and pose everyone as written here." : "";
+  const portraits = roles.has("npc") || roles.has("pc") ? " The portraits show only each person's face and hair: keep who they are, but give everyone the facial expression, dress and pose written here." : "";
   if (!portraits) return prompt;
   return `${prompt.trim().replace(/[^.!?]$/, "$&.")}${portraits}`;
 }
