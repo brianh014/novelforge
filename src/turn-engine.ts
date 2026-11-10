@@ -4,7 +4,7 @@ import { type ImagePipeline, movedScene, portraitsDue, restyledBy, type Scene } 
 import { promptStyle } from "./graph-builder";
 import { withArtStyleFor } from "./web/art-styles";
 import { log } from "./logger";
-import { assemblePrompt, chapterTitlePrompt, CONTINUE_INPUT, editInstruction, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction } from "./prompt-assembler";
+import { assemblePrompt, chapterTitlePrompt, CONTINUE_INPUT, editInstruction, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction, SET_SCENE_NOTE } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, introduce, Person, type SceneMemory, type State, StateOperation } from "./state-applier";
@@ -284,6 +284,7 @@ async function narrate(
   let check = storedCheck;
   let narrationSent = 0;
   let retry = "";
+  let unplacedBefore = false;
   for (let attempt = 1; ; attempt++) {
     // Without a reason the player sees text vanish, which looks like a glitch.
     if (narrationSent > 0) emit("restart", { reason: retry });
@@ -301,7 +302,7 @@ async function narrate(
     try {
       const reply = await askNarrator(
         textProvider,
-        check ? [...prompt, resultInstruction(check)] : prompt,
+        [...prompt, ...(check ? [resultInstruction(check)] : []), ...(unplacedBefore ? [SET_SCENE_NOTE] : [])],
         { schema: check || !rollCheck ? noCheckSchema : responseSchema, onText, onGeneration: (id) => (generation = id), signal },
         input,
         refusal,
@@ -321,6 +322,7 @@ async function narrate(
       const spoken = edited === undefined ? spokenLineFault(narration) : undefined;
       // A long speech is only logged, as rewriting it restarted too many Turns the player could see.
       const fault = attempt < MAX_ATTEMPTS ? (unplaced ?? (spoken === LONG_SPEECH ? undefined : spoken)) : undefined;
+      unplacedBefore = fault === unplaced && !!unplaced;
       if (fault) throw new InvalidResponse(undefined, { cause: fault });
       if (spoken === LONG_SPEECH) log.warning("turn", "Long speech kept", { attempt, generation });
       const memory = await pendingMemory;
