@@ -74,7 +74,10 @@ const ResponseShape = z.object({
     check: CheckRequest.nullable(),
     narration: z.string().nullable(),
     state_operations: z.array(StateOperation),
-    people: z.array(Person),
+    // Described here for the same reason as chapter_ends: speakers kept going missing from it.
+    people: z
+      .array(Person)
+      .describe("everyone the narration names or gives a spoken line to, other than the PC, even someone only mentioned, each with their name and appearance. Someone new never gets a name the state already has for someone else, as people are matched by name"),
     summary: z.string(),
     recent_summary: z.string(),
     scene_changed: z.boolean().nullable(),
