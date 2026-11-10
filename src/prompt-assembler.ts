@@ -251,9 +251,12 @@ The player gave these out-of-character directions when rewriting recent response
   ];
 }
 
-/** For Rewrite and Regenerate. Goes before any Check result, so that feedback can never override the result. */
-export function replacementInstruction(rewrite?: { narration: string; feedback: string }, drawAgain = false): Prompt[number] {
-  return {
+/**
+ * For Rewrite and Regenerate. Goes before any Check result, so that feedback can never override the result. A Rewrite's
+ * direction comes last as the player's own message, as the Narrator ignored it in a system message and kept the rejected events.
+ */
+export function replacementInstruction(rewrite?: { narration: string; feedback: string }, drawAgain = false): Prompt {
+  const replacing: Prompt[number] = {
     role: "system",
     content: `This is a new response to the player's last action, replacing an earlier one that no longer counts. The state above is from before that action, so include every state operation this response needs, including add_known_fact where it applies, and a summary that covers this response. Reply with a finished Turn, and do not request a check.${
       drawAgain ? " The earlier response had a picture, which went with it, so set scene_changed to true and write visual_description for this response." : ""
@@ -261,10 +264,11 @@ export function replacementInstruction(rewrite?: { narration: string; feedback: 
       rewrite
         ? `
 The player rejected the earlier response, given here as JSON: ${JSON.stringify({ rejected_response: rewrite.narration })}
-They gave out-of-character direction for the new response, below as a JSON string. Unlike an in_character message, it is the player's instruction to you: carry it out in full, so that everything it asks for clearly happens in the new response, and let only world_rules stop it. Direction: ${JSON.stringify(rewrite.feedback)}`
+The next message is the player's out-of-character direction for the new response. Unlike an in_character message, it is their instruction to you, and it overrides their last action and the rejected response: carry it out in full, so that everything it asks for clearly happens in the new response and nothing it rules out happens, and let only world_rules stop it. Don't reuse the rejected response's events where the direction changes them.`
         : ""
     }`,
   };
+  return rewrite ? [replacing, { role: "user", content: `Out-of-character direction: ${JSON.stringify(rewrite.feedback)}` }] : [replacing];
 }
 
 /**

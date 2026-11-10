@@ -199,12 +199,14 @@ test.each([
   const first = await app.post(`/saves/${id}/messages/2/${action}`, body);
   expect(first.status).toBe(201);
   expect(prompts[1]![0]!.content).toContain("World Brief: A city of glass");
-  expect(prompts[1]!.at(-3)!.content).toContain("The city is dry.");
+  // A Rewrite's direction is one more message at the end.
+  const state = action === "rewrite" ? -4 : -3;
+  expect(prompts[1]!.at(state)!.content).toContain("The city is dry.");
   expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
 
   const { messages } = (await first.json()) as { messages: { id: number }[] };
   await app.post(`/saves/${id}/messages/${messages[0]!.id}/${action}`, body);
-  expect(prompts[2]!.at(-3)!.content).toContain("The city is dry.");
+  expect(prompts[2]!.at(state)!.content).toContain("The city is dry.");
   expect(prompts[2]![0]!.content).toContain("World Brief: A city of glass");
   expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
   expect(await brief(id)).toBe("A city of glass");

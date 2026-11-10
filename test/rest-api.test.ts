@@ -1748,11 +1748,11 @@ test("Rewrite regenerates the response with the player's feedback, delimited and
   expect(response.status).toBe(201);
   expect(await messageTexts(app, id)).toEqual(["I hand over the spanners.", "Ashley glares."]);
   expect(await journal(app, id)).toMatchObject({ facts: ["Ashley is angry."] });
-  const last = prompts[1]!.at(-1)!;
-  expect(last.role).toBe("system");
-  expect(last.content).toContain(JSON.stringify({ rejected_response: "Ashley smiles." }));
-  // Last, where the Narrator can't miss it, and still delimited.
-  expect(last.content.endsWith(`Direction: ${JSON.stringify(feedback)}`)).toBe(true);
+  const [instruction, last] = prompts[1]!.slice(-2);
+  expect(instruction!.role).toBe("system");
+  expect(instruction!.content).toContain(JSON.stringify({ rejected_response: "Ashley smiles." }));
+  // Last, as the player's own message, where the Narrator can't miss it, and still delimited.
+  expect(last).toEqual({ role: "user", content: `Out-of-character direction: ${JSON.stringify(feedback)}` });
   // Only as the response being rejected, never as a Message the Narrator wrote or as state.
   expect(contents(prompts[1]).filter((text) => text.includes("Ashley smiles"))).toHaveLength(1);
   expect(contents(prompts[1])).not.toContainEqual(expect.stringContaining("Ashley is pleased"));

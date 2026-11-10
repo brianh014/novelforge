@@ -220,7 +220,7 @@ export async function replaceResponse(
   const kind = feedback === undefined ? "regenerate" : "rewrite";
   return narrate(textProvider, signal, emit, {
     kind,
-    prompt: [...prompt, replacementInstruction(feedback === undefined ? undefined : { narration, feedback }, hadPicture && images.ready())],
+    prompt: [...prompt, ...replacementInstruction(feedback === undefined ? undefined : { narration, feedback }, hadPicture && images.ready())],
     input: feedback ?? "",
     refusal: "The Narrator refused this, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
