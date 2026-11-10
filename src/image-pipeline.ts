@@ -53,12 +53,16 @@ export function portraitsDue(before: State, after: State) {
   return [...new Set(due)].flatMap((name) => after.npcs.filter((npc) => npc.name === name));
 }
 
-/** Everyone whose looks a Turn changed: an NPC given new looks, and the PC, as null, when what they wear changed. */
+/** Everyone whose looks a Turn changed: an NPC given new looks, and the PC, as null, when what they wear or how they look changed. */
 export function restyledBy(before: State, after: State): (Npc | null)[] {
   const npcs = after.npcs.filter(({ name, appearance }) => before.npcs.some((npc) => npc.name === name && npc.appearance !== appearance));
-  const pc = JSON.stringify(before.inventory.wearing) !== JSON.stringify(after.inventory.wearing);
+  const pc = JSON.stringify(before.inventory.wearing) !== JSON.stringify(after.inventory.wearing) || before.pcAppearance !== after.pcAppearance;
   return [...(pc ? [null] : []), ...npcs];
 }
+
+/** The PC as they look now: the story's appearance for them once it has one, or else their own physicalTraits. */
+export const pcNow = <Pc extends Save["pc"]>(pc: Pc, { pcAppearance }: Pick<State, "pcAppearance">): Pc =>
+  pcAppearance.trim() ? { ...pc, physicalTraits: pcAppearance } : pc;
 
 /**
  * `outfit` is the form's own words for what the PC wears and carries, before the Narrator has sorted them. Something is
@@ -229,6 +233,8 @@ export function imagePipeline(
   const work = new Map<string, Work>();
   // shortcut: in memory, so a restart forgets a failed Redraw, which leaves the old image anyway.
   const failures = new Map<string, string>();
+  // shortcut: kept in memory like the jobs, so a restart forgets which portraits are out of date, keep it in the Save if that bites.
+  const outOfDate = new Set<string>();
   // shortcut: in memory and one per Save, so a restart or a second failure loses it, and that picture was never drawn anyway.
   const requestFailures = new Map<string, { error: string; words: string }>();
   let session = 0;
@@ -267,7 +273,7 @@ export function imagePipeline(
   };
 
   async function drawMoment(id: string, { description, npcs, wearing }: Moment, signal: AbortSignal) {
-    const { pc } = saves.read(id);
+    const pc = pcNow(saves.read(id).pc, saves.latestState(id));
     const hasReference = (person: string | null) => usesPortraits(settings.read()) && !!saves.portraitOf(id, person);
     const { prompt, pictured } = expandMarks(description, npcs, { name: pc.name, looks: pcLooks(pc, wearing) }, hasReference);
     const bytes = await adapter(scenePayload(id, prompt, pictured), signal);
@@ -288,10 +294,11 @@ export function imagePipeline(
       saves.addPortrait(id, messageId, null, held.bytes, held.prompt);
       return log.info("images", "Image drawn", about(id, { kind: "portrait", messageId }));
     }
-    // shortcut: a person keeps their first portrait when update_npc changes their looks, redraw if that shows in play.
     const name = npc?.name ?? null;
-    const { pc, artStyle, theme, worldBrief } = saves.read(id);
-    const looks = npc ? npc.appearance : pc.physicalTraits?.trim() && pcLooks(pc, saves.latestState(id).inventory.wearing);
+    const { pc: started, artStyle, theme, worldBrief } = saves.read(id);
+    const state = saves.latestState(id);
+    const pc = pcNow(started, state);
+    const looks = npc ? npc.appearance : pc.physicalTraits?.trim() && pcLooks(pc, state.inventory.wearing);
     if (!looks || saves.portraitOf(id, name)) return;
     const prompt = await writer({ kind: "portrait", looks, theme, world: worldBrief, artStyle })(signal);
     const bytes = await adapter(portraitPayload(prompt), signal);
@@ -361,7 +368,8 @@ export function imagePipeline(
   function updatePortrait(id: string, npc: Npc | null, wearing: string[]) {
     const portrait = saves.portraits(id).find((candidate) => candidate.npc === (npc?.name ?? null));
     if (!portrait) return;
-    const { pc, theme, worldBrief, artStyle } = saves.read(id);
+    const { pc: started, theme, worldBrief, artStyle } = saves.read(id);
+    const pc = pcNow(started, saves.latestState(id));
     const looks = npc ? npc.appearance.trim() : pc.physicalTraits?.trim() && pcLooks(pc, wearing);
     if (!looks) return;
     if (pipeline.redraw(id, { kind: "portrait", ref: portrait.id }, portrait.messageId, writer({ kind: "portrait", looks, theme, world: worldBrief, artStyle }))) {
@@ -407,9 +415,13 @@ export function imagePipeline(
           const bytes = await adapter(redrawPayload(id, target, messageId, written, keepFace), signal);
           session++;
           saves.replaceImage(id, target, written, bytes);
+          outOfDate.delete(key);
           log.info("images", "Image drawn", about(id, { kind, messageId }));
         } catch (error) {
-          if (!signal.aborted && !(error instanceof SaveNotFound)) failures.set(key, shownFailure(error));
+          if (!signal.aborted && !(error instanceof SaveNotFound)) {
+            failures.set(key, shownFailure(error));
+            if (keepFace && target.kind === "portrait") outOfDate.add(key);
+          }
           throw error;
         }
       };
@@ -481,8 +493,19 @@ export function imagePipeline(
           jobs.waiting = queued(id, { kind: "scene", messageId, scene: true, draw: (signal) => drawScene(id, messageId, scene, signal) });
         }
       });
+      if (!updatePortraits) return;
+      // A portrait whose update failed is tried again when the Scene moves, as missing portraits are.
+      const stale = scene.moved
+        ? saves.portraits(id).filter(({ id: ref }) => outOfDate.has(redrawKey(id, { kind: "portrait", ref })))
+            .flatMap(({ npc }) => (npc === null ? [null] : scene.npcs.filter(({ name }) => name === npc)))
+        : [];
+      pipeline.restyled(id, [...new Set([...(scene.restyled ?? []), ...stale])], scene.wearing);
+    },
+
+    /** Updates the portraits of those whose looks changed, when the player has Update portraits on. */
+    restyled(id: string, people: (Npc | null)[], wearing: string[]) {
       // Only when images are on, as a Redraw draws whatever the Settings say, and nobody asked for this one.
-      if (updatePortraits && ready()) for (const person of scene.restyled ?? []) updatePortrait(id, person, scene.wearing);
+      if (settings.read().updatePortraits && ready()) for (const person of people) updatePortrait(id, person, wearing);
     },
 
     /** Whether `messageId`'s Scene Image is still on the way. */

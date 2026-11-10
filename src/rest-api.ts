@@ -9,7 +9,7 @@ import { withArtStyleFor } from "./web/art-styles";
 import { defaultLogLevel, errorFields, errorType, log, setLogLevel, withLogContext } from "./logger";
 import { estimateTokens } from "./lore-activation";
 import type { ImageAdapter } from "./image-adapter";
-import { coverPeople, type EarlyImage, type ImageKind, imagePipeline, pcLooks, type PictureWriter, shownFailure, unnamed, visibleNpcs } from "./image-pipeline";
+import { coverPeople, type EarlyImage, type ImageKind, imagePipeline, pcLooks, pcNow, restyledBy, type PictureWriter, shownFailure, unnamed, visibleNpcs } from "./image-pipeline";
 import {
   EditNotFound,
   imageType,
@@ -1052,7 +1052,10 @@ export function startServer(options: {
           const basedOn = saves.latestMessageId(id);
           const release = turns.hold(id);
           try {
-            const { world_brief, summary, facts, npc_summaries, npc_looks, inventory, status, ...update } = await changeWorld(options, saves.latestState(id), change, req.signal);
+            const before = saves.latestState(id);
+            // The PC's looks as they stand, so a change to them keeps all they don't change.
+            const looksNow = pcNow(saves.read(id).pc, before).physicalTraits ?? "";
+            const { world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status, ...update } = await changeWorld(options, { ...before, pcAppearance: looksNow }, change, req.signal);
             if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
             const journal: WorldEdit[] = [
               ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),
@@ -1062,8 +1065,13 @@ export function startServer(options: {
               ...(inventory === null ? [] : [{ edit: "inventory" as const, ...inventory }]),
               ...(status === null ? [] : [{ edit: "status" as const, ...status }]),
             ];
-            const looks = npc_looks.map(({ name, appearance }) => ({ edit: "npcLooks" as const, name, appearance }));
+            const looks = [
+              ...npc_looks.map(({ name, appearance }) => ({ edit: "npcLooks" as const, name, appearance })),
+              ...(pc_looks === null ? [] : [{ edit: "pcLooks" as const, appearance: pc_looks }]),
+            ];
             for (const edit of [{ edit: "world" as const, update }, ...looks, ...journal]) saves.addEdit(id, edit);
+            const after = saves.latestState(id);
+            images.restyled(id, restyledBy(before, after), after.inventory.wearing);
             // Counts only, so that the log never repeats the world.
             log.info("world", "World Change applied", () => ({
               lore: update.lore_entries.length,
@@ -1199,16 +1207,17 @@ export function startServer(options: {
           if (!image) return Response.json({ error: "Image not found" }, { status: 404 });
           if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
           const { pc, title, theme, artStyle } = saves.read(id);
-          const { inventory, npcs, scene, worldBrief, pcKnown } = saves.latestState(id);
+          const state = saves.latestState(id);
+          const { inventory, npcs, scene, worldBrief, pcKnown } = state;
           const looksOf = (name: string) => npcs.find((npc) => npc.name === name)?.appearance.trim() ?? "";
-          const pcNow = pcLooks(pc, inventory.wearing);
+          const pcLooksNow = pcLooks(pcNow(pc, state), inventory.wearing);
           // shortcut: the Important Characters aren't kept in a Save, so a Cover shows the PC and those met lately, keep them if covers miss them.
           const met = [...new Set([...scene.visibleCast, ...saves.recentCast(id)])].filter((name) => pcKnown.npcs.includes(name)).slice(0, COVER_NPCS);
           const setting = { theme, world: worldBrief, artStyle, ...(nudge && { nudge }) };
           const ask: PictureAsk =
             kind === "cover"
-              ? { kind, title, ...setting, people: [pcNow, ...met.map(looksOf)].filter(Boolean) }
-              : { kind: "portrait", ...setting, looks: image.npc === null ? pcNow : looksOf(image.npc) };
+              ? { kind, title, ...setting, people: [pcLooksNow, ...met.map(looksOf)].filter(Boolean) }
+              : { kind: "portrait", ...setting, looks: image.npc === null ? pcLooksNow : looksOf(image.npc) };
           if (ask.kind === "portrait" && !ask.looks) return Response.json({ error: "There are no looks to draw this from." }, { status: 409 });
           if (!images.redraw(id, { kind, ref }, image.messageId, images.writer(ask))) {
             return Response.json({ error: "This image is already being redrawn." }, { status: 409 });

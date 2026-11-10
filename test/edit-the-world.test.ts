@@ -412,6 +412,17 @@ test("a World Change can rewrite an NPC's looks, which stay hidden, and one for 
   expect(JSON.stringify(await journal(id))).not.toContain("hooded wool cloak");
 });
 
+test("a World Change can rewrite the PC's looks from those they have now, which stay hidden", async () => {
+  play(update({ pc_looks: "short, with a scar across the chin" }));
+  const id = store().create({ worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "short" }, opening: { ...WORLD, npcs: NPCS, pcKnown: KNOWN, summary: "" } });
+
+  expect((await change(id, "Ash has a scar on the chin")).status).toBe(200);
+
+  expect(store().latestState(id).pcAppearance).toBe("short, with a scar across the chin");
+  expect(prompts[0]![0]!.content).toContain('"pc_looks":"short"');
+  expect(JSON.stringify(await journal(id))).not.toContain("scar across the chin");
+});
+
 test("a World Change's status with a numeral is retried, and one left out changes nothing", async () => {
   play(update({ status: { health: "2 hit points", injuries: [], conditions: [] } }), update({ summary: "It rained harder." }));
   const id = createSave();

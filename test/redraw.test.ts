@@ -476,6 +476,69 @@ test("Update portraits is off by default, and so is anything drawn for new looks
   expect(drawn.payloads).toHaveLength(drawnBefore);
 });
 
+const quiet = (...state_operations: object[]) =>
+  JSON.stringify({ check: null, narration: "The tide rises.", state_operations, scene_changed: false, visual_description: "" });
+const pcLooksNow = (appearance: string, ...more: object[]) => quiet({ op: "set_pc_appearance", appearance }, ...more);
+
+test("with Update portraits on, a Turn that changes the PC's looks draws their portrait again from the new looks", async () => {
+  await play([turn("A wet street", scene("The ferry")), pcLooksNow("Short, hair shorn close, a scar on the chin")], png(1), png(2), png(3));
+  await app.patch("/settings", { updatePortraits: true });
+  const id = await newSave();
+  const before = find(await playTurn(id), "portrait");
+
+  const after = find(await playTurn(id), "portrait");
+
+  expect(after.redraws).toBe(before.redraws + 1);
+  expect(drawn.payloads.at(-1)!.prompt).toContain("hair shorn close");
+  expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["pc"]);
+});
+
+test("a PC with no looks gets a portrait once the story gives them some and the Scene moves", async () => {
+  await play([turn("A wet street", scene("The ferry")), pcLooksNow("Tall and wiry, with red hair", scene("The quay"))], png(1), png(2));
+  const id = ((await (await app.post("/saves", { worldBrief: "A drowned city", pc: { name: "Ash" } })).json()) as { id: string }).id;
+  expect((await playTurn(id)).images.some(({ kind }) => kind === "portrait")).toBe(false);
+
+  const gallery = await playTurn(id);
+
+  expect(find(gallery, "portrait")).toMatchObject({ label: "Ash" });
+  expect(drawn.payloads.at(-1)!.prompt).toContain("Tall and wiry, with red hair");
+});
+
+test("a failed portrait update is tried again when the Scene next moves", async () => {
+  await play(
+    [turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), looksAgain("Hesper"), quiet(scene("The quay", "Hesper"))],
+    png(1),
+    png(2),
+    png(3),
+    new Error("The model is busy"),
+    png(4),
+  );
+  await app.patch("/settings", { updatePortraits: true });
+  const id = await newSave();
+  await playTurn(id);
+  const failed = (await playTurn(id)).images.find(({ kind, label }) => kind === "portrait" && label === "Hesper")!;
+  expect(failed).toMatchObject({ redraws: 0 });
+  expect(failed.failure).not.toBe("");
+
+  const retried = (await playTurn(id)).images.find(({ kind, label }) => kind === "portrait" && label === "Hesper")!;
+
+  expect(retried).toMatchObject({ redraws: 1, failure: "" });
+  expect(drawn.payloads.at(-1)!.prompt).toContain("a fresh scar across one cheek");
+});
+
+test("with Update portraits on, a World Change to the PC's looks draws their portrait again", async () => {
+  const worldChange = JSON.stringify({ lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [], world_brief: null, summary: null, facts: [], npc_summaries: [], pc_looks: "Short, with a tattooed neck" });
+  await play([turn("A wet street", scene("The ferry")), worldChange], png(1), png(2), png(3));
+  await app.patch("/settings", { updatePortraits: true });
+  const id = await newSave();
+  await playTurn(id);
+
+  expect((await app.post(`/saves/${id}/world-change`, { change: "Ash has a neck tattoo" })).status).toBe(200);
+
+  expect(find(await settled(id), "portrait")).toMatchObject({ redraws: 1 });
+  expect(drawn.payloads.at(-1)!.prompt).toContain("a tattooed neck");
+});
+
 test("with Draw scene pictures off, a Turn draws portraits but no Scene Image", async () => {
   await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], png(1), png(2), png(3));
   await app.patch("/settings", { drawScenes: false });

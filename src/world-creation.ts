@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { PromptStyle } from "./graph-builder";
-import { pcLooks, visibleNpcs } from "./image-pipeline";
+import { pcLooks, pcNow, visibleNpcs } from "./image-pipeline";
 import { LONG_TEXT } from "./limits";
 import { errorType, log } from "./logger";
 import { activateLore } from "./lore-activation";
@@ -296,7 +296,7 @@ ${imageInstructions(context)}`,
       theme: save.theme ?? "",
       world_brief: save.worldBrief,
       location: state.scene.location,
-      pc: { name: save.pc.name, looks: pcLooks(save.pc, state.inventory.wearing) },
+      pc: { name: save.pc.name, looks: pcLooks(pcNow(save.pc, state), state.inventory.wearing) },
       people: visibleNpcs(state).map(({ name, appearance }) => ({ name, looks: appearance })),
       recent_story: messages.slice(-RECENT_STORY).map(({ role, text }) => ({ role, text })),
     }),
@@ -391,15 +391,16 @@ const WorldChange = WorldUpdate.extend({
   facts: z.array(ListChange).default([]),
   npc_summaries: z.array(z.object({ name: words, summary: words })).default([]),
   npc_looks: z.array(z.object({ name: words, appearance: words })).default([]),
+  pc_looks: words.nullable().default(null),
   inventory: z.object({ wearing: z.array(words), carrying: z.array(words) }).nullable().default(null),
   status: z.object({ health: words, injuries: z.array(words), conditions: z.array(words) }).nullable().default(null),
 });
 
 // A misquoted entry can't be matched, and a reply with no change would tell the player it was done when it wasn't.
 const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown, npcs }: State) =>
-  WorldChange.refine(({ lore_entries, removed_lore, world_rules, plot_threads, world_brief, summary, facts, npc_summaries, npc_looks, inventory, status }) => {
+  WorldChange.refine(({ lore_entries, removed_lore, world_rules, plot_threads, world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status }) => {
     const quotes = (list: string[], changes: typeof world_rules) => changes.every(({ old }) => old === null || list.includes(old));
-    const changed = [lore_entries, removed_lore, world_rules, plot_threads, facts, npc_summaries, npc_looks].some((list) => list.length > 0) || [world_brief, summary, inventory, status].some((part) => part !== null);
+    const changed = [lore_entries, removed_lore, world_rules, plot_threads, facts, npc_summaries, npc_looks].some((list) => list.length > 0) || [world_brief, summary, pc_looks, inventory, status].some((part) => part !== null);
     // The same rule as a Turn's status.
     const statusInWords = status === null || ![status.health, ...status.injuries, ...status.conditions].some(hasNumber);
     return (
@@ -414,7 +415,7 @@ const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown, npcs }: State
     );
   });
 
-const worldChangePrompt = (context: Context, { worldBrief, worldBible, worldRules, plotThreads, summary, pcKnown, inventory, status, npcs }: State, change: string): Prompt => [
+const worldChangePrompt = (context: Context, { worldBrief, worldBible, worldRules, plotThreads, summary, pcKnown, inventory, status, npcs, pcAppearance }: State, change: string): Prompt => [
   {
     role: "system",
     // The world comes last, as a provider's error can echo the start of this and the server log keeps that.
@@ -426,6 +427,7 @@ Each change in world_rules, plot_threads and facts has old, copied exactly from 
 world_brief, summary, facts and npc_summaries are the Journal, which the player reads. Change them only where they no longer hold, and give null or an empty list otherwise. Write them as the PC knows the world: a secret stays out of them, even when the player's instruction names it, and goes in the hidden parts. Each of npc_summaries holds a new summary with the exact name of an NPC already in the Journal.
 inventory and status are what the PC wears and carries, and their health, injuries and conditions, which the player also reads. Give the whole new inventory or status only when the instruction changes it, keeping everything it doesn't change, and null otherwise. Write status in words with no digits: health in at most five words, and at most three injuries and three conditions of at most eight words each.
 npc_looks holds new looks only for each NPC whose looks or clothing the instruction changes, with their exact name from npcs, ${LOOKS}. These are hidden, and they are what pictures of that NPC are drawn from.
+pc_looks is the PC's new looks, only when the instruction changes how their body or face looks, such as their hair, a scar, a tattoo or makeup, and null otherwise: start from pc_looks in the world, keep all it doesn't change, and write only how their body and face look in at most 40 words, never clothing, gear, temperament or history. Pictures of the PC are drawn from it.
 ${modelInstructions(context)}
 The world as it stands, as JSON: ${JSON.stringify({
       world_brief: worldBrief,
@@ -433,6 +435,7 @@ The world as it stands, as JSON: ${JSON.stringify({
       world_rules: worldRules,
       plot_threads: plotThreads,
       npcs: Object.fromEntries(npcs.map(({ name, appearance }) => [name, appearance])),
+      pc_looks: pcAppearance,
       journal: {
         summary,
         facts: pcKnown.facts,

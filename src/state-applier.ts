@@ -30,6 +30,8 @@ export type State = {
   chapterReady: boolean;
   /** Null until the Narrator first sets it, as in a Save from before Story Time. */
   storyTime: StoryTime | null;
+  /** How the PC's body and face look now, once the story changes them. Empty until then, when the PC's own physicalTraits stand. */
+  pcAppearance: string;
 };
 
 /** `day` counts days since the Opening, as Narrators add whole numbers far better than they work an in-world calendar. The player never sees it. */
@@ -55,6 +57,7 @@ export const openingState: State = {
   chapters: [],
   chapterReady: false,
   storyTime: null,
+  pcAppearance: "",
 };
 
 const stringList = z.array(z.string());
@@ -80,6 +83,7 @@ export const StateSections = {
   chapters: z.array(z.object({ lastMessage: z.number().int().nullable(), title: z.string() })),
   chapterReady: z.boolean(),
   storyTime: z.object({ day: z.number().int(), date: z.string(), timeOfDay: z.string() }).nullable(),
+  pcAppearance: z.string(),
 } satisfies { [Section in keyof State]: z.ZodType<State[Section]> };
 
 const nonEmpty = z.string().min(1);
@@ -119,6 +123,7 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("update_plot_thread"), thread: nonEmpty, replacement: nonEmpty }),
   z.object({ op: z.literal("resolve_plot_thread"), thread: nonEmpty }),
   z.object({ op: z.literal("set_summary"), summary: nonEmpty }),
+  z.object({ op: z.literal("set_pc_appearance"), appearance: nonEmpty }),
   z.object({ op: z.literal("set_story_time"), days_passed: z.number().int().min(0), date: nonEmpty.nullable(), time_of_day: nonEmpty }),
 ]);
 export type StateOperation = z.infer<typeof StateOperation>;
@@ -263,6 +268,9 @@ function apply(state: State, operation: StateOperation): string | undefined {
     case "set_summary":
       state.summary = operation.summary;
       return;
+    case "set_pc_appearance":
+      state.pcAppearance = operation.appearance;
+      return;
     case "set_story_time": {
       const { days_passed, time_of_day } = operation;
       // A new day kept on the old date would put the story on the wrong day, so it waits for a Turn that names one.
@@ -366,6 +374,7 @@ export const WorldEdit = z.discriminatedUnion("edit", [
   z.object({ edit: z.literal("status"), health: z.string(), injuries: z.array(z.string()), conditions: z.array(z.string()) }),
   // Hidden like the rest of an NPC's looks, so only a World Change writes it.
   z.object({ edit: z.literal("npcLooks"), name: z.string(), appearance: z.string() }),
+  z.object({ edit: z.literal("pcLooks"), appearance: z.string() }),
   // Only the server closes a Chapter, as it writes the title.
   z.object({ edit: z.literal("closeChapter"), title: z.string() }),
 ]);
@@ -392,6 +401,8 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, ...mergeWorldUpdate(state, edit.update) };
     case "inventory":
       return { ...state, inventory: { wearing: edit.wearing, carrying: edit.carrying } };
+    case "pcLooks":
+      return { ...state, pcAppearance: edit.appearance };
     case "npcLooks":
       return { ...state, npcs: state.npcs.map((npc) => (npc.name === edit.name ? { ...npc, appearance: edit.appearance } : npc)) };
     case "status":
