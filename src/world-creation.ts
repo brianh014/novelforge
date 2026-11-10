@@ -335,16 +335,17 @@ const pictureRules = (kind: PictureAsk["kind"], style: PromptStyle, words: numbe
 const EDIT_RULE =
   "The image model is given the portrait that was describes, and edits it. looks is how this person looks now. keep and changes make the editing instruction. Cover every difference that shows from the chest up: clothing taken off, put on or changed, hair, makeup, marks on the skin and expression. Leave out whatever that frame can't show, such as hands, legs, feet and anything they hold.";
 const KEEP_WORDS = 40;
+// Stated in the field, as a limit the text model wasn't told failed every try of an Update with many changes.
+const CHANGE_WORDS = 100;
 const KEEP_THE_REST = "Keep the head and shoulders framing, the plain background, the lighting and the art style the same.";
-const editReply = (words: number) =>
-  z.object({
-    keep: atMost(KEEP_WORDS).describe(
-      `One sentence telling the image model to keep the same person, naming their face, facial proportions and skin tone and each feature from was that looks doesn't change, such as eye colour, scars or hairstyle, as in "Keep the same young man: the same face, facial proportions, light skin, grey-green eyes and acne-scarred jaw."`,
-    ),
-    changes: atMost(words - KEEP_WORDS - countWords(KEEP_THE_REST)).describe(
-      `What to change so the portrait shows them as looks describes, one change per sentence, each naming what in the portrait goes and what replaces it, as in "Replace the green t-shirt with a bare chest."`,
-    ),
-  });
+const editReply = z.object({
+  keep: atMost(KEEP_WORDS).describe(
+    `One sentence telling the image model to keep the same person, naming their face, facial proportions and skin tone and each feature from was that looks doesn't change, such as eye colour, scars or hairstyle, as in "Keep the same young man: the same face, facial proportions, light skin, grey-green eyes and acne-scarred jaw." Never over ${KEEP_WORDS} words.`,
+  ),
+  changes: atMost(CHANGE_WORDS).describe(
+    `What to change so the portrait shows them as looks describes, one change per sentence, each naming what in the portrait goes and what replaces it, as in "Replace the green t-shirt with a bare chest." Never over ${CHANGE_WORDS} words.`,
+  ),
+});
 
 /**
  * A Cover's or portrait's Image Prompt, written for the image model's family. The player reads it, so its prompt holds only
@@ -358,7 +359,7 @@ export async function writePicturePrompt(context: Context, ask: PictureAsk, styl
   const lettered = (prompt: string) => ask.kind !== "cover" || quoted(ask.title.toLowerCase()).some((title) => prompt.toLowerCase().includes(title));
   const edit = ask.kind === "portrait" && !!ask.was;
   const whole = z.object({ text: atMost(words).refine(lettered, "no title in quotation marks") });
-  const edited = editReply(words);
+  const edited = editReply;
   const reply = edit ? edited : whole;
   const { kind, ...details } = ask;
   const prompt: Prompt = [
