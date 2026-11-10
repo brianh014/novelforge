@@ -1219,7 +1219,7 @@ export function startServer(options: {
               ? { kind, title, ...setting, people: [pcLooksNow, ...met.map(looksOf)].filter(Boolean) }
               : { kind: "portrait", ...setting, looks: image.npc === null ? pcLooksNow : looksOf(image.npc) };
           if (ask.kind === "portrait" && !ask.looks) return Response.json({ error: "There are no looks to draw this from." }, { status: 409 });
-          if (!images.redraw(id, { kind, ref }, image.messageId, images.writer(ask))) {
+          if (!images.redraw(id, { kind, ref }, image.messageId, ask)) {
             return Response.json({ error: "This image is already being redrawn." }, { status: 409 });
           }
           return Response.json({}, { status: 202 });

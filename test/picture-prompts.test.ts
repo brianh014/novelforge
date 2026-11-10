@@ -116,6 +116,20 @@ test("a nudge is the player's request for that picture, which the prompt must sh
   expect(plain.prompts[0]![0]!.content).not.toContain("nudge");
 });
 
+test("an Update's portrait prompt is an edit of the old portrait, saying what changes and to keep the rest", async () => {
+  const { written, prompts } = write({ ...portrait, was: "A tall woman in a green shirt." }, "prose", text("Replace the green shirt with an oilskin coat. Keep everything else the same."));
+
+  expect(await written).toBe("Replace the green shirt with an oilskin coat. Keep everything else the same.");
+  const system = prompts[0]![0]!.content;
+  expect(system).toContain("The image model is given the portrait that was describes, and edits it.");
+  expect(system).not.toContain("Open the prompt with the picture's art style");
+  expect(system).not.toContain("never what isn't");
+  expect(JSON.parse(prompts[0]![1]!.content)).toMatchObject({ was: "A tall woman in a green shirt.", looks: portrait.looks });
+  const whole = write(portrait, "prose", text("A tall woman."));
+  await whole.written;
+  expect(whole.prompts[0]![0]!.content).not.toContain("edits it");
+});
+
 test("a Cover or portrait follows the Image Instructions, and never the Model Instructions", async () => {
   const script = scriptedTextProvider(text("A tall woman in soft light."));
   const settings = settingsStore(join(folder.path, "settings.json"));

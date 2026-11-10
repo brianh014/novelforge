@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { COVER_FROM_PORTRAITS } from "../src/image-pipeline";
 import { saveStore } from "../src/save-store";
+import type { PictureAsk } from "../src/world-creation";
 import { png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 type Item = { kind: string; ref: number; label: string; prompt: string | null; redraws: number; redrawing: boolean; failure: string };
@@ -12,10 +13,12 @@ let folder: ReturnType<typeof tempFolder>;
 let app: ReturnType<typeof startApp>;
 let drawn: ReturnType<typeof scriptedImages>;
 let savesDir: string;
+let asks: PictureAsk[];
 
 const play = (replies: string[], ...imageReplies: Parameters<typeof scriptedImages>) => {
   drawn = scriptedImages(...imageReplies);
-  app = startApp(savesDir, scriptedTextProvider(...replies).textProvider, scriptedDice(), 2, drawn.imageAdapter);
+  asks = [];
+  app = startApp(savesDir, scriptedTextProvider(...replies).textProvider, scriptedDice(), 2, drawn.imageAdapter, async (ask, _style, template) => (asks.push(ask), template));
   return app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
 };
 
@@ -317,7 +320,7 @@ A storm`, aspect_ratio: "2:3" });
 
 const update = (id: string, { kind, ref }: Item) => app.post(`/saves/${id}/gallery/update`, { kind, ref });
 
-test("Update draws a portrait again from a new prompt of the person's looks now, keeping their face, and only for a Cover or portrait", async () => {
+test("Update draws a portrait again as an edit of its first image, from the person's looks now, keeping their face, and only for a Cover or portrait", async () => {
   await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], png(1), png(2), png(3), png(4));
   const id = await newSave();
   const before = await playTurn(id);
@@ -328,7 +331,8 @@ test("Update draws a portrait again from a new prompt of the person's looks now,
 
   expect(drawn.payloads.at(-1)).toMatchObject({ aspect_ratio: "1:1" });
   expect(drawn.payloads.at(-1)!.prompt).toContain("Tall, in oilskins");
-  expect(drawn.payloads.at(-1)!.prompt).toContain("The portraits show only each person's face and hair");
+  expect(drawn.payloads.at(-1)!.prompt).not.toContain("The portraits show only");
+  expect(asks.at(-1)).toMatchObject({ kind: "portrait", looks: "Tall, in oilskins", was: hesper.prompt });
   expect(drawn.payloads.at(-1)!.reference_images.map(({ role }) => role)).toEqual(["npc"]);
   expect(after.images.find(({ label }) => label === "Hesper")!.prompt).not.toContain("The portraits show only");
   expect(after.images.find(({ label }) => label === "Hesper")).toMatchObject({ redraws: 1 });

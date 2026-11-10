@@ -22,6 +22,7 @@ import {
   playOpening,
   playTurn,
   type Journal,
+  type Portrait,
   portraitUrl,
   previewRevert,
   replaceResponse,
@@ -166,6 +167,11 @@ export function Play({ id }: { id: string }) {
   const [setupNotice, setSetupNotice] = useState<string>();
   const [chatStyle, setChatStyle] = useState<ChatStyle>("prose");
   const [journal, setJournal] = useState<Journal>();
+  // Portraits updated while the page is open, under the latest Message then. Only in memory, so a refresh clears them.
+  const [updated, setUpdated] = useState<{ portrait: Portrait; messageId: number }[]>([]);
+  const latestId = useRef<number>(undefined);
+  const lastJournal = useRef<Journal>(undefined);
+  latestId.current = messages.at(-1)?.id;
   const [openNewImages, setOpenNewImages] = useState(true);
   // Pictures each list held when first fetched. They stay folded, and only ones drawn later open by themselves.
   const loaded = useRef<Record<"scene" | "requested" | "portrait", Set<number>>>({} as never);
@@ -199,7 +205,7 @@ export function Play({ id }: { id: string }) {
   const [closingChapter, setClosingChapter] = useState(false);
   const inputBox = useRef<HTMLTextAreaElement>(null);
   const story = useRef<HTMLDivElement>(null);
-  const inlineCount = images.images.length + requested.images.length + (journal?.portraits.length ?? 0);
+  const inlineCount = images.images.length + requested.images.length + (journal?.portraits.length ?? 0) + updated.length;
   const { more, room, onScroll, refit } = useTurnScroll(story, turn, messages.at(-1)?.id, inlineCount, folded);
   const rewriteButton = useRef<HTMLButtonElement>(null);
   const drawButton = useRef<HTMLButtonElement>(null);
@@ -252,6 +258,11 @@ export function Play({ id }: { id: string }) {
 
   function takeJournal(next: Journal) {
     loaded.current.portrait ??= new Set(next.portraits.map(({ id }) => id));
+    const before = lastJournal.current;
+    lastJournal.current = next;
+    const messageId = latestId.current;
+    const redrawn = next.portraits.filter((portrait) => (before?.portraits.find(({ id }) => id === portrait.id)?.redraws ?? portrait.redraws) < portrait.redraws);
+    if (messageId !== undefined && redrawn.length > 0) setUpdated((shown) => [...shown, ...redrawn.map((portrait) => ({ portrait, messageId }))]);
     setJournal(next);
   }
 
@@ -538,6 +549,14 @@ export function Play({ id }: { id: string }) {
             <details key={portrait.id} className="inline-image" open={opens("portrait", portrait.id)} onToggle={refit}>
               <summary>Portrait: {portrait.npc}</summary>
               <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={portrait.npc!} onLoad={refit} />
+            </details>
+          ))}
+        {updated
+          .filter(({ messageId }) => messageId === message.id)
+          .map(({ portrait }) => (
+            <details key={`${portrait.id}/${portrait.redraws}`} className="inline-image" open={openNewImages} onToggle={refit}>
+              <summary>Portrait updated: {portrait.npc ?? pc}</summary>
+              <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={portrait.npc ?? pc} onLoad={refit} />
             </details>
           ))}
         {requestedRows(message)}

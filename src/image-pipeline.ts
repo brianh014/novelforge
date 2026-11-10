@@ -190,9 +190,9 @@ const coverPayload = (prompt: string, people: ImagePayload["reference_images"]):
   style_preset: "",
 });
 
-/** `face` is the portrait being updated, so the new one keeps that face and takes the clothing from the prompt. */
-const portraitPayload = (prompt: string, face: ImagePayload["reference_images"] = []): ImagePayload => ({
-  prompt: withReferenceRoles(prompt, face),
+/** `face` is the portrait being updated, so the new one keeps that face and takes the clothing from the prompt. An `edit` prompt says itself what to keep. */
+const portraitPayload = (prompt: string, face: ImagePayload["reference_images"] = [], edit = false): ImagePayload => ({
+  prompt: edit ? prompt : withReferenceRoles(prompt, face),
   negative_prompt: AVOID,
   aspect_ratio: "1:1",
   reference_images: face,
@@ -308,7 +308,7 @@ export function imagePipeline(
   }
 
   /** The same kind of request that made the image, so only the prompt, the Art Style and the Settings can differ. */
-  function redrawPayload(id: string, { kind, ref }: ImageTarget, messageId: number, prompt: string, keepFace = false) {
+  function redrawPayload(id: string, { kind, ref }: ImageTarget, messageId: number, prompt: string, keepFace = false, edit = false) {
     if (kind === "scene" || kind === "requested") {
       const state = saves.snapshot(id, messageId);
       // An image from before this kept no record, and was drawn from the cast and the PC.
@@ -321,7 +321,7 @@ export function imagePipeline(
     const bytes = saves.original(id, ref) ?? saves.portrait(id, ref);
     const mediaType = imageType(bytes);
     const role = saves.portraits(id).find((portrait) => portrait.id === ref)?.npc === null ? "pc" : "npc";
-    return portraitPayload(prompt, reference(role, mediaType && { bytes, mediaType }));
+    return portraitPayload(prompt, reference(role, mediaType && { bytes, mediaType }), edit);
   }
 
   const redrawKey = (id: string, { kind, ref }: ImageTarget) => `${id}/${kind}/${ref}`;
@@ -372,7 +372,7 @@ export function imagePipeline(
     const pc = pcNow(started, saves.latestState(id));
     const looks = npc ? npc.appearance.trim() : pc.physicalTraits?.trim() && pcLooks(pc, wearing);
     if (!looks) return;
-    if (pipeline.redraw(id, { kind: "portrait", ref: portrait.id }, portrait.messageId, writer({ kind: "portrait", looks, theme, world: worldBrief, artStyle }))) {
+    if (pipeline.redraw(id, { kind: "portrait", ref: portrait.id }, portrait.messageId, { kind: "portrait", looks, theme, world: worldBrief, artStyle })) {
       log.info("images", "Portrait updated to new looks", about(id, { kind: "portrait", messageId: portrait.messageId }));
     }
   }
@@ -400,19 +400,24 @@ export function imagePipeline(
 
     /** False when that image is already being redrawn. Jobs live in memory, so stopping the server loses this one too, and the old image stands. */
     /**
-     * `prompt` is the player's own, or for an Update, a writer that makes a new one when the job's turn comes. An Update of a
-     * portrait keeps its face, as the player wants the same person as they are now.
+     * `prompt` is the player's own, or for an Update, what to write a new one from when the job's turn comes. An Update of a
+     * portrait keeps its face, as the player wants the same person as they are now, and is written as an edit of the image
+     * its face comes from when that image surely reaches the model.
      */
-    redraw(id: string, target: ImageTarget, messageId: number, prompt: string | ((signal: AbortSignal) => Promise<string>)) {
+    redraw(id: string, target: ImageTarget, messageId: number, prompt: string | PictureAsk) {
       const keepFace = typeof prompt !== "string" && (target.kind === "portrait" || target.kind === "original");
+      // OpenRouter's image models take the reference too; a ComfyUI workflow or an SD checkpoint may not.
+      const takesFace = settings.read().imageProvider === "openrouter" || usesPortraits(settings.read());
+      const was = keepFace && takesFace ? saves.originalPrompt(id, target.ref) : undefined;
+      const write = typeof prompt === "string" ? undefined : writer(was && prompt.kind === "portrait" ? { ...prompt, was } : prompt);
       const key = redrawKey(id, target);
       if (isRedrawing(id, key)) return false;
       failures.delete(key);
       const kind = `${target.kind} redraw`;
       const draw = async (signal: AbortSignal) => {
         try {
-          const written = typeof prompt === "string" ? prompt : await prompt(signal);
-          const bytes = await adapter(redrawPayload(id, target, messageId, written, keepFace), signal);
+          const written = write ? await write(signal) : (prompt as string);
+          const bytes = await adapter(redrawPayload(id, target, messageId, written, keepFace, !!was), signal);
           session++;
           saves.replaceImage(id, target, written, bytes);
           outOfDate.delete(key);

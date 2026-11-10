@@ -885,6 +885,16 @@ export function saveStore(savesDir: string) {
       return db.query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM portrait_originals WHERE id = ?").get(portraitId)?.bytes;
     },
 
+    /** The prompt of the image `original` returns, or of the portrait while it has none. */
+    originalPrompt(id: string, portraitId: number) {
+      using db = open(id);
+      return db
+        .query<{ prompt: string | null }, [number]>(
+          "SELECT CASE WHEN o.id IS NULL THEN p.prompt ELSE o.prompt END AS prompt FROM portraits p LEFT JOIN portrait_originals o ON o.id = p.id WHERE p.id = ?",
+        )
+        .get(portraitId)?.prompt ?? undefined;
+    },
+
     /** Goes by exact name, as the state does. A null `npc` is the PC. */
     portraitOf(id: string, npc: string | null) {
       using db = open(id);
