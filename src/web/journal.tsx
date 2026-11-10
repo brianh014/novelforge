@@ -107,7 +107,7 @@ function Editable(props: { label: string; text: string; opener?: string; onSave:
 }
 
 /** Words about the world, hidden parts included, so the reply can only say that it was done or that it failed. Stays open until it's answered, as nothing else would tell the player. */
-function TellTheNarrator({ id, onDone, onClose }: { id: string; onDone: () => Promise<unknown>; onClose: () => void }) {
+export function TellTheNarrator({ id, onDone, onClose }: { id: string; onDone: () => Promise<unknown>; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);

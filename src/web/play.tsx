@@ -40,7 +40,8 @@ import {
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, StopIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, StopIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, NudgeIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
+import { TellTheNarrator } from "./journal";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 import { Person, Zoomable } from "./zoom";
@@ -176,6 +177,7 @@ export function Play({ id }: { id: string }) {
   /** Ask the Narrator's field, and its one answer, which goes when the field closes or a Turn is sent. */
   const [questioning, setQuestioning] = useState(false);
   const [question, setQuestion] = useState("");
+  const [telling, setTelling] = useState(false);
   const [answer, setAnswer] = useState("");
   const [wondering, setWondering] = useState(false);
   const askButton = useRef<HTMLButtonElement>(null);
@@ -906,6 +908,9 @@ export function Play({ id }: { id: string }) {
           >
             {AskIcon}
           </button>
+          <button type="button" className="icon" title="Tell Narrator what to change" aria-label="Tell Narrator what to change" aria-haspopup="dialog" onClick={() => setTelling(true)}>
+            {NudgeIcon}
+          </button>
           <button
             type="button"
             className="icon"
@@ -951,6 +956,8 @@ export function Play({ id }: { id: string }) {
           )}
         </div>
       </form>
+      {/* Outside the chat form, as the dialog holds a form of its own. */}
+      {telling && <TellTheNarrator id={id} onDone={async () => {}} onClose={() => setTelling(false)} />}
       {reverting && (
         <RevertDialog
           id={id}
