@@ -51,7 +51,11 @@ export const SettingsUpdate = z
     drawScenes: z.boolean(),
     // On, a portrait is drawn again, keeping its face, whenever a Turn changes how that person looks.
     updatePortraits: z.boolean(),
-    imageResolution: z.enum(["480p", "720p", "1080p", "4k"]),
+    // In megapixels, as each shape of image gets the same area. Settings from before name a video size, and 4K is too costly to keep.
+    imageResolution: z.preprocess(
+      (value) => ({ "480p": "0.5mp", "720p": "1mp", "1080p": "2mp", "4k": "2mp" })[value as string] ?? value,
+      z.enum(["0.5mp", "1mp", "2mp"]),
+    ),
     comfyUrl: z.url({ protocol: /^https?$/ }),
     comfyFamily: Family,
     // A checkpoint file doesn't say which it is, and Settings warns when the resolution is too big for it.
@@ -110,7 +114,7 @@ const defaults = {
   comfyUrl: "http://127.0.0.1:8188",
   comfyFamily: "sd",
   comfySdBase: "sdxl",
-  imageResolution: "720p",
+  imageResolution: "1mp",
   comfyCheckpoint: "",
   comfyDiffusionModel: "",
   comfyTextEncoder: "",

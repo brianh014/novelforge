@@ -36,8 +36,8 @@ const MOST_QWEN_REFERENCES = 10;
 const QWEN_TURBO_SIGMAS = "1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0";
 const QWEN_TURBO_STEPS = 8;
 
-// The side of a square with each resolution's pixels, so every shape of image gets the same area.
-const SQUARE = { "480p": 640, "720p": 960, "1080p": 1440, "4k": 2880 };
+// The side of a square with each resolution's megapixels, in multiples of 32, so every shape of image gets the same area.
+const SQUARE = { "0.5mp": 704, "1mp": 1024, "2mp": 1408 };
 
 // Keeps the previous Scene's layout and palette but leaves room for what has changed in it.
 const IMG2IMG_DENOISE = 0.65;

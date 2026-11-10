@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { settingsStore } from "../src/settings-store";
 import { narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
@@ -44,7 +46,7 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     comfyUrl: "http://127.0.0.1:8188",
     comfyFamily: "sd",
     comfySdBase: "sdxl",
-    imageResolution: "720p",
+    imageResolution: "1mp",
     comfyCheckpoint: "",
     comfyDiffusionModel: "",
     comfyTextEncoder: "",
@@ -72,7 +74,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     comfyUrl: "http://localhost:8188",
     comfyFamily: "flux2",
     comfySdBase: "sd15",
-    imageResolution: "1080p",
+    imageResolution: "2mp",
     comfyCheckpoint: "dream.safetensors",
     comfyDiffusionModel: "flux2.safetensors",
     comfyTextEncoder: "mistral.safetensors",
@@ -282,4 +284,12 @@ test("API keys never enter a Save, its duplicates or its export", async () => {
     expect(Buffer.from(bytes).includes(imageKey)).toBe(false);
   }
   expect(await app.get("/settings").then((r) => r.text())).not.toContain("-key-");
+});
+
+test("a resolution saved by its old video name reads as megapixels, and 4K as the largest left", () => {
+  const path = join(folder.path, "old-settings.json");
+  for (const [old, now] of [["480p", "0.5mp"], ["720p", "1mp"], ["1080p", "2mp"], ["4k", "2mp"]]) {
+    writeFileSync(path, JSON.stringify({ imageResolution: old }));
+    expect(settingsStore(path).read().imageResolution).toBe(now as never);
+  }
 });

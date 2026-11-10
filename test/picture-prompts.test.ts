@@ -117,11 +117,16 @@ test("a nudge is the player's request for that picture, which the prompt must sh
 });
 
 test("an Update's portrait prompt is an edit of the old portrait, saying what changes and to keep the rest", async () => {
-  const { written, prompts } = write({ ...portrait, was: "A tall woman in a green shirt." }, "prose", text("Replace the green shirt with an oilskin coat. Keep everything else the same."));
+  const reply = JSON.stringify({ keep: "Keep the same tall woman: the same face and grey eyes.", changes: "Replace the green shirt with an oilskin coat." });
+  const { written, prompts } = write({ ...portrait, was: "A tall woman in a green shirt." }, "prose", reply);
 
-  expect(await written).toBe("Replace the green shirt with an oilskin coat. Keep everything else the same.");
+  // The person first and the rest last, put in order by the code, as the text model ignored the order it was given.
+  expect(await written).toBe(
+    "Keep the same tall woman: the same face and grey eyes. Replace the green shirt with an oilskin coat. Keep the head and shoulders framing, the plain background, the lighting and the art style the same.",
+  );
   const system = prompts[0]![0]!.content;
   expect(system).toContain("The image model is given the portrait that was describes, and edits it.");
+  expect(system).toContain("telling the image model to keep the same person");
   expect(system).not.toContain("Open the prompt with the picture's art style");
   expect(system).not.toContain("never what isn't");
   expect(JSON.parse(prompts[0]![1]!.content)).toMatchObject({ was: "A tall woman in a green shirt.", looks: portrait.looks });

@@ -378,7 +378,7 @@ test("an Advanced workflow draws a Scene Image into the Save, and it counts", as
   const graph = comfy.jobs.prompts.at(-1)!;
   expect(nodes(graph, "CLIPTextEncode")[0]!.inputs.text).toEndWith("A flooded street");
   expect(nodes(graph, "CLIPTextEncode")[1]!.inputs.text).toBe("text, captions, letters, numbers, dice");
-  expect(nodes(graph, "EmptyLatentImage")[0]!.inputs).toMatchObject({ width: 1280, height: 720 });
+  expect(nodes(graph, "EmptyLatentImage")[0]!.inputs).toMatchObject({ width: 1360, height: 768 });
   expect(nodes(graph, "KSampler")[0]!.inputs.seed).toBeNumber();
   // The Simple Mode LoRA list and trigger words are the workflow's business here.
   expect(nodes(graph, "LoraLoader")).toEqual([]);

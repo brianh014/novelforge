@@ -30,10 +30,9 @@ const LOG_LEVELS = [
   ["verbose", "Verbose"],
 ] as const;
 const RESOLUTIONS = [
-  ["480p", "480p (848 × 480)"],
-  ["720p", "720p (1280 × 720)"],
-  ["1080p", "1080p (1920 × 1088)"],
-  ["4k", "4K (3840 × 2160)"],
+  ["0.5mp", "0.5 MP (704 × 704 portrait, 944 × 528 scene)"],
+  ["1mp", "1 MP (1024 × 1024 portrait, 1360 × 768 scene)"],
+  ["2mp", "2 MP (1408 × 1408 portrait, 1872 × 1056 scene)"],
 ];
 const THIS_STORY = "This story";
 
@@ -447,10 +446,10 @@ function ComfySettings({
   const addLora = useRef<HTMLButtonElement>(null);
   const { comfySdBase, imageResolution } = draft;
   const tooBig =
-    comfySdBase === "sd15" && imageResolution !== "480p"
-      ? "SD 1.5 models are trained for small images, so this resolution may double faces and figures. 480p suits them best."
-      : comfySdBase === "sdxl" && imageResolution === "4k"
-        ? "SDXL models are trained for about 1024 pixels, so 4K may repeat subjects. 1080p or lower suits them best."
+    comfySdBase === "sd15" && imageResolution !== "0.5mp"
+      ? "SD 1.5 models are trained for small images, so this resolution may double faces and figures. 0.5 MP suits them best."
+      : comfySdBase === "sdxl" && imageResolution === "2mp"
+        ? "SDXL models are trained for about 1 MP, so 2 MP may repeat subjects. 1 MP suits them best."
         : "";
 
   useEffect(() => {
