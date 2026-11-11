@@ -1,7 +1,6 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { COVER_FROM_PORTRAITS } from "../src/image-pipeline";
 import { saveStore } from "../src/save-store";
 import type { PictureAsk } from "../src/world-creation";
 import { png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
@@ -69,7 +68,7 @@ const find = (gallery: Gallery, kind: string) => gallery.images.find((item) => i
 
 test("the Gallery lists the PC, known NPCs and Scene Images with their prompts, and hides NPCs the PC doesn't know", async () => {
   await play(
-    [turn("[Hesper] on a wet street", meet("Hesper"), meet("Stranger"), know("Hesper"), scene("The ferry", "Hesper", "Stranger"))],
+    [turn("[Hesper: Tall, in oilskins] on a wet street", meet("Hesper"), meet("Stranger"), know("Hesper"), scene("The ferry", "Hesper", "Stranger"))],
     png(1),
     png(2),
     png(3),
@@ -126,7 +125,7 @@ test("redrawing a Scene Image replaces only it, with its shape and references, d
 
 test("a redrawn portrait is what later Scene Images use, while the NPC's stored looks stay", async () => {
   await play(
-    [turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("[Hesper] on a pier", scene("The pier", "Hesper"))],
+    [turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("[Hesper: Tall, in oilskins] on a pier", scene("The pier", "Hesper"))],
     png(1),
     png(2),
     png(3),
@@ -313,8 +312,8 @@ test("a Cover Redraw in the story draws the PC from their portrait, as the first
   await settled(id);
 
   expect(drawn.payloads[1]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
-  expect(drawn.payloads[2]).toMatchObject({ prompt: `${COVER_FROM_PORTRAITS}
-A storm`, aspect_ratio: "2:3" });
+  // The player's own prompt goes as it is, with nothing added.
+  expect(drawn.payloads[2]).toMatchObject({ prompt: "A storm", aspect_ratio: "2:3" });
   expect(drawn.payloads[2]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
 });
 

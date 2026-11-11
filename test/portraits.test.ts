@@ -249,14 +249,14 @@ test("an unfinished Local setup makes no portrait calls, and the OpenRouter adap
   expect(images.payloads).toEqual([]);
 });
 
-test("a Scene Image gets the portraits of the PC first, then those marked in it, and their looks without names", async () => {
+test("a Scene Image gets the portraits of the PC first, then those marked in it, and the Narrator's phrases without names", async () => {
   const pictured = (visual_description: string, ...state_operations: object[]) =>
     JSON.stringify({ check: null, narration: "The tide rises.", state_operations, scene_changed: true, visual_description });
   play(
     [
       pictured("An empty street", moveTo("The street")),
       pictured(
-        "[Orin] nods to [Hesper] while [Ash] waits",
+        "[Orin: Stooped, red scarf] nods to [Hesper: Tall, in oilskins] while [Ash: wearing a tin badge] waits",
         meet("Hesper", "Tall, in oilskins"),
         meet("Orin", "Stooped, red scarf"),
         meet("Tobin", "Unseen"),

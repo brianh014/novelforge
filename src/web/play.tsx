@@ -41,7 +41,7 @@ import {
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, StopIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, NudgeIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, StopIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
@@ -706,7 +706,7 @@ export function Play({ id }: { id: string }) {
           line={line}
           controls={controls}
           rows={requestedRows}
-          waiting={!!turn && !turn.narration}
+          waiting={!!turn && !(turn.edit && turn.narration)}
           retry={turn?.retry}
         >
           {/* Back should show what that moment looked like, not the newest image. */}
@@ -744,12 +744,9 @@ export function Play({ id }: { id: string }) {
               {/* Mounted before any text arrives, or screen readers would not announce it. */}
               <div aria-live="polite" className="message narrator">
                 {turn?.retry && <p className="notice">{turn.retry}</p>}
-                {turn &&
-                  (turn.narration ? (
-                    messageBeats({ role: "narrator", text: turn.narration }).map(line)
-                  ) : (
-                    <p className="waiting">{WRITING}</p>
-                  ))}
+                {turn?.narration && messageBeats({ role: "narrator", text: turn.narration }).map(line)}
+                {/* Until the Turn is done, as the text can pause while the Narrator writes the rest of its reply. An Edit has its own. */}
+                {turn && !(turn.edit && turn.narration) && <p className="waiting">{WRITING}</p>}
               </div>
               <div ref={room} aria-hidden="true" />
             </div>
@@ -928,7 +925,7 @@ export function Play({ id }: { id: string }) {
             {AskIcon}
           </button>
           <button type="button" className="icon" title="Tell Narrator what to change" aria-label="Tell Narrator what to change" aria-haspopup="dialog" onClick={() => setTelling(true)}>
-            {NudgeIcon}
+            {RewriteIcon}
           </button>
           <button
             type="button"

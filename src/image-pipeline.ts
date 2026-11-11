@@ -81,9 +81,6 @@ export function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: stri
   return [traits, dressed].filter(Boolean).join(", ");
 }
 
-// Longer stored looks would crowd out the scene, as a player can write as much as they like for their PC.
-const MOST_LOOKS_WORDS = 60;
-
 const named = (full: string, mark: string) =>
   full.toLowerCase() === mark.toLowerCase() || full.toLowerCase().split(" ").includes(mark.toLowerCase());
 
@@ -96,24 +93,21 @@ function findPerson(npcs: Npc[], mark: string) {
 }
 
 /**
- * Turns the Narrator's [Name: phrase] marks into what the model reads, so what a person does stays beside who they are
- * and no name reaches a model that might letter it into the picture. A portrait carries a face better than words, and
- * words that repeat it only cost length, so someone with a reference keeps the Narrator's short phrase and anyone else
- * gets their stored looks, which draw them the same every time.
+ * Turns the Narrator's [Name: phrase] marks into its phrases, so no name reaches a model that might letter it into the
+ * picture, and says who is pictured. The phrase is all the model reads of them: no stored looks are added, as the
+ * Narrator writes the whole prompt to its length and order, and added looks made prompts nearly twice that length.
  */
-export function expandMarks(text: string, npcs: Npc[], pc: { name: string; looks: string }, hasReference: (person: string | null) => boolean = () => false) {
+export function expandMarks(text: string, npcs: Npc[], pcName: string) {
   const pictured: Pictured = [];
   const prompt = text.replace(/\[([^[\]:]+)(?::([^[\]]*))?\]/g, (_, mark: string, phrase = "") => {
     const brief = phrase.trim();
-    const isPc = named(pc.name, mark.trim());
+    const isPc = named(pcName, mark.trim());
     const npc = isPc ? undefined : findPerson(npcs, mark.trim());
     if (!isPc && !npc) return brief || "a person";
     const person = isPc ? null : npc!.name;
     if (pictured.includes(person)) return "the same person";
     pictured.push(person);
-    const looks = (isPc ? pc.looks : npc!.appearance).trim();
-    const tooLong = looks.split(/\s+/).length > MOST_LOOKS_WORDS;
-    return brief && (hasReference(person) || tooLong) ? brief : looks || brief || "a person";
+    return brief || "a person";
   });
   return { prompt, pictured };
 }
@@ -133,18 +127,6 @@ const portraitPrompt = (looks: string, style: PromptStyle) =>
   style === "keywords"
     ? `head and shoulders portrait, one person, plain background, ${chestUp(looks)}`
     : `A head and shoulders portrait of one person, ${chestUp(looks)}, facing the viewer against a plain neutral background in soft even light.`;
-
-type Role = ImagePayload["reference_images"][number]["role"];
-
-/**
- * Says what the portraits are for, as an image model otherwise copies a portrait's clothing into the picture.
- */
-export function withReferenceRoles(prompt: string, references: { role: Role }[]) {
-  const roles = new Set(references.map(({ role }) => role));
-  const portraits = roles.has("npc") || roles.has("pc") ? " The portraits show only each person's face and hair: keep who they are, but give everyone the facial expression, dress and pose written here." : "";
-  if (!portraits) return prompt;
-  return `${prompt.trim().replace(/[^.!?]$/, "$&.")}${portraits}`;
-}
 
 // The opening of the world and of each person only, as a whole World Overview and the player's long descriptions made a prompt of nearly a thousand words, and the image model lost the cover in it.
 const COVER_WORLD_WORDS = 80;
@@ -175,24 +157,18 @@ export function coverPeople(pc: Save["pc"], wearing: string[], characters: { nam
 /** `people` are the portraits of those it shows, the PC's first, so each looks like themselves. */
 // No style_preset in any payload: each Image Prompt carries its own Art Style, as the text model writes the whole of it.
 // shortcut: an image from before that has no Art Style in its prompt, so its Redraw draws without one, Update writes it in.
-/**
- * Says first what the portraits are for, as Qwen, given them with a note at the end or none, drew the cover as an edit of a
- * portrait: the same framing and pose with a glitch. A note before the scene moves the people into it.
- */
-export const COVER_FROM_PORTRAITS =
-  "A completely new picture, not an edit of the reference portraits. Take only the face and hair of each person in the portraits, and move those people into the new scene described here, with new poses, new clothing, a new setting and a new composition:";
-
+// Every prompt is the text model's own, which says what any portraits are for: nothing is added to it here.
 const coverPayload = (prompt: string, people: ImagePayload["reference_images"]): ImagePayload => ({
-  prompt: people.length > 0 ? `${COVER_FROM_PORTRAITS}\n${prompt.trim()}` : prompt,
+  prompt,
   negative_prompt: COVER_AVOID,
   aspect_ratio: "2:3",
   reference_images: people,
   style_preset: "",
 });
 
-/** `face` is the portrait being updated, so the new one keeps that face and takes the clothing from the prompt. An `edit` prompt says itself what to keep. */
-const portraitPayload = (prompt: string, face: ImagePayload["reference_images"] = [], edit = false): ImagePayload => ({
-  prompt: edit ? prompt : withReferenceRoles(prompt, face),
+/** `face` is the portrait being updated, so the new one keeps that face, as its prompt says. */
+const portraitPayload = (prompt: string, face: ImagePayload["reference_images"] = []): ImagePayload => ({
+  prompt,
   negative_prompt: AVOID,
   aspect_ratio: "1:1",
   reference_images: face,
@@ -205,6 +181,7 @@ export function shownFailure(error: unknown) {
   return code ? "The image model can't be reached. Make sure it's running." : message;
 }
 
+type Role = ImagePayload["reference_images"][number]["role"];
 const reference = (role: Role, image: { bytes: Uint8Array; mediaType: string } | null | undefined) =>
   image ? [{ role, ...image }] : [];
 
@@ -269,13 +246,11 @@ export function imagePipeline(
 
   const scenePayload = (id: string, prompt: string, pictured: Pictured): ImagePayload => {
     const reference_images = references(id, pictured);
-    return { prompt: withReferenceRoles(prompt, reference_images), negative_prompt: AVOID, aspect_ratio: "16:9", reference_images, style_preset: "" };
+    return { prompt, negative_prompt: AVOID, aspect_ratio: "16:9", reference_images, style_preset: "" };
   };
 
-  async function drawMoment(id: string, { description, npcs, wearing }: Moment, signal: AbortSignal) {
-    const pc = pcNow(saves.read(id).pc, saves.latestState(id));
-    const hasReference = (person: string | null) => usesPortraits(settings.read()) && !!saves.portraitOf(id, person);
-    const { prompt, pictured } = expandMarks(description, npcs, { name: pc.name, looks: pcLooks(pc, wearing) }, hasReference);
+  async function drawMoment(id: string, { description, npcs }: Moment, signal: AbortSignal) {
+    const { prompt, pictured } = expandMarks(description, npcs, saves.read(id).pc.name);
     const bytes = await adapter(scenePayload(id, prompt, pictured), signal);
     // Counted before storing, as the player has paid for it whether or not its Message is still there.
     session++;
@@ -308,7 +283,7 @@ export function imagePipeline(
   }
 
   /** The same kind of request that made the image, so only the prompt, the Art Style and the Settings can differ. */
-  function redrawPayload(id: string, { kind, ref }: ImageTarget, messageId: number, prompt: string, keepFace = false, edit = false) {
+  function redrawPayload(id: string, { kind, ref }: ImageTarget, messageId: number, prompt: string, keepFace = false) {
     if (kind === "scene" || kind === "requested") {
       const state = saves.snapshot(id, messageId);
       // An image from before this kept no record, and was drawn from the cast and the PC.
@@ -321,7 +296,7 @@ export function imagePipeline(
     const bytes = saves.original(id, ref) ?? saves.portrait(id, ref);
     const mediaType = imageType(bytes);
     const role = saves.portraits(id).find((portrait) => portrait.id === ref)?.npc === null ? "pc" : "npc";
-    return portraitPayload(prompt, reference(role, mediaType && { bytes, mediaType }), edit);
+    return portraitPayload(prompt, reference(role, mediaType && { bytes, mediaType }));
   }
 
   const redrawKey = (id: string, { kind, ref }: ImageTarget) => `${id}/${kind}/${ref}`;
@@ -409,7 +384,9 @@ export function imagePipeline(
       // OpenRouter's image models take the reference too; a ComfyUI workflow or an SD checkpoint may not.
       const takesFace = settings.read().imageProvider === "openrouter" || usesPortraits(settings.read());
       const was = keepFace && takesFace ? saves.originalPrompt(id, target.ref) : undefined;
-      const write = typeof prompt === "string" ? undefined : writer(was && prompt.kind === "portrait" ? { ...prompt, was } : prompt);
+      // Without the old prompt to edit, a portrait drawn from its face is told the face is all it takes from it.
+      const asked = typeof prompt !== "string" && prompt.kind === "portrait" && keepFace ? { ...prompt, ...(was ? { was } : { face: true }) } : prompt;
+      const write = typeof asked === "string" ? undefined : writer(asked);
       const key = redrawKey(id, target);
       if (isRedrawing(id, key)) return false;
       failures.delete(key);
@@ -417,7 +394,7 @@ export function imagePipeline(
       const draw = async (signal: AbortSignal) => {
         try {
           const written = write ? await write(signal) : (prompt as string);
-          const bytes = await adapter(redrawPayload(id, target, messageId, written, keepFace, !!was), signal);
+          const bytes = await adapter(redrawPayload(id, target, messageId, written, keepFace), signal);
           session++;
           saves.replaceImage(id, target, written, bytes);
           outOfDate.delete(key);

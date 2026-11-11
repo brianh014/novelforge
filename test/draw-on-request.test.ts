@@ -198,7 +198,7 @@ test("the text call gets the recent story and the Scene's people with their look
   expect(data.recent_story).toMatchObject([{ role: "player", text: "I wait." }, { role: "narrator", text: "The tide rises." }]);
 });
 
-test("a mark for someone outside the Scene gets no stored looks and no portrait", async () => {
+test("a mark for someone outside the Scene gets no portrait", async () => {
   await play(
     [
       turn("A wet street", meet("Offstage", "OFFSTAGE-LOOKS"), know("Offstage"), meet("Hesper"), scene("The ferry", "Hesper")),
@@ -212,7 +212,8 @@ test("a mark for someone outside the Scene gets no stored looks and no portrait"
   await asked(id, "the two of them");
 
   const payload = drawn.payloads.at(-1)!;
-  expect(payload.prompt).toStartWith("a stranger in grey and a tall woman in oilskins on a bench");
+  expect(payload.prompt).toStartWith("a stranger in grey and a tall woman on a bench");
+  expect(payload.prompt).not.toContain("OFFSTAGE-LOOKS");
   expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc"]);
 });
 
@@ -240,7 +241,7 @@ test("the prompt follows the Prompt Style, with marks only in prose", async () =
 
   const prose = written.prompts.at(-1)![0]!.content;
   expect(prose).toContain("[Name: phrase]");
-  expect(prose).toContain("at most 180 words");
+  expect(prose).toContain("at most 150 words in all");
   expect(prose).toContain("Open the prompt with the picture's art style");
   expect(prose).toContain("someone who has never read it must be able to draw this moment");
   expect(prose).toContain("never write no, not or without");
@@ -252,7 +253,7 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   await play(
     [
       turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")),
-      written_("[Hesper: a tall woman in oilskins] on a bench, by [Ash], and a boy with a kite"),
+      written_("[Hesper: a tall woman in oilskins] on a bench, by [Ash: a short person in a wool coat], and a boy with a kite"),
     ],
     png(1),
     png(2),
@@ -265,8 +266,7 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   const gallery = await asked(id, "Hesper and me");
 
   const payload = drawn.payloads.at(-1)!;
-  // The PC wears nothing listed, so is drawn dressed rather than bare.
-  expect(payload.prompt).toStartWith("a tall woman in oilskins on a bench, by a short person with cropped hair, fully clothed in everyday clothes that suit them, and a boy with a kite");
+  expect(payload.prompt).toStartWith("a tall woman in oilskins on a bench, by a short person in a wool coat, and a boy with a kite");
   expect(payload.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([
     ["pc", png(1)],
     ["npc", png(2)],

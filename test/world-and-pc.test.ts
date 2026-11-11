@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { COVER_FROM_PORTRAITS } from "../src/image-pipeline";
 import { saveStore } from "../src/save-store";
 import { narration, png, scriptedDice, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
@@ -113,8 +112,7 @@ test("writing the world draws the portrait from the PC in what they wear, then t
   expect(payloads[0]!.prompt.startsWith("Ink wash")).toBe(true);
   expect(payloads[1]!.prompt).toContain("Rain never stops in Saltmere.");
   expect(payloads[1]).toMatchObject({ aspect_ratio: "2:3", style_preset: "" });
-  expect(payloads[1]!.prompt.startsWith(`${COVER_FROM_PORTRAITS}
-Ink wash`)).toBe(true);
+  expect(payloads[1]!.prompt.startsWith("Ink wash")).toBe(true);
   expect(payloads[1]!.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([["pc", png(1)]]);
 });
 
@@ -523,7 +521,6 @@ test("a Cover shows only the characters the player put on it, from their portrai
   expect(roles(cover)).toEqual([["pc", png(1)], ["npc", await bytesOf(`/worlds/${id}/npcs/m1`)]]);
   expect(cover.prompt).toContain("someone's sister");
   expect(cover.prompt).not.toContain("long dead");
-  expect(cover.prompt.startsWith(COVER_FROM_PORTRAITS)).toBe(true);
   expect(roles(payloads.at(-1)!)).toEqual(roles(cover));
 });
 

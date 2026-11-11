@@ -81,7 +81,11 @@ const ResponseShape = z.object({
     summary: z.string(),
     recent_summary: z.string(),
     scene_changed: z.boolean().nullable(),
-    visual_description: z.string().nullable(),
+    // The length beside the field too, as the Narrator writes the people's looks itself and a rule mid-prompt gets ignored.
+    visual_description: z
+      .string()
+      .nullable()
+      .describe("the picture's prompt, written as the rules say and kept within their word limit with each person's looks counted in it"),
     // Defined here, beside the field, as a rule mid-prompt is the kind Narrators ignore.
     chapter_ends: z
       .boolean()

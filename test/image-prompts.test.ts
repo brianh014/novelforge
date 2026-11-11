@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { promptStyle } from "../src/graph-builder";
-import { chestUp, expandMarks, withReferenceRoles } from "../src/image-pipeline";
+import { chestUp, expandMarks } from "../src/image-pipeline";
 import { assemblePrompt, IN_ITS_WORLD_AND_STYLE, REQUESTED_IMAGE_PROMPT } from "../src/prompt-assembler";
 import { openingState } from "../src/state-applier";
 
@@ -8,11 +8,11 @@ const npcs = [
   { name: "Hesper", appearance: "a tall woman in oilskins" },
   { name: "Orin", appearance: "" },
 ];
-const pc = { name: "Ash Vane", looks: "a short man, wearing a tin badge" };
+const pc = "Ash Vane";
 
-test("each mark becomes that person's looks, beside what they do, and says who is pictured", () => {
-  expect(expandMarks("[Hesper] waves at [Ash Vane] on the quay", npcs, pc)).toEqual({
-    prompt: "a tall woman in oilskins waves at a short man, wearing a tin badge on the quay",
+test("each mark becomes the Narrator's own phrase, beside what they do, and says who is pictured", () => {
+  expect(expandMarks("[Hesper: a tall woman in black] waves at [Ash Vane: a short man with a tin badge] on the quay", npcs, pc)).toEqual({
+    prompt: "a tall woman in black waves at a short man with a tin badge on the quay",
     pictured: ["Hesper", null],
   });
 });
@@ -21,9 +21,9 @@ test("the PC can be marked by their first name", () => {
   expect(expandMarks("[Ash] sits", npcs, pc).pictured).toEqual([null]);
 });
 
-test("a person's looks go in once, and neither an unknown name nor missing looks reach the model", () => {
-  expect(expandMarks("[Hesper] turns, and [Hesper] sighs", npcs, pc)).toEqual({
-    prompt: "a tall woman in oilskins turns, and the same person sighs",
+test("a person goes in once, and neither an unknown name nor a missing phrase reaches the model", () => {
+  expect(expandMarks("[Hesper: a tall woman] turns, and [Hesper] sighs", npcs, pc)).toEqual({
+    prompt: "a tall woman turns, and the same person sighs",
     pictured: ["Hesper"],
   });
   expect(expandMarks("[Tobin] waits", npcs, pc)).toEqual({ prompt: "a person waits", pictured: [] });
@@ -36,20 +36,13 @@ test("part of a name finds someone only when it can mean nobody else", () => {
     { name: "Woman with notebook", appearance: "a woman with a notebook" },
     { name: "Woman with mesh sleeve", appearance: "a woman in mesh" },
   ];
-  expect(expandMarks("[Dana] waits", people, pc)).toEqual({ prompt: "a woman in a grey blazer waits", pictured: ["Dana Reyes"] });
+  expect(expandMarks("[Dana: a woman in grey] waits", people, pc)).toEqual({ prompt: "a woman in grey waits", pictured: ["Dana Reyes"] });
   expect(expandMarks("[dana reyes] waits", people, pc).pictured).toEqual(["Dana Reyes"]);
   expect(expandMarks("[Woman] waits", people, pc)).toEqual({ prompt: "a person waits", pictured: [] });
 });
 
-test("someone with a reference keeps the short phrase, and anyone else gets their stored looks", () => {
-  const text = "[Hesper: a tall woman in black] nods";
-  expect(expandMarks(text, npcs, pc, () => true).prompt).toBe("a tall woman in black nods");
-  expect(expandMarks(text, npcs, pc, () => false).prompt).toBe("a tall woman in oilskins nods");
-});
-
-test("looks too long for a prompt give way to the short phrase, and an unknown name keeps it", () => {
-  const long = { name: "Ash Vane", looks: "word ".repeat(61) };
-  expect(expandMarks("[Ash: a short man] sits", npcs, long).prompt).toBe("a short man sits");
+test("no stored looks are ever added, as the Narrator writes the whole prompt to its length", () => {
+  expect(expandMarks("[Hesper: a tall woman in black] nods", npcs, pc).prompt).toBe("a tall woman in black nods");
   expect(expandMarks("[Tobin: a thin boy] sits", npcs, pc)).toEqual({ prompt: "a thin boy sits", pictured: [] });
 });
 
@@ -94,18 +87,16 @@ test("with images off the Narrator writes no prompt", () => {
   expect(system).not.toContain("connected sentences");
 });
 
-test("the image model is told the portraits are only for faces, so it copies no clothing from them", () => {
-  expect(withReferenceRoles("A quay at dusk.", [])).toBe("A quay at dusk.");
-  expect(withReferenceRoles("A quay at dusk", [{ role: "npc" }])).toBe("A quay at dusk. The portraits show only each person's face and hair: keep who they are, but give everyone the facial expression, dress and pose written here.");
-  expect(withReferenceRoles("A quay.", [{ role: "pc" }])).toContain("The portraits show only");
+test("the Narrator writes that any portraits are only for faces, so the image model copies no clothing from them", () => {
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("end the prompt with a sentence saying that any portraits show only each person's face and hair");
 });
 
 test("an Image Prompt puts each person once in what they do, keeps props plain and sized, and holds to a real era", () => {
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("Make each mark the subject of the sentence that says what that person does");
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("never in a list of who is there");
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("keep their hands empty otherwise");
-  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("Picture at most four people and leave anyone else out of view.");
-  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("Leave out poses where people carry, lift or hold each other or share a seat or a horse");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("Picture at most three people and leave anyone else out of view.");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("at least an arm's length of clear space between people's bodies");
   expect(REQUESTED_IMAGE_PROMPT.prose).toContain("each named plainly with its size, material and place");
   expect(IN_ITS_WORLD_AND_STYLE).toContain("Say which real era and region the place, buildings and clothing resemble");
   expect(IN_ITS_WORLD_AND_STYLE).toContain("in a world set before about 1600, such as an ancient or medieval one, never write coat");
