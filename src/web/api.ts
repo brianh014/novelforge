@@ -239,6 +239,9 @@ export const enhance = (
 
 export const editJournal = (id: string, edit: VisibleEdit) => request<object>(`/saves/${id}/edits`, jsonBody(edit));
 
+/** Renames an NPC everywhere in the story, Messages and images included. */
+export const renameNpc = (id: string, name: string, newName: string) => request<object>(`/saves/${id}/rename`, jsonBody({ name, newName }));
+
 export const getChapters = (id: string) => request<{ chapters: Chapter[]; offer: boolean }>(`/saves/${id}/chapters`);
 
 export const closeChapter = (id: string) => request<object>(`/saves/${id}/chapters`, { method: "POST" });

@@ -17,6 +17,7 @@ import {
   MAX_IMPORT_BYTES,
   type Message,
   MessageNotFound,
+  NameTaken,
   NoteNotFound,
   OPENING_SNAPSHOT,
   PcDetails,
@@ -256,6 +257,9 @@ const ImageRequest = z.object({ words: z.string().trim().max(300) });
 
 const NoteRequest = z.object({ text: z.string().trim().min(1) });
 
+// No quote or backslash, which every JSON column would hold escaped. One line, as a name.
+const RenameRequest = z.object({ name: z.string().min(1), newName: z.string().trim().min(1).max(100).regex(/^[^"\\\n\r]+$/, "A name can't have quotes, backslashes or line breaks") });
+
 // shortcut: Notes are addressed by position, so a second tab can change the wrong one, give them ids if that ever matters.
 function spliceNote(notes: string[], index: string, ...replacement: string[]) {
   const position = Number(index);
@@ -287,6 +291,7 @@ function errorResponse(error: unknown) {
   if (error instanceof PortraitNotFound) return Response.json({ error: "Portrait not found" }, { status: 404 });
   if (error instanceof NoteNotFound) return Response.json({ error: "Note not found" }, { status: 404 });
   if (error instanceof EditNotFound) return Response.json({ error: "That's no longer in the Journal" }, { status: 404 });
+  if (error instanceof NameTaken) return Response.json({ error: "Someone already has that name" }, { status: 409 });
   if (error instanceof WorldNotFound) {
     return Response.json({ error: "This world is no longer held. Go back to your choices and generate it again." }, { status: 404 });
   }
@@ -1041,6 +1046,15 @@ export function startServer(options: {
           const { id } = req.params;
           turns.assertIdle(id);
           saves.addEdit(id, edit);
+          return Response.json({});
+        },
+      },
+      "/saves/:id/rename": {
+        POST: async (req) => {
+          const { name, newName } = await parseBody(req, RenameRequest);
+          const { id } = req.params;
+          turns.assertIdle(id);
+          saves.rename(id, name, newName);
           return Response.json({});
         },
       },

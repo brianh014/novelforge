@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { editJournal, getImages, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, statusWords, tellNarrator } from "./api";
+import { editJournal, getImages, renameNpc, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, statusWords, tellNarrator } from "./api";
 import { ContinueRule, isContinue, readable } from "./chat-style";
 import { EditIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
@@ -320,6 +320,15 @@ export function Journal({ id }: { id: string }) {
                         <Person id={id} name={name} portrait={journal.portraits.find(({ npc }) => npc === name)} who={journal.npcSummaries[name]} />
                       </span>
                     </Editable>
+                    <Editable
+                      label={`Rename ${name} everywhere in the story`}
+                      text={name}
+                      opener="Rename"
+                      onSave={async (newName) => {
+                        await renameNpc(id, name, newName.trim());
+                        await reread();
+                      }}
+                    />
                   </li>
                 )}
               </NewestFirst>

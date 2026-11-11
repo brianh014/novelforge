@@ -32,6 +32,7 @@ export class NoteNotFound extends Error {}
 export class PortraitNotFound extends Error {}
 export class EditNotFound extends Error {}
 export class InvalidSave extends Error {}
+export class NameTaken extends Error {}
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
@@ -357,6 +358,18 @@ function migrate(db: Database, save?: string) {
 }
 
 const NOT_A_SAVE = "This file isn't a valid Save.";
+
+/** Every column that can hold a name, which a rename rewrites. The PC's name is left alone, as only NPCs are renamed. */
+const RENAMED: [string, string[]][] = [
+  ["save", ["world_brief", "starting_hook", "title", "pc_details", "pending_notes", "pending_edits"]],
+  ["messages", ["text", "edits", "direction"]],
+  ["sections", ["content"]],
+  ["scene_images", ["caption", "prompt", "pictured"]],
+  ["requested_images", ["caption", "prompt", "pictured"]],
+  ["portraits", ["npc", "prompt"]],
+  ["portrait_originals", ["prompt"]],
+  ["cover", ["prompt"]],
+];
 
 const SAVE_TABLES = ["save", "messages", "sections", "snapshot_sections", "scene_images", "requested_images", "portraits", "portrait_originals", "cover"];
 
@@ -1078,6 +1091,40 @@ export function saveStore(savesDir: string) {
           (edit.edit === "chapterTitle" && edit.index >= chapters.length);
         if (missing) throw new EditNotFound();
         db.run("UPDATE save SET pending_edits = ?", [JSON.stringify([...pendingEdits(db), edit])]);
+      })();
+    },
+
+    /**
+     * Renames a known NPC in every Message, Snapshot, pending change and image of the Save, so no Revert brings the old name back.
+     * Their first name alone is renamed too, as the story mostly uses it, unless someone else shares it.
+     */
+    rename(id: string, name: string, newName: string) {
+      using db = open(id);
+      db.transaction(() => {
+        const { npcs, pcKnown } = currentState(db);
+        if (!pcKnown.npcs.includes(name)) throw new EditNotFound();
+        const pc = db.query<{ pc_name: string }, []>("SELECT pc_name FROM save").get()!.pc_name;
+        const others = [pc, ...npcs.map((npc) => npc.name), ...pcKnown.npcs].filter((other) => other !== name);
+        if (others.includes(newName)) throw new NameTaken();
+        const first = (full: string) => full.split(/\s+/)[0]!;
+        const pairs: [string, string][] = [[name, newName]];
+        const [oldFirst, newFirst] = [first(name), first(newName)];
+        if (oldFirst !== name && oldFirst !== newFirst && !others.some((other) => first(other) === oldFirst)) pairs.push([oldFirst, newFirst]);
+        // JSON-escaped, as most columns hold JSON, and a plain name reads the same either way.
+        const patterns = pairs.map(([from, to]) => {
+          const escaped = JSON.stringify(from).slice(1, -1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          return [new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "gu"), JSON.stringify(to).slice(1, -1)] as const;
+        });
+        const renamed = (text: string) => patterns.reduce((result, [pattern, to]) => result.replace(pattern, () => to), text);
+        for (const [table, columns] of RENAMED) {
+          for (const row of db.query<Record<string, string | number | null>, []>(`SELECT rowid AS _row, ${columns} FROM ${table}`).all()) {
+            for (const column of columns) {
+              const text = row[column];
+              if (typeof text === "string" && renamed(text) !== text) db.run(`UPDATE ${table} SET ${column} = ? WHERE rowid = ?`, [renamed(text), row._row!]);
+            }
+          }
+        }
+        log.info("saves", "NPC renamed", { save: id });
       })();
     },
 

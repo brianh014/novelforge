@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { saveStore } from "../src/save-store";
 import { applyOperations, mergeWorldUpdate, openingState } from "../src/state-applier";
 import { ContentRefused, TextProviderFailed } from "../src/turn-engine";
-import { logOf, narration, scriptedTextProvider, startApp, tempFolder } from "./support";
+import { logOf, narration, png, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
@@ -700,4 +700,26 @@ test("a Revert during a hidden change wins, and the change says the story moved"
 
   expect((await underway.response).status).toBe(409);
   expect(hidden(id)).toEqual(WORLD);
+});
+
+test("renaming an NPC changes their name in every Message, Snapshot and portrait, first name too", async () => {
+  play(narration("Hesper Vane waves. Hesper's ferry waits. Hespera stays."));
+  const id = store().create({
+    worldBrief: "A drowned city",
+    pc: { name: "Ash" },
+    opening: { npcs: [{ name: "Hesper Vane", appearance: "a woman" }, NPCS[1]!], pcKnown: { facts: [], npcs: ["Hesper Vane"], summaries: { "Hesper Vane": "A ferry pilot." } } },
+  });
+  await turn(id, "I greet Hesper.");
+  store().addPortrait(id, 0, "Hesper Vane", png(1));
+
+  expect((await app.post(`/saves/${id}/rename`, { name: "Hesper Vane", newName: "Corvin" })).status).toBe(409);
+  expect((await app.post(`/saves/${id}/rename`, { name: "Nobody", newName: "Mira" })).status).toBe(404);
+  expect((await app.post(`/saves/${id}/rename`, { name: "Hesper Vane", newName: "Mira Vane" })).status).toBe(200);
+
+  expect(store().messages(id).map(({ text }) => text)).toEqual(["I greet Mira.", "Mira Vane waves. Mira's ferry waits. Hespera stays."]);
+  const state = store().latestState(id);
+  expect(state.npcs.map(({ name }) => name)).toEqual(["Mira Vane", "Corvin"]);
+  expect(state.pcKnown).toMatchObject({ npcs: ["Mira Vane"], summaries: { "Mira Vane": "A ferry pilot." } });
+  expect(store().snapshot(id, 1).pcKnown.npcs).toEqual(["Mira Vane"]);
+  expect(store().portraits(id).map(({ npc }) => npc)).toEqual(["Mira Vane"]);
 });
