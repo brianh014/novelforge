@@ -125,7 +125,8 @@ test("an Update's portrait prompt is a short edit of the old portrait: the same 
   const system = prompts[0]![0]!.content;
   expect(system).toContain("The image model is given the portrait that was describes, and edits it.");
   expect(system).toContain("the same person with their face preserved");
-  expect(system).toContain("Never describe their face in any way, such as its expression");
+  expect(system).toContain("Never describe their face's features");
+  expect(system).toContain("Only when nudge asks for an expression, start changes with it as a mild one");
   expect(system).toContain("a last sentence placing them in front of a plain neutral background");
   expect(system).not.toContain("Open the prompt with the picture's art style");
   expect(system).not.toContain("never what isn't");
