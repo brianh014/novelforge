@@ -212,7 +212,7 @@ test("a mark for someone outside the Scene gets no portrait", async () => {
   await asked(id, "the two of them");
 
   const payload = drawn.payloads.at(-1)!;
-  expect(payload.prompt).toStartWith("a stranger in grey and a tall woman on a bench");
+  expect(payload.prompt).toStartWith("a stranger in grey and the person from image 1, a tall woman, on a bench");
   expect(payload.prompt).not.toContain("OFFSTAGE-LOOKS");
   expect(payload.reference_images.map(({ role }) => role)).toEqual(["npc"]);
 });
@@ -266,7 +266,7 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   const gallery = await asked(id, "Hesper and me");
 
   const payload = drawn.payloads.at(-1)!;
-  expect(payload.prompt).toStartWith("a tall woman in oilskins on a bench, by a short person in a wool coat, and a boy with a kite");
+  expect(payload.prompt).toStartWith("the person from image 2, a tall woman in oilskins, on a bench, by the person from image 1, a short person in a wool coat, and a boy with a kite");
   expect(payload.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([
     ["pc", png(1)],
     ["npc", png(2)],

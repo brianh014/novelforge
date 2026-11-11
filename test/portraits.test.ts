@@ -285,7 +285,7 @@ test("a Scene Image gets the portraits of the PC first, then those marked in it,
     { role: "npc", bytes: png(3), mediaType: "image/png" },
     { role: "npc", bytes: png(4), mediaType: "image/png" },
   ]);
-  expect(second.prompt).toContain("Stooped, red scarf nods to Tall, in oilskins while");
+  expect(second.prompt).toContain("the person from image 2, Stooped, red scarf, nods to the person from image 3, Tall, in oilskins, while the person from image 1, wearing");
   expect(second.prompt).toContain("wearing a tin badge");
   expect(second.prompt).not.toContain("Orin");
   expect(second.prompt).not.toContain("Unseen");

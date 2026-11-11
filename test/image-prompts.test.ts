@@ -46,6 +46,16 @@ test("no stored looks are ever added, as the Narrator writes the whole prompt to
   expect(expandMarks("[Tobin: a thin boy] sits", npcs, pc)).toEqual({ prompt: "a thin boy sits", pictured: [] });
 });
 
+test("each person with a portrait is pointed at their image by number, and the likeness sentence stays only then", () => {
+  const prompt = "[Hesper: a tall woman] waves at [Ash: a short man] by [Orin: an old man]. {Keep each face.}";
+  // The PC's portrait goes first, so Ash is image 1 though marked second, and Orin has no portrait.
+  expect(expandMarks(prompt, npcs, pc, [null, "Hesper"]).prompt).toBe(
+    "the person from image 2, a tall woman, waves at the person from image 1, a short man, by an old man. Keep each face.",
+  );
+  expect(expandMarks(prompt, npcs, pc).prompt).toBe("a tall woman waves at a short man by an old man.");
+  expect(expandMarks("They wave at [Hesper: a tall woman].", npcs, pc, ["Hesper"]).prompt).toBe("They wave at the person from image 1, a tall woman.");
+});
+
 test.each([
   [{ imageProvider: "local", comfyMode: "simple", comfyFamily: "sd" }, "keywords"],
   [{ imageProvider: "local", comfyMode: "simple", comfyFamily: "flux2" }, "prose"],
@@ -87,8 +97,9 @@ test("with images off the Narrator writes no prompt", () => {
   expect(system).not.toContain("connected sentences");
 });
 
-test("the Narrator writes that any portraits are only for faces, so the image model copies no clothing from them", () => {
-  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("end the prompt with a sentence saying that any portraits show only each person's face and hair");
+test("the Narrator ends with a likeness sentence in braces, which asks to keep each face but not the portrait's clothing", () => {
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("end the prompt with one sentence in curly braces");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("keep each referenced person's same face");
 });
 
 test("an Image Prompt puts each person once in what they do, keeps props plain and sized, and holds to a real era", () => {

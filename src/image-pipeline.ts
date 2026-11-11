@@ -1,4 +1,4 @@
-import { drawingFamily, localIsSetUp, promptStyle, type PromptStyle, usesPortraits } from "./graph-builder";
+import { drawingFamily, localIsSetUp, promptStyle, type PromptStyle, usableReferences, usesPortraits } from "./graph-builder";
 import { artStyleFor } from "./web/art-styles";
 import type { ImageAdapter, ImagePayload } from "./image-adapter";
 import { errorType, log } from "./logger";
@@ -96,19 +96,27 @@ function findPerson(npcs: Npc[], mark: string) {
  * Turns the Narrator's [Name: phrase] marks into its phrases, so no name reaches a model that might letter it into the
  * picture, and says who is pictured. The phrase is all the model reads of them: no stored looks are added, as the
  * Narrator writes the whole prompt to its length and order, and added looks made prompts nearly twice that length.
+ * `referenced` are those whose portrait reaches the model, in its order: each is pointed at their image by number, and the
+ * Narrator's {likeness sentence} is kept only when there is one, so a picture with no portraits is prompted as before.
  */
-export function expandMarks(text: string, npcs: Npc[], pcName: string) {
+export function expandMarks(text: string, npcs: Npc[], pcName: string, referenced: Pictured = []) {
   const pictured: Pictured = [];
-  const prompt = text.replace(/\[([^[\]:]+)(?::([^[\]]*))?\]/g, (_, mark: string, phrase = "") => {
-    const brief = phrase.trim();
-    const isPc = named(pcName, mark.trim());
-    const npc = isPc ? undefined : findPerson(npcs, mark.trim());
-    if (!isPc && !npc) return brief || "a person";
-    const person = isPc ? null : npc!.name;
-    if (pictured.includes(person)) return "the same person";
-    pictured.push(person);
-    return brief || "a person";
-  });
+  const prompt = text
+    .replace(/\s*\{([^{}]*)\}/g, (_, likeness: string) => (referenced.length > 0 ? ` ${likeness.trim()}` : ""))
+    .replace(/\[([^[\]:]+)(?::([^[\]]*))?\]/g, (_, mark: string, phrase: string | undefined, at: number, whole: string) => {
+      const brief = (phrase ?? "").trim();
+      const isPc = named(pcName, mark.trim());
+      const npc = isPc ? undefined : findPerson(npcs, mark.trim());
+      if (!isPc && !npc) return brief || "a person";
+      const person = isPc ? null : npc!.name;
+      if (pictured.includes(person)) return "the same person";
+      pictured.push(person);
+      const image = referenced.indexOf(person) + 1;
+      if (!image) return brief || "a person";
+      // A comma closes the phrase only when the sentence reads on, as in "the person from image 1, a tall woman, kneels".
+      const readsOn = /^\s*[a-z]/i.test(whole.slice(at + _.length));
+      return brief ? `the person from image ${image}, ${brief}${readsOn ? "," : ""}` : `the person from image ${image}`;
+    });
   return { prompt, pictured };
 }
 
@@ -239,18 +247,32 @@ export function imagePipeline(
    * NPC rather than the PC. A portrait of someone not in the picture can get pasted into it, so only those pictured go in.
    * No earlier Scene Image goes in, as FLUX.2 copied its people, poses and clothing into the new one whatever the prompt said.
    */
-  const references = (id: string, pictured: Pictured) => [
-    ...(pictured.includes(null) ? reference("pc", saves.portraitOf(id, null)) : []),
-    ...pictured.flatMap((name) => (name === null ? [] : reference("npc", saves.portraitOf(id, name)))),
-  ];
+  const references = (id: string, pictured: Pictured) =>
+    [...(pictured.includes(null) ? [null] : []), ...pictured.filter((name) => name !== null)].flatMap((person) =>
+      reference(person === null ? "pc" : "npc", saves.portraitOf(id, person)).map((image) => ({ person, image })),
+    );
+
+  /**
+   * Who of `pictured` has a portrait that reaches the image model, in its order. Simple Local keeps a family's first few or none.
+   * shortcut: OpenRouter's model limit and an advanced workflow's slots aren't known here, so all count, number by slot if one drops some.
+   */
+  const referenced = (id: string, pictured: Pictured) => {
+    const people = references(id, pictured);
+    const current = settings.read();
+    const reaching = current.imageProvider === "local" && current.comfyMode === "simple" ? usableReferences(current, people.map(({ image }) => image)).length : people.length;
+    return people.slice(0, reaching).map(({ person }) => person);
+  };
 
   const scenePayload = (id: string, prompt: string, pictured: Pictured): ImagePayload => {
-    const reference_images = references(id, pictured);
+    const reference_images = references(id, pictured).map(({ image }) => image);
     return { prompt, negative_prompt: AVOID, aspect_ratio: "16:9", reference_images, style_preset: "" };
   };
 
   async function drawMoment(id: string, { description, npcs }: Moment, signal: AbortSignal) {
-    const { prompt, pictured } = expandMarks(description, npcs, saves.read(id).pc.name);
+    const pcName = saves.read(id).pc.name;
+    // Twice, as who is pictured decides which portraits go in, and those decide how each mark is written.
+    const { pictured } = expandMarks(description, npcs, pcName);
+    const { prompt } = expandMarks(description, npcs, pcName, referenced(id, pictured));
     const bytes = await adapter(scenePayload(id, prompt, pictured), signal);
     // Counted before storing, as the player has paid for it whether or not its Message is still there.
     session++;
