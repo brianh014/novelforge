@@ -6,6 +6,13 @@
       "runtimeExecutable": "bun",
       "runtimeArgs": ["src/main.ts"],
       "port": 4600
+    },
+    {
+      "name": "novelforge-dev",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--watch", "src/main.ts"],
+      "env": { "PORT": "4610", "HOST": "127.0.0.1" },
+      "port": 4610
     }
   ]
 }
