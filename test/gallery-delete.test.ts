@@ -65,7 +65,7 @@ const redraw = (id: string, { kind, ref }: Item, prompt: string) => app.post(`/s
 const labels = (gallery: Gallery) => gallery.images.filter(({ kind }) => kind !== "original").map(({ label }) => label);
 const find = (gallery: Gallery, label: string) => gallery.images.find((item) => item.label === label)!;
 
-test("the Gallery goes Cover, the PC, NPCs newest first, then Scenes newest first", async () => {
+test("the Gallery goes Cover, the PC, NPCs by name, then Scenes newest first", async () => {
   await play(
     [
       turn("A wet street", meet("Bram"), know("Bram"), scene("The ferry", "Bram")),
@@ -82,8 +82,8 @@ test("the Gallery goes Cover, the PC, NPCs newest first, then Scenes newest firs
   await playTurn(id);
   const { images } = await playTurn(id);
 
-  // The Message each portrait goes by puts Cleo and Dov first, and a later portrait of the same Message is the newer.
-  expect(images.map(({ label }) => label)).toEqual(["Ash", "Dov", "Cleo", "Bram", "The pier", "The ferry"]);
+  // Bram, met first, still leads, as NPCs go by name and not by when they were drawn.
+  expect(images.map(({ label }) => label)).toEqual(["Ash", "Bram", "Cleo", "Dov", "The pier", "The ferry"]);
 });
 
 test("a Message's images sort newest first too, and a Redraw moves none of them", async () => {

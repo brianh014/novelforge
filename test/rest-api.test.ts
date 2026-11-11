@@ -1457,6 +1457,8 @@ test("the Journal says who known NPCs are, and lists the known ones in the scene
 
   const journal = await journalOf(app, id);
   expect(journal).toMatchObject({ npcSummaries: { Mara: "The ferry's pilot." }, recentNpcs: ["Mara"] });
+  // Oldest first, as the page flips it: Mara, met first but last in a scene, ends the list.
+  expect(journal.npcs).toEqual(["Tobin", "Wren", "Mara"]);
   expect(JSON.stringify(journal)).not.toContain("SECRET-LOOKS");
   expect(JSON.stringify(journal)).not.toContain("Stranger");
   expect(prompts[0]![0]!.content).toContain("set_known_npc_summary");
@@ -1468,7 +1470,29 @@ test("the Journal says who known NPCs are, and lists the known ones in the scene
   expect(await journalOf(app, id)).toMatchObject({ npcSummaries: { Mara: "The ferry's pilot." } });
 
   await app.post(`/saves/${id}/turns`, { input: "I board." });
-  expect(await journalOf(app, id)).toMatchObject({ recentNpcs: ["Wren", "Mara"] });
+  expect(await journalOf(app, id)).toMatchObject({ recentNpcs: ["Wren", "Mara"], npcs: ["Tobin", "Mara", "Wren"] });
+});
+
+test("the Journal puts known NPCs never in a scene below, by their last mention", async () => {
+  const { app } = play(
+    narration(
+      "They wait.",
+      { op: "add_npc", name: "Tobin", appearance: "red scarf" },
+      { op: "add_known_npc", name: "Tobin" },
+      { op: "add_npc", name: "Wren", appearance: "tall" },
+      { op: "add_known_npc", name: "Wren" },
+      { op: "add_npc", name: "Mara", appearance: "grey coat" },
+      { op: "add_known_npc", name: "Mara" },
+      { op: "set_scene", location: "The docks", visible_cast: ["Mara"] },
+    ),
+    narration("A letter from Tobin arrives."),
+  );
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I look." });
+  await app.post(`/saves/${id}/turns`, { input: "I read." });
+
+  // Oldest first, as the page flips it: Tobin, met first but mentioned last, comes above Wren.
+  expect((await journalOf(app, id)).npcs).toEqual(["Wren", "Tobin", "Mara"]);
 });
 
 test("the Journal of a new Save is empty, and a missing Save has none", async () => {

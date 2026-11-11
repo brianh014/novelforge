@@ -787,8 +787,8 @@ export function saveStore(savesDir: string) {
     },
 
     /**
-     * Every image without its bytes, in Gallery order, including those of NPCs the player must not see yet: the Cover, the PC, then NPCs and
-     * images of moments, each newest first by their Message, which a Redraw leaves alone. On one Message a Scene Image is drawn before any Requested Image.
+     * Every image without its bytes, in Gallery order, including those of NPCs the player must not see yet: the Cover, the PC, NPCs by name,
+     * then images of moments newest first by their Message, which a Redraw leaves alone. On one Message a Scene Image is drawn before any Requested Image.
      */
     gallery(id: string) {
       using db = open(id);
@@ -801,7 +801,7 @@ export function saveStore(savesDir: string) {
              FROM portrait_originals o JOIN portraits p ON p.id = o.id
            UNION ALL SELECT 'scene', message_id, NULL, message_id, caption, prompt, redraws, 3 FROM scene_images
            UNION ALL SELECT 'requested', id, NULL, message_id, caption, prompt, redraws, 3 FROM requested_images)
-           ORDER BY place, messageId DESC, kind = 'original', kind, ref DESC`,
+           ORDER BY place, CASE WHEN place = 2 THEN npc END COLLATE NOCASE, messageId DESC, kind = 'original', kind, ref DESC`,
         )
         .all();
     },

@@ -960,6 +960,10 @@ export function startServer(options: {
           // An allowlist, so the World Bible, Plot Threads and NPC appearance text can never reach the player by default.
           // shortcut: the summary, facts, Loose Ends and Scene Memories are Narrator free text, kept clean only by its prompt, screen them if models leak.
           const { summary, recentSummary, pcKnown, looseEnds, sceneMemories, scene, storyTime, status } = saves.latestState(req.params.id);
+          // Everyone in the scene, then the last seen. The filter keeps an NPC the PC doesn't know yet hidden.
+          const seen = [...new Set([...scene.visibleCast, ...saves.recentCast(req.params.id)])].filter((name) => pcKnown.npcs.includes(name));
+          const fullLog = saves.messages(req.params.id);
+          const lastMention = (name: string) => fullLog.findLastIndex(({ text }) => text.includes(name));
           return Response.json({
             status,
             // Without the day count, which only the Narrator uses.
@@ -969,14 +973,12 @@ export function startServer(options: {
             facts: pcKnown.facts,
             looseEnds,
             sceneMemories,
-            npcs: pcKnown.npcs,
+            // Least recently seen first, as the Journal shows them newest first. Anyone never in a scene's cast goes below, by their last mention.
+            npcs: [...pcKnown.npcs.filter((name) => !seen.includes(name)).sort((a, b) => lastMention(a) - lastMention(b)), ...seen.toReversed()],
             npcSummaries: pcKnown.summaries ?? {},
-            // Everyone in the scene, then the last seen. The filter keeps an NPC the PC doesn't know yet hidden.
-            recentNpcs: [...new Set([...scene.visibleCast, ...saves.recentCast(req.params.id)])]
-              .filter((name) => pcKnown.npcs.includes(name))
-              .slice(0, Math.max(RECENT_CHARACTERS, scene.visibleCast.length)),
+            recentNpcs: seen.slice(0, Math.max(RECENT_CHARACTERS, scene.visibleCast.length)),
             portraits: knownPortraits(req.params.id),
-            fullLog: saves.messages(req.params.id),
+            fullLog,
             chapters: chaptersOf(req.params.id).chapters,
           });
         },
