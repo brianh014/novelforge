@@ -1,7 +1,9 @@
 import { randomInt } from "node:crypto";
+import { existsSync, mkdirSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { z } from "zod";
+import { fakeImages, fakeTextProvider } from "./fake-services";
 import { openRouterImages } from "./image-adapter";
 import { defaultLevelFor, log, startLog } from "./logger";
 import { startServer } from "./rest-api";
@@ -12,15 +14,26 @@ import { textProvider } from "./text-provider";
 const isCompiled = basename(process.execPath, ".exe") !== "bun";
 const appDir = isCompiled ? dirname(process.execPath) : process.cwd();
 
-startLog(defaultLevelFor(isCompiled), join(appDir, "logs"));
+// --fake swaps the Text Provider and image model for local stand-ins, in a folder of their own, so trying the app
+// needs no key, costs nothing, and never touches a real Save or the real Settings.
+const fake = process.argv.includes("--fake");
+const dataDir = fake ? join(appDir, "fake") : appDir;
+mkdirSync(dataDir, { recursive: true });
 
-const settings = settingsStore(join(appDir, "settings.json"));
+startLog(defaultLevelFor(isCompiled), join(dataDir, "logs"));
+
+const settingsPath = join(dataDir, "settings.json");
+const firstFakeRun = fake && !existsSync(settingsPath);
+const settings = settingsStore(settingsPath);
+// Filled in once, so play and pictures work at the start, and anything changed in Settings afterwards stays. The
+// address is the closed discard port, so model listings come back empty at once instead of reaching a real server.
+if (firstFakeRun) settings.update({ textBaseUrl: "http://127.0.0.1:9/v1", textModel: "fake-narrator", imageModel: "fake-images", imageApiKey: "fake-key" });
 
 const server = startServer({
-  savesDir: join(appDir, "Saves"),
+  savesDir: join(dataDir, "Saves"),
   settings,
-  textProvider: textProvider(settings),
-  imageAdapter: openRouterImages(settings, "https://openrouter.ai/api/v1"),
+  textProvider: fake ? fakeTextProvider : textProvider(settings),
+  imageAdapter: fake ? fakeImages : openRouterImages(settings, "https://openrouter.ai/api/v1"),
   dice: () => randomInt(1, 21),
   nearMissMargin: z.coerce.number().int().min(0).parse(process.env.NEAR_MISS_MARGIN ?? 2),
   port: Number(process.env.PORT ?? 4600),
@@ -30,6 +43,7 @@ const server = startServer({
 
 // A listening address of 0.0.0.0 is no use in a browser.
 log.startup(`NovelForge is running at ${server.url.href.replace("0.0.0.0", "127.0.0.1")}`);
+if (fake) log.startup(`Using fake text and images, with Saves and Settings in ${dataDir}`);
 if (server.hostname === "0.0.0.0") {
   for (const address of Object.values(networkInterfaces()).flat()) {
     if (address?.family === "IPv4" && !address.internal) log.startup(`On your network: http://${address.address}:${server.port}/`);
