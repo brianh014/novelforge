@@ -331,21 +331,21 @@ const pictureRules = (kind: PictureAsk["kind"], style: PromptStyle, words: numbe
   })[kind][style];
 
 // An edit, as a whole new description sent with the old portrait kept its clothing: the image model copied the reference over the words.
-// The person's own features first, as FLUX.2 Klein lost the face when the edit only said "keep their face" at the end.
+// Short, with the face named once and up front: FLUX.2 Klein lost the face when "keep their face" came last, and redrew it when its features were listed.
 // In fields the code puts in order, as the text model ignored the order the rule gave.
 const EDIT_RULE =
-  "The image model is given the portrait that was describes, and edits it. looks is how this person looks now. keep and changes make the editing instruction. Cover every difference that shows from the chest up: clothing taken off, put on or changed, hair, makeup, marks on the skin and expression. Leave out whatever that frame can't show, such as hands, legs, feet and anything they hold.";
+  "The image model is given the portrait that was describes, and edits it. looks is how this person looks now. keep and changes make the editing instruction, in plain short sentences. Describe how they look now from the chest up: their clothing, hair and any marks on the skin below the face. Never describe their face in any way, such as its expression, makeup, eyes, skin tone or build, which the image model takes from the portrait, as any description of it pulls the face away from the person. Leave out whatever that frame can't show, such as hands, legs, feet and anything they hold.";
 // For a portrait drawn from an old one's face with no prompt of it to edit, as the model otherwise copies its clothing.
 const FACE_ONLY = " The image model is also given an older portrait of this person, so end the prompt with a sentence saying that portrait shows only their face and hair, and that their clothing and expression are as written here.";
-const KEEP_WORDS = 40;
+const KEEP_WORDS = 12;
 // Stated in the field, as a limit the text model wasn't told failed every try of an Update with many changes.
-const CHANGE_WORDS = 120;
+const CHANGE_WORDS = 80;
 const editReply = z.object({
   keep: atMost(KEEP_WORDS).describe(
-    `One sentence telling the image model to keep the same person, naming their face, facial proportions and skin tone and each feature from was that looks doesn't change, such as eye colour, scars or hairstyle, as in "Keep the same young man: the same face, facial proportions, light skin, grey-green eyes and acne-scarred jaw." Never over ${KEEP_WORDS} words.`,
+    `One short sentence saying this is the same person with their face preserved, as in "The same woman with their face preserved." Never over ${KEEP_WORDS} words.`,
   ),
   changes: atMost(CHANGE_WORDS).describe(
-    `What to change so the portrait shows them as looks describes, one change per sentence, each naming what in the portrait goes and what replaces it, as in "Replace the green t-shirt with a bare chest.", then a last sentence telling it to keep the head and shoulders framing, the plain background, the lighting and the art style the same. Never over ${CHANGE_WORDS} words.`,
+    `How they look now, in plain short sentences, as in "She is wearing a cream knit sweater showing the collarbone. Her hair is in a high ponytail. She has a bruise on her throat.", then a last sentence placing them in front of a plain neutral background, as in "Standing in front of a plain neutral background." Never over ${CHANGE_WORDS} words.`,
   ),
 });
 

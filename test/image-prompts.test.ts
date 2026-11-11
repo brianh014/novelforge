@@ -98,8 +98,8 @@ test("with images off the Narrator writes no prompt", () => {
 });
 
 test("the Narrator ends with a likeness sentence in braces, which asks to keep each face but not the portrait's clothing", () => {
-  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("end the prompt with one sentence in curly braces");
-  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("keep each referenced person's same face");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("end the prompt with one short sentence in curly braces");
+  expect(REQUESTED_IMAGE_PROMPT.prose).toContain("the same people with their faces preserved");
 });
 
 test("an Image Prompt puts each person once in what they do, keeps props plain and sized, and holds to a real era", () => {

@@ -116,16 +116,17 @@ test("a nudge is the player's request for that picture, which the prompt must sh
   expect(plain.prompts[0]![0]!.content).not.toContain("nudge");
 });
 
-test("an Update's portrait prompt is an edit of the old portrait, saying what changes and to keep the rest", async () => {
-  const reply = JSON.stringify({ keep: "Keep the same tall woman: the same face and grey eyes.", changes: "Replace the green shirt with an oilskin coat. Keep the framing the same." });
+test("an Update's portrait prompt is a short edit of the old portrait: the same face, then how they look now", async () => {
+  const reply = JSON.stringify({ keep: "The same woman with her face preserved.", changes: "She is wearing an oilskin coat. Standing in front of a plain neutral background." });
   const { written, prompts } = write({ ...portrait, was: "A tall woman in a green shirt." }, "prose", reply);
 
   // The person first, as the text model ignored the order it was given, and nothing added that the model didn't write.
-  expect(await written).toBe("Keep the same tall woman: the same face and grey eyes. Replace the green shirt with an oilskin coat. Keep the framing the same.");
+  expect(await written).toBe("The same woman with her face preserved. She is wearing an oilskin coat. Standing in front of a plain neutral background.");
   const system = prompts[0]![0]!.content;
   expect(system).toContain("The image model is given the portrait that was describes, and edits it.");
-  expect(system).toContain("telling the image model to keep the same person");
-  expect(system).toContain("then a last sentence telling it to keep the head and shoulders framing");
+  expect(system).toContain("the same person with their face preserved");
+  expect(system).toContain("Never describe their face in any way, such as its expression");
+  expect(system).toContain("a last sentence placing them in front of a plain neutral background");
   expect(system).not.toContain("Open the prompt with the picture's art style");
   expect(system).not.toContain("never what isn't");
   expect(JSON.parse(prompts[0]![1]!.content)).toMatchObject({ was: "A tall woman in a green shirt.", looks: portrait.looks });
