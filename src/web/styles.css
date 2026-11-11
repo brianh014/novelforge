@@ -1297,6 +1297,11 @@ a.action {
   color: var(--muted);
 }
 
+/* Only a phone shows the Journal's pages one at a time. */
+.page-pick {
+  display: none;
+}
+
 .journal-head {
   display: flex;
   gap: 12px;
@@ -1820,16 +1825,38 @@ dialog blockquote {
     column-gap: 12px;
   }
 
-  /* The Journal is too long for two stacked panes, so it reads as one page with the tabs held in reach. */
-  .book:has(.full-log) {
+  /* The Journal is too long for two stacked panes, so it shows one page at a time and scrolls as a whole, with the tabs held in reach. */
+  .book:has(.page-pick) {
     height: auto;
     min-height: 100%;
   }
 
-  .book:has(.full-log) .page,
+  .book:has(.page-pick) .page,
   .full-log {
-    flex: none;
+    flex: 1 0 auto;
     overflow: visible;
+  }
+
+  .book:has(.page-pick[data-shown="chapters"]) .page.left,
+  .book:has(.page-pick[data-shown="journal"]) .page.right {
+    display: none;
+  }
+
+  /* Alone, the right page is the top one, so it makes room for the ribbons as the left page does. */
+  .book:has(.page-pick[data-shown="chapters"]) .page.right {
+    padding-top: 48px;
+  }
+
+  .page-pick {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+
+  .page-pick [aria-pressed="true"] {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 4px;
   }
 
   /* The response being rewritten needs the room, and the Rewrite box stands in for the Send box until it's done. */

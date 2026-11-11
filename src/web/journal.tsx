@@ -32,7 +32,13 @@ function Clamped({ text }: { text: string }) {
   const shown = useRef<HTMLParagraphElement>(null);
   useLayoutEffect(() => {
     const paragraph = shown.current;
-    if (paragraph && !open) setCut(paragraph.scrollHeight > paragraph.clientHeight);
+    if (!paragraph || open) return;
+    const measure = () => setCut(paragraph.scrollHeight > paragraph.clientHeight);
+    measure();
+    // A hidden page measures nothing, so this measures again once it shows.
+    const resized = new ResizeObserver(measure);
+    resized.observe(paragraph);
+    return () => resized.disconnect();
   }, [text, open]);
   return (
     <div>
@@ -42,6 +48,21 @@ function Clamped({ text }: { text: string }) {
           {open ? "Less" : "More"}
         </button>
       )}
+    </div>
+  );
+}
+
+type PhonePage = "journal" | "chapters";
+
+/** On a phone the two pages stack into one long scroll, so this shows one at a time. Hidden on wider screens, which show both. */
+function PagePick({ shown, onPick }: { shown: PhonePage; onPick: (page: PhonePage) => void }) {
+  return (
+    <div className="page-pick" data-shown={shown}>
+      {(["journal", "chapters"] as const).map((page) => (
+        <button key={page} className="quiet" aria-pressed={shown === page} onClick={() => onPick(page)}>
+          {page === "journal" ? "Journal" : "Summary & Chapters"}
+        </button>
+      ))}
     </div>
   );
 }
@@ -170,6 +191,8 @@ export function Journal({ id }: { id: string }) {
   const [loadError, setLoadError] = useState("");
   const [telling, setTelling] = useState(false);
   const [reading, setReading] = useState<number>();
+  const [phonePage, setPhonePage] = useState<PhonePage>("journal");
+  const pick = <PagePick shown={phonePage} onPick={setPhonePage} />;
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -226,6 +249,7 @@ export function Journal({ id }: { id: string }) {
     <Book
       left={
         <>
+          {pick}
           <div className="journal-head">
             <h1 className="big">Journal</h1>
             <button className="quiet" onClick={() => setTelling(true)}>
@@ -276,20 +300,6 @@ export function Journal({ id }: { id: string }) {
               <p className="muted">Nothing left open.</p>
             )}
             <Editable label="New Loose End" text="" opener="Add a Loose End" onSave={(text) => edit({ edit: "looseEnd", old: null, new: text })} />
-            <h2>Scene Memories</h2>
-            {journal.sceneMemories.length > 0 ? (
-              <NewestFirst items={journal.sceneMemories}>
-                {({ firstMessage, text }) => (
-                  <li key={firstMessage}>
-                    <Editable label="Scene Memory" text={text} onSave={(next) => edit({ edit: "sceneMemory", firstMessage, text: next })}>
-                      <span>{text}</span>
-                    </Editable>
-                  </li>
-                )}
-              </NewestFirst>
-            ) : (
-              <p className="muted">Nothing has faded yet.</p>
-            )}
             <h2>What {save.pc.name} knows</h2>
             {journal.facts.length > 0 ? (
               <NewestFirst items={journal.facts}>
@@ -310,7 +320,7 @@ export function Journal({ id }: { id: string }) {
               <p className="muted">Nothing certain yet.</p>
             )}
             <Editable label={`New fact ${save.pc.name} knows`} text="" opener="Add a fact" onSave={(text) => edit({ edit: "fact", old: null, new: text })} />
-            <h2>NPCs</h2>
+            <h2>Characters</h2>
             {journal.npcs.length > 0 ? (
               <NewestFirst items={journal.npcs} className="people">
                 {(name) => (
@@ -335,11 +345,26 @@ export function Journal({ id }: { id: string }) {
             ) : (
               <p className="muted">No one yet.</p>
             )}
+            <h2>Scene Memories</h2>
+            {journal.sceneMemories.length > 0 ? (
+              <NewestFirst items={journal.sceneMemories}>
+                {({ firstMessage, text }) => (
+                  <li key={firstMessage}>
+                    <Editable label="Scene Memory" text={text} onSave={(next) => edit({ edit: "sceneMemory", firstMessage, text: next })}>
+                      <Clamped text={text} />
+                    </Editable>
+                  </li>
+                )}
+              </NewestFirst>
+            ) : (
+              <p className="muted">Nothing has faded yet.</p>
+            )}
           </div>
         </>
       }
       tabs={<BookTabs id={id} current="Journal" />}
     >
+      {pick}
       {reading === undefined ? (
         <>
           <h2>Story Summary</h2>
