@@ -617,7 +617,6 @@ button {
 }
 
 textarea,
-select,
 input {
   width: 100%;
   padding: 4px 6px;
@@ -630,8 +629,7 @@ input {
   resize: none;
 }
 
-.settings label,
-.settings select {
+.settings label {
   min-width: 0;
 }
 

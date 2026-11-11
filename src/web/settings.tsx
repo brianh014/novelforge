@@ -33,7 +33,7 @@ const RESOLUTIONS = [
   ["0.5mp", "0.5 MP (704 × 704 portrait, 944 × 528 scene)"],
   ["1mp", "1 MP (1024 × 1024 portrait, 1360 × 768 scene)"],
   ["2mp", "2 MP (1408 × 1408 portrait, 1872 × 1056 scene)"],
-];
+] as const;
 const THIS_STORY = "This story";
 
 export const applyLook = ({ fontSize, theme }: Settings) => {
@@ -112,16 +112,14 @@ function ModelSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label>
-      {label}
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
-        {!value && <option value="">Choose a model</option>}
-        {/* A saved model that's gone stays as it is, with a notice, until the player changes it. */}
-        {[...new Set([value, ...list])].filter(Boolean).map((model) => (
-          <option key={model}>{model}</option>
-        ))}
-      </select>
-    </label>
+    <Picker
+      label={label}
+      empty="Choose a model"
+      value={value}
+      // A saved model that's gone stays as it is, with a notice, until the player changes it.
+      choices={[...new Set([value, ...list])].filter(Boolean).map((model) => ({ value: model, label: model }))}
+      onChange={onChange}
+    />
   );
 }
 
@@ -131,9 +129,8 @@ export function matches(text: string, search: string) {
   return words.every((word) => text.toLowerCase().includes(word));
 }
 
-type Choice = { value: string; label: string };
-
-function Picker({
+/** A dropdown drawn in the page rather than the browser's own, so it looks like the book and opens the same everywhere. Long lists get a search box. */
+function Picker<T extends string>({
   label,
   empty,
   value,
@@ -142,10 +139,11 @@ function Picker({
 }: {
   label: string;
   empty?: string;
-  value: string;
-  choices: Choice[];
-  onChange: (value: string) => void;
+  value: T;
+  choices: { value: T; label: string }[];
+  onChange: (value: T) => void;
 }) {
+  const searchable = choices.length > 8;
   const id = useId();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -166,13 +164,18 @@ function Picker({
     if (open) list.current?.querySelector("[data-active]")?.scrollIntoView({ block: "nearest" });
   }, [open, active]);
 
-  const choose = (chosen: string) => {
+  // React's autoFocus only reaches form controls, so a list with no search box is focused here.
+  useEffect(() => {
+    if (open && !searchable) list.current?.focus();
+  }, [open, searchable]);
+
+  const choose = (chosen: T) => {
     onChange(chosen);
     setOpen(false);
     button.current?.focus();
   };
 
-  function keys(event: KeyboardEvent<HTMLInputElement>) {
+  function keys(event: KeyboardEvent<HTMLElement>) {
     const moves: Record<string, () => void> = {
       ArrowDown: () => setActive(Math.min(active + 1, found.length - 1)),
       ArrowUp: () => setActive(Math.max(active - 1, 0)),
@@ -209,23 +212,36 @@ function Picker({
       </button>
       {open && (
         <div className="picker-panel">
-          <input
-            autoFocus
-            role="combobox"
-            aria-label={`Search ${label}`}
-            aria-expanded
-            aria-controls={`${id}-list`}
-            aria-activedescendant={found[active] && `${id}-${active}`}
-            autoComplete="off"
-            placeholder={`Search ${choices.length} options`}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setActive(0);
-            }}
-            onKeyDown={keys}
-          />
-          <ul id={`${id}-list`} role="listbox" aria-labelledby={`${id}-label`} ref={list}>
+          {searchable && (
+            <input
+              autoFocus
+              role="combobox"
+              aria-label={`Search ${label}`}
+              aria-expanded
+              aria-controls={`${id}-list`}
+              aria-activedescendant={found[active] && `${id}-${active}`}
+              autoComplete="off"
+              placeholder={`Search ${choices.length} options`}
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setActive(0);
+              }}
+              onKeyDown={keys}
+            />
+          )}
+          {/* With no search box, the list itself takes focus and the arrow keys. */}
+          <ul
+            id={`${id}-list`}
+            role="listbox"
+            aria-labelledby={`${id}-label`}
+            ref={list}
+            {...(!searchable && {
+              tabIndex: -1,
+              "aria-activedescendant": found[active] && `${id}-${active}`,
+              onKeyDown: keys,
+            })}
+          >
             {found.map((choice, at) => (
               <li
                 key={choice.value}
@@ -489,13 +505,15 @@ function ComfySettings({
           onChange={(e) => set({ comfyUrl: e.target.value })}
         />
       </label>
-      <label>
-        ComfyUI mode
-        <select value={draft.comfyMode} onChange={(e) => set({ comfyMode: e.target.value as Settings["comfyMode"] })}>
-          <option value="simple">Simple Mode</option>
-          <option value="advanced">Advanced workflow</option>
-        </select>
-      </label>
+      <Picker
+        label="ComfyUI mode"
+        value={draft.comfyMode}
+        choices={[
+          { value: "simple", label: "Simple Mode" },
+          { value: "advanced", label: "Advanced workflow" },
+        ]}
+        onChange={(comfyMode) => set({ comfyMode })}
+      />
       {advanced ? (
         <>
           <label>
@@ -513,17 +531,16 @@ function ComfySettings({
         </>
       ) : (
         <>
-          <label>
-            Model family
-            <select
-              value={draft.comfyFamily}
-              onChange={(e) => set(switchFamily(draft, e.target.value as Settings["comfyFamily"]))}
-            >
-              <option value="sd">SD 1.5/SDXL (faces change between pictures)</option>
-              <option value="flux2">FLUX.2</option>
-              <option value="qwen21">Qwen Image 2.1</option>
-            </select>
-          </label>
+          <Picker
+            label="Model family"
+            value={draft.comfyFamily}
+            choices={[
+              { value: "sd", label: "SD 1.5/SDXL (faces change between pictures)" },
+              { value: "flux2", label: "FLUX.2" },
+              { value: "qwen21", label: "Qwen Image 2.1" },
+            ]}
+            onChange={(family) => set(switchFamily(draft, family))}
+          />
           {flux2 || qwen21 ? (
             <>
               <ModelSelect
@@ -553,16 +570,15 @@ function ComfySettings({
                 list={models?.checkpoints ?? []}
                 onChange={(comfyCheckpoint) => set({ comfyCheckpoint })}
               />
-              <label>
-                Checkpoint type
-                <select
-                  value={draft.comfySdBase}
-                  onChange={(e) => set({ comfySdBase: e.target.value as Settings["comfySdBase"] })}
-                >
-                  <option value="sdxl">SDXL</option>
-                  <option value="sd15">SD 1.5</option>
-                </select>
-              </label>
+              <Picker
+                label="Checkpoint type"
+                value={draft.comfySdBase}
+                choices={[
+                  { value: "sdxl", label: "SDXL" },
+                  { value: "sd15", label: "SD 1.5" },
+                ]}
+                onChange={(comfySdBase) => set({ comfySdBase })}
+              />
               {tooBig && <p className="notice">{tooBig}</p>}
               <p className="muted">
                 SD 1.5 and SDXL draw from words alone. They can't use portraits or edit an image, so faces change from
@@ -616,15 +632,17 @@ function ComfySettings({
                 list={models?.samplers ?? []}
                 onChange={(comfySampler) => set({ comfySampler })}
               />
-              <label>
-                Scheduler
-                <select value={draft.comfyScheduler} onChange={(e) => set({ comfyScheduler: e.target.value })}>
-                  {(flux2 || qwen21) && <option value="">{flux2 ? "FLUX.2's own (default)" : "Qwen Turbo's own (default)"}</option>}
-                  {[...new Set([draft.comfyScheduler, ...(models?.schedulers ?? [])])].filter(Boolean).map((scheduler) => (
-                    <option key={scheduler}>{scheduler}</option>
-                  ))}
-                </select>
-              </label>
+              <Picker
+                label="Scheduler"
+                value={draft.comfyScheduler}
+                choices={[
+                  ...(flux2 || qwen21 ? [{ value: "", label: flux2 ? "FLUX.2's own (default)" : "Qwen Turbo's own (default)" }] : []),
+                  ...[...new Set([draft.comfyScheduler, ...(models?.schedulers ?? [])])]
+                    .filter(Boolean)
+                    .map((scheduler) => ({ value: scheduler, label: scheduler })),
+                ]}
+                onChange={(comfyScheduler) => set({ comfyScheduler })}
+              />
               <p className="muted">
                 Distilled models, such as Turbo or Lightning, need the settings their page gives.
                 {qwen21 && " Qwen Turbo's own scheduler is for 8 steps, and other counts use simple. The base model wants about 25 steps."}
@@ -829,16 +847,15 @@ function InstallSettings({
     >
       <div data-section="Text" className="fields" hidden={section !== "Text"}>
       <h2>Text</h2>
-      <label>
-        Text provider
-        <select
-          value={local ? "local" : "openrouter"}
-          onChange={(e) => set({ textBaseUrl: e.target.value === "local" ? "" : OPENROUTER_URL })}
-        >
-          <option value="openrouter">OpenRouter</option>
-          <option value="local">Local</option>
-        </select>
-      </label>
+      <Picker
+        label="Text provider"
+        value={local ? "local" : "openrouter"}
+        choices={[
+          { value: "openrouter", label: "OpenRouter" },
+          { value: "local", label: "Local" },
+        ]}
+        onChange={(provider) => set({ textBaseUrl: provider === "local" ? "" : OPENROUTER_URL })}
+      />
       {local && (
         <label>
           Local server address
@@ -892,15 +909,17 @@ function InstallSettings({
               If this provider is down, let OpenRouter use another
             </label>
           ) : (
-            <label>
-              Routing
-              <select value={draft.textRouting} onChange={(e) => set({ textRouting: e.target.value as Settings["textRouting"] })}>
-                <option value="price">Cheapest</option>
-                <option value="throughput">Fastest writing</option>
-                <option value="latency">Quickest to start</option>
-                <option value="default">OpenRouter's choice</option>
-              </select>
-            </label>
+            <Picker
+              label="Routing"
+              value={draft.textRouting}
+              choices={[
+                { value: "price", label: "Cheapest" },
+                { value: "throughput", label: "Fastest writing" },
+                { value: "latency", label: "Quickest to start" },
+                { value: "default", label: "OpenRouter's choice" },
+              ]}
+              onChange={(textRouting) => set({ textRouting })}
+            />
           )}
           <p className="muted">Staying on one provider keeps its prompt cache, which can cut the cost of a Turn.</p>
         </>
@@ -1030,29 +1049,21 @@ function InstallSettings({
         />
       </label>
       <p className="muted">Your own guidance for every picture's prompt, for every Save. Extra Narrator Instructions don't reach pictures.</p>
-      <label>
-        Image provider
-        <select
-          value={draft.imageProvider}
-          onChange={(e) => set({ imageProvider: e.target.value as Settings["imageProvider"] })}
-        >
-          <option value="openrouter">OpenRouter</option>
-          <option value="local">Local (ComfyUI)</option>
-        </select>
-      </label>
-      <label>
-        Resolution
-        <select
-          value={draft.imageResolution}
-          onChange={(e) => set({ imageResolution: e.target.value as Settings["imageResolution"] })}
-        >
-          {RESOLUTIONS.map(([value, name]) => (
-            <option key={value} value={value}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <Picker
+        label="Image provider"
+        value={draft.imageProvider}
+        choices={[
+          { value: "openrouter", label: "OpenRouter" },
+          { value: "local", label: "Local (ComfyUI)" },
+        ]}
+        onChange={(imageProvider) => set({ imageProvider })}
+      />
+      <Picker
+        label="Resolution"
+        value={draft.imageResolution}
+        choices={RESOLUTIONS.map(([value, label]) => ({ value, label }))}
+        onChange={(imageResolution) => set({ imageResolution })}
+      />
       {draft.imageProvider === "openrouter" ? (
         <>
           <p className="muted">
@@ -1081,55 +1092,50 @@ function InstallSettings({
 
       <div data-section="Reading" className="fields" hidden={section !== "Reading"}>
       <h2>Reading</h2>
-      <label>
-        Theme
-        <select value={draft.theme} onChange={(e) => set({ theme: e.target.value as Settings["theme"] })}>
-          <option value="system">Match this device</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
-      </label>
-      <label>
-        Chat style
-        <select
-          value={draft.chatStyle}
-          onChange={(e) => set({ chatStyle: e.target.value as Settings["chatStyle"] })}
-        >
-          <option value="script">Script</option>
-          <option value="prose">Prose</option>
-          <option value="bubbles">Bubbles</option>
-          <option value="stage">Stage box</option>
-        </select>
-      </label>
-      <label>
-        Font size
-        <select
-          value={draft.fontSize}
-          onChange={(e) => set({ fontSize: e.target.value as Settings["fontSize"] })}
-        >
-          <option value="small">Small</option>
-          <option value="medium">Medium</option>
-          <option value="large">Large</option>
-        </select>
-      </label>
+      <Picker
+        label="Theme"
+        value={draft.theme}
+        choices={[
+          { value: "system", label: "Match this device" },
+          { value: "light", label: "Light" },
+          { value: "dark", label: "Dark" },
+        ]}
+        onChange={(theme) => set({ theme })}
+      />
+      <Picker
+        label="Chat style"
+        value={draft.chatStyle}
+        choices={[
+          { value: "script", label: "Script" },
+          { value: "prose", label: "Prose" },
+          { value: "bubbles", label: "Bubbles" },
+          { value: "stage", label: "Stage box" },
+        ]}
+        onChange={(chatStyle) => set({ chatStyle })}
+      />
+      <Picker
+        label="Font size"
+        value={draft.fontSize}
+        choices={[
+          { value: "small", label: "Small" },
+          { value: "medium", label: "Medium" },
+          { value: "large", label: "Large" },
+        ]}
+        onChange={(fontSize) => set({ fontSize })}
+      />
       </div>
 
       <div data-section="Advanced" className="fields" hidden={section !== "Advanced"}>
       <h2>Advanced</h2>
-      <label>
-        Log Level
-        <select
-          value={draft.logLevel ?? ""}
-          onChange={(e) => set({ logLevel: (e.target.value || null) as Settings["logLevel"] })}
-        >
-          <option value="">Default ({LOG_LEVELS.find(([value]) => value === draft.defaultLogLevel)?.[1]})</option>
-          {LOG_LEVELS.map(([value, name]) => (
-            <option key={value} value={value}>
-              {name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <Picker
+        label="Log Level"
+        value={draft.logLevel ?? ""}
+        choices={[
+          { value: "", label: `Default (${LOG_LEVELS.find(([value]) => value === draft.defaultLogLevel)?.[1]})` },
+          ...LOG_LEVELS.map(([value, label]) => ({ value, label })),
+        ]}
+        onChange={(level) => set({ logLevel: level || null })}
+      />
       <p className="muted">
         How much the app writes to its Server Log, from Error, only what failed, to Verbose, every step. It changes as soon as
         you save, and the log never holds story text.
