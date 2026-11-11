@@ -155,6 +155,24 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
   return { more, room, onScroll, refit };
 }
 
+const draftKey = (id: string) => `novelforge-draft-${id}`;
+
+/** The chat bar's unsent words, kept for this tab so leaving the Story page doesn't lose them. Blocked storage only forgets them. */
+function storedDraft(id: string) {
+  try {
+    return sessionStorage.getItem(draftKey(id)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeDraft(id: string, draft: string) {
+  try {
+    if (draft) sessionStorage.setItem(draftKey(id), draft);
+    else sessionStorage.removeItem(draftKey(id));
+  } catch {}
+}
+
 export function Play({ id }: { id: string }) {
   const [save, setSave] = useState<OpenSave>();
   const [folded, setFolded] = useState(leftFolded);
@@ -177,7 +195,8 @@ export function Play({ id }: { id: string }) {
   const loaded = useRef<Record<"scene" | "requested" | "portrait", Set<number>>>({} as never);
   // Unset until the player moves, so that each new response opens on its first beat.
   const [chosenBeat, setChosenBeat] = useState<number>();
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => storedDraft(id));
+  useEffect(() => storeDraft(id, draft), [id, draft]);
   const [turn, setTurn] = useState<TurnInProgress>();
   const [deciding, setDeciding] = useState(false);
   /** Ask the Narrator's field, and its one answer, which goes when the field closes or a Turn is sent. */
