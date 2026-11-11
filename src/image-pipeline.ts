@@ -406,6 +406,8 @@ export function imagePipeline(
       // OpenRouter's image models take the reference too; a ComfyUI workflow or an SD checkpoint may not.
       const takesFace = settings.read().imageProvider === "openrouter" || usesPortraits(settings.read());
       const was = keepFace && takesFace ? saves.originalPrompt(id, target.ref) : undefined;
+      // The player's own prompt for a portrait that has been replaced draws from the original's face too, as nothing else holds it.
+      const fromOriginal = typeof prompt === "string" && target.kind === "portrait" && takesFace && !!saves.original(id, target.ref);
       // Without the old prompt to edit, a portrait drawn from its face is told the face is all it takes from it.
       const asked = typeof prompt !== "string" && prompt.kind === "portrait" && keepFace ? { ...prompt, ...(was ? { was } : { face: true }) } : prompt;
       const write = typeof asked === "string" ? undefined : writer(asked);
@@ -416,7 +418,7 @@ export function imagePipeline(
       const draw = async (signal: AbortSignal) => {
         try {
           const written = write ? await write(signal) : (prompt as string);
-          const bytes = await adapter(redrawPayload(id, target, messageId, written, keepFace), signal);
+          const bytes = await adapter(redrawPayload(id, target, messageId, written, keepFace || fromOriginal), signal);
           session++;
           saves.replaceImage(id, target, written, bytes);
           outOfDate.delete(key);

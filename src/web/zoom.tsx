@@ -22,12 +22,14 @@ export function PromptBox({
   failure,
   canRedraw,
   onRedraw,
+  note,
 }: {
   prompt: string | null;
   redrawing: boolean;
   failure: string;
   canRedraw: boolean;
   onRedraw: (prompt: string) => void;
+  note?: string;
 }) {
   const [text, setText] = useState(prompt ?? "");
   useEffect(() => setText(prompt ?? ""), [prompt]);
@@ -47,6 +49,7 @@ export function PromptBox({
       {failure && <p role="alert" className="error">{failure}</p>}
       {redrawing && <p role="status" className="waiting">This image is being redrawn…</p>}
       {!canRedraw && <p className="muted">Images are turned off or not set up in Settings.</p>}
+      {note && <p className="muted">{note}</p>}
       <p className="muted">Each Redraw draws one new image, which may cost money.</p>
       <div className="row">
         <button type="submit" className="action" disabled={redrawing || !canRedraw || !text.trim()}>
@@ -256,6 +259,11 @@ export function RedrawableImage({
           failure={shown.failure || refused}
           canRedraw={canRedraw}
           onRedraw={(prompt) => started(redrawImage(id, shown, prompt))}
+          note={
+            shown.kind === "scene" || shown.kind === "requested"
+              ? "A Redraw uses each person's latest portrait, which may have changed since this scene was drawn."
+              : undefined
+          }
         />
       </RedrawPanel>
     </Zoomable>

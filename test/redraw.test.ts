@@ -366,6 +366,11 @@ test("a replaced portrait keeps its first image as the original, which every Upd
   await update(id, hesper);
   await settled(id);
   expect(drawn.payloads.at(-1)!.reference_images.map(({ bytes }) => bytes)).toEqual([redrawn]);
+
+  // The player's own prompt for the replaced portrait takes the original's face too, and goes as it is.
+  await redraw(id, hesper, "Hesper in a straw hat");
+  await settled(id);
+  expect(drawn.payloads.at(-1)).toMatchObject({ prompt: "Hesper in a straw hat", reference_images: [{ role: "npc", bytes: redrawn }] });
 });
 
 test("Update works the player's nudge into a portrait's new prompt", async () => {
