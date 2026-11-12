@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
+import { getSettings, quitApp } from "./api";
 import { DownIcon } from "./icons";
 import logo from "./logo.svg";
 
@@ -154,6 +155,13 @@ export const MenuRibbon = () => (
 );
 
 export function Menu() {
+  const [canQuit, setCanQuit] = useState(false);
+  const [closed, setClosed] = useState(false);
+
+  useEffect(() => {
+    getSettings().then((settings) => setCanQuit(settings.canQuit), () => {});
+  }, []);
+
   return (
     <Book
       left={
@@ -167,14 +175,23 @@ export function Menu() {
         </div>
       }
     >
-      <div className="menu">
-        <p className="eyebrow" aria-hidden="true">Contents</p>
-        <nav aria-label="Main Menu">
-          <a href="#/new">New Story</a>
-          <a href="#/load">Load Story</a>
-          <a href="#/settings">Settings</a>
-        </nav>
-      </div>
+      {closed ? (
+        <div className="menu">
+          <h2>NovelForge has closed</h2>
+          <p className="muted">Your stories are saved. Close this tab, and open NovelForge again to keep playing.</p>
+        </div>
+      ) : (
+        <div className="menu">
+          <p className="eyebrow" aria-hidden="true">Contents</p>
+          <nav aria-label="Main Menu">
+            <a href="#/new">New Story</a>
+            <a href="#/load">Load Story</a>
+            <a href="#/settings">Settings</a>
+            {/* A server gone by now still counts as closed. */}
+            {canQuit && <button type="button" onClick={() => void quitApp().catch(() => {}).then(() => setClosed(true))}>Quit</button>}
+          </nav>
+        </div>
+      )}
     </Book>
   );
 }

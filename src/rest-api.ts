@@ -415,6 +415,8 @@ export function startServer(options: {
   port: number;
   /** How a Cover's or portrait's prompt is written. By default the text model writes it. */
   writePicture?: PictureWriter;
+  /** The downloaded app, which the Menu's Quit can end. A server can't be quit from a page. */
+  quittable?: boolean;
 }) {
   const saves = saveStore(options.savesDir);
   const turns = liveTurns();
@@ -697,10 +699,11 @@ export function startServer(options: {
       theme,
       logLevel: logLevel ?? null,
       defaultLogLevel: defaultLogLevel(),
+      canQuit: options.quittable ?? false,
     };
   };
 
-  return Bun.serve({
+  const server = Bun.serve({
     hostname: options.hostname ?? "127.0.0.1",
     port: options.port,
     // Not hot reload, whose client copies an uncaught page error's words to the terminal, and they can quote the story.
@@ -711,6 +714,16 @@ export function startServer(options: {
     maxRequestBodySize: MAX_IMPORT_BYTES + 1,
     routes: logged({
       "/": spa,
+      // The download has no window to close, so the Menu's Quit ends it. Requests in flight, a Turn's save among them, finish first.
+      // A server doesn't quit, as everyone on the network shares it.
+      "/quit": {
+        POST: () => {
+          if (!options.quittable) return Response.json({ error: "Not found" }, { status: 404 });
+          log.startup("NovelForge is closing");
+          void server.stop().then(() => process.exit(0));
+          return new Response(null, { status: 204 });
+        },
+      },
       "/settings": {
         GET: () => Response.json(publicSettings()),
         PATCH: async (req) => {
@@ -1340,4 +1353,5 @@ export function startServer(options: {
     },
     error: errorResponse,
   });
+  return server;
 }

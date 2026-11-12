@@ -10,7 +10,7 @@ const provider = fakeOpenAi([[delta(JSON.stringify({ narration: "The tide rises.
 
 // Loopback, as Windows Firewall asks about every new executable that opens a network port, and each run builds a new one.
 async function launch() {
-  const app = Bun.spawn([executable], { cwd: folder.path, env: { ...process.env, PORT: "0", HOST: "127.0.0.1" }, stdout: "pipe" });
+  const app = Bun.spawn([executable], { cwd: folder.path, env: { ...process.env, PORT: "0", HOST: "127.0.0.1", NO_BROWSER: "1" }, stdout: "pipe" });
   const { value } = await app.stdout.getReader().read();
   const url = new TextDecoder().decode(value).match(/http:\S+/)![0];
   return { app, url: new URL(url) };
@@ -66,6 +66,13 @@ test("the compiled app serves the SPA from inside itself", async () => {
   expect(assets.some((asset) => asset.endsWith(".css"))).toBe(true);
   expect(responses.map((response) => response.status)).toEqual(assets.map(() => 200));
   expect(script).toContain("Main Menu");
+});
+
+test("the compiled app offers Quit, which ends it", async () => {
+  const { app, url } = await launch();
+  expect(await fetch(new URL("/settings", url)).then((r) => r.json())).toMatchObject({ canQuit: true });
+  expect((await fetch(new URL("/quit", url), { method: "POST" })).status).toBe(204);
+  expect(await app.exited).toBe(0);
 });
 
 // Through Bun, one program the firewall asks about once. It reads what the app says rather than connecting, as whether

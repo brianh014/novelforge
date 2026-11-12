@@ -7,3 +7,4 @@ settings.json.unfinished
 held-images/
 .scratch/
 fake/
+.bun-cache/

@@ -723,7 +723,7 @@ button.quiet:not(.leave, .back):hover:not(:disabled, [aria-disabled="true"]) {
 }
 
 /* Numbered like a book's contents. */
-.menu a {
+.menu :is(a, button) {
   display: flex;
   align-items: baseline;
   gap: 18px;
@@ -735,14 +735,22 @@ button.quiet:not(.leave, .back):hover:not(:disabled, [aria-disabled="true"]) {
   counter-increment: entry;
 }
 
-.menu a::before {
+/* Quit, which is an action rather than a place, but reads as one more entry. */
+.menu button {
+  border-width: 0 0 1px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu :is(a, button)::before {
   content: counter(entry, upper-roman) ".";
   width: 28px;
   color: var(--muted);
   font: 400 14px var(--label);
 }
 
-.menu a:hover {
+.menu :is(a, button):hover {
   background: var(--soft);
   color: var(--accent);
 }
@@ -2363,7 +2371,7 @@ dialog blockquote {
     gap: 12px;
   }
 
-  .menu a {
+  .menu :is(a, button) {
     align-items: center;
     min-height: 52px;
     padding: 8px 24px 8px 8px;

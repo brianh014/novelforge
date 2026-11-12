@@ -1,4 +1,5 @@
-// What the NovelForge shortcut runs (see install-launcher.ts): starts the server and opens it in the browser.
+// What the NovelForge shortcut runs (see install-launcher.ts): starts the server, for the whole network, and opens
+// it in the browser. Its window holds the log, and closing it stops the server. The download is the app instead.
 // Extra arguments pass through, so `bun scripts/launch.ts --fake` works too.
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ if (process.platform === "win32") {
   spawnSync("powershell", ["-NoProfile", "-Command", `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue } | Where-Object Name -eq 'bun' | Stop-Process -Force`]);
 }
 
+process.argv.push("--open");
 try {
   await import("../src/main");
 } catch (error) {
@@ -19,7 +21,3 @@ try {
   prompt("NovelForge could not start. Press Enter to close.");
   process.exit(1);
 }
-
-const url = `http://127.0.0.1:${port}/`;
-const opener = process.platform === "win32" ? "explorer" : process.platform === "darwin" ? "open" : "xdg-open";
-Bun.spawn([opener, url], { stdio: ["ignore", "ignore", "ignore"] });

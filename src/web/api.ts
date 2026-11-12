@@ -18,6 +18,8 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   hasImageApiKey: boolean;
   imagesReady: boolean;
   workflowProblem: string;
+  /** Only the downloaded app, which has no window to close. A server keeps running for everyone. */
+  canQuit: boolean;
 };
 export type TextHost = Awaited<ReturnType<typeof textHosts>>[number];
 export type Journal = { status: Status; storyTime: { date: string; timeOfDay: string } | null; summary: string; recentSummary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[]; chapters: Chapter[] };
@@ -85,6 +87,8 @@ export const importSave = (file: File) =>
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1";
 
 export const getSettings = () => request<Settings>("/settings");
+
+export const quitApp = () => fetch("/quit", { method: "POST" });
 
 /** Fired with the saved Settings, so what is already on screen can follow a change, such as a new image family. */
 export const SETTINGS_SAVED = "novelforge-settings-saved";

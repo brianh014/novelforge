@@ -5,7 +5,8 @@
   "scripts": {
     "start": "bun scripts/launch.ts",
     "install-launcher": "bun scripts/install-launcher.ts",
-    "build":"bun build src/main.ts --compile --production --outfile dist/novelforge",
+    "release": "bun scripts/build-release.ts",
+    "build": "bun build src/main.ts --compile --production --outfile dist/novelforge",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },

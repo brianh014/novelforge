@@ -66,7 +66,13 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     theme: "system",
     logLevel: null,
     defaultLogLevel: "warning",
+    canQuit: false,
   });
+});
+
+test("a server can't be quit from a page", async () => {
+  expect((await app.post("/quit", {})).status).toBe(404);
+  expect((await app.get("/settings")).status).toBe(200);
 });
 
 test("every setting survives a restart, and no key comes back", async () => {
@@ -145,6 +151,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     theme: "dark",
     logLevel: null,
     defaultLogLevel: "warning",
+    canQuit: false,
   };
   expect(await response.json()).toEqual(expected);
 
