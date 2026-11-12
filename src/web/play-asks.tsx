@@ -1,5 +1,6 @@
 import { type FormEvent, type KeyboardEvent, type RefObject, useState } from "react";
 import { askNarrator, closeChapter, requestImage } from "./api";
+import { Quilling } from "./icons";
 
 export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
   if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
@@ -134,7 +135,7 @@ export function QuestionForm(props: { id: string; pc: string; signal: AbortSigna
       </label>
       {(wondering || answer) && (
         <p role="status" className="answer">
-          {wondering ? "The Narrator is thinking…" : answer}
+          {wondering ? <span className="waiting drawing">{Quilling}The Narrator is thinking…</span> : answer}
         </p>
       )}
       <div className="row">
@@ -176,8 +177,8 @@ export function ChapterEnd(props: {
 
   if (closing) {
     return (
-      <p role="status" className="waiting">
-        Ending the chapter…
+      <p role="status" className="waiting drawing">
+        {Quilling}Ending the chapter…
       </p>
     );
   }

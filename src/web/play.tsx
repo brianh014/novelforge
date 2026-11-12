@@ -721,8 +721,8 @@ export function Play({ id }: { id: string }) {
             </button>
           )}
           {deciding && !!draft.trim() && (
-            <span role="status" className="waiting">
-              Enhancing…
+            <span role="status" className="waiting drawing">
+              {Quilling}Enhancing…
             </span>
           )}
           {!draft.trim() && (

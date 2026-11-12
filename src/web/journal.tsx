@@ -14,7 +14,7 @@ import {
   tellNarrator,
 } from "./api";
 import { ContinueRule, isContinue, readable } from "./chat-style";
-import { EditIcon, RenameIcon, RewriteIcon } from "./icons";
+import { EditIcon, Quilling, RenameIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./story-pictures";
 import { Person } from "./zoom";
@@ -205,8 +205,8 @@ export function TellTheNarrator({ id, onDone, onClose }: { id: string; onDone: (
           <textarea rows={4} value={text} autoFocus disabled={busy} onChange={(event) => setText(event.target.value)} />
         </label>
         {busy && (
-          <p role="status" className="waiting">
-            The Narrator is changing the world…
+          <p role="status" className="waiting drawing">
+            {Quilling}The Narrator is changing the world…
           </p>
         )}
         {done && (
