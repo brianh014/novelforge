@@ -178,6 +178,7 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 async function uploaded(req: Request) {
   if (req.headers.get("content-type") !== "application/octet-stream") throw new UploadRefused("A picture must be sent as application/octet-stream", 415);
   // Refused before reading, as the server takes bodies up to an import's size.
+  // shortcut: a chunked body has no length and is still read whole, up to the import limit; stream it if server mode needs it.
   if (Number(req.headers.get("content-length")) > MAX_UPLOAD_BYTES) throw new UploadRefused("That picture is over 10 MB.", 413);
   const bytes = new Uint8Array(await req.arrayBuffer());
   if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new UploadRefused("That picture is over 10 MB.", 413);

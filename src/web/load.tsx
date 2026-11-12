@@ -131,6 +131,7 @@ export function LoadStory() {
             // The button that opened the dialog went with the Save, and focus must not fall back to the page.
             heading.current!.focus();
             // Not through `attempt`, which would drop it while a Duplicate or Import is busy.
+            setError("");
             setNotice(`Deleted ${name}.`);
             refresh();
           }}

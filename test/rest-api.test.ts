@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { CONTINUE_INPUT, type Prompt } from "../src/prompt-assembler";
 import { saveStore } from "../src/save-store";
 import type { State } from "../src/state-applier";
-import { ContentRefused } from "../src/turn-engine";
+import type { ImagePipeline } from "../src/image-pipeline";
+import { settingsStore } from "../src/settings-store";
+import { ContentRefused, playTurn } from "../src/turn-engine";
 import { narration, scriptedDice, scriptedTextProvider, startApp, tempFolder, turnEvents } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
@@ -2407,4 +2409,16 @@ test("the app refuses a request for another site's name, so a rebound domain can
 
   expect(rebound.status).toBe(404);
   expect(own.status).toBe(200);
+});
+
+test("a Turn already saved is still a success when image work after it throws, so the player doesn't send it twice", async () => {
+  const saves = saveStore(savesDir);
+  const id = saves.create({ worldBrief: "A drowned city", pc: { name: "Ash" } });
+  const images = { ready: () => false, sceneChanged: () => { throw new Error("database is locked"); } } as unknown as ImagePipeline;
+  const settings = settingsStore(join(folder.path, "settings.json"));
+  const { textProvider } = scriptedTextProvider(narration("The tide rises around you."));
+
+  await playTurn(saves, { textProvider, dice: scriptedDice(), nearMissMargin: 2, settings, images }, id, "I wade forward.", new AbortController().signal);
+
+  expect(saves.messages(id).map(({ role }) => role)).toEqual(["player", "narrator"]);
 });
