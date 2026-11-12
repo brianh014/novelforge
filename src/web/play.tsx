@@ -46,12 +46,22 @@ import { StoryRecap } from "./story-recap";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 
 const WRITING = "The Narrator is writing…";
+const SQUIGGLE = "M4 15q5-4 10 0t10 0 10 0 10 0 10 0 10 0 10 0";
 
-/** A quill writing in place, beside its words, as pictures have a brush. */
+/**
+ * A quill writing a squiggle, left to right, then sliding straight back, while the Narrator writes. The words stay for
+ * screen readers. The pen's path adds the line back, so the squiggle ends 52.3% along it (in styles.css): measure
+ * again if the squiggle changes.
+ */
 const Writing = () => (
-  <p className="waiting drawing">
-    {Quilling}
-    {WRITING}
+  <p className="quill-writing">
+    <svg viewBox="0 0 80 24" aria-hidden="true">
+      <path className="ink" d={SQUIGGLE} pathLength={1} />
+      <g className="pen" style={{ offsetPath: `path("${SQUIGGLE}L4 15")` }}>
+        <path d="M20 3c-7 1-12 6-14 14M20 3c0 6-3 10-9 11M4 21l2-4" transform="translate(-4 -21)" />
+      </g>
+    </svg>
+    <span className="visually-hidden">{WRITING}</span>
   </p>
 );
 
@@ -616,8 +626,8 @@ export function Play({ id }: { id: string }) {
       />
       {/* An Edit shows its words at once, so this is all that says the Narrator is still at work. */}
       {turn?.edit && (
-        <p role="status" className="waiting">
-          The Narrator is updating the story…
+        <p role="status" className="waiting drawing">
+          {Quilling}The Narrator is updating the story…
         </p>
       )}
       {/* Pending covers every picture on the way, Scene Images and portraits too, and only requested ones are counted. */}

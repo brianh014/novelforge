@@ -25,7 +25,7 @@ export const SendIcon = icon("M12 20V4M5 11l7-7 7 7");
 export const RevertIcon = icon("M4 12a8 8 0 1 0 2.4-5.7M4 3v5h5");
 
 const SQUIGGLE = "M4 18q2-3 4 0t4 0 4 0";
-/** A quill writing a squiggle in place, for beside the Narrator's words while it writes. Its moves are the brush's. */
+/** A quill writing a squiggle in place, for beside the words while the Narrator updates the story. Its moves are the brush's. */
 export const Quilling = (
   <svg className="painting" viewBox="0 0 32 24" aria-hidden="true">
     <path className="hills" d={SQUIGGLE} pathLength={1} />
