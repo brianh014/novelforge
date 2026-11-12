@@ -22,7 +22,7 @@ Follow the conventions in `CONTRIBUTING.md`: Glossary terms, `shortcut:` comment
 
 - The server's routes are split by area, one module each: `settings-routes`, `world-routes`, `save-routes`, `turn-routes` and `gallery-routes` (ADR 0004). A new route goes in its area's module. State only one area uses stays private to that module. `src/http.ts` holds what they share, and `rest-api.ts` only puts them together.
 - `Play` (`src/web/play.tsx`) keeps the Turn and the state its parts share. The parts are in their own files: `story-pictures.tsx` (the `useStoryPictures` hook and the pictures inline in the story), `story-recap.tsx` (the left page), `message-controls.tsx` (the tools under a Message) and `play-asks.tsx` (the forms over the compose box). A new piece of the story screen goes in the file for its job.
-- `src/web/wizard.tsx` (`NewStory`) is still one big component. Split it by job if a change makes it harder to follow.
+- `NewStory` (`src/web/wizard.tsx`) keeps the form's state, the Narrator calls and the Art and Your World steps. The parts are in their own files: `wizard-draft.ts` (the draft, its themes and keeping it in the tab), `wizard-form.tsx` (the first step's boxes), `wizard-pictures.tsx` (a picture with its Draw, Redo, Nudge and Upload) and `wizard-frame.tsx` (the heading, the Working screen and the dialogs). A new piece of the New Story screen goes in the file for its job.
 
 ### CI and releases
 
