@@ -1,18 +1,48 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { newStory } from "./support";
 
-test("a new story starts from the wizard, takes a Turn, and fills the Journal and Gallery", async ({ page }) => {
-  await newStory(page);
+/** The left page's Story Time, newest Loose End and newest Recent Character. The fake Narrator changes each every Turn. */
+const leftPage = (page: Page) => {
+  const firstIn = (heading: string) => page.getByRole("heading", { name: heading }).locator("~ ul > li").first();
+  return [page.getByTestId("story-time"), firstIn("Loose Ends"), firstIn("Recent Characters").getByRole("img")];
+};
+const textsOf = async (page: Page) => {
+  const [time, looseEnd, character] = leftPage(page);
+  await expect(character!).toBeVisible();
+  return [await time!.textContent(), await looseEnd!.textContent(), await character!.getAttribute("alt")];
+};
 
-  await page.getByRole("textbox", { name: /say or do\?$/ }).fill("I walk to the harbour.");
-  await page.getByRole("button", { name: "Send" }).click();
-
-  await expect(page.getByTestId("message-player")).toHaveText(["I walk to the harbour."]);
-  await expect(page.getByTestId("message-narrator")).toHaveCount(2);
-
+async function journalCounts(page: Page) {
   await page.getByRole("link", { name: "Journal" }).click();
-  await expect(page.getByRole("heading", { name: "Journal", level: 1 })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Characters" }).locator("~ ul > li").first()).toBeVisible();
+  const items = (heading: string | RegExp) => page.getByRole("heading", { name: heading }).locator("~ ul").first().locator("> li");
+  await expect(items(/knows$/).first()).toBeVisible();
+  const counts = { facts: await items(/knows$/).count(), looseEnds: await items("Loose Ends").count() };
+  await page.getByRole("link", { name: "Story" }).click();
+  return counts;
+}
+
+test("each Turn adds to the story and updates the left page and the Journal", async ({ page }) => {
+  await newStory(page);
+  const journalBefore = await journalCounts(page);
+  let before = await textsOf(page);
+
+  for (const [index, input] of ["I walk to the harbour.", "I ask about the lighthouse."].entries()) {
+    await page.getByRole("textbox", { name: /say or do\?$/ }).fill(input);
+    await page.getByRole("button", { name: "Send" }).click();
+
+    await expect(page.getByTestId("message-player").last()).toHaveText(input);
+    await expect(page.getByTestId("message-narrator")).toHaveCount(index + 2);
+    await expect(page.getByRole("textbox", { name: /say or do\?$/ })).toHaveValue("");
+    const [time, looseEnd, character] = leftPage(page);
+    await expect(time!).not.toHaveText(before[0]!);
+    await expect(looseEnd!).not.toHaveText(before[1]!);
+    await expect(character!).not.toHaveAttribute("alt", before[2]!);
+    before = await textsOf(page);
+  }
+
+  const journalAfter = await journalCounts(page);
+  expect(journalAfter.facts).toBe(journalBefore.facts + 2);
+  expect(journalAfter.looseEnds).toBe(journalBefore.looseEnds + 2);
 
   await page.getByRole("link", { name: "Gallery" }).click();
   await expect(page.getByRole("img", { name: "Cover" })).toBeVisible();

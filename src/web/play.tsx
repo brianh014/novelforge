@@ -683,7 +683,7 @@ export function Play({ id }: { id: string }) {
             {/* A Save from before titles has only its PC. */}
             <div className="story-title">
               <h1 className="title">{storyName(save)}</h1>
-              {journal?.storyTime && <p className="muted">{journal.storyTime.date}, {journal.storyTime.timeOfDay}</p>}
+              {journal?.storyTime && <p className="muted" data-testid="story-time">{journal.storyTime.date}, {journal.storyTime.timeOfDay}</p>}
             </div>
             {journal?.recentSummary && (
               <div className="story-recap">
