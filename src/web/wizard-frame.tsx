@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
+import { Quilling } from "./icons";
 
 /** Stands in for the page's controls while the Narrator works, so nothing can change under it. */
 export function Working({ message, onCancel }: { message: string; onCancel: () => void }) {
   return (
     <div className="working">
-      <p role="status" className="waiting">
+      <p role="status" className="waiting drawing">
+        <Quilling />
         {message}
       </p>
       <div className="progress" />

@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 const icon = (path: string) => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <path d={path} />
@@ -23,6 +25,37 @@ export const UploadIcon = icon("M12 15V4M7 9l5-5 5 5M4 15v5h16v-5");
 export const StopIcon = icon("M7 7h10v10H7z");
 export const SendIcon = icon("M12 20V4M5 11l7-7 7 7");
 export const RevertIcon = icon("M4 12a8 8 0 1 0 2.4-5.7M4 3v5h5");
+
+// Three waves, from where the trail starts fading to past the nib, as the page slides one wave left each round.
+const WAVE = "c1.008 0 1.392 1.4 2.4 1.4c1.008 0 1.392-1.4 2.4-1.4";
+const LINE = `M4.4 17.3${WAVE}${WAVE}${WAVE}`;
+/**
+ * A quill writing in place, for beside the words of a Narrator at work: its tip only goes up and down while the page
+ * slides left under it, so a short squiggle trails behind and fades. Its moves are in styles.css. Its own mask id, as
+ * several can be on screen at once.
+ */
+export function Quilling() {
+  const fade = useId();
+  return (
+    <svg className="painting quilling" viewBox="0 0 32 24" aria-hidden="true">
+      <defs>
+        <linearGradient id={`${fade}g`}>
+          <stop offset="0" stopColor="#fff" stopOpacity="0" />
+          <stop offset=".7" stopColor="#fff" />
+        </linearGradient>
+        <mask id={fade} maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="24">
+          <rect x="5.5" y="0" width="8.5" height="24" fill={`url(#${fade}g)`} />
+        </mask>
+      </defs>
+      <g mask={`url(#${fade})`}>
+        <path className="ink" d={LINE} />
+      </g>
+      <g className="nib">
+        <path className="pen" d="M20 3c-7 1-12 6-14 14M20 3c0 6-3 10-9 11M4 21l2-4" transform="translate(14 18) scale(.8) translate(-4 -21)" />
+      </g>
+    </svg>
+  );
+}
 
 const HILLS = "M4 19l7-8 5 5 4-4 8 7";
 /** A brush painting hills in a frame, then a sun, for beside the words of a picture being drawn. Its moves are in styles.css. */

@@ -36,7 +36,7 @@ import {
   type TurnInProgress,
 } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, Painting, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, Painting, Quilling, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
 import { type MessageActions, MessageControls } from "./message-controls";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
@@ -475,8 +475,11 @@ export function Play({ id }: { id: string }) {
     edit: startEdit,
     regenerate: () => replace(""),
   };
+  // An empty row while a Turn runs keeps the tools' room, so the story doesn't shift when they come back.
   const controls = (message: Message) =>
-    !turn && (
+    turn ? (
+      <div className="row actions" />
+    ) : (
       <MessageControls
         message={message}
         latest={message === latest}
@@ -568,7 +571,12 @@ export function Play({ id }: { id: string }) {
                   </Fragment>
                 );
               })}
-              {turn?.input && !turn.replaces && <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>}
+              {turn?.input && !turn.replaces && (
+                <div className="message player">
+                  {messageBeats({ role: "player", text: turn.input }).map(line)}
+                  <div className="row actions" />
+                </div>
+              )}
               {/* Mounted before any text arrives, or screen readers would not announce it. */}
               <div aria-live="polite" className="message narrator">
                 {turn?.retry && <p className="notice">{turn.retry}</p>}
@@ -618,7 +626,8 @@ export function Play({ id }: { id: string }) {
       />
       {/* An Edit shows its words at once, so this is all that says the Narrator is still at work. */}
       {turn?.edit && (
-        <p role="status" className="waiting">
+        <p role="status" className="waiting drawing">
+          <Quilling />
           The Narrator is updating the story…
         </p>
       )}
@@ -713,7 +722,8 @@ export function Play({ id }: { id: string }) {
             </button>
           )}
           {deciding && !!draft.trim() && (
-            <span role="status" className="waiting">
+            <span role="status" className="waiting drawing">
+              <Quilling />
               Enhancing…
             </span>
           )}
