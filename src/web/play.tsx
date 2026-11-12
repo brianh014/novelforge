@@ -475,8 +475,11 @@ export function Play({ id }: { id: string }) {
     edit: startEdit,
     regenerate: () => replace(""),
   };
+  // An empty row while a Turn runs keeps the tools' room, so the story doesn't shift when they come back.
   const controls = (message: Message) =>
-    !turn && (
+    turn ? (
+      <div className="row actions" />
+    ) : (
       <MessageControls
         message={message}
         latest={message === latest}
@@ -568,7 +571,12 @@ export function Play({ id }: { id: string }) {
                   </Fragment>
                 );
               })}
-              {turn?.input && !turn.replaces && <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>}
+              {turn?.input && !turn.replaces && (
+                <div className="message player">
+                  {messageBeats({ role: "player", text: turn.input }).map(line)}
+                  <div className="row actions" />
+                </div>
+              )}
               {/* Mounted before any text arrives, or screen readers would not announce it. */}
               <div aria-live="polite" className="message narrator">
                 {turn?.retry && <p className="notice">{turn.retry}</p>}

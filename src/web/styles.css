@@ -1843,6 +1843,8 @@ a.action {
 /* Floated, so they sit beside the last line when it leaves room, and appearing on hover moves no text. */
 .message .actions {
   float: right;
+  /* An icon's height, so a row with no tools yet takes the same room. */
+  min-height: 32px;
   margin-top: 0;
   gap: 0;
 }
@@ -1970,11 +1972,6 @@ a.action {
   .waiting {
     animation: breathe 2s ease-in-out infinite alternate;
   }
-}
-
-/* The pen stands above the svg's box, so this clears it off the Message above. */
-.quill-writing {
-  margin-top: 1.5rem;
 }
 
 .quill-writing svg {
