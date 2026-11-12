@@ -15,4 +15,4 @@ A NovelForge server open to the network (the default for `bun start` and the Ser
 
 ## Reporting a problem
 
-Please report a vulnerability privately rather than in a public issue: use the repository host's private security advisory, or contact the maintainer through the repository. Include what you found, how to reproduce it, and what it lets an attacker do. You should hear back within two weeks.
+Please report a vulnerability privately rather than in a public issue: use the host's private security advisory where it has one (as GitHub does), or else contact the maintainer through their profile on the repository's host. Include what you found, how to reproduce it, and what it lets an attacker do. You should hear back within two weeks.
