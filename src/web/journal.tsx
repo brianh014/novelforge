@@ -245,6 +245,12 @@ export function Journal({ id }: { id: string }) {
   const [reading, setReading] = useState<number>();
   const [phonePage, setPhonePage] = useState<PhonePage>("journal");
   const pick = <PagePick shown={phonePage} onPick={setPhonePage} />;
+  // On both pages, as a phone shows one at a time and either can make a change. A wider screen shows only the left one's.
+  const staleNotice = stale && (
+    <p role="status" className="error stale">
+      Saved, but the Journal couldn't be refreshed. Open it again to see the change.
+    </p>
+  );
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -328,11 +334,7 @@ export function Journal({ id }: { id: string }) {
             </button>
           </div>
           {telling && <TellTheNarrator id={id} onDone={reread} onClose={() => setTelling(false)} />}
-          {stale && (
-            <p role="status" className="error">
-              Saved, but the Journal couldn't be refreshed. Open it again to see the change.
-            </p>
-          )}
+          {staleNotice}
           <div className="journal">
             <p className="person pc">
               <Person id={id} name={save.pc.name} portrait={pcPortrait} who={statusWords(journal.status)} />
@@ -450,6 +452,7 @@ export function Journal({ id }: { id: string }) {
       tabs={<BookTabs id={id} current="Journal" />}
     >
       {pick}
+      {staleNotice}
       {reading === undefined ? (
         <>
           <h2>Story Summary</h2>

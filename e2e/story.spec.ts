@@ -228,3 +228,17 @@ test("the latest response can be edited, rewritten and regenerated, and the stor
   await expect(narrator).toHaveCount(1);
   await expect(page.getByTestId("message-player")).toHaveCount(0);
 });
+
+test("on a phone, a Journal change that can't be refreshed says so on the page it was made", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await newStory(page);
+  await journal(page);
+  await page.getByRole("button", { name: "Summary & Chapters" }).click();
+  await page.getByRole("button", { name: "Edit: Story Summary" }).click();
+  await page.getByRole("textbox", { name: "Story Summary" }).fill("A changed summary.");
+  // The change saves, but the fresh copy of the Journal doesn't come back.
+  await page.route(/\/saves\/[^/]+\/journal$/, (route) => (route.request().method() === "GET" ? route.fulfill({ status: 500 }) : route.continue()));
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+
+  await expect(page.getByText("Saved, but the Journal couldn't be refreshed.").filter({ visible: true })).toHaveCount(1);
+});
