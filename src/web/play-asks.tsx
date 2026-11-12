@@ -135,7 +135,14 @@ export function QuestionForm(props: { id: string; pc: string; signal: AbortSigna
       </label>
       {(wondering || answer) && (
         <p role="status" className="answer">
-          {wondering ? <span className="waiting drawing">{Quilling}The Narrator is thinking…</span> : answer}
+          {wondering ? (
+            <span className="waiting drawing">
+              <Quilling />
+              The Narrator is thinking…
+            </span>
+          ) : (
+            answer
+          )}
         </p>
       )}
       <div className="row">
@@ -178,7 +185,8 @@ export function ChapterEnd(props: {
   if (closing) {
     return (
       <p role="status" className="waiting drawing">
-        {Quilling}Ending the chapter…
+        <Quilling />
+        Ending the chapter…
       </p>
     );
   }

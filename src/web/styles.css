@@ -2107,6 +2107,44 @@ span.drawing {
   }
 }
 
+.quilling .ink {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.quilling .pen {
+  stroke: var(--ink);
+}
+
+/* The tip at the top of its stroke, where the line under it starts. */
+.quilling .nib {
+  transform: translateY(-0.7px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The same ease as the line's waves, so the tip stays on it. */
+  .quilling .nib {
+    animation: bob 0.4s cubic-bezier(0.42, 0, 0.58, 1) infinite alternate;
+  }
+
+  .quilling .ink {
+    animation: feed 0.8s linear infinite;
+  }
+}
+
+@keyframes bob {
+  to {
+    transform: translateY(0.7px);
+  }
+}
+
+/* One wave a round, so it loops without a seam. */
+@keyframes feed {
+  to {
+    transform: translateX(-4.8px);
+  }
+}
+
 @keyframes hills {
   from {
     stroke-dashoffset: 1;

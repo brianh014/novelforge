@@ -206,7 +206,8 @@ export function TellTheNarrator({ id, onDone, onClose }: { id: string; onDone: (
         </label>
         {busy && (
           <p role="status" className="waiting drawing">
-            {Quilling}The Narrator is changing the world…
+            <Quilling />
+            The Narrator is changing the world…
           </p>
         )}
         {done && (

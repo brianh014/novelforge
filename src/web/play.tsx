@@ -627,7 +627,8 @@ export function Play({ id }: { id: string }) {
       {/* An Edit shows its words at once, so this is all that says the Narrator is still at work. */}
       {turn?.edit && (
         <p role="status" className="waiting drawing">
-          {Quilling}The Narrator is updating the story…
+          <Quilling />
+          The Narrator is updating the story…
         </p>
       )}
       {/* Pending covers every picture on the way, Scene Images and portraits too, and only requested ones are counted. */}
@@ -722,7 +723,8 @@ export function Play({ id }: { id: string }) {
           )}
           {deciding && !!draft.trim() && (
             <span role="status" className="waiting drawing">
-              {Quilling}Enhancing…
+              <Quilling />
+              Enhancing…
             </span>
           )}
           {!draft.trim() && (

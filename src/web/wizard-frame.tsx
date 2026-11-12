@@ -6,7 +6,7 @@ export function Working({ message, onCancel }: { message: string; onCancel: () =
   return (
     <div className="working">
       <p role="status" className="waiting drawing">
-        {Quilling}
+        <Quilling />
         {message}
       </p>
       <div className="progress" />
