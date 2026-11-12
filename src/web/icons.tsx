@@ -23,3 +23,16 @@ export const UploadIcon = icon("M12 15V4M7 9l5-5 5 5M4 15v5h16v-5");
 export const StopIcon = icon("M7 7h10v10H7z");
 export const SendIcon = icon("M12 20V4M5 11l7-7 7 7");
 export const RevertIcon = icon("M4 12a8 8 0 1 0 2.4-5.7M4 3v5h5");
+
+const HILLS = "M4 19l7-8 5 5 4-4 8 7";
+/** A brush painting hills in a frame, then a sun, for beside the words of a picture being drawn. Its moves are in styles.css. */
+export const Painting = (
+  <svg className="painting" viewBox="0 0 32 24" aria-hidden="true">
+    <rect className="frame" x="2" y="2" width="28" height="20" rx="1" />
+    <path className="hills" d={HILLS} pathLength={1} />
+    <circle className="sun" cx="22" cy="7.5" r="2" />
+    <g className="brush" style={{ offsetPath: `path("${HILLS}")` }}>
+      <path d="M0 0c.5-1.5 1.5-2.5 2.5-2.5l1 1c0 1-1 2-2.5 2.5zM3-2l6-6" />
+    </g>
+  </svg>
+);

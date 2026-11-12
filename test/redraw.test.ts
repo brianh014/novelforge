@@ -614,7 +614,7 @@ test("with Draw scene pictures off, a Turn draws portraits but no Scene Image", 
   expect(drawn.payloads.every(({ aspect_ratio }) => aspect_ratio === "1:1")).toBe(true);
 });
 
-test("while pictures draw, the story is told what kind is drawing and how many wait, but never whose", async () => {
+test("while pictures draw, the story is told what is drawing and how many wait", async () => {
   let finish = (_: Uint8Array) => {};
   const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
   await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper"))], slow, png(2), png(3));
@@ -624,8 +624,23 @@ test("while pictures draw, the story is told what kind is drawing and how many w
   const drawing = await app.get(`/saves/${id}/images`).then((r) => r.json());
 
   // The PC's portrait, then a check for it on the move that draws nothing as it exists, Hesper's portrait and the scene.
-  expect(drawing).toMatchObject({ pending: true, drawing: "portrait", more: 3 });
-  expect(JSON.stringify(drawing)).not.toContain("Hesper");
+  expect(drawing).toMatchObject({ pending: true, drawing: "portrait", name: "Ash", more: 3 });
   finish(png(1));
   expect(await settled(id)).not.toHaveProperty("drawing");
+});
+
+test("a portrait of someone the PC doesn't know yet is drawn without their name", async () => {
+  let finish = (_: Uint8Array) => {};
+  const slow = new Promise<Uint8Array>((resolve) => (finish = resolve));
+  await play([turn("[Hesper] on a wet street", meet("Hesper"), scene("The ferry", "Hesper"))], png(1), slow, png(3));
+  const id = await newSave();
+  await settled(id);
+  await app.post(`/saves/${id}/turns`, { input: "I wait." }).then((r) => r.text());
+
+  const drawing = await app.get(`/saves/${id}/images`).then((r) => r.json());
+
+  expect(drawing).toMatchObject({ pending: true, drawing: "portrait" });
+  expect(JSON.stringify(drawing)).not.toContain("Hesper");
+  finish(png(2));
+  await settled(id);
 });

@@ -1972,6 +1972,209 @@ a.action {
   }
 }
 
+.quill-writing svg {
+  display: block;
+  width: 5rem;
+  height: 1.5rem;
+  margin-inline: auto;
+  overflow: visible;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.quill-writing .ink {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 1;
+}
+
+.quill-writing .pen {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  offset-anchor: 0 0;
+  offset-rotate: 0deg;
+  offset-distance: 52.3%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .quill-writing .ink {
+    animation: ink 2.4s linear infinite;
+  }
+
+  .quill-writing .pen {
+    animation: pen 2.4s linear infinite;
+  }
+}
+
+@keyframes ink {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+
+  60% {
+    stroke-dashoffset: 0;
+  }
+
+  70% {
+    opacity: 1;
+  }
+
+  90%,
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+/* 52.3% is where the squiggle ends on the pen's path; the rest is the straight line back. */
+@keyframes pen {
+  from {
+    offset-distance: 0%;
+  }
+
+  60% {
+    offset-distance: 52.3%;
+  }
+
+  70% {
+    offset-distance: 52.3%;
+    animation-timing-function: ease-in-out;
+  }
+
+  95%,
+  to {
+    offset-distance: 100%;
+  }
+}
+
+/* The words of a picture being drawn, after a brush painting one. */
+.drawing {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+span.drawing {
+  display: inline-flex;
+}
+
+.painting {
+  flex: none;
+  width: 2em;
+  height: 1.5em;
+  overflow: visible;
+  fill: none;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.painting .frame {
+  stroke: var(--muted);
+}
+
+.painting .hills,
+.painting .sun {
+  stroke: var(--muted);
+}
+
+.painting .hills {
+  stroke-dasharray: 1;
+}
+
+.painting .brush {
+  stroke: var(--ink);
+  offset-anchor: 0 0;
+  offset-rotate: 0deg;
+  offset-distance: 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .painting .hills {
+    animation: hills 2.8s linear infinite;
+  }
+
+  .painting .sun {
+    animation: sun 2.8s ease-out infinite;
+  }
+
+  .painting .brush {
+    animation: brush 2.8s linear infinite;
+  }
+}
+
+@keyframes hills {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+
+  55% {
+    stroke-dashoffset: 0;
+  }
+
+  80% {
+    opacity: 1;
+  }
+
+  95%,
+  to {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes sun {
+  0%,
+  55% {
+    opacity: 0;
+  }
+
+  68%,
+  80% {
+    opacity: 1;
+  }
+
+  95%,
+  to {
+    opacity: 0;
+  }
+}
+
+/* Off the hills' end, out of sight, back to their start, and in again. */
+@keyframes brush {
+  from {
+    offset-distance: 0%;
+  }
+
+  55%,
+  62% {
+    offset-distance: 100%;
+    opacity: 1;
+  }
+
+  70% {
+    opacity: 0;
+  }
+
+  90% {
+    opacity: 0;
+    offset-distance: 100%;
+  }
+
+  92% {
+    opacity: 0;
+    offset-distance: 0%;
+  }
+
+  to {
+    offset-distance: 0%;
+    opacity: 1;
+  }
+}
+
 /* Between two colours that both pass, as fading out would drop the text below readable contrast. */
 @keyframes breathe {
   to {

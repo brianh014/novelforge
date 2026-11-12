@@ -36,7 +36,7 @@ import {
   type TurnInProgress,
 } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, Painting, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
 import { type MessageActions, MessageControls } from "./message-controls";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
@@ -46,6 +46,24 @@ import { StoryRecap } from "./story-recap";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 
 const WRITING = "The Narrator is writing…";
+const SQUIGGLE = "M4 15q5-4 10 0t10 0 10 0 10 0 10 0 10 0 10 0";
+
+/**
+ * A quill writing a squiggle, left to right, then sliding straight back, while the Narrator writes. The words stay for
+ * screen readers. The pen's path adds the line back, so the squiggle ends 52.3% along it (in styles.css): measure
+ * again if the squiggle changes.
+ */
+const Writing = () => (
+  <p className="quill-writing">
+    <svg viewBox="0 0 80 24" aria-hidden="true">
+      <path className="ink" d={SQUIGGLE} pathLength={1} />
+      <g className="pen" style={{ offsetPath: `path("${SQUIGGLE}L4 15")` }}>
+        <path d="M20 3c-7 1-12 6-14 14M20 3c0 6-3 10-9 11M4 21l2-4" transform="translate(-4 -21)" />
+      </g>
+    </svg>
+    <span className="visually-hidden">{WRITING}</span>
+  </p>
+);
 
 /**
  * A new Turn snaps the player's words to the top of the story, and the response streams in below them, held there to
@@ -556,7 +574,7 @@ export function Play({ id }: { id: string }) {
                 {turn?.retry && <p className="notice">{turn.retry}</p>}
                 {turn?.narration && messageBeats({ role: "narrator", text: turn.narration }).map(line)}
                 {/* Until the Turn is done, as the text can pause while the Narrator writes the rest of its reply. An Edit has its own. */}
-                {turn && !(turn.edit && turn.narration) && <p className="waiting">{WRITING}</p>}
+                {turn && !(turn.edit && turn.narration) && <Writing />}
               </div>
               <div ref={room} aria-hidden="true" />
             </div>
@@ -606,8 +624,9 @@ export function Play({ id }: { id: string }) {
       )}
       {/* Pending covers every picture on the way, Scene Images and portraits too, and only requested ones are counted. */}
       {(images.pending || requested.drawing > 0) && (
-        <p role="status" className="waiting">
-          Drawing {DRAWING[images.drawing ?? ""] ?? "a picture"}
+        <p role="status" className="waiting drawing">
+          {Painting}Drawing{" "}
+          {images.name ? `${images.name}${images.drawing?.endsWith("redraw") ? " again" : ""}` : (DRAWING[images.drawing ?? ""] ?? "a picture")}
           {(images.more ?? 0) > 0 && `, then ${plural(images.more!, "more picture")}`}…
         </p>
       )}
@@ -796,7 +815,7 @@ function StageBox(props: {
           ),
         )}
         {props.retry && <p className="notice">{props.retry}</p>}
-        {waiting && <p className="waiting">{WRITING}</p>}
+        {waiting && <Writing />}
         {current.message && props.rows(current.message)}
         <div className="row stage-foot">
           <span className="muted">
@@ -818,11 +837,11 @@ function StageBox(props: {
 /** What the story says is being drawn, by the kind of job drawing it. */
 const DRAWING: Record<string, string> = {
   scene: "the scene",
-  portrait: "a portrait",
+  portrait: "a character",
   requested: "the picture you asked for",
   "scene redraw": "a scene again",
   "requested redraw": "a picture again",
-  "portrait redraw": "a portrait again",
+  "portrait redraw": "a character again",
   "cover redraw": "the Cover again",
 };
 
