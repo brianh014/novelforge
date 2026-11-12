@@ -2255,8 +2255,14 @@ span.drawing {
   color: var(--ink);
 }
 
+/* A framed button, so it stays inside the strip, unlike the ×'s overhang, and the words sit level with it. */
+.dismissable:has(.chapter-end) {
+  align-items: center;
+}
+
 .dismissable .chapter-end {
-  margin-left: auto;
+  margin: 0 0 0 auto;
+  font-size: inherit;
 }
 
 /* The dismissing ×, which needs no frame. */
