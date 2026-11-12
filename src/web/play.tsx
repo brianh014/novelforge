@@ -1,6 +1,5 @@
-import { type FormEvent, Fragment, type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type FormEvent, Fragment, type ReactNode, type Ref, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  askNarrator,
   stopTurn,
   decideForMe,
   duplicateFrom,
@@ -9,35 +8,20 @@ import {
   getTurn,
   resumeTurn,
   type TurnStatus,
-  getImages,
-  getJournal,
   getChapters,
-  closeChapter,
-  getRequestedImages,
   getSave,
-  imageUrl,
   type OpenSave,
   getSettings,
   type Message,
   playOpening,
   playTurn,
-  type Journal,
   type Chapter,
-  type Portrait,
   portraitUrl,
   previewRevert,
   replaceResponse,
   editResponse,
-  type RequestedImage,
-  type RequestedImages,
-  requestedImageUrl,
-  requestImage,
   revert,
-  type SceneImageInfo,
-  type SceneImages,
   setupProblem,
-  storyName,
-  takeImageFailure,
 } from "./api";
 import {
   type Beat,
@@ -52,58 +36,16 @@ import {
   type TurnInProgress,
 } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import {
-  AskIcon,
-  StopIcon,
-  ChapterIcon,
-  ContinueIcon,
-  DecideIcon,
-  DownIcon,
-  DrawIcon,
-  DuplicateIcon,
-  EditIcon,
-  RegenerateIcon,
-  RevertIcon,
-  RewriteIcon,
-  SendIcon,
-} from "./icons";
+import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
+import { type MessageActions, MessageControls } from "./message-controls";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
+import { ChapterEnd, FeedbackForm, PictureForm, QuestionForm, sendOnEnter } from "./play-asks";
+import { InlineImages, RequestedRows, SceneImage, useStoryPictures } from "./story-pictures";
+import { StoryRecap } from "./story-recap";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
-import { Person, Zoomable } from "./zoom";
-
-const RECENT_LOOSE_ENDS = 3;
-
-// Often enough to feel prompt, as an image takes many seconds anyway.
-export const IMAGE_CHECK_MS = 2000;
 
 const WRITING = "The Narrator is writing…";
-
-export function SceneImage({ id, image, onLoad }: { id: string; image: SceneImageInfo; onLoad?: () => void }) {
-  return (
-    <figure className="plate">
-      <Zoomable lazy src={imageUrl(id, image)} alt={image.caption ? `Scene Image: ${image.caption}` : "Scene Image"} onLoad={onLoad} />
-      {image.caption && <figcaption aria-hidden="true">{image.caption}</figcaption>}
-    </figure>
-  );
-}
-
-const requestedAlt = ({ caption }: RequestedImage) => `Picture: ${caption}`;
-
-export function RequestedPicture({ id, image }: { id: string; image: RequestedImage }) {
-  return (
-    <figure className="plate">
-      <Zoomable lazy src={requestedImageUrl(id, image)} alt={requestedAlt(image)} />
-      <figcaption aria-hidden="true">{image.caption}</figcaption>
-    </figure>
-  );
-}
-
-export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
-  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
-  event.preventDefault();
-  event.currentTarget.form!.requestSubmit();
-}
 
 /**
  * A new Turn snaps the player's words to the top of the story, and the response streams in below them, held there to
@@ -202,34 +144,20 @@ export function Play({ id }: { id: string }) {
   const [save, setSave] = useState<OpenSave>();
   const [folded, setFolded] = useState(leftFolded);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [images, setImages] = useState<SceneImages>({ images: [], pending: false, session: 0 });
-  const [requested, setRequested] = useState<RequestedImages>({ images: [], drawing: 0 });
   const [imagesReady, setImagesReady] = useState(false);
   const [asking, setAsking] = useState(false);
   const [words, setWords] = useState("");
   const [setupNotice, setSetupNotice] = useState<string>();
   const [chatStyle, setChatStyle] = useState<ChatStyle>("prose");
-  const [journal, setJournal] = useState<Journal>();
-  // Portraits updated while the page is open, under the latest Message then. Only in memory, so a refresh clears them.
-  const [updated, setUpdated] = useState<{ portrait: Portrait; messageId: number }[]>([]);
-  const latestId = useRef<number>(undefined);
-  const lastJournal = useRef<Journal>(undefined);
-  latestId.current = messages.at(-1)?.id;
   const [openNewImages, setOpenNewImages] = useState(true);
-  // Pictures each list held when first fetched. They stay folded, and only ones drawn later open by themselves.
-  const loaded = useRef<Record<"scene" | "requested" | "portrait", Set<number>>>({} as never);
   // Unset until the player moves, so that each new response opens on its first beat.
   const [chosenBeat, setChosenBeat] = useState<number>();
   const [draft, setDraft] = useState(() => storedDraft(id));
   useEffect(() => storeDraft(id, draft), [id, draft]);
   const [turn, setTurn] = useState<TurnInProgress>();
   const [deciding, setDeciding] = useState(false);
-  /** Ask the Narrator's field, and its one answer, which goes when the field closes or a Turn is sent. */
   const [questioning, setQuestioning] = useState(false);
-  const [question, setQuestion] = useState("");
   const [telling, setTelling] = useState(false);
-  const [answer, setAnswer] = useState("");
-  const [wondering, setWondering] = useState(false);
   const askButton = useRef<HTMLButtonElement>(null);
   /** The player's words before an Enhance, which Undo puts back while the box still holds the Enhanced text. */
   const [enhanced, setEnhanced] = useState<{ was: string; now: string }>();
@@ -247,18 +175,19 @@ export function Play({ id }: { id: string }) {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [chapterOffer, setChapterOffer] = useState(false);
   const [endingChapter, setEndingChapter] = useState(false);
-  const [closingChapter, setClosingChapter] = useState(false);
   const inputBox = useRef<HTMLTextAreaElement>(null);
   const story = useRef<HTMLDivElement>(null);
-  const inlineCount = images.images.length + requested.images.length + (journal?.portraits.length ?? 0) + updated.length;
-  const { more, room, onScroll, refit } = useTurnScroll(story, turn, messages.at(-1)?.id, inlineCount, folded);
+  const pictures = useStoryPictures(id, messages.at(-1)?.id, (failure) => {
+    setError(failure.error);
+    setWords((typed) => typed || failure.words);
+    setAsking(true);
+  });
+  const { more, room, onScroll, refit } = useTurnScroll(story, turn, messages.at(-1)?.id, pictures.count, folded);
   const rewriteButton = useRef<HTMLButtonElement>(null);
   const drawButton = useRef<HTMLButtonElement>(null);
   const leaving = useRef(new AbortController());
   const unwatchTurn = useRef(() => {});
-  const imageCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
   const duplicating = useRef(false);
-  const drawing = useRef(false);
 
   useEffect(() => {
     // Taken now, as it may finish while the page loads, and its Messages must not be missed.
@@ -295,77 +224,18 @@ export function Play({ id }: { id: string }) {
       },
       (failure: Error) => setLoadError(failure.message),
     );
-    checkImages();
     checkChapter();
     return () => {
       leaving.current.abort();
       unwatchTurn.current();
-      clearTimeout(imageCheck.current);
     };
   }, [id]);
-
-  function takeJournal(next: Journal) {
-    loaded.current.portrait ??= new Set(next.portraits.map(({ id }) => id));
-    const before = lastJournal.current;
-    lastJournal.current = next;
-    const messageId = latestId.current;
-    const redrawn = next.portraits.filter(
-      (portrait) => (before?.portraits.find(({ id }) => id === portrait.id)?.redraws ?? portrait.redraws) < portrait.redraws,
-    );
-    if (messageId !== undefined && redrawn.length > 0) setUpdated((shown) => [...shown, ...redrawn.map((portrait) => ({ portrait, messageId }))]);
-    setJournal(next);
-  }
 
   function checkChapter() {
     getChapters(id).then(
       ({ chapters, offer }) => {
         setChapters(chapters);
         setChapterOffer(offer);
-      },
-      () => {},
-    );
-  }
-
-  async function endChapter() {
-    setClosingChapter(true);
-    try {
-      await closeChapter(id);
-      checkChapter();
-      setEndingChapter(false);
-      setChapterOffer(false);
-      setAnnouncement("Chapter ended. The next Turn starts a new one.");
-    } catch (failure) {
-      setError((failure as Error).message);
-    } finally {
-      setClosingChapter(false);
-    }
-  }
-
-  // Images draw in the background, so the page looks for them apart from the Turn, for as long as any are on the way.
-  function checkImages() {
-    clearTimeout(imageCheck.current);
-    Promise.all([getImages(id), getRequestedImages(id)]).then(
-      ([next, asked]) => {
-        loaded.current.scene ??= new Set(next.images.map(({ messageId }) => messageId));
-        loaded.current.requested ??= new Set(asked.images.map(({ ref }) => ref));
-        setImages(next);
-        setRequested(asked);
-        if (next.pending && !leaving.current.signal.aborted) imageCheck.current = setTimeout(checkImages, IMAGE_CHECK_MS);
-        else {
-          // Once, when drawing stops, as this holds the whole Full Log.
-          getJournal(id).then(takeJournal, () => {});
-          // Not on the way out, as nothing would be left to tell the player.
-          if (leaving.current.signal.aborted) return;
-          takeImageFailure(id).then(
-            (failure) => {
-              if (!failure) return;
-              setError(failure.error);
-              setWords((typed) => typed || failure.words);
-              setAsking(true);
-            },
-            () => {},
-          );
-        }
       },
       () => {},
     );
@@ -460,45 +330,13 @@ export function Play({ id }: { id: string }) {
 
   function closeQuestion() {
     setQuestioning(false);
-    setQuestion("");
-    setAnswer("");
     askButton.current?.focus();
-  }
-
-  async function askQuestion(event: FormEvent) {
-    event.preventDefault();
-    if (!askable || wondering || !question.trim()) return;
-    setError("");
-    setWondering(true);
-    try {
-      setAnswer(await askNarrator(id, question, leaving.current.signal));
-    } catch (failure) {
-      if (!leaving.current.signal.aborted) setError((failure as Error).message);
-    }
-    setWondering(false);
   }
 
   function cancelAsking() {
     setAsking(false);
     setWords("");
     drawButton.current?.focus();
-  }
-
-  async function askForPicture(event: FormEvent) {
-    event.preventDefault();
-    // A second Enter or click while the first is sent would pay for a second picture.
-    if (!drawable || drawing.current) return;
-    drawing.current = true;
-    setError("");
-    try {
-      await requestImage(id, words);
-      cancelAsking();
-      checkImages();
-    } catch (failure) {
-      setError((failure as Error).message);
-    } finally {
-      drawing.current = false;
-    }
   }
 
   async function duplicateHere(message: Message) {
@@ -525,9 +363,8 @@ export function Play({ id }: { id: string }) {
 
   // `before` is passed in because the load effect runs this before `messages` is set.
   function playInput(input: string, before: Message[], replaces?: Message) {
+    // A Turn sent closes the question, and its answer with it.
     setQuestioning(false);
-    setQuestion("");
-    setAnswer("");
     return run({ input, narration: "", replaces }, before, (show, signal) =>
       replaces ? replaceResponse(id, replaces.id, input, show, signal) : playTurn(id, input, before.at(-1)?.id ?? 0, show, signal),
     );
@@ -563,7 +400,7 @@ export function Play({ id }: { id: string }) {
       getMessages(id).then(setMessages, () => {});
     }
     checkChapter();
-    checkImages();
+    pictures.check();
   }
 
   // Before the story opens there's no Message for a picture to join.
@@ -584,6 +421,7 @@ export function Play({ id }: { id: string }) {
   }
   if (!save) return <Book left={null}>{null}</Book>;
   const pc = save.pc.name;
+  const { journal, images, requested } = pictures;
   const portraits = journal?.portraits ?? [];
   const portraitOf = (name?: string | null) => portraits.find(({ npc }) => npc === name);
   const latest = messages.at(-1);
@@ -592,50 +430,8 @@ export function Play({ id }: { id: string }) {
   const told = readable(turn?.replaces ? messages.slice(0, -1) : messages);
   const staged = chatStyle === "stage" && (told.length > 0 || !!turn);
   const sceneImage = (image = scene) => image && <SceneImage id={id} image={image} />;
-  const opens = (list: keyof typeof loaded.current, key: number) => openNewImages && !loaded.current[list]?.has(key);
-  /** Pictures the player asked for, which have no other place in the story. */
-  const requestedRows = (message: Message) =>
-    requested.images
-      .filter(({ messageId }) => messageId === message.id)
-      .map((image) => (
-        <details key={image.ref} className="inline-image requested" open={opens("requested", image.ref)} onToggle={refit}>
-          <summary>Picture: {image.caption}</summary>
-          <Zoomable lazy src={requestedImageUrl(id, image)} alt={requestedAlt(image)} onLoad={refit} />
-        </details>
-      ));
-
-  /** Folded in the story under the response they came with. */
-  const inlineImages = (message: Message) => {
-    const image = images.images.find(({ messageId }) => messageId === message.id);
-    return (
-      <>
-        {image && (
-          <details className="inline-image" open={opens("scene", image.messageId)} onToggle={refit}>
-            <summary>Picture{image.caption && `: ${image.caption}`}</summary>
-            {/* Only an open row loads its picture, and only then is its height known. */}
-            <SceneImage id={id} image={image} onLoad={refit} />
-          </details>
-        )}
-        {portraits
-          .filter(({ npc, messageId }) => npc && messageId === message.id)
-          .map((portrait) => (
-            <details key={portrait.id} className="inline-image" open={opens("portrait", portrait.id)} onToggle={refit}>
-              <summary>Portrait: {portrait.npc}</summary>
-              <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={portrait.npc!} onLoad={refit} />
-            </details>
-          ))}
-        {updated
-          .filter(({ messageId }) => messageId === message.id)
-          .map(({ portrait }) => (
-            <details key={`${portrait.id}/${portrait.redraws}`} className="inline-image" open={openNewImages} onToggle={refit}>
-              <summary>Portrait updated: {portrait.npc ?? pc}</summary>
-              <Zoomable className="portrait" lazy src={portraitUrl(id, portrait)} alt={portrait.npc ?? pc} onLoad={refit} />
-            </details>
-          ))}
-        {requestedRows(message)}
-      </>
-    );
-  };
+  const inline = { id, pictures, openNew: openNewImages, refit };
+  const requestedRows = (message: Message) => <RequestedRows {...inline} message={message} />;
 
   const line = (beat: Beat, key: number) => {
     const portrait = portraitOf(beat.speaker);
@@ -646,84 +442,29 @@ export function Play({ id }: { id: string }) {
 
   const opening = chapterOpenings(chapters, told);
 
+  const actions: MessageActions = {
+    replay: (message) => {
+      setReplaying(message.text === CONTINUE_INPUT ? "" : message.text);
+      setReverting(before(message));
+    },
+    revert: setReverting,
+    duplicate: duplicateHere,
+    toggleChapterEnd: () => setEndingChapter(!endingChapter),
+    rewrite: startRewrite,
+    edit: startEdit,
+    regenerate: () => replace(""),
+  };
   const controls = (message: Message) =>
     !turn && (
-      <div className="row actions">
-        {message.role === "player" && before(message) && (
-          <button
-            type="button"
-            className="icon"
-            title="Edit and replay from here"
-            aria-label={`Edit and replay from your words: ${message.text.slice(0, 40)}`}
-            onClick={() => {
-              setReplaying(message.text === CONTINUE_INPUT ? "" : message.text);
-              setReverting(before(message));
-            }}
-          >
-            {EditIcon}
-          </button>
-        )}
-        {message !== latest && (
-          <button
-            type="button"
-            className="icon revert"
-            title="Revert to here"
-            aria-label={`Revert to this Message: ${message.text.slice(0, 40)}`}
-            onClick={() => setReverting(message)}
-          >
-            {RevertIcon}
-          </button>
-        )}
-        <button
-          type="button"
-          className="icon revert"
-          title="Duplicate from here"
-          aria-label={`Duplicate from this Message: ${message.text.slice(0, 40)}`}
-          onClick={() => duplicateHere(message)}
-        >
-          {DuplicateIcon}
-        </button>
-        {message === latest && (
-          <button
-            type="button"
-            className="icon"
-            title="End the chapter here"
-            aria-label="End the chapter here"
-            aria-expanded={endingChapter}
-            onClick={() => setEndingChapter(!endingChapter)}
-          >
-            {ChapterIcon}
-          </button>
-        )}
-        {message === replaceable && (
-          <>
-            <button
-              type="button"
-              ref={rewriteButton}
-              className="icon"
-              title="Rewrite"
-              aria-label="Rewrite"
-              aria-expanded={rewriting === message.id}
-              onClick={() => startRewrite(message)}
-            >
-              {RewriteIcon}
-            </button>
-            <button
-              type="button"
-              className="icon"
-              title="Edit"
-              aria-label="Edit"
-              aria-expanded={rewriting === message.id && editing}
-              onClick={() => startEdit(message)}
-            >
-              {EditIcon}
-            </button>
-            <button type="button" className="icon" title="Regenerate" aria-label="Regenerate" onClick={() => replace("")}>
-              {RegenerateIcon}
-            </button>
-          </>
-        )}
-      </div>
+      <MessageControls
+        message={message}
+        latest={message === latest}
+        replaceable={message === replaceable}
+        replayable={!!before(message)}
+        open={{ rewrite: rewriting === message.id, edit: rewriting === message.id && editing, chapterEnd: endingChapter }}
+        rewriteButton={rewriteButton}
+        actions={actions}
+      />
     );
 
   return (
@@ -746,51 +487,7 @@ export function Play({ id }: { id: string }) {
             {DownIcon}
           </button>
           <Fold>
-            {/* A Save from before titles has only its PC. */}
-            <div className="story-title">
-              <h1 className="title">{storyName(save)}</h1>
-              {journal?.storyTime && (
-                <p className="muted" data-testid="story-time">
-                  {journal.storyTime.date}, {journal.storyTime.timeOfDay}
-                </p>
-              )}
-            </div>
-            {journal?.recentSummary && (
-              <div className="story-recap">
-                <h2>Recently</h2>
-                <p>{journal.recentSummary}</p>
-              </div>
-            )}
-            {!!journal?.looseEnds.length && (
-              <div className="story-recap">
-                <h2>Loose Ends</h2>
-                <ul>
-                  {journal.looseEnds
-                    .toReversed()
-                    .slice(0, RECENT_LOOSE_ENDS)
-                    .map((looseEnd) => (
-                      <li key={looseEnd}>{looseEnd}</li>
-                    ))}
-                </ul>
-                {journal.looseEnds.length > RECENT_LOOSE_ENDS && (
-                  <a className="quiet" href={`#/journal/${id}`}>
-                    More ({journal.looseEnds.length - RECENT_LOOSE_ENDS})
-                  </a>
-                )}
-              </div>
-            )}
-            {!!journal?.recentNpcs.length && (
-              <div className="story-recap">
-                <h2>Recent Characters</h2>
-                <ul className="people">
-                  {journal.recentNpcs.map((name) => (
-                    <li key={name} className="person">
-                      <Person id={id} name={name} portrait={portraitOf(name)} who={journal.npcSummaries[name]} />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <StoryRecap id={id} save={save} journal={journal} portraitOf={portraitOf} />
           </Fold>
         </>
       }
@@ -845,7 +542,7 @@ export function Play({ id }: { id: string }) {
                     <div className={`message ${message.role}${opening.opens.has(message.id) ? " opens" : ""}`} data-testid={`message-${message.role}`}>
                       {messageBeats(message).map(line)}
                       {controls(message)}
-                      {inlineImages(message)}
+                      <InlineImages {...inline} message={message} pc={pc} />
                     </div>
                   </Fragment>
                 );
@@ -883,38 +580,21 @@ export function Play({ id }: { id: string }) {
           </button>
         </div>
       )}
-      {closingChapter ? (
-        <p role="status" className="waiting">
-          Ending the chapter…
-        </p>
-      ) : (
-        !turn &&
-        (endingChapter ? (
-          <div className="ask">
-            <p>End this chapter after the latest Message? The Narrator gives it a title, and the next Turn starts a new chapter.</p>
-            <div className="row">
-              <button type="button" className="quiet" onClick={() => setEndingChapter(false)}>
-                Cancel
-              </button>
-              <button type="button" className="action" onClick={endChapter}>
-                End the chapter
-              </button>
-            </div>
-          </div>
-        ) : (
-          chapterOffer && (
-            <div className="notice dismissable">
-              <p>This feels like the end of a chapter.</p>
-              <button type="button" className="quiet chapter-end" onClick={endChapter}>
-                End the chapter
-              </button>
-              <button type="button" className="quiet" aria-label="Keep the chapter going" onClick={() => setChapterOffer(false)}>
-                ×
-              </button>
-            </div>
-          )
-        ))
-      )}
+      <ChapterEnd
+        id={id}
+        asked={endingChapter}
+        offered={chapterOffer}
+        turnRunning={!!turn}
+        onCancel={() => setEndingChapter(false)}
+        onDismissOffer={() => setChapterOffer(false)}
+        onEnded={() => {
+          checkChapter();
+          setEndingChapter(false);
+          setChapterOffer(false);
+          setAnnouncement("Chapter ended. The next Turn starts a new one.");
+        }}
+        onError={setError}
+      />
       {/* An Edit shows its words at once, so this is all that says the Narrator is still at work. */}
       {turn?.edit && (
         <p role="status" className="waiting">
@@ -929,82 +609,22 @@ export function Play({ id }: { id: string }) {
         </p>
       )}
       {replaceable && rewriting === replaceable.id && (
-        <form className="ask" onSubmit={sendFeedback}>
-          <label>
-            {editing ? "Edit the response" : "What should the Narrator change?"}
-            <textarea
-              autoFocus
-              rows={editing ? 10 : 2}
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              // An Edit is many lines long, so Enter makes a new line.
-              onKeyDown={editing ? undefined : sendOnEnter}
-            />
-          </label>
-          <div className="row">
-            <button type="button" className="quiet" onClick={cancelRewrite}>
-              Cancel
-            </button>
-            <button type="submit" className="action" aria-disabled={!feedback.trim()}>
-              {editing ? "Save the edit" : "Rewrite the response"}
-            </button>
-          </div>
-        </form>
+        <FeedbackForm editing={editing} feedback={feedback} onFeedback={setFeedback} onSubmit={sendFeedback} onCancel={cancelRewrite} />
       )}
       {asking && drawable && (
-        <form className="ask" onSubmit={askForPicture}>
-          <label>
-            What should the picture show?
-            <textarea
-              autoFocus
-              rows={2}
-              maxLength={300}
-              placeholder="Describe what you want or leave blank to draw the current scene"
-              value={words}
-              onChange={(e) => setWords(e.target.value)}
-              onKeyDown={sendOnEnter}
-            />
-          </label>
-          <div className="row">
-            <button type="button" className="quiet" onClick={cancelAsking}>
-              Cancel
-            </button>
-            <button type="submit" className="action">
-              Draw
-            </button>
-          </div>
-        </form>
+        <PictureForm
+          id={id}
+          words={words}
+          onWords={setWords}
+          onDrawn={() => {
+            cancelAsking();
+            pictures.check();
+          }}
+          onCancel={cancelAsking}
+          onError={setError}
+        />
       )}
-      {questioning && askable && (
-        <form className="ask" onSubmit={askQuestion}>
-          <label>
-            What do you ask the Narrator?
-            <textarea
-              autoFocus
-              rows={2}
-              maxLength={1000}
-              placeholder={`What would ${pc} know about this place?`}
-              value={question}
-              readOnly={wondering}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={sendOnEnter}
-            />
-          </label>
-          {(wondering || answer) && (
-            <p role="status" className="answer">
-              {wondering ? "The Narrator is thinking…" : answer}
-            </p>
-          )}
-          <div className="row">
-            <button type="button" className="quiet" onClick={closeQuestion}>
-              {answer ? "Close" : "Cancel"}
-            </button>
-            <button type="submit" className="action" aria-disabled={wondering || !question.trim()}>
-              Ask
-            </button>
-          </div>
-        </form>
-      )}
+      {questioning && askable && <QuestionForm id={id} pc={pc} signal={leaving.current.signal} onClose={closeQuestion} onError={setError} />}
       <form className="compose" onSubmit={send}>
         <label>
           <span className="visually-hidden">What does {pc} say or do?</span>
@@ -1106,7 +726,7 @@ export function Play({ id }: { id: string }) {
         </div>
       </form>
       {/* Outside the chat form, as the dialog holds a form of its own. */}
-      {telling && <TellTheNarrator id={id} onDone={() => getJournal(id).then(takeJournal, () => {})} onClose={() => setTelling(false)} />}
+      {telling && <TellTheNarrator id={id} onDone={pictures.rereadJournal} onClose={() => setTelling(false)} />}
       {reverting && (
         <RevertDialog
           id={id}
@@ -1121,8 +741,8 @@ export function Play({ id }: { id: string }) {
             setMessages(kept);
             setChosenBeat(undefined);
             checkChapter();
-            getJournal(id).then(takeJournal, () => {});
-            checkImages();
+            pictures.rereadJournal();
+            pictures.check();
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.
             inputBox.current!.focus();
             if (input) playInput(input, kept);

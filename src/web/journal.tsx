@@ -16,7 +16,7 @@ import {
 import { ContinueRule, isContinue, readable } from "./chat-style";
 import { EditIcon, RenameIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
-import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./play";
+import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./story-pictures";
 import { Person } from "./zoom";
 
 const FIRST_SHOWN = 5;

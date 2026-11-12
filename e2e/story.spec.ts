@@ -192,3 +192,39 @@ test("Load Story opens a story, and a Duplicate is a second one", async ({ page 
   await expect(page).toHaveURL(/#\/play\//);
   await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
 });
+
+test("the latest response can be edited, rewritten and regenerated, and the story reverted", async ({ page }) => {
+  await newStory(page);
+  const narrator = page.getByTestId("message-narrator");
+  const regenerate = page.getByRole("button", { name: "Regenerate" });
+  await page.getByRole("textbox", { name: PC_INPUT }).fill("I knock on the door.");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(narrator).toHaveCount(2);
+  await expect(regenerate).toBeVisible();
+
+  // An Edit puts the player's own words in place of the response.
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("textbox", { name: "Edit the response" }).fill("The door creaks open.");
+  await page.getByRole("button", { name: "Save the edit" }).click();
+  await expect(regenerate).toBeVisible();
+  await expect(narrator.last()).toHaveText("The door creaks open.");
+
+  // A Rewrite and a Regenerate each replace it, still one response to the Turn.
+  await page.getByRole("button", { name: "Rewrite", exact: true }).click();
+  await page.getByRole("textbox", { name: "What should the Narrator change?" }).fill("Make it raining.");
+  await page.getByRole("button", { name: "Rewrite the response" }).click();
+  await expect(narrator.last()).not.toHaveText("The door creaks open.");
+  await expect(regenerate).toBeVisible();
+  await regenerate.click();
+  await expect(regenerate).toBeVisible();
+  await expect(narrator).toHaveCount(2);
+
+  // A Revert to the Opening takes the Turn away.
+  await page
+    .getByRole("button", { name: /^Revert to this Message/ })
+    .first()
+    .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Revert", exact: true }).click();
+  await expect(narrator).toHaveCount(1);
+  await expect(page.getByTestId("message-player")).toHaveCount(0);
+});

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { deleteImage, type Gallery as GalleryContent, type GalleryImage, getGallery } from "./api";
 import { BookTabs, DeleteDialog, Sheet } from "./menu";
-import { IMAGE_CHECK_MS } from "./play";
+import { IMAGE_CHECK_MS } from "./story-pictures";
 import { RedrawableImage } from "./zoom";
 
 /** The server sends each kind in its order, with the PC first, so a section only keeps it. */
