@@ -87,8 +87,17 @@ const STEPS = [
 ];
 
 // Kept for the tab, so a reload or a trip to Settings to fix a failure doesn't lose what the player wrote. It only ever holds player-facing text.
+// Blocked storage or a damaged value starts a blank form, rather than a blank screen.
+const kept = (): Partial<typeof blank> => {
+  try {
+    return JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
+};
+
 const stored = () => {
-  const draft = { ...blank, ...(JSON.parse(sessionStorage.getItem(STORAGE_KEY) ?? "{}") as Partial<typeof blank>) };
+  const draft = { ...blank, ...kept() };
   // A form kept from before the Important Characters were a list, or had portraits, or from when the PC had more boxes.
   const pc = Object.fromEntries(Object.keys(blank.pc).map((field) => [field, draft.pc[field as keyof PcDraft] ?? ""])) as PcDraft;
   const characters = Array.isArray(draft.characters) ? draft.characters.map((character) => ({ ...character, ref: character.ref ?? newRef() })) : [];
@@ -268,7 +277,11 @@ export function NewStory({ step }: { step?: string }) {
   const { world, id: worldId } = draft;
   const page = step === "overview" && world && worldId ? "overview" : step === "art" ? "art" : "form";
 
-  useEffect(() => sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft)), [draft]);
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+    } catch {}
+  }, [draft]);
   // Otherwise a world finishing later would pull the player back here from wherever they went.
   useEffect(() => () => running.current?.abort(), []);
   useEffect(() => setError(""), [step]);

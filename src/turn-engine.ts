@@ -3,7 +3,7 @@ import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resol
 import { type ImagePipeline, movedScene, portraitsDue, restyledBy, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
 import { withArtStyleFor } from "./web/art-styles";
-import { log } from "./logger";
+import { errorFields, log } from "./logger";
 import { assemblePrompt, chapterTitlePrompt, CONTINUE_INPUT, editInstruction, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction, SET_SCENE_NOTE } from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
@@ -360,16 +360,21 @@ async function narrate(
         restyled = restyledBy(state, next);
         return next;
       });
-      committed(messages.at(-1)!.id, {
-        changed: moved || !!scene_changed,
-        moved,
-        description: visual_description?.trim() ?? "",
-        location,
-        npcs,
-        wearing,
-        portraits,
-        restyled,
-      });
+      // The Turn is saved by now, so image trouble must not report it failed, or the player would send it again.
+      try {
+        committed(messages.at(-1)!.id, {
+          changed: moved || !!scene_changed,
+          moved,
+          description: visual_description?.trim() ?? "",
+          location,
+          npcs,
+          wearing,
+          portraits,
+          restyled,
+        });
+      } catch (error) {
+        log.error("turn", "Image work after commit failed", errorFields(error));
+      }
       if (repeated > 0) log.info("turn", "Repeats ignored", { count: repeated });
       if (ignored.length > 0) log.warning("turn", "Operations ignored", { reason: refusalText(ignored) });
       // Counts only, so that the log never repeats the story.

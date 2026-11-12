@@ -177,6 +177,8 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 /** A picture the player chose themselves. Sent as a type no form can send, so other websites need a CORS preflight, like an import. */
 async function uploaded(req: Request) {
   if (req.headers.get("content-type") !== "application/octet-stream") throw new UploadRefused("A picture must be sent as application/octet-stream", 415);
+  // Refused before reading, as the server takes bodies up to an import's size.
+  if (Number(req.headers.get("content-length")) > MAX_UPLOAD_BYTES) throw new UploadRefused("That picture is over 10 MB.", 413);
   const bytes = new Uint8Array(await req.arrayBuffer());
   if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new UploadRefused("That picture is over 10 MB.", 413);
   if (!imageType(bytes)) throw new UploadRefused("That picture isn't a PNG, JPEG or WebP.", 415);
@@ -383,12 +385,18 @@ data: ${JSON.stringify(data)}
  * Every route, logged by its pattern as a real path holds ids and could hold anything. Each line a request causes,
  * however long after, names its route and any Save, so a Save id needn't be passed down to everything that logs.
  */
-function logged<Route extends string>(routes: Bun.Serve.Routes<undefined, Route>) {
+const LOOPBACK_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+const isLoopback = (hostname: string) => LOOPBACK_HOST.test(hostname) || hostname === "::1";
+
+/** `loopback`: only this computer's own names may reach the routes, so a page rebinding its domain to 127.0.0.1 can't read the Saves or spend the keys. */
+function logged<Route extends string>(routes: Bun.Serve.Routes<undefined, Route>, loopback: boolean) {
   const wrap = (route: string, method: string, handler: (req: Bun.BunRequest) => Response | Promise<Response>) => (req: Bun.BunRequest) => {
     const { id } = req.params as { id?: string };
     // Not `/worlds/:id`, whose id is a story's before it has a Save, which then gets another.
     const save = route.startsWith("/saves/") && z.uuid().safeParse(id).success ? id : undefined;
     return withLogContext({ route, save }, async () => {
+      // shortcut: a server open to the network takes any Host, so rebinding can still reach it there; check against a configured name if that matters.
+      if (loopback && !LOOPBACK_HOST.test(req.headers.get("host") ?? "")) return Response.json({ error: "Not found" }, { status: 404 });
       const started = performance.now();
       const response = await Promise.resolve().then(() => handler(req)).catch(errorResponse);
       log.verbose("http", "Request", () => ({ method, status: response.status, ms: Math.round(performance.now() - started) }));
@@ -444,7 +452,7 @@ export function startServer(options: {
   // Requests in flight, a Turn's save among them, finish first.
   const quit = (why: string) => {
     log.startup(`NovelForge is closing: ${why}`);
-    void server.stop().then(() => process.exit(0));
+    void server.stop().finally(() => process.exit(0));
   };
   // Pages check in, and the app quits once none has for `idleMs`, after any Turn or picture is done.
   let pageSeen = Date.now();
@@ -606,6 +614,7 @@ export function startServer(options: {
 
   // The player's own picture in place of any drawn or drawing. It has no prompt, so a Redraw starts from what they write.
   const uploadHeld = async (id: string, image: string, req: Request) => {
+    if (!HELD_ID.test(id)) throw new WorldNotFound();
     const bytes = await uploaded(req);
     heldOf(id, image)?.stop.abort();
     held.set(heldAt(id, image), { drawn: Promise.resolve({ prompt: "", bytes }), stop: new AbortController() });
@@ -974,6 +983,8 @@ export function startServer(options: {
           return Response.json({ artStyle });
         },
         DELETE: (req) => {
+          // A running Turn would go on paying the model for a story that is gone.
+          turns.stop(req.params.id);
           saves.delete(req.params.id);
           // Below 0, because the PC's portrait belongs to no Message.
           images.forget(req.params.id, -1, "the Save was deleted");
@@ -1288,10 +1299,12 @@ export function startServer(options: {
           const ref = Number(req.params.ref);
           const image = visibleImages(id).find((candidate) => candidate.kind === kind && candidate.ref === ref);
           if (!image || (kind !== "cover" && kind !== "portrait" && kind !== "original")) return Response.json({ error: "Image not found" }, { status: 404 });
+          // Read first, as a Redraw could start while the body arrives.
+          const bytes = await uploaded(req);
           if (images.redrawState(id, { kind, ref }).redrawing) {
             return Response.json({ error: "This image is being redrawn. Try again when it's done." }, { status: 409 });
           }
-          saves.replaceImage(id, { kind, ref }, image.prompt, await uploaded(req));
+          saves.replaceImage(id, { kind, ref }, image.prompt, bytes);
           log.info("images", "Image uploaded", { save: id, kind });
           return Response.json({});
         },
@@ -1373,7 +1386,7 @@ export function startServer(options: {
           return Response.json(deleted);
         },
       },
-    }),
+    }, isLoopback(options.hostname ?? "127.0.0.1")),
     fetch: () => {
       log.verbose("http", "No such route");
       return Response.json({ error: "Not found" }, { status: 404 });

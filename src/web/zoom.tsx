@@ -193,14 +193,18 @@ export function RedrawableImage({
 }) {
   const [refused, setRefused] = useState("");
   const [seeOriginal, setSeeOriginal] = useState(false);
+  // Until the Gallery reloads, the server's `redrawing` is still false, and a second click would pay for a second picture.
+  const [sending, setSending] = useState(false);
   const started = (work: Promise<object>) => {
     setRefused("");
-    work.then(onRedrawn, (failure: Error) => setRefused(failure.message));
+    setSending(true);
+    work.then(onRedrawn, (failure: Error) => setRefused(failure.message)).finally(() => setSending(false));
   };
   // The latest shows first, and the buttons below act on whichever is shown.
   const latest = image;
   const shown = seeOriginal && original ? original : latest;
   const shownAlt = shown === latest ? alt : `${alt}, original`;
+  const redrawing = shown.redrawing || sending;
   return (
     <Zoomable lazy src={galleryUrl(id, latest)} largeSrc={galleryUrl(id, shown)} alt={alt} onClose={() => setSeeOriginal(false)}>
       {original && (
@@ -237,16 +241,16 @@ export function RedrawableImage({
                     : "Update: write a new prompt from the story as it is now, and draw it"
                 }
                 aria-label="Update"
-                disabled={shown.redrawing || !canRedraw}
+                disabled={redrawing || !canRedraw}
                 onClick={() => started(updateImage(id, shown))}
               >
                 {RegenerateIcon}
               </button>
             )}
-            {canUpdate && <NudgeButton label={`Nudge: ${shownAlt}`} disabled={shown.redrawing || !canRedraw} onNudge={(nudge) => started(updateImage(id, shown, nudge))} />}
-            {canUpdate && <UploadButton label={`Upload your own picture: ${shownAlt}`} disabled={shown.redrawing} onFile={(file) => started(uploadGalleryImage(id, shown, file))} />}
+            {canUpdate && <NudgeButton label={`Nudge: ${shownAlt}`} disabled={redrawing || !canRedraw} onNudge={(nudge) => started(updateImage(id, shown, nudge))} />}
+            {canUpdate && <UploadButton label={`Upload your own picture: ${shownAlt}`} disabled={redrawing} onFile={(file) => started(uploadGalleryImage(id, shown, file))} />}
             {onDelete && (
-              <button type="button" className="icon" title="Delete" aria-label="Delete" aria-haspopup="dialog" disabled={shown.redrawing} onClick={onDelete}>
+              <button type="button" className="icon" title="Delete" aria-label="Delete" aria-haspopup="dialog" disabled={redrawing} onClick={onDelete}>
                 {DeleteIcon}
               </button>
             )}
@@ -255,7 +259,7 @@ export function RedrawableImage({
       >
         <PromptBox
           prompt={shown.prompt}
-          redrawing={shown.redrawing}
+          redrawing={redrawing}
           failure={shown.failure || refused}
           canRedraw={canRedraw}
           onRedraw={(prompt) => started(redrawImage(id, shown, prompt))}

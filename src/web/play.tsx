@@ -234,6 +234,7 @@ export function Play({ id }: { id: string }) {
   const unwatchTurn = useRef(() => {});
   const imageCheck = useRef<ReturnType<typeof setTimeout>>(undefined);
   const duplicating = useRef(false);
+  const drawing = useRef(false);
 
   useEffect(() => {
     // Taken now, as it may finish while the page loads, and its Messages must not be missed.
@@ -446,7 +447,9 @@ export function Play({ id }: { id: string }) {
 
   async function askForPicture(event: FormEvent) {
     event.preventDefault();
-    if (!drawable) return;
+    // A second Enter or click while the first is sent would pay for a second picture.
+    if (!drawable || drawing.current) return;
+    drawing.current = true;
     setError("");
     try {
       await requestImage(id, words);
@@ -454,6 +457,8 @@ export function Play({ id }: { id: string }) {
       checkImages();
     } catch (failure) {
       setError((failure as Error).message);
+    } finally {
+      drawing.current = false;
     }
   }
 
@@ -998,7 +1003,7 @@ export function Play({ id }: { id: string }) {
           )}
           {/* Not for the Opening, as a page with no Messages has nothing to start it again. */}
           {turn && messages.length > 0 ? (
-            <button type="button" className="icon send" title="Stop the Narrator" aria-label="Stop" onClick={() => stopTurn(id).catch(() => {})}>
+            <button type="button" className="icon send" title="Stop the Narrator" aria-label="Stop" onClick={() => stopTurn(id).catch((failure: Error) => setError(failure.message))}>
               {StopIcon}
             </button>
           ) : (
@@ -1010,7 +1015,7 @@ export function Play({ id }: { id: string }) {
         </div>
       </form>
       {/* Outside the chat form, as the dialog holds a form of its own. */}
-      {telling && <TellTheNarrator id={id} onDone={async () => {}} onClose={() => setTelling(false)} />}
+      {telling && <TellTheNarrator id={id} onDone={() => getJournal(id).then(takeJournal, () => {})} onClose={() => setTelling(false)} />}
       {reverting && (
         <RevertDialog
           id={id}

@@ -217,7 +217,6 @@ export const askNarrator = (id: string, question: string, signal?: AbortSignal) 
 export const portraitUrl = (id: string, { id: portraitId, redraws }: Pick<Portrait, "id" | "redraws">) =>
   `/saves/${id}/portraits/${portraitId}?v=${redraws}`;
 
-export const getStatus = (id: string) => request<Status>(`/saves/${id}/status`);
 
 export const statusWords = ({ health, injuries, conditions }: Status) =>
   [health, ...injuries, ...conditions].join(", ");
@@ -322,7 +321,11 @@ export const editResponse = (id: string, messageId: number, text: string, signal
   streamTurn(id, `messages/${messageId}/edit`, { text }, text, messageId, "Try again.", () => {}, signal);
 
 /** Ends the running Turn. Its page hears it end with the player's words given back, and no error. */
-export const stopTurn = (id: string) => fetch(`/saves/${id}/turn`, { method: "DELETE" }).then(() => {});
+/** A 404 means the Turn had already ended, which is what the player wanted. */
+export async function stopTurn(id: string) {
+  const response = await fetch(`/saves/${id}/turn`, { method: "DELETE" });
+  if (!response.ok && response.status !== 404) throw new Error(await errorMessage(response));
+}
 
 /** The state of a Turn on the server, which goes on without this page. Reading a failure takes it. */
 export const getTurn = (id: string) => request<TurnStatus>(`/saves/${id}/turn`);

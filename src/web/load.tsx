@@ -26,13 +26,18 @@ export function LoadStory() {
     setNotice("");
     try {
       await action();
-      setSaves(await listSaves());
-      setNotice(done);
     } catch (failure) {
       setError((failure as Error).message);
+      setBusy(false);
+      return;
     }
+    setNotice(done);
     setBusy(false);
+    refresh();
   }
+
+  // Apart from the action, as a list that fails to load doesn't undo an Import, and the player shouldn't import it twice.
+  const refresh = () => listSaves().then(setSaves, (failure: Error) => setError(failure.message));
 
   function importChosen(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -125,7 +130,9 @@ export function LoadStory() {
           onDeleted={(name) => {
             // The button that opened the dialog went with the Save, and focus must not fall back to the page.
             heading.current!.focus();
-            attempt(async () => {}, `Deleted ${name}.`);
+            // Not through `attempt`, which would drop it while a Duplicate or Import is busy.
+            setNotice(`Deleted ${name}.`);
+            refresh();
           }}
         />
       )}

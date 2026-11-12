@@ -2397,3 +2397,14 @@ test("a duplicated Save keeps its Director's Notes, and changing them leaves the
   expect(await notes(app, id)).toEqual({ notes: ["Green eyes"] });
   expect(await notes(app, copy)).toEqual({ notes: ["Grey eyes"] });
 });
+
+test("the app refuses a request for another site's name, so a rebound domain can't reach the Saves", async () => {
+  const { app } = play();
+  await app.createSave();
+
+  const rebound = await fetch(app.url("/saves"), { headers: { host: "evil.example:4600" } });
+  const own = await fetch(app.url("/saves"), { headers: { host: "localhost:4600" } });
+
+  expect(rebound.status).toBe(404);
+  expect(own.status).toBe(200);
+});

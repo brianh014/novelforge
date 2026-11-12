@@ -57,7 +57,7 @@ export function openRouterImages(settings: SettingsStore, baseUrl: string): Imag
   return async ({ prompt, negative_prompt, aspect_ratio, reference_images, style_preset }, signal) => {
     const { imageModel, imageApiKey, imageResolution } = settings.read();
     const headers = { Authorization: `Bearer ${imageApiKey}` };
-    const redacted = (detail: string) => detail.replaceAll(imageApiKey, "[key]");
+    const redacted = (detail: string) => (imageApiKey ? detail.replaceAll(imageApiKey, "[key]") : detail);
     const limited = AbortSignal.any([signal, AbortSignal.timeout(GIVE_UP_MS)]);
 
     const info = await modelInfo(imageModel, headers, limited);

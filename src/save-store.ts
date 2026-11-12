@@ -661,7 +661,7 @@ export function saveStore(savesDir: string) {
     }: Save & { artStyle?: string; startingHook?: string; title?: string; theme?: string; opening?: Partial<State> }) {
       const id = crypto.randomUUID();
       const unfinishedPath = `${pathOf(id)}.unfinished`;
-      {
+      try {
         using db = connect(unfinishedPath);
         const { name, ...details } = pc;
         db.run("INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details, title, theme) VALUES (1, ?, ?, ?, ?, ?, ?, ?)", [
@@ -681,6 +681,10 @@ export function saveStore(savesDir: string) {
             [JSON.stringify(value), name],
           );
         }
+      } catch (error) {
+        // Else a hidden file holding the world stays in Saves, where nothing lists or deletes it.
+        rmSync(unfinishedPath, { force: true });
+        throw error;
       }
       // Renaming last means a crash can never leave a half-built file that looks like a Save.
       renameSync(unfinishedPath, pathOf(id));
@@ -989,10 +993,15 @@ export function saveStore(savesDir: string) {
       if (fromMessage !== undefined) requireMessage(source, fromMessage);
       const copyId = crypto.randomUUID();
       const unfinishedPath = `${pathOf(copyId)}.unfinished`;
-      source.run("VACUUM INTO ?", [unfinishedPath]);
-      if (fromMessage !== undefined) {
-        using copy = connect(unfinishedPath);
-        deleteAfter(copy, fromMessage);
+      try {
+        source.run("VACUUM INTO ?", [unfinishedPath]);
+        if (fromMessage !== undefined) {
+          using copy = connect(unfinishedPath);
+          deleteAfter(copy, fromMessage);
+        }
+      } catch (error) {
+        rmSync(unfinishedPath, { force: true });
+        throw error;
       }
       renameSync(unfinishedPath, pathOf(copyId));
       log.info("saves", "Save duplicated", { save: id, copy: copyId, fromMessage });
