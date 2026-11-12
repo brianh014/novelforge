@@ -141,6 +141,8 @@ export function settingsStore(path: string) {
     const stored = SettingsUpdate.parse(existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {});
     // Settings from before the toggle keep a number the player typed by starting with the toggle off.
     const typed = stored.comfySteps != null || stored.comfyCfg != null;
+    // The Stage box is no longer offered (its code is kept), so a stored pick of it reads as Prose.
+    if (stored.chatStyle === "stage") stored.chatStyle = "prose";
     return { ...defaults, comfyDefaults: !typed, ...stored };
   };
 

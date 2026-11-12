@@ -173,10 +173,16 @@ test("options that don't exist are refused and change nothing", async () => {
   expect(await settings()).toMatchObject({ fontSize: "medium", chatStyle: "prose", imageProvider: "openrouter", imagesEnabled: true });
 });
 
-test.each(["script", "prose", "bubbles", "stage"])("the %s Chat style persists through a restart", async (chatStyle) => {
+test.each(["script", "prose", "bubbles"])("the %s Chat style persists through a restart", async (chatStyle) => {
   expect((await change({ chatStyle })).status).toBe(200);
   await app.restart();
   expect(await settings()).toMatchObject({ chatStyle });
+});
+
+test("a stored Stage box Chat style, no longer offered, reads as Prose", async () => {
+  expect((await change({ chatStyle: "stage" })).status).toBe(200);
+  await app.restart();
+  expect(await settings()).toMatchObject({ chatStyle: "prose" });
 });
 
 test("an install's settings file from before these settings gets their defaults", async () => {

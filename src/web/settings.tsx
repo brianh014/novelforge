@@ -1109,7 +1109,6 @@ function InstallSettings({
           { value: "script", label: "Script" },
           { value: "prose", label: "Prose" },
           { value: "bubbles", label: "Bubbles" },
-          { value: "stage", label: "Stage box" },
         ]}
         onChange={(chatStyle) => set({ chatStyle })}
       />
