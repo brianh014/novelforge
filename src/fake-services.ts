@@ -128,12 +128,36 @@ function titleIn(prompt: Parameters<TextProvider>[0]) {
   }
 }
 
+// shortcut: the Important Characters of the last world built, in any story, so a fake Turn can meet them. A real Narrator
+// knows them from the world it wrote. Upgrade to a per-world list if two stories at once ever need their own.
+let important: string[] = [];
+const parsed = (content: string) => {
+  try {
+    return JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Remembers a world request's Important Characters, and gives a Turn's first person the name of one the PC hasn't met. */
+function meetImportant(prompt: Parameters<TextProvider>[0], people: { name: string }[]) {
+  const asked = prompt.map(({ content }) => parsed(content)?.important_characters).find(Array.isArray) as { name: string }[] | undefined;
+  if (asked) important = asked.map(({ name }) => name);
+  const state = prompt.map(({ content }) => content.split("\n").find((line) => line.startsWith("Current state: "))).find(Boolean);
+  const known = (state && (parsed(state.slice("Current state: ".length))?.pcKnown as { npcs?: string[] } | undefined)?.npcs) ?? undefined;
+  const stranger = known && important.find((name) => !known.includes(name));
+  if (stranger && people[0]) people[0].name = stranger;
+}
+
 /** Answers every request at once with `sample` of its schema, streamed in a few pieces like a real model. */
 export const fakeTextProvider: TextProvider = async (prompt, { schema, onText, signal }) => {
   const sampled = schema && (sample(schema as Schema) as Record<string, unknown>);
   const title = titleIn(prompt);
   if (sampled && title && typeof sampled.text === "string") sampled.text = `A book cover with large bold title text reading "${title}" across the top. Rain on a harbour at dusk.`;
-  if (sampled && Array.isArray(sampled.people) && Array.isArray(sampled.state_operations)) sampled.state_operations = storyChanges(sampled.people.map(({ name }: { name: string }) => name));
+  if (sampled) meetImportant(prompt, Array.isArray(sampled.people) ? sampled.people : []);
+  if (sampled && Array.isArray(sampled.people) && Array.isArray(sampled.state_operations)) {
+    sampled.state_operations = storyChanges(sampled.people.map(({ name }: { name: string }) => name));
+  }
   const reply = sampled ? JSON.stringify(sampled) : "The fake Narrator is answering. Start without --fake to test a real model.";
   for (let at = 0; at < reply.length; at += 40) {
     // Slow like a real model when played; tests and the e2e run set FAKE_STREAM_MS to go faster.
