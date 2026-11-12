@@ -246,7 +246,8 @@ const PLATES: [number, number, number][] = [
 
 /** Each picture a plain plate in the next colour, shaped as asked, after a short wait like a real model's. */
 export const fakeImages: ImageAdapter = async ({ aspect_ratio }, signal) => {
-  await pause(400, signal);
+  // Set it higher to see the app while pictures take as long as a real model's.
+  await pause(Number(process.env.FAKE_IMAGE_MS ?? 400), signal);
   const [w = 1, h = 1] = aspect_ratio.split(":").map(Number);
   return solidPng(Math.round((64 * w) / Math.max(w, h)), Math.round((64 * h) / Math.max(w, h)), next(PLATES));
 };

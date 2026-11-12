@@ -152,6 +152,41 @@ type Narrated = {
   committed: (messageId: number, scene: Scene) => void;
 };
 
+/** The prompt for a Turn's reply, and the Scene Memory due alongside it. Settings are read once, so the whole prompt comes from one copy. */
+function turnPrompt(
+  saves: SaveStore,
+  settings: SettingsStore,
+  id: string,
+  signal: AbortSignal,
+  textProvider: TextProvider,
+  {
+    state,
+    messages,
+    input,
+    directions,
+    picture,
+  }: Pick<Parameters<typeof assemblePrompt>[0], "state" | "messages" | "input" | "directions"> & { picture: boolean },
+) {
+  const current = settings.read();
+  const memoryStart = saves.memoryStart(id);
+  return {
+    prompt: assemblePrompt({
+      save: withArtStyleFor(saves.read(id), current),
+      state,
+      messages,
+      memoryStart,
+      windowMessages: current.textRecentMessages,
+      modelInstructions: current.modelInstructions,
+      imageInstructions: current.imageInstructions,
+      directions,
+      input,
+      responseSchema: JSON.stringify(responseSchema),
+      promptStyle: picture ? promptStyle(current) : null,
+    }),
+    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, current.textRecentMessages, signal),
+  };
+}
+
 export async function playTurn(
   saves: SaveStore,
   {
@@ -170,19 +205,12 @@ export async function playTurn(
   const basedOn = saves.latestMessageId(id);
   const state = saves.latestState(id);
   const messages = saves.messages(id);
-  const memoryStart = saves.memoryStart(id);
-  const prompt = assemblePrompt({
-    save: withArtStyleFor(saves.read(id), settings.read()),
+  const { prompt, memory } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
-    memoryStart,
-    windowMessages: settings.read().textRecentMessages,
-    modelInstructions: settings.read().modelInstructions,
-    imageInstructions: settings.read().imageInstructions,
-    directions: saves.directions(id, basedOn),
     input,
-    responseSchema: JSON.stringify(responseSchema),
-    promptStyle: images.ready() ? promptStyle(settings.read()) : null,
+    directions: saves.directions(id, basedOn),
+    picture: images.ready(),
   });
   return narrate(textProvider, signal, emit, {
     kind: input === OPENING_INPUT ? "opening" : "turn",
@@ -190,7 +218,7 @@ export async function playTurn(
     input,
     refusal: "The Narrator refused this message. Edit it and try again.",
     pcName: saves.read(id).pc.name,
-    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, settings.read().textRecentMessages, signal),
+    memory,
     // The PC attempts nothing in a Continue, so there is nothing to roll for.
     rollCheck: mayCheck && input !== CONTINUE_INPUT ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
@@ -217,20 +245,13 @@ export async function replaceResponse(
   const { input, narration, check, state, messages, sceneImage } = saves.turnToReplace(id, messageId);
   // The old picture goes with its response, so the new one always gets its own, whatever the Narrator decides.
   const hadPicture = !!sceneImage || images.sceneDrawing(id, messageId);
-  const memoryStart = saves.memoryStart(id);
-  const prompt = assemblePrompt({
-    save: withArtStyleFor(saves.read(id), settings.read()),
+  const { prompt, memory } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
-    memoryStart,
-    windowMessages: settings.read().textRecentMessages,
-    modelInstructions: settings.read().modelInstructions,
-    imageInstructions: settings.read().imageInstructions,
+    input,
     // The response being replaced keeps its own, which a Regenerate carries over.
     directions: saves.directions(id, messageId),
-    input,
-    responseSchema: JSON.stringify(responseSchema),
-    promptStyle: images.ready() ? promptStyle(settings.read()) : null,
+    picture: images.ready(),
   });
   const kind = feedback === undefined ? "regenerate" : "rewrite";
   return narrate(textProvider, signal, emit, {
@@ -240,7 +261,7 @@ export async function replaceResponse(
     refusal: "The Narrator refused this, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
     check,
-    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, settings.read().textRecentMessages, signal),
+    memory,
     commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance, feedback?.trim() || undefined),
     committed: (replacement, scene) => {
       images.forget(id, messageId - 1, kind);
@@ -264,19 +285,12 @@ export async function editResponse(
   emit: TurnEvents = () => {},
 ) {
   const { input, state, messages } = saves.turnToReplace(id, messageId);
-  const memoryStart = saves.memoryStart(id);
-  const prompt = assemblePrompt({
-    save: saves.read(id),
+  const { prompt, memory } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
-    memoryStart,
-    windowMessages: settings.read().textRecentMessages,
-    modelInstructions: settings.read().modelInstructions,
-    imageInstructions: settings.read().imageInstructions,
     input,
-    responseSchema: JSON.stringify(responseSchema),
     // No picture is drawn, so the Narrator needn't write a prompt for one.
-    promptStyle: null,
+    picture: false,
   });
   return narrate(textProvider, signal, emit, {
     kind: "edit",
@@ -285,7 +299,7 @@ export async function editResponse(
     refusal: "The Narrator refused this edit, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
     narration: text,
-    memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, settings.read().textRecentMessages, signal),
+    memory,
     commit: (narration, _check, advance) => saves.editTurn(id, messageId, narration, advance),
     // Only portraits for anyone new, as the Scene Image stays.
     committed: (edited, scene) => images.sceneChanged(id, edited, { ...scene, changed: false }),

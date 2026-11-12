@@ -309,3 +309,20 @@ test("a resolution saved by its old video name reads as megapixels, and 4K as th
     expect(settingsStore(path).read().imageResolution).toBe(now as never);
   }
 });
+
+test("one bad setting falls back to its default and keeps the rest", () => {
+  const path = join(folder.path, "bad-field.json");
+  writeFileSync(path, JSON.stringify({ textModel: "kept", fontSize: "huge", textMaxTokens: 5 }));
+  const read = settingsStore(path).read();
+  expect(read.textModel).toBe("kept");
+  expect(read.fontSize).toBe("medium");
+  expect(read.textMaxTokens).toBe(16_000);
+});
+
+test("a text server that won't read takes its key with it, and a stray built-in name is ignored", () => {
+  const path = join(folder.path, "bad-url.json");
+  writeFileSync(path, JSON.stringify({ textBaseUrl: "ftp://my-box/v1", textApiKey: "for-my-box", constructor: 1, toString: "x" }));
+  const read = settingsStore(path).read();
+  expect(read.textBaseUrl).toBe("https://openrouter.ai/api/v1");
+  expect(read.textApiKey).toBe("");
+});

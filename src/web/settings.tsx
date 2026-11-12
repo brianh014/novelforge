@@ -158,8 +158,15 @@ function Picker<T extends string>({
   useEffect(() => {
     if (!open) return;
     const away = ({ target }: PointerEvent) => !picker.current?.contains(target as Node) && setOpen(false);
+    // Tabbing away closes it too. A press on an option of a searchable list moves focus nowhere, and must not close it before the click.
+    const left = ({ relatedTarget }: FocusEvent) => relatedTarget && !picker.current?.contains(relatedTarget as Node) && setOpen(false);
+    const at = picker.current;
     document.addEventListener("pointerdown", away);
-    return () => document.removeEventListener("pointerdown", away);
+    at?.addEventListener("focusout", left);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      at?.removeEventListener("focusout", left);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -452,6 +459,9 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
   const [models, setModels] = useState<ComfyModels>();
   const [refreshes, setRefreshes] = useState(0);
   const addLora = useRef<HTMLButtonElement>(null);
+  // A key per LoRA row that stays with it when one above is removed, as the same file may be listed twice.
+  const loraKeys = useRef<number[]>([]);
+  const nextLoraKey = useRef(0);
   const { comfySdBase, imageResolution } = draft;
   const tooBig =
     comfySdBase === "sd15" && imageResolution !== "0.5mp"
@@ -489,6 +499,8 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
   const flux2 = draft.comfyFamily === "flux2";
   const qwen21 = draft.comfyFamily === "qwen21";
   const loras = models?.loras ?? [];
+  loraKeys.current.length = Math.min(loraKeys.current.length, draft.comfyLoras.length);
+  while (loraKeys.current.length < draft.comfyLoras.length) loraKeys.current.push(nextLoraKey.current++);
   const setLora = (index: number, change: Partial<Settings["comfyLoras"][number]>) =>
     set({ comfyLoras: draft.comfyLoras.map((lora, i) => (i === index ? { ...lora, ...change } : lora)) });
 
@@ -633,15 +645,13 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
           <fieldset>
             <legend>LoRAs</legend>
             {draft.comfyLoras.map((lora, index) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: LoRA rows have no id of their own, and the same file may be listed twice.
-              <div className="lora" key={index}>
+              <div className="lora" key={loraKeys.current[index]}>
                 <ModelSelect label={`LoRA ${index + 1}`} value={lora.name} list={loras} onChange={(name) => setLora(index, { name })} />
                 <label>
                   Strength
-                  {/* Uncontrolled, so the box can be empty while the player types. The key shows the right value after a removal. */}
+                  {/* Uncontrolled, so the box can be empty while the player types. Keyed by the name too, so a changed file resets the box. */}
                   <input
-                    // biome-ignore lint/suspicious/noArrayIndexKey: as for the row, with the name so a changed file resets the box.
-                    key={`${index} ${lora.name}`}
+                    key={lora.name}
                     aria-label={`LoRA ${index + 1} strength`}
                     type="number"
                     required
@@ -667,6 +677,7 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
                   className="quiet"
                   aria-label={`Remove LoRA ${index + 1}`}
                   onClick={() => {
+                    loraKeys.current.splice(index, 1);
                     set({ comfyLoras: draft.comfyLoras.filter((_, i) => i !== index) });
                     // This button may be about to go, which would drop keyboard focus to the top of the page.
                     addLora.current?.focus();

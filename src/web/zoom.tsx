@@ -220,7 +220,7 @@ export function RedrawableImage({
   const shown = seeOriginal && original ? original : latest;
   const shownAlt = shown === latest ? alt : `${alt}, original`;
   return (
-    <Zoomable lazy src={galleryUrl(id, latest)} largeSrc={galleryUrl(id, shown)} alt={alt} onClose={() => setSeeOriginal(false)}>
+    <Zoomable lazy src={galleryUrl(id, latest)} largeSrc={galleryUrl(id, shown)} alt={alt} largeAlt={shownAlt} onClose={() => setSeeOriginal(false)}>
       {original && (
         <div className="row">
           <button
@@ -315,6 +315,8 @@ export function Zoomable(props: {
   children?: ReactNode;
   /** What the opened view shows, when not `src`. */
   largeSrc?: string;
+  /** Its name, when not `alt`. */
+  largeAlt?: string;
   onClose?: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -338,7 +340,7 @@ export function Zoomable(props: {
         onClose={props.onClose}
         onClick={(event) => event.target === dialog.current && dialog.current.close()}
       >
-        <img src={props.largeSrc ?? props.src} alt={props.alt} loading="lazy" />
+        <img src={props.largeSrc ?? props.src} alt={props.largeAlt ?? props.alt} loading="lazy" />
         {props.children}
         <div className="row">
           <button type="button" className={props.children ? "quiet" : "action"} onClick={() => dialog.current!.close()}>

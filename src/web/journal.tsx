@@ -16,7 +16,7 @@ import {
 import { ContinueRule, isContinue, readable } from "./chat-style";
 import { EditIcon, RenameIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
-import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./play";
+import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./story-pictures";
 import { Person } from "./zoom";
 
 const FIRST_SHOWN = 5;
@@ -238,6 +238,8 @@ export function Journal({ id }: { id: string }) {
   const [images, setImages] = useState<SceneImageInfo[]>([]);
   const [requested, setRequested] = useState<RequestedImage[]>([]);
   const [loadError, setLoadError] = useState("");
+  // A change that saved but whose fresh copy didn't come back, so the page shows the old one.
+  const [stale, setStale] = useState(false);
   const [telling, setTelling] = useState(false);
   const [reading, setReading] = useState<number>();
   const [phonePage, setPhonePage] = useState<PhonePage>("journal");
@@ -282,11 +284,16 @@ export function Journal({ id }: { id: string }) {
     );
   }
   if (!save || !journal) return <Book left={null}>{null}</Book>;
-  const reread = async () => {
-    const [save, journal] = await Promise.all([getSave(id), getJournal(id)]);
-    setSave(save);
-    setJournal(journal);
-  };
+  // Never rejects: the change before it has saved, and an error would leave its box open to save it twice.
+  const reread = () =>
+    Promise.all([getSave(id), getJournal(id)]).then(
+      ([save, journal]) => {
+        setSave(save);
+        setJournal(journal);
+        setStale(false);
+      },
+      () => setStale(true),
+    );
   const edit = async (change: Parameters<typeof editJournal>[1]) => {
     await editJournal(id, change);
     await reread();
@@ -320,6 +327,11 @@ export function Journal({ id }: { id: string }) {
             </button>
           </div>
           {telling && <TellTheNarrator id={id} onDone={reread} onClose={() => setTelling(false)} />}
+          {stale && (
+            <p role="status" className="error">
+              Saved, but the Journal couldn't be refreshed. Open it again to see the change.
+            </p>
+          )}
           <div className="journal">
             <p className="person pc">
               <Person id={id} name={save.pc.name} portrait={pcPortrait} who={statusWords(journal.status)} />
