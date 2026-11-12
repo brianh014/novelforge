@@ -21,8 +21,19 @@ export type Scene = {
   portraits: Npc[];
   restyled?: (Npc | null)[];
 };
-/** A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. */
-type Job = { kind: string; messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string; scene?: boolean };
+/**
+ * A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. `npc` is whose
+ * portrait it is, null for the PC, and `place` names a scene's, both for telling the player what is drawing.
+ */
+type Job = {
+  kind: string;
+  messageId: number;
+  draw: (signal: AbortSignal) => Promise<void>;
+  redraw?: string;
+  scene?: boolean;
+  npc?: string | null;
+  place?: string;
+};
 /** `world` is what the player can read of it: the World Overview, or the World Brief before there is one. */
 type Cover = { title: string; theme: string; world: string; people?: string[] };
 export type ImageKind = "cover" | "portrait";
@@ -397,7 +408,7 @@ export function imagePipeline(
   }
 
   const portraitJob = (id: string, messageId: number, npc?: Npc, early?: Promise<EarlyImage>): Job =>
-    queued(id, { kind: "portrait", messageId, draw: (signal) => drawPortrait(id, messageId, npc, signal, early) });
+    queued(id, { kind: "portrait", messageId, npc: npc?.name ?? null, draw: (signal) => drawPortrait(id, messageId, npc, signal, early) });
 
   const pipeline = {
     ready: () => Boolean(ready()),
@@ -444,6 +455,8 @@ export function imagePipeline(
       if (isRedrawing(id, key)) return false;
       failures.delete(key);
       const kind = `${target.kind} redraw`;
+      const shown = saves.gallery(id).find((image) => image.kind === target.kind && image.ref === target.ref);
+      const what = target.kind === "portrait" || target.kind === "original" ? { npc: shown?.npc ?? null } : { place: shown?.caption || undefined };
       const draw = async (signal: AbortSignal) => {
         try {
           const written = write ? await write(signal) : (prompt as string);
@@ -460,7 +473,7 @@ export function imagePipeline(
           throw error;
         }
       };
-      enqueue(id, (jobs) => jobs.queue.push(queued(id, { kind, messageId, draw, redraw: key })));
+      enqueue(id, (jobs) => jobs.queue.push(queued(id, { kind, messageId, draw, redraw: key, ...what })));
       return true;
     },
 
@@ -531,7 +544,13 @@ export function imagePipeline(
         jobs.queue.push(...scene.portraits.map((npc) => portraitJob(id, messageId, npc)));
         if (drawScenes && scene.changed && scene.description) {
           if (jobs.waiting) dropped(id, jobs.waiting, "a newer scene");
-          jobs.waiting = queued(id, { kind: "scene", messageId, scene: true, draw: (signal) => drawScene(id, messageId, scene, signal) });
+          jobs.waiting = queued(id, {
+            kind: "scene",
+            messageId,
+            scene: true,
+            place: scene.location || undefined,
+            draw: (signal) => drawScene(id, messageId, scene, signal),
+          });
         }
       });
       if (!updatePortraits) return;
@@ -572,15 +591,19 @@ export function imagePipeline(
     },
 
     /**
-     * While anything is on the way, `drawing` is the kind of job drawing now, or next, and `more` how many wait after it.
-     * Only kinds, never whose portrait, as one may be of someone the PC doesn't know yet.
+     * While anything is on the way, `drawing` is the kind of job drawing now, or next, `name` what it is of, and `more`
+     * how many wait after it. A portrait is named only once the PC knows them, so it can't give away someone yet to come.
      * shortcut: `more` counts a portrait job for someone who already has one, which finishes at once, check first if the count misleads.
      */
     status: (id: string) => {
       const jobs = work.get(id);
       if (!jobs) return { pending: false, session };
       const all = [jobs.running, ...jobs.queue, jobs.waiting].filter((job) => job !== undefined);
-      return { pending: true, session, drawing: all[0]?.kind ?? "", more: Math.max(all.length - 1, 0) };
+      const next = all[0];
+      const name =
+        next?.place ??
+        (next?.npc === null ? saves.read(id).pc.name : next?.npc && saves.latestState(id).pcKnown.npcs.includes(next.npc) ? next.npc : undefined);
+      return { pending: true, session, drawing: next?.kind ?? "", name, more: Math.max(all.length - 1, 0) };
     },
   };
   return pipeline;

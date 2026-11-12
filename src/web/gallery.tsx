@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { deleteImage, type Gallery as GalleryContent, type GalleryImage, getGallery } from "./api";
+import { Painting } from "./icons";
 import { BookTabs, DeleteDialog, Sheet } from "./menu";
 import { IMAGE_CHECK_MS } from "./story-pictures";
 import { RedrawableImage } from "./zoom";
@@ -81,7 +82,7 @@ export function Gallery({ id }: { id: string }) {
                       onDelete={deletable ? () => setDeleting(image) : undefined}
                     />
                     <span>{image.label}</span>
-                    {image.redrawing && <span className="waiting">Redrawing…</span>}
+                    {image.redrawing && <span className="waiting drawing">{Painting}Redrawing…</span>}
                     {image.failure && <span className="error">Redraw failed</span>}
                   </li>
                 ))}

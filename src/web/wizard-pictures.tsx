@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getHeldImage, type HeldImage, type HeldPicture, heldImageUrl, redrawHeldImage } from "./api";
-import { RegenerateIcon } from "./icons";
+import { Painting, RegenerateIcon } from "./icons";
 import { NudgeButton, PromptBox, RedrawPanel, UploadButton, Zoomable } from "./zoom";
 
 /** What a picture is called, and how it's described to a screen reader. */
@@ -34,7 +34,12 @@ function HeldArt(props: { id: string; picture: HeldPicture; naming: Naming; vers
     };
   }, [id, picture, version]);
 
-  if (!image) return <p className="waiting">The {name} is being painted…</p>;
+  if (!image)
+    return (
+      <p className="waiting drawing">
+        {Painting}The {name} is being painted…
+      </p>
+    );
 
   const redraw = (prompt: string) => {
     setRedrawing(true);
@@ -60,7 +65,11 @@ function HeldArt(props: { id: string; picture: HeldPicture; naming: Naming; vers
           <RedrawPanel busy={redrawing || !!failure}>{box}</RedrawPanel>
         </Zoomable>
       </figure>
-      {redrawing && <p className="waiting">Redrawing the {name}…</p>}
+      {redrawing && (
+        <p className="waiting drawing">
+          {Painting}Redrawing the {name}…
+        </p>
+      )}
       {failure && <p className="error">Redraw failed. Open the {name} to see why.</p>}
     </>
   );

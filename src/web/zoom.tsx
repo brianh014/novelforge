@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { galleryUrl, type GalleryImage, type Portrait, portraitUrl, updateImage, redrawImage, uploadGalleryImage } from "./api";
-import { DeleteIcon, EditIcon, RegenerateIcon, RewriteIcon, UploadIcon } from "./icons";
+import { DeleteIcon, EditIcon, Painting, RegenerateIcon, RewriteIcon, UploadIcon } from "./icons";
 
 /** Someone's picture and name, with who they are when that's known. */
 export function Person({ id, name, portrait, who }: { id: string; name: string; portrait?: Portrait; who?: string }) {
@@ -52,8 +52,8 @@ export function PromptBox({
         </p>
       )}
       {redrawing && (
-        <p role="status" className="waiting">
-          This image is being redrawn…
+        <p role="status" className="waiting drawing">
+          {Painting}This image is being redrawn…
         </p>
       )}
       {!canRedraw && <p className="muted">Images are turned off or not set up in Settings.</p>}
@@ -245,8 +245,8 @@ export function RedrawableImage({
               </p>
             )}
             {shown.redrawing && (
-              <p role="status" className="waiting">
-                This image is being drawn…
+              <p role="status" className="waiting drawing">
+                {Painting}This image is being drawn…
               </p>
             )}
           </>

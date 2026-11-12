@@ -202,7 +202,7 @@ test("a Turn never waits for its image", async () => {
 
   expect((await playTurn(id)).status).toBe(201);
 
-  expect(await imagesOf(id)).toEqual({ images: [], pending: true, session: 0, drawing: "scene", more: 0 });
+  expect(await imagesOf(id)).toMatchObject({ images: [], pending: true, session: 0, drawing: "scene", more: 0 });
   expect(await messageIds(id)).toEqual([1, 2]);
   resolve(PNG);
   expect((await settled(id)).images).toHaveLength(1);
