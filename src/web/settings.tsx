@@ -542,7 +542,11 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
               { value: "flux2", label: "FLUX.2" },
               { value: "qwen21", label: "Qwen Image 2.1" },
             ]}
-            onChange={(family) => set(switchFamily(draft, family))}
+            onChange={(family) => {
+              // A new list of LoRAs, so new rows, or a strength box would keep the last family's value.
+              loraKeys.current = [];
+              set(switchFamily(draft, family));
+            }}
           />
           {flux2 || qwen21 ? (
             <>
