@@ -38,7 +38,6 @@ import {
   setupProblem,
   storyName,
   takeImageFailure,
-  type TurnResult,
 } from "./api";
 import { type Beat, BeatLine, type ChatStyle, chapterOpenings, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";

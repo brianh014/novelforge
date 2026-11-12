@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { fillWorkflow } from "./comfy-workflow";
 import { buildGraph, usableReferences } from "./graph-builder";
-import type { ImageAdapter, ImagePayload } from "./image-adapter";
+import type { ImageAdapter } from "./image-adapter";
 import { errorFields, log } from "./logger";
 import { imageType } from "./save-store";
 import type { SettingsStore } from "./settings-store";

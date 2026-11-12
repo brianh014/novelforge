@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { MIN_CHAPTER_MESSAGES } from "../src/rest-api";
+import { MIN_CHAPTER_MESSAGES } from "../src/save-routes";
 import { scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
