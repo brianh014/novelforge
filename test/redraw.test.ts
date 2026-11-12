@@ -408,6 +408,35 @@ test("Update draws the Cover again from the title, the World Brief and the PC as
   expect(payload.reference_images.map(({ role }) => role)).toEqual(["pc"]);
 });
 
+test("Update draws the Cover with the Important Characters the player put on it, and the PC only if they were on it", async () => {
+  await play([sheet, generated], png(1), png(2), png(3));
+  const characters = [
+    { name: "Mira", description: "A red-haired smuggler", onCover: true },
+    { name: "Tobin", description: "A grey-bearded priest", onCover: false },
+  ];
+  const world = (
+    (await (await app.post("/worlds", { ...choices, pc: { name: "Ash", physicalTraits: "Short" }, characters, pcOnCover: false })).json()) as { id: string }
+  ).id;
+  await coverOf(world);
+  const id = await accept(world);
+  await storedCover(id);
+  expect(saveStore(savesDir).read(id)).toMatchObject({ importantCharacters: characters, pcOnCover: false });
+  const cover = (await settled(id)).images.find(({ kind }) => kind === "cover")!;
+
+  expect((await update(id, cover)).status).toBe(202);
+  await settled(id);
+
+  expect(asks.at(-1)).toMatchObject({ kind: "cover", people: ["A red-haired smuggler"] });
+});
+
+test("a Save from before Important Characters were kept reads as having none on record", async () => {
+  await play([]);
+  const id = saveStore(savesDir).create({ worldBrief: "A drowned city", pc: { name: "Ash" } });
+  const { importantCharacters, pcOnCover } = saveStore(savesDir).read(id);
+  expect(importantCharacters).toBeUndefined();
+  expect(pcOnCover).toBe(true);
+});
+
 test("a failed cover keeps its prompt for a retry, and a failed Redraw keeps the old cover", async () => {
   await play([sheet, generated], new Error("The model is busy"), png(1), new Error("Still busy"));
   const world = await newWorld();

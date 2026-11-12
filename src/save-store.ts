@@ -25,6 +25,9 @@ export type PcDetails = z.infer<typeof PcDetails>;
 
 export type Save = { worldBrief: string; pc: { name: string } & PcDetails };
 
+/** One of the Important Characters as the New Story form had them at Begin. */
+export type ImportantCharacter = { name: string; description: string; onCover: boolean };
+
 export class SaveNotFound extends Error {}
 export class MessageNotFound extends Error {}
 export class StaleTurn extends Error {}
@@ -311,6 +314,12 @@ const toVersion21 = (db: Database) =>
 /** The PC's appearance as the story changes it, which starts empty, as nothing could change it yet. */
 const toVersion22 = addMissingSections;
 
+/** The Important Characters from the New Story form, and whether the PC was on the Cover. NULL in a Save from before, which has none on record. */
+const toVersion23 = (db: Database) => {
+  if (!hasColumn(db, "save", "important_characters")) db.run("ALTER TABLE save ADD COLUMN important_characters TEXT");
+  if (!hasColumn(db, "save", "pc_on_cover")) db.run("ALTER TABLE save ADD COLUMN pc_on_cover INTEGER NOT NULL DEFAULT 1");
+};
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
 const MIGRATIONS = [
   toVersion1,
@@ -335,6 +344,7 @@ const MIGRATIONS = [
   toVersion20,
   toVersion21,
   toVersion22,
+  toVersion23,
 ];
 
 function schemaVersion(db: Database) {
@@ -434,6 +444,8 @@ function assertValidSave(db: Database) {
     title: z.string(),
     theme: z.string(),
     memory_start: rowId,
+    important_characters: jsonText(z.array(z.object({ name: z.string(), description: z.string(), onCover: z.boolean() })).max(10)).nullable(),
+    pc_on_cover: z.union([z.literal(0), z.literal(1)]),
   });
   const messages = rowsOf(db, "messages", {
     id: rowId.positive(),
@@ -574,22 +586,37 @@ export function saveStore(savesDir: string) {
       startingHook = "",
       title = "",
       theme = "",
+      importantCharacters,
+      pcOnCover = true,
       opening,
-    }: Save & { artStyle?: string; startingHook?: string; title?: string; theme?: string; opening?: Partial<State> }) {
+    }: Save & {
+      artStyle?: string;
+      startingHook?: string;
+      title?: string;
+      theme?: string;
+      importantCharacters?: ImportantCharacter[];
+      pcOnCover?: boolean;
+      opening?: Partial<State>;
+    }) {
       const id = crypto.randomUUID();
       const unfinishedPath = `${pathOf(id)}.unfinished`;
       try {
         using db = connect(unfinishedPath);
         const { name, ...details } = pc;
-        db.run("INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details, title, theme) VALUES (1, ?, ?, ?, ?, ?, ?, ?)", [
-          worldBrief,
-          name,
-          artStyle,
-          startingHook,
-          JSON.stringify(details),
-          title,
-          theme,
-        ]);
+        db.run(
+          "INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details, title, theme, important_characters, pc_on_cover) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          [
+            worldBrief,
+            name,
+            artStyle,
+            startingHook,
+            JSON.stringify(details),
+            title,
+            theme,
+            importantCharacters ? JSON.stringify(importantCharacters) : null,
+            pcOnCover ? 1 : 0,
+          ],
+        );
         // No Message has this Snapshot yet, and the file isn't a Save until the rename below.
         for (const [name, value] of Object.entries({ ...opening, worldBrief })) {
           db.run(
@@ -627,12 +654,31 @@ export function saveStore(savesDir: string) {
       return saves.toSorted((a, b) => b.updatedAt - a.updatedAt);
     },
 
-    read(id: string): Save & { artStyle: string; startingHook: string; title: string; theme: string; hasCover: boolean; coverRedraws: number } {
+    read(id: string): Save & {
+      artStyle: string;
+      startingHook: string;
+      title: string;
+      theme: string;
+      hasCover: boolean;
+      coverRedraws: number;
+      importantCharacters?: ImportantCharacter[];
+      pcOnCover: boolean;
+    } {
       using db = open(id);
       const save = db
-        .query<{ pc_name: string; art_style: string; starting_hook: string; pc_details: string; title: string; theme: string }, []>(
-          "SELECT pc_name, art_style, starting_hook, pc_details, title, theme FROM save",
-        )
+        .query<
+          {
+            pc_name: string;
+            art_style: string;
+            starting_hook: string;
+            pc_details: string;
+            title: string;
+            theme: string;
+            important_characters: string | null;
+            pc_on_cover: number;
+          },
+          []
+        >("SELECT pc_name, art_style, starting_hook, pc_details, title, theme, important_characters, pc_on_cover FROM save")
         .get()!;
       return {
         worldBrief: currentState(db).worldBrief,
@@ -641,6 +687,8 @@ export function saveStore(savesDir: string) {
         startingHook: save.starting_hook,
         title: save.title,
         theme: save.theme,
+        ...(save.important_characters !== null && { importantCharacters: JSON.parse(save.important_characters) as ImportantCharacter[] }),
+        pcOnCover: save.pc_on_cover === 1,
         hasCover: db.query("SELECT 1 FROM cover").get() !== null,
         coverRedraws: db.query<{ redraws: number }, []>("SELECT redraws FROM cover").get()?.redraws ?? 0,
       };

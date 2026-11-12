@@ -69,6 +69,8 @@ test("a generated world reaches the player only as its World Overview, and its S
     startingHook: "A body washes ashore",
     hasCover: false,
     coverRedraws: 0,
+    importantCharacters: [],
+    pcOnCover: true,
   });
   expect(await app.get(`/saves/${id}`).then((r) => r.json())).toMatchObject({ title: "The Salt Reckoning" });
   const { worldBible, worldRules, plotThreads } = saves.latestState(id);
