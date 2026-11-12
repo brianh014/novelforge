@@ -744,6 +744,7 @@ test("renaming an NPC changes their name in every Message, Snapshot and portrait
   const id = store().create({
     worldBrief: "A drowned city",
     pc: { name: "Ash" },
+    importantCharacters: [{ name: "Hesper Vane", description: "A ferry pilot", onCover: true }],
     opening: {
       npcs: [{ name: "Hesper Vane", appearance: "a woman" }, NPCS[1]!],
       pcKnown: { facts: [], npcs: ["Hesper Vane"], summaries: { "Hesper Vane": "A ferry pilot." } },
@@ -770,4 +771,5 @@ test("renaming an NPC changes their name in every Message, Snapshot and portrait
       .portraits(id)
       .map(({ npc }) => npc),
   ).toEqual(["Mira Vane"]);
+  expect(store().read(id).importantCharacters).toEqual([{ name: "Mira Vane", description: "A ferry pilot", onCover: true }]);
 });
