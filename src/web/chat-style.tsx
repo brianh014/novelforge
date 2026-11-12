@@ -1,5 +1,28 @@
 import { CONTINUE_INPUT, OPENING_INPUT } from "../prompt-assembler";
-import type { Message, Settings } from "./api";
+import type { Chapter, Message, Settings } from "./api";
+
+const NUMERALS: [number, string][] = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+
+export const roman = (n: number) =>
+  NUMERALS.reduce((text, [value, numeral]) => {
+    for (; n >= value; n -= value) text += numeral;
+    return text;
+  }, "");
+
+/** Each chapter's heading goes above its first Message shown, and its large first letter on its first narration. */
+export function chapterOpenings(chapters: Chapter[], messages: Pick<Message, "id" | "role">[]) {
+  const heads = new Map<number, { numeral: string; title: string }>();
+  const opens = new Set<number>();
+  chapters.forEach(({ title, lastMessage }, index) => {
+    const after = index === 0 ? -Infinity : (chapters[index - 1]!.lastMessage ?? Infinity);
+    const inside = messages.filter(({ id }) => id > after && id <= (lastMessage ?? Infinity));
+    if (!inside[0]) return;
+    heads.set(inside[0].id, { numeral: roman(index + 1), title });
+    const narration = inside.find(({ role }) => role === "narrator");
+    if (narration) opens.add(narration.id);
+  });
+  return { heads, opens };
+}
 
 export type ChatStyle = Settings["chatStyle"];
 /** `rule` is a Continue, which shows as a short line between the responses. */

@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type FormEvent, Fragment, type KeyboardEvent, type ReactNode, type Ref, type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   askNarrator,
   stopTurn,
@@ -22,6 +22,7 @@ import {
   playOpening,
   playTurn,
   type Journal,
+  type Chapter,
   type Portrait,
   portraitUrl,
   previewRevert,
@@ -39,7 +40,7 @@ import {
   takeImageFailure,
   type TurnResult,
 } from "./api";
-import { type Beat, BeatLine, type ChatStyle, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
+import { type Beat, BeatLine, type ChatStyle, chapterOpenings, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
 import { AskIcon, StopIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
@@ -219,6 +220,7 @@ export function Play({ id }: { id: string }) {
   const [reverting, setReverting] = useState<Message>();
   /** With a Revert to the Message before one of the player's: their words, to edit and send again from there. */
   const [replaying, setReplaying] = useState<string>();
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [chapterOffer, setChapterOffer] = useState(false);
   const [endingChapter, setEndingChapter] = useState(false);
   const [closingChapter, setClosingChapter] = useState(false);
@@ -286,13 +288,17 @@ export function Play({ id }: { id: string }) {
   }
 
   function checkChapter() {
-    getChapters(id).then(({ offer }) => setChapterOffer(offer), () => {});
+    getChapters(id).then(({ chapters, offer }) => {
+      setChapters(chapters);
+      setChapterOffer(offer);
+    }, () => {});
   }
 
   async function endChapter() {
     setClosingChapter(true);
     try {
       await closeChapter(id);
+      checkChapter();
       setEndingChapter(false);
       setChapterOffer(false);
       setAnnouncement("Chapter ended. The next Turn starts a new one.");
@@ -590,6 +596,8 @@ export function Play({ id }: { id: string }) {
 
   const before = (message: Message) => messages[messages.indexOf(message) - 1];
 
+  const opening = chapterOpenings(chapters, told);
+
   const controls = (message: Message) =>
     !turn && (
       <div className="row actions">
@@ -675,7 +683,6 @@ export function Play({ id }: { id: string }) {
             {/* A Save from before titles has only its PC. */}
             <div className="story-title">
               <h1 className="title">{storyName(save)}</h1>
-              {save.title && <p className="muted">{pc}</p>}
               {journal?.storyTime && <p className="muted">{journal.storyTime.date}, {journal.storyTime.timeOfDay}</p>}
             </div>
             {journal?.recentSummary && (
@@ -750,13 +757,24 @@ export function Play({ id }: { id: string }) {
                   </button>
                 </>
               )}
-              {told.map((message) => (
-                <div key={message.id} className={`message ${message.role}`}>
-                  {messageBeats(message).map(line)}
-                  {controls(message)}
-                  {inlineImages(message)}
-                </div>
-              ))}
+              {told.map((message) => {
+                const chapter = opening.heads.get(message.id);
+                return (
+                  <Fragment key={message.id}>
+                    {chapter && (
+                      <div className="chapter-head">
+                        <h2>Chapter {chapter.numeral}</h2>
+                        {chapter.title && <p>{chapter.title}</p>}
+                      </div>
+                    )}
+                    <div className={`message ${message.role}${opening.opens.has(message.id) ? " opens" : ""}`}>
+                      {messageBeats(message).map(line)}
+                      {controls(message)}
+                      {inlineImages(message)}
+                    </div>
+                  </Fragment>
+                );
+              })}
               {turn?.input && !turn.replaces && (
                 <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>
               )}

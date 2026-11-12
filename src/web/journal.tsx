@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { editJournal, getImages, renameNpc, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, statusWords, tellNarrator } from "./api";
 import { ContinueRule, isContinue, readable } from "./chat-style";
-import { EditIcon } from "./icons";
+import { EditIcon, RenameIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./play";
 import { Person } from "./zoom";
@@ -68,8 +68,9 @@ function PagePick({ shown, onPick }: { shown: PhonePage; onPick: (page: PhonePag
 }
 
 /** Text the player can change where it stands. A failure keeps what they typed, and the server's refusal during a Turn shows here. */
-function Editable(props: { label: string; text: string; opener?: string; onSave: (text: string) => Promise<unknown>; onRemove?: () => Promise<unknown>; children?: ReactNode }) {
-  const { label, text, opener, onSave, onRemove, children } = props;
+/** `opener` names the button, shown as its text unless an `icon` draws it. */
+function Editable(props: { label: string; text: string; opener?: string; icon?: ReactNode; onSave: (text: string) => Promise<unknown>; onRemove?: () => Promise<unknown>; children?: ReactNode }) {
+  const { label, text, opener, icon, onSave, onRemove, children } = props;
   const [draft, setDraft] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -91,8 +92,8 @@ function Editable(props: { label: string; text: string; opener?: string; onSave:
     return (
       <div className="editable">
         {children}
-        <button className={opener ? "quiet" : "icon"} aria-label={`${opener ?? "Edit"}: ${label}`} title={opener ?? "Edit"} onClick={() => setDraft(text)}>
-          {opener ?? EditIcon}
+        <button className={opener && !icon ? "quiet" : "icon"} aria-label={`${opener ?? "Edit"}: ${label}`} title={opener ?? "Edit"} onClick={() => setDraft(text)}>
+          {icon ?? opener ?? EditIcon}
         </button>
       </div>
     );
@@ -252,12 +253,15 @@ export function Journal({ id }: { id: string }) {
           {pick}
           <div className="journal-head">
             <h1 className="big">Journal</h1>
-            <button className="quiet" onClick={() => setTelling(true)}>
-              Tell Narrator what to change
+            <button type="button" className="icon" title="Tell Narrator what to change" aria-label="Tell Narrator what to change" aria-haspopup="dialog" onClick={() => setTelling(true)}>
+              {RewriteIcon}
             </button>
           </div>
           {telling && <TellTheNarrator id={id} onDone={reread} onClose={() => setTelling(false)} />}
           <div className="journal">
+            <p className="person pc">
+              <Person id={id} name={save.pc.name} portrait={pcPortrait} who={statusWords(journal.status)} />
+            </p>
             {journal.storyTime && (
               <>
                 <h2>Story Time</h2>
@@ -269,9 +273,6 @@ export function Journal({ id }: { id: string }) {
                 </Editable>
               </>
             )}
-            <p className="person">
-              <Person id={id} name={save.pc.name} portrait={pcPortrait} who={statusWords(journal.status)} />
-            </p>
             <h2>World Brief</h2>
             <Editable label="World Brief" text={save.worldBrief} onSave={(text) => edit({ edit: "worldBrief", text })}>
               <Clamped text={save.worldBrief} />
@@ -334,6 +335,7 @@ export function Journal({ id }: { id: string }) {
                       label={`Rename ${name} everywhere in the story`}
                       text={name}
                       opener="Rename"
+                      icon={RenameIcon}
                       onSave={async (newName) => {
                         await renameNpc(id, name, newName.trim());
                         await reread();
@@ -345,12 +347,12 @@ export function Journal({ id }: { id: string }) {
             ) : (
               <p className="muted">No one yet.</p>
             )}
-            <h2>Scene Memories</h2>
+            <h2>Old Memories</h2>
             {journal.sceneMemories.length > 0 ? (
               <NewestFirst items={journal.sceneMemories}>
                 {({ firstMessage, text }) => (
                   <li key={firstMessage}>
-                    <Editable label="Scene Memory" text={text} onSave={(next) => edit({ edit: "sceneMemory", firstMessage, text: next })}>
+                    <Editable label="Old Memory"text={text} onSave={(next) => edit({ edit: "sceneMemory", firstMessage, text: next })}>
                       <Clamped text={text} />
                     </Editable>
                   </li>

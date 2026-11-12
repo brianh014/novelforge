@@ -14,6 +14,13 @@
   src: url("./fonts/libre-caslon-display-latin-400-normal.woff2") format("woff2");
   font-display: swap;
 }
+/* A quill hand, for the name on the main menu only. */
+@font-face {
+  font-family: "Tangerine";
+  font-weight: 700;
+  src: url("./fonts/tangerine-latin-700-normal.woff2") format("woff2");
+  font-display: swap;
+}
 
 :root {
   color-scheme: light dark;
@@ -22,15 +29,14 @@
   --ink: light-dark(#25221a, #e8e4d8);
   --muted: light-dark(#5a5340, #b5b2a6);
   --line: light-dark(#b4a581, #55544e);
-  --accent: light-dark(#23503e, #b9c7a8);
+  /* A warm, olive-leaning green, so it sits in the browns. */
+  --accent: light-dark(#33552f, #c3c79f);
   --on-accent: light-dark(#f2ead6, #16180f);
   --soft: light-dark(#dccda9, #3a3a37);
   --error: light-dark(#8f2f1c, #eda78f);
-  /* Light is aged parchment, with age spots. Dark is charcoal laid paper, with the ribs and chain lines of a handmade sheet. */
-  --foxing: light-dark(rgb(120 80 30 / 0.12), transparent);
-  --laid: light-dark(transparent, rgb(255 255 255 / 0.035));
-  --chain: light-dark(transparent, rgb(0 0 0 / 0.16));
-  --gutter: light-dark(rgb(40 25 5 / 0.45), rgb(0 0 0 / 0.7));
+  /* Light is aged parchment, with age spots. Dark is plain charcoal. */
+  --foxing: light-dark(rgb(120 80 30 / 0.1), transparent);
+  --gutter: light-dark(rgb(40 25 5 / 0.38), rgb(0 0 0 / 0.6));
   --display: "Libre Caslon Display", "Hoefler Text", Georgia, serif;
   --body: "Libre Caslon Text", "Hoefler Text", Georgia, serif;
   --label: "Libre Caslon Text", Georgia, serif;
@@ -105,18 +111,14 @@ a {
   margin-inline: auto;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  /* Fibres, then age spots, then the stock itself. The grain is drawn as noise so it costs no image file. */
+  /* Age spots over the stock: clean paper, with just enough age to read as paper. */
   background-color: var(--page);
   background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='320'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9 .4' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='320' height='320' filter='url(%23f)' opacity='.55'/%3E%3C/svg%3E"),
     radial-gradient(circle at 8% 14%, var(--foxing), transparent 26%),
-    radial-gradient(circle at 92% 82%, var(--foxing), transparent 30%),
-    radial-gradient(circle at 58% 38%, var(--foxing), transparent 18%),
-    repeating-linear-gradient(0deg, var(--laid) 0 1px, transparent 1px 4px),
-    repeating-linear-gradient(90deg, var(--chain) 0 1px, transparent 1px 86px);
-  /* One per layer, as a shorter list would repeat and blend the wrong ones. */
-  background-blend-mode: soft-light, normal, normal, normal, normal, normal;
-  box-shadow: 0 6px 22px rgb(0 0 0 / 0.45);
+    radial-gradient(circle at 92% 82%, var(--foxing), transparent 30%);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.35),
+    0 18px 48px rgb(0 0 0 / 0.42);
 }
 
 /* The left page holds the picture, so it stays wide enough to show one whole. */
@@ -127,25 +129,25 @@ a {
 .page {
   min-width: 0;
   min-height: 0;
-  padding: 14px 22px;
+  padding: 32px 44px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   overflow: auto;
 }
 
 /* The gutter: each page curves down into the spine. */
 .page.left {
-  box-shadow: inset -22px 0 22px -18px var(--gutter);
+  box-shadow: inset -28px 0 28px -22px var(--gutter);
 }
 
 .page.right {
-  box-shadow: inset 22px 0 22px -18px var(--gutter);
+  box-shadow: inset 28px 0 28px -22px var(--gutter);
 }
 
 /* Clears the bookmarks. */
 .book:has(.tabs) .page.right {
-  padding-top: 42px;
+  padding-top: 64px;
 }
 
 .page.left[inert] {
@@ -162,12 +164,50 @@ a {
 }
 
 .brand {
+  margin-block: auto;
+  display: grid;
+  justify-items: center;
   text-align: center;
 }
 
 .logo {
   display: block;
-  margin: 0 auto 20px;
+  margin: 0 auto 8px;
+}
+
+/* The name, written by hand. */
+.brand h1 {
+  font: 700 clamp(80px, 9vw, 128px) / 1 "Tangerine", var(--display);
+}
+
+/* A rule with a diamond, between the name and the line under it. */
+.brand h1::after {
+  content: "";
+  display: block;
+  width: 220px;
+  height: 7px;
+  margin: 10px auto 16px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) center / 7px 7px no-repeat,
+    linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat;
+  clip-path: polygon(0 3px, calc(50% - 3.5px) 3px, 50% 0, calc(50% + 3.5px) 3px, 100% 3px, 100% 4px, calc(50% + 3.5px) 4px, 50% 100%, calc(50% - 3.5px) 4px, 0 4px);
+}
+
+.brand p {
+  max-width: 22em;
+  font-size: 1.05em;
+}
+
+.brand p span {
+  white-space: nowrap;
+}
+
+/* A small label above a list or a section, in the accent. */
+.eyebrow {
+  font: 700 12px var(--label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .big:focus {
@@ -180,8 +220,17 @@ a {
 }
 
 h2 {
-  font: 700 15px var(--label);
+  font: 700 12px var(--label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--accent);
+}
+
+/* A dialog's heading is a question, so it reads as one. */
+dialog h2 {
+  font-size: 17px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .muted {
@@ -194,13 +243,13 @@ h2 {
   position: absolute;
   z-index: 1;
   top: 0;
-  right: 22px;
+  right: 32px;
   display: flex;
-  gap: 3px;
+  gap: 4px;
 }
 
 .tabs a {
-  padding: 3px 10px 12px;
+  padding: 6px 12px 16px;
   background: var(--muted);
   color: var(--page);
   font: 400 14px var(--label);
@@ -208,8 +257,13 @@ h2 {
   clip-path: polygon(0 0, 100% 0, 100% 100%, 50% calc(100% - 7px), 0 100%);
 }
 
+.tabs a:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
 .tabs [aria-current] {
-  padding-bottom: 18px;
+  padding-bottom: 24px;
   background: var(--accent);
   color: var(--on-accent);
 }
@@ -236,12 +290,16 @@ h2 {
 
 .sheet-rail {
   min-height: 0;
-  padding: 14px 22px;
+  padding: 40px 32px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 20px;
   border-right: 1px solid var(--line);
   overflow: auto;
+}
+
+.sheet-rail nav {
+  border-top: 1px solid var(--line);
 }
 
 .sheet-rail nav {
@@ -249,7 +307,8 @@ h2 {
 }
 
 .sheet-rail nav > * {
-  padding: 6px 0;
+  min-height: 44px;
+  padding: 10px 0;
   border: 0;
   border-bottom: 1px dotted var(--muted);
   background: none;
@@ -309,19 +368,20 @@ h2 {
   position: relative;
   flex: 1;
   min-width: 0;
-  padding: 14px 30px 30px;
+  padding: 40px 56px 40px;
   overflow: auto;
 }
 
 .book:has(.tabs) .sheet-scroll {
-  padding-top: 42px;
+  padding-top: 64px;
 }
 
 .sheet-body {
+  max-width: 48em;
   min-height: 100%;
   display: grid;
   align-content: start;
-  gap: 12px;
+  gap: 16px;
 }
 
 .sheet-body:has(> .working) {
@@ -344,8 +404,22 @@ h2 {
   scroll-margin-top: 14px;
 }
 
+.sheet-foot .row {
+  gap: 10px;
+}
+
+/* A status line with nothing to say takes no room, yet stays in place so screen readers hear it when it speaks. */
+.sheet-foot > :empty {
+  margin-bottom: -6px;
+}
+
+.sheet-foot .action,
+.sheet-foot .secondary {
+  min-height: 40px;
+}
+
 .sheet-foot {
-  padding: 10px 30px;
+  padding: 14px 56px;
   display: grid;
   gap: 6px;
   border-top: 1px solid var(--line);
@@ -537,6 +611,28 @@ button {
   cursor: default;
 }
 
+/* A second choice beside an Action: outlined, the same size. */
+.secondary {
+  min-height: 36px;
+  padding: 5px 14px;
+  border: 1px solid var(--accent);
+  background: none;
+  color: var(--accent);
+  font: 400 15px var(--label);
+  cursor: pointer;
+}
+
+.secondary:hover {
+  background: var(--soft);
+}
+
+.secondary:disabled {
+  border-color: var(--line);
+  color: var(--muted);
+  background: none;
+  cursor: default;
+}
+
 .quiet {
   padding: 0;
   border: 0;
@@ -567,19 +663,41 @@ button {
 }
 
 .menu {
+  width: 100%;
+  max-width: 460px;
   margin-block: auto;
   display: grid;
+  gap: 18px;
 }
 
+.menu nav {
+  display: grid;
+  border-top: 1px solid var(--line);
+  counter-reset: entry;
+}
+
+/* Numbered like a book's contents. */
 .menu a {
-  padding: 10px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding: 16px 12px;
   border-bottom: 1px dotted var(--muted);
   color: var(--ink);
-  font: 400 26px var(--display);
+  font: 400 30px var(--display);
   text-decoration: none;
+  counter-increment: entry;
+}
+
+.menu a::before {
+  content: counter(entry, upper-roman) ".";
+  width: 28px;
+  color: var(--muted);
+  font: 400 14px var(--label);
 }
 
 .menu a:hover {
+  background: var(--soft);
   color: var(--accent);
 }
 
@@ -631,6 +749,20 @@ input {
 
 .settings label {
   min-width: 0;
+  gap: 6px;
+}
+
+/* Each setting stands apart, and its note stays with it. */
+.settings [data-section] {
+  gap: 22px;
+}
+
+.settings [data-section] > .muted {
+  margin-top: -14px;
+}
+
+.settings [data-section] > h2 + .muted {
+  margin-top: -12px;
 }
 
 .picker {
@@ -828,20 +960,41 @@ input {
 
 .review dl {
   margin: 0;
+  display: grid;
+  grid-template-columns: minmax(8em, 12em) minmax(0, 1fr);
+}
+
+.review dt,
+.review dd {
+  padding: 10px 0;
+  border-bottom: 1px dotted var(--muted);
 }
 
 .review dt {
-  color: var(--accent);
+  padding-right: 16px;
+  color: var(--muted);
 }
 
 .review dd {
-  margin: 0 0 10px;
+  margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .review h2 {
   margin: 0;
+}
+
+.review .row {
+  justify-content: space-between;
+}
+
+/* The world opens like a chapter, with its first letter large. */
+.review .overview p::first-letter {
+  float: left;
+  padding: 0.12em 0.1em 0 0;
+  color: var(--accent);
+  font: 400 4.1em/0.82 var(--display);
 }
 
 .chips {
@@ -851,8 +1004,8 @@ input {
 }
 
 .chips.art {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px 16px;
 }
 
 .fields .chips label {
@@ -1152,8 +1305,12 @@ a.action {
 
 .chat-script .message.player p,
 .chat-bubbles .message.player p {
-  padding-left: 0;
-  border-left: 0;
+  width: auto;
+  max-width: none;
+  margin-left: 0;
+  padding: 0;
+  border-radius: 0;
+  background: none;
 }
 
 .chat-bubbles .message.player p {
@@ -1289,10 +1446,57 @@ a.action {
   justify-content: flex-start;
 }
 
+/* The player's own words, as a note in the margin of the story. */
 .message.player p {
-  padding-left: 0.8em;
-  border-left: 2px solid var(--line);
+  width: fit-content;
+  max-width: 80%;
+  margin-left: auto;
+  padding: 8px 14px;
+  border-radius: 14px 14px 2px 14px;
+  background: var(--soft);
   color: var(--muted);
+}
+
+/* A chapter's title, set into the story where it begins. */
+.chapter-head {
+  margin: 1.6em 0 1em;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.story > div > .chapter-head:first-child {
+  margin-top: 0.4em;
+}
+
+.chapter-head h2 {
+  font-weight: 700;
+}
+
+.chapter-head p {
+  font: 400 28px/1.15 var(--display);
+  text-wrap: balance;
+}
+
+.chapter-head::after {
+  content: "";
+  width: 160px;
+  height: 7px;
+  margin-top: 8px;
+  background:
+    linear-gradient(var(--line), var(--line)) center / 7px 7px no-repeat,
+    linear-gradient(var(--line), var(--line)) center / 100% 1px no-repeat;
+  clip-path: polygon(0 3px, calc(50% - 3.5px) 3px, 50% 0, calc(50% + 3.5px) 3px, 100% 3px, 100% 4px, calc(50% + 3.5px) 4px, 50% 100%, calc(50% - 3.5px) 4px, 0 4px);
+}
+
+/* The first letter of each chapter, large, as a printed book has it. Bubbles centre their narration small, where it would look lost. */
+.chat-prose .message.opens > .told:first-child::first-letter,
+.chat-script .message.opens > .told:first-child::first-letter {
+  float: left;
+  padding: 0.12em 0.1em 0 0;
+  color: var(--accent);
+  font: 400 4.1em/0.82 var(--display);
 }
 
 /* Only a phone shows the Journal's pages one at a time. */
@@ -1303,13 +1507,30 @@ a.action {
 .journal-head {
   display: flex;
   gap: 12px;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
 
-.journal-head > button {
-  flex: 0 1 auto;
-  text-align: right;
+/* The PC heads the Journal, larger than the people listed under it. */
+.person.pc {
+  gap: 16px;
+  padding-bottom: 6px;
+}
+
+.person.pc .portrait {
+  width: 72px;
+  height: 72px;
+}
+
+.person.pc > span:last-child {
+  font: 400 24px/1.15 var(--display);
+}
+
+.person.pc .about {
+  margin-top: 4px;
+  font: 400 14.4px/1.35 var(--body);
 }
 
 .journal {
@@ -1358,9 +1579,44 @@ a.action {
 .journal .people {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   padding: 0;
   list-style: none;
+}
+
+/* One row per person, ruled off, with its tools together on the right. */
+.journal .people li {
+  position: relative;
+  padding: 10px 0;
+  border-bottom: 1px dotted var(--muted);
+}
+
+.journal .people .editable {
+  align-items: center;
+}
+
+/* Room for the Rename tool beside Edit. */
+.journal .people li > .editable:first-child {
+  padding-right: 36px;
+}
+
+.journal .people li > .editable + .editable {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+/* While one box is open, the row's other tool waits. */
+.journal .people li:has(> .edit-box) > .editable > button {
+  display: none;
+}
+
+.journal .people li:has(> .edit-box) > .editable:first-child {
+  padding-right: 0;
+}
+
+.journal .people li > .edit-box + .editable {
+  display: none;
 }
 
 .person {
@@ -1419,9 +1675,32 @@ a.action {
   grid-column: 2;
 }
 
+/* Open, then its tools together, always on one row. */
 .saves .row {
   align-self: start;
+  flex-wrap: nowrap;
   justify-content: flex-start;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.saves .row .action {
+  min-height: 40px;
+  margin-right: 10px;
+  padding-inline: 22px;
+}
+
+.saves .row .icon {
+  width: 40px;
+  height: 40px;
+}
+
+.saves li {
+  padding-block: 16px;
+}
+
+.saves .title {
+  margin-bottom: 2px;
 }
 
 .saves .action,
@@ -1485,8 +1764,8 @@ a.action {
 }
 
 .icon {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   display: grid;
   place-items: center;
@@ -1499,6 +1778,10 @@ a.action {
 .icon:hover,
 .icon[aria-expanded="true"] {
   color: var(--accent);
+}
+
+.icon:hover {
+  background: var(--soft);
 }
 
 .icon[aria-disabled="true"],
@@ -1630,10 +1913,15 @@ a.action {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 10px 10px 8px 14px;
-  border: 1px solid var(--line);
+  padding: 12px 10px 8px 18px;
   border-radius: 14px;
   background: var(--soft);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.06);
+}
+
+/* On the compose box's own shade, a hovered tool needs the page to stand out. */
+.compose .icon:hover {
+  background: var(--page);
 }
 
 /* The whole box shows focus, so the text box itself has no line of its own. */
@@ -1654,9 +1942,10 @@ a.action {
   gap: 6px;
 }
 
-.compose .send {
-  width: 34px;
-  height: 34px;
+.compose .send,
+.compose .send:hover {
+  width: 36px;
+  height: 36px;
   margin-left: auto;
   border-radius: 50%;
   background: var(--accent);
@@ -1730,8 +2019,12 @@ dialog blockquote {
     box-shadow: none;
   }
 
-  .page {
+  /* One column has no spine to curve into. */
+  .page,
+  .page.left,
+  .page.right {
     padding: 16px;
+    box-shadow: none;
   }
 
   .page.left {
@@ -1773,15 +2066,28 @@ dialog blockquote {
     font-size: 24px;
   }
 
+  /* The sections become one row of tabs, scrolling sideways if they run long. */
   .sheet-rail nav {
+    flex-basis: 100%;
     display: flex;
-    flex-wrap: wrap;
-    gap: 0 14px;
+    justify-content: space-between;
+    gap: 8px;
+    overflow-x: auto;
+    border-top: 0;
+    border-bottom: 1px solid var(--line);
+    scrollbar-width: none;
   }
 
   .sheet-rail nav > * {
-    padding: 2px 0;
-    border-bottom: 0;
+    flex: none;
+    margin-bottom: -1px;
+    padding: 8px 0;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+  }
+
+  .sheet-rail nav [aria-current] {
+    border-bottom-color: var(--accent);
   }
 
   .sheet-rail nav .jump,
@@ -1815,7 +2121,15 @@ dialog blockquote {
   }
 
   .sheet-foot {
-    padding: 8px 16px;
+    padding: 10px 16px;
+  }
+
+  .sheet-foot .row {
+    flex-wrap: nowrap;
+  }
+
+  .sheet-foot .leave {
+    white-space: nowrap;
   }
 
   .saves li.with-cover {
@@ -1823,10 +2137,26 @@ dialog blockquote {
     column-gap: 12px;
   }
 
+  .saves .row .action {
+    margin-right: 6px;
+    padding-inline: 16px;
+  }
+
+  .saves .row .icon {
+    width: 36px;
+  }
+
   /* The Journal is too long for two stacked panes, so it shows one page at a time and scrolls as a whole, with the tabs held in reach. */
+  /* The desk grows with the Journal, so the page's own length scrolls, even where a phone's toolbars change the screen's height. */
+  .desk:has(.page-pick),
   .book:has(.page-pick) {
     height: auto;
-    min-height: 100%;
+    min-height: 100dvh;
+  }
+
+  /* A phone's home bar sits over the end of a page that scrolls to the bottom edge, so the end clears it. */
+  .book:has(.page-pick) .page {
+    padding-bottom: calc(32px + env(safe-area-inset-bottom));
   }
 
   .book:has(.page-pick) .page,
@@ -1845,16 +2175,26 @@ dialog blockquote {
     padding-top: 48px;
   }
 
+  /* Two tabs over the Journal's pages, underlined where you are. */
   .page-pick {
     display: flex;
-    gap: 16px;
-    margin-bottom: 12px;
+    gap: 20px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .page-pick button {
+    min-height: 44px;
+    margin-bottom: -1px;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    text-decoration: none;
   }
 
   .page-pick [aria-pressed="true"] {
-    color: var(--ink);
-    text-decoration: underline;
-    text-underline-offset: 4px;
+    border-bottom-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
   }
 
   /* The response being rewritten needs the room, and the Rewrite box stands in for the Send box until it's done. */
@@ -1897,7 +2237,57 @@ dialog blockquote {
   }
 
   .chips.art {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* The main menu fits one phone screen. */
+  .page:has(> .brand) {
+    padding-top: 48px;
+    border-bottom: 0;
+  }
+
+  .brand .logo {
+    width: 150px;
+    height: auto;
+    margin-bottom: 4px;
+  }
+
+  .brand h1 {
+    font-size: 72px;
+  }
+
+  .brand h1::after {
+    margin: 6px auto 10px;
+  }
+
+  /* Name and contents sit together near the top of the screen. */
+  .book:has(.brand) {
+    justify-content: flex-start;
+  }
+
+  .book:has(.brand) .page {
+    flex: none;
+  }
+
+  .menu {
+    margin-block: 0;
+    gap: 12px;
+  }
+
+  .menu a {
+    align-items: center;
+    min-height: 52px;
+    padding: 8px;
+    font-size: 24px;
+  }
+
+  .review dl {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .review dt {
+    padding-bottom: 0;
+    border-bottom: 0;
   }
 
   .fields .chips label {

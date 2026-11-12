@@ -1,7 +1,31 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CONTINUE_INPUT } from "../src/prompt-assembler";
-import { type Beat, BeatLine, messageBeats, openingBeat, stageBeats } from "../src/web/chat-style";
+import { type Beat, BeatLine, chapterOpenings, messageBeats, openingBeat, roman, stageBeats } from "../src/web/chat-style";
+
+test("each chapter's heading sits above its first Message, and its large letter on its first narration", () => {
+  const messages = [
+    { id: 1, role: "player" },
+    { id: 2, role: "narrator" },
+    { id: 3, role: "player" },
+    { id: 4, role: "narrator" },
+  ] as const;
+  const { heads, opens } = chapterOpenings(
+    [
+      { title: "The Quay", lastMessage: 2 },
+      { title: "", lastMessage: null },
+    ],
+    [...messages],
+  );
+  expect([...heads]).toEqual([
+    [1, { numeral: "I", title: "The Quay" }],
+    [3, { numeral: "II", title: "" }],
+  ]);
+  expect([...opens]).toEqual([2, 4]);
+  // A closed chapter with nothing after it yet has no heading for the next.
+  expect(chapterOpenings([{ title: "The Quay", lastMessage: 4 }, { title: "", lastMessage: null }], [...messages]).heads.size).toBe(1);
+  expect([4, 9, 14, 40, 1994].map(roman)).toEqual(["IV", "IX", "XIV", "XL", "MCMXCIV"]);
+});
 
 test("a Continue shows as a rule in the story, and the Stage box skips it", () => {
   const [beat] = messageBeats({ role: "player", text: CONTINUE_INPUT });

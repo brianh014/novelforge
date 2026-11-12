@@ -19,7 +19,7 @@ import {
   type TextHost,
   type TextTest,
 } from "./api";
-import { BookTabs, Sheet } from "./menu";
+import { BookTabs, MenuRibbon, Sheet } from "./menu";
 
 const SECTIONS = ["Text", "Images", "Reading", "Advanced"];
 
@@ -985,7 +985,7 @@ function InstallSettings({
           onChange={(e) => set({ textRecentMessages: e.target.valueAsNumber })}
         />
       </label>
-      <p className="muted">Sent in full on every Turn. Older Messages reach the Narrator as Scene Memories. More remembers detail better but makes each Turn cost more, and fewer saves money. A lower number catches up one Scene Memory a Turn.</p>
+      <p className="muted">Sent in full on every Turn. Older Messages reach the Narrator as Old Memories. More remembers detail better but makes each Turn cost more, and fewer saves money. A lower number catches up one Old Memory a Turn.</p>
       <label>
         Longest Question answer, in words
         <input
@@ -1168,7 +1168,7 @@ export function SettingsScreen({ id }: { id?: string }) {
     <Sheet
       view={section}
       foot={foot}
-      tabs={id && <BookTabs id={id} current="Settings" />}
+      tabs={id ? <BookTabs id={id} current="Settings" /> : <MenuRibbon />}
       rail={
         <>
           <h1 className="big">Settings</h1>
@@ -1180,12 +1180,6 @@ export function SettingsScreen({ id }: { id?: string }) {
             ))}
           </nav>
           {!id && <p className="muted so-far">Open a story to change its Art Style.</p>}
-          {/* A story's Settings has the Main Menu among its tabs. */}
-          {!id && (
-            <a className="quiet" href="#/">
-              Main Menu
-            </a>
-          )}
         </>
       }
     >

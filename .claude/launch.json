@@ -15,6 +15,13 @@
       "port": 4610
     },
     {
+      "name": "novelforge-dev-lan",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--watch", "src/main.ts", "--fake"],
+      "env": { "PORT": "4610", "HOST": "0.0.0.0" },
+      "port": 4610
+    },
+    {
       "name": "novelforge-dev-real",
       "runtimeExecutable": "bun",
       "runtimeArgs": ["--watch", "src/main.ts"],

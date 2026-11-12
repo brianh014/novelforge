@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { ArtStylePicker, artStyleText, Choices, OWN_ART_STYLE } from "./art-style-picker";
 import { ART_STYLES } from "./art-styles";
+import { roman } from "./chat-style";
 import {
   beginStory,
   type Character,
@@ -22,7 +23,7 @@ import {
   type WorldField,
 } from "./api";
 import { LONG_TEXT } from "../limits";
-import { DecideIcon, RegenerateIcon } from "./icons";
+import { DecideIcon, EditIcon, RegenerateIcon } from "./icons";
 import { Sheet } from "./menu";
 import { NudgeButton, PromptBox, RedrawPanel, UploadButton, Zoomable } from "./zoom";
 
@@ -366,7 +367,7 @@ export function NewStory({ step }: { step?: string }) {
       rail={
         <nav aria-label="Steps" className="wizard-steps">
           {STEPS.map(({ name, hash }, index) => {
-            const label = `${index + 1}. ${name}`;
+            const label = `${roman(index + 1)}. ${name}`;
             if (index === here) return <a key={name} href={`#${hash}`} aria-current="step">{label}</a>;
             // Only back, as a later step needs the earlier ones done. Leaving the world asks first, as it discards it.
             if (index > here) return <span key={name}>{label}</span>;
@@ -561,8 +562,8 @@ export function NewStory({ step }: { step?: string }) {
         location.hash = `/play/${id}`;
       });
     const edit = (to: string, label: string) => (
-      <button type="button" className="quiet" aria-haspopup="dialog" onClick={() => setLeaving(to)}>
-        {label}
+      <button type="button" className="icon" title="Edit" aria-label={label} aria-haspopup="dialog" onClick={() => setLeaving(to)}>
+        {EditIcon}
       </button>
     );
     const shown = (term: string, text: string) =>
@@ -585,7 +586,7 @@ export function NewStory({ step }: { step?: string }) {
         <section className="fields wizard">
           <div className="row">
             <h2>Your choices</h2>
-            {edit("/new", "Edit")}
+            {edit("/new", "Edit your choices")}
           </div>
           <dl>
             {shown("Theme", theme)}
@@ -603,7 +604,7 @@ export function NewStory({ step }: { step?: string }) {
         <section className="fields wizard">
           <div className="row">
             <h2>Art</h2>
-            {edit("/new/art", "Edit")}
+            {edit("/new/art", "Edit the art")}
           </div>
           <dl>{shown("Art Style", draft.artStyle === OWN_ART_STYLE ? draft.ownArtStyle : draft.artStyle)}</dl>
           <div className="drawn-pair">
@@ -792,8 +793,7 @@ export function NewStory({ step }: { step?: string }) {
     </div>,
     backTo("/", "Main Menu"),
     <>
-      <span className="muted">Fills only the empty boxes.</span>
-      <button type="button" className="quiet" disabled={!theme || [...worldBoxes, ...Object.values(draft.pc)].every((text) => text.trim())} onClick={fillForm}>
+      <button type="button" className="secondary" title="Fills only the empty boxes" aria-description="Fills only the empty boxes." disabled={!theme || [...worldBoxes, ...Object.values(draft.pc)].every((text) => text.trim())} onClick={fillForm}>
         Pick for me
       </button>
       <button type="button" className="action" onClick={next}>

@@ -146,22 +146,35 @@ export function BookTabs({ id, current }: { id: string; current: "Story" | "Jour
   );
 }
 
+/** The way back to the main menu, as a ribbon, for screens outside a story. */
+export const MenuRibbon = () => (
+  <nav className="tabs" aria-label="Book sections">
+    <a href="#/">Menu</a>
+  </nav>
+);
+
 export function Menu() {
   return (
     <Book
       left={
         <div className="brand">
           <img className="logo" src={logo} alt="" width="264" height="197" />
-          <h1 className="big">NovelForge</h1>
-          <p className="muted">A choose-your-own visual novel, written as you play.</p>
+          <h1>NovelForge</h1>
+          {/* Each half stays whole, so a wrap falls after the comma. */}
+          <p className="muted">
+            <span>A choose-your-own visual novel,</span> <span>written as you play.</span>
+          </p>
         </div>
       }
     >
-      <nav className="menu" aria-label="Main Menu">
-        <a href="#/new">New Story</a>
-        <a href="#/load">Load Story</a>
-        <a href="#/settings">Settings</a>
-      </nav>
+      <div className="menu">
+        <p className="eyebrow" aria-hidden="true">Contents</p>
+        <nav aria-label="Main Menu">
+          <a href="#/new">New Story</a>
+          <a href="#/load">Load Story</a>
+          <a href="#/settings">Settings</a>
+        </nav>
+      </div>
     </Book>
   );
 }

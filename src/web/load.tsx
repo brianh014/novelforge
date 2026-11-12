@@ -1,6 +1,7 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { coverUrl, deleteSave, duplicateSave, importSave, type ListedSave, listSaves, storyName } from "./api";
-import { DeleteDialog, Sheet } from "./menu";
+import { DeleteIcon, DuplicateIcon, ExportIcon } from "./icons";
+import { DeleteDialog, MenuRibbon, Sheet } from "./menu";
 import { Zoomable } from "./zoom";
 
 const lastChanged = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -46,9 +47,9 @@ export function LoadStory() {
         <>
           <h1 className="big" ref={heading} tabIndex={-1}>Load Story</h1>
           <p className="muted so-far">Pick up a story, branch it, or carry it to another machine.</p>
-          <a className="quiet" href="#/">Main Menu</a>
         </>
       }
+      tabs={<MenuRibbon />}
       foot={
         <>
           <div role="status">{notice && <p className="notice">{notice}</p>}</div>
@@ -84,29 +85,31 @@ export function LoadStory() {
               <div className="row">
                 {!("unreadable" in save) && (
                   <>
-                    <a className="action" href={`#/play/${save.id}`} aria-label={`Load ${name}`}>
-                      Load
+                    <a className="action" href={`#/play/${save.id}`} aria-label={`Open ${name}`}>
+                      Open
                     </a>
                     <button
-                      className="quiet"
+                      className="icon"
+                      title="Duplicate"
                       aria-label={`Duplicate ${name}`}
                       aria-disabled={busy}
                       onClick={() => attempt(() => duplicateSave(save.id), `Duplicated ${name}.`)}
                     >
-                      Duplicate
+                      {DuplicateIcon}
                     </button>
-                    <a className="quiet" href={`/saves/${save.id}/export`} download aria-label={`Export ${name}`}>
-                      Export
+                    <a className="icon" title="Export" href={`/saves/${save.id}/export`} download aria-label={`Export ${name}`}>
+                      {ExportIcon}
                     </a>
                   </>
                 )}
                 <button
-                  className="quiet"
+                  className="icon"
+                  title="Delete"
                   aria-label={`Delete ${name}`}
                   aria-haspopup="dialog"
                   onClick={() => setDeleting(save)}
                 >
-                  Delete
+                  {DeleteIcon}
                 </button>
               </div>
             </li>

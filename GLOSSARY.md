@@ -101,7 +101,7 @@ Something the PC knows is still unresolved, such as an unanswered question, a pr
 _Avoid_: Open thread, Plot Thread (that is secret, and says where the story could go)
 
 **Scene Memory**:
-About 100 words on what happened in a batch of 20 older Messages, written by the Narrator before they leave the prompt and sent on every Turn after. The server records which Messages it covers. Only the player can change it, in the Journal.
+About 100 words on what happened in a batch of 20 older Messages, written by the Narrator before they leave the prompt and sent on every Turn after. The server records which Messages it covers. Only the player can change it, in the Journal. The player sees it as an **Old Memory**; code and prompts keep the name Scene Memory.
 _Avoid_: Summary (that is the one rolling account of the whole story), Scene (that is a place and situation in the story)
 
 **World Overview**:
