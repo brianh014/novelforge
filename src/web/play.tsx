@@ -401,6 +401,8 @@ export function Play({ id }: { id: string }) {
       getMessages(id).then(setMessages, () => {});
     }
     checkChapter();
+    // The left page moves on with the Turn, not once its pictures are drawn.
+    pictures.rereadJournal();
     pictures.check();
   }
 

@@ -57,6 +57,8 @@ export function useStoryPictures(id: string, latestId: number | undefined, onFai
   const loaded = useRef<Partial<Record<Shown, Set<number>>>>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const gone = useRef(false);
+  // Whether pictures were drawing at the last check, so the Journal is read again once they stop.
+  const drew = useRef(false);
   const latest = useRef(latestId);
   latest.current = latestId;
   const failed = useRef(onFailure);
@@ -84,10 +86,13 @@ export function useStoryPictures(id: string, latestId: number | undefined, onFai
         loaded.current.requested ??= new Set(asked.images.map(({ ref }) => ref));
         setImages(next);
         setRequested(asked);
-        if (next.pending && !gone.current) timer.current = setTimeout(check, IMAGE_CHECK_MS);
-        else {
-          // Once, when drawing stops, as this holds the whole Full Log.
-          rereadJournal();
+        if (next.pending && !gone.current) {
+          drew.current = true;
+          timer.current = setTimeout(check, IMAGE_CHECK_MS);
+        } else {
+          // Once, when drawing stops, for the portraits just drawn. Only then, as this holds the whole Full Log.
+          if (drew.current) rereadJournal();
+          drew.current = false;
           // Not on the way out, as nothing would be left to tell the player.
           if (gone.current) return;
           takeImageFailure(id).then(
@@ -102,6 +107,8 @@ export function useStoryPictures(id: string, latestId: number | undefined, onFai
 
   useEffect(() => {
     gone.current = false;
+    // At once, not after the pictures, which can take minutes, so the left page fills as the story opens.
+    rereadJournal();
     check();
     return () => {
       gone.current = true;
