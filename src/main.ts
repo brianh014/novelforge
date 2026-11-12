@@ -17,8 +17,10 @@ const inMacApp = isCompiled && process.execPath.includes(".app/Contents/MacOS/")
 const appDir = inMacApp ? join(homedir(), "Library", "Application Support", "NovelForge") : isCompiled ? dirname(process.execPath) : process.cwd();
 
 // The download is the app: one player on this computer, a browser that opens by itself, and Quit in the Menu.
-// Otherwise it's a server, for the network, until it's stopped. --app tries the app without a build.
-const app = isCompiled || process.argv.includes("--app");
+// Otherwise it's a server, for the network, until it's stopped. --app tries the app without a build. The Server
+// downloads are built as servers (see scripts/build-release.ts), and --server makes any download one.
+const serverMode = process.argv.includes("--server") || process.env.NOVELFORGE_MODE === "server";
+const app = (isCompiled || process.argv.includes("--app")) && !serverMode;
 const port = Number(process.env.PORT ?? 4600);
 
 // --fake swaps the Text Provider and image model for local stand-ins, in a folder of their own, so trying the app
@@ -59,7 +61,7 @@ const server = startServer({
   port,
   // shortcut: anyone on the network can play, change Settings and spend the saved keys, add accounts if the server leaves a trusted LAN.
   hostname: process.env.HOST ?? (app ? "127.0.0.1" : "0.0.0.0"),
-  quittable: app,
+  quittable: app ? { idleMs: Number(process.env.IDLE_QUIT_MS ?? 5 * 60_000) } : undefined,
 });
 
 // A listening address of 0.0.0.0 is no use in a browser.

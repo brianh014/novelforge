@@ -73,6 +73,9 @@ export function liveTurns() {
       };
     },
 
+    /** Whether any Save has a Turn or a world change under way. */
+    busy: () => running.size > 0 || changing.size > 0,
+
     /** Whether there was a Turn to stop. It ends as a failure, so its page gets the player's words back. */
     stop(id: string) {
       stoppers.get(id)?.abort();

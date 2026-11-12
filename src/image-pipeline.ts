@@ -379,6 +379,8 @@ export function imagePipeline(
 
   const pipeline = {
     ready: () => Boolean(ready()),
+    /** Whether any Save has a picture drawing or waiting. */
+    busy: () => work.size > 0,
 
     /**
      * A Cover or a portrait, for a world that has no Save yet. Its prompt holds only what the player reads, as

@@ -415,8 +415,11 @@ export function startServer(options: {
   port: number;
   /** How a Cover's or portrait's prompt is written. By default the text model writes it. */
   writePicture?: PictureWriter;
-  /** The downloaded app, which the Menu's Quit can end. A server can't be quit from a page. */
-  quittable?: boolean;
+  /**
+   * The downloaded app, which the Menu's Quit ends, as does `idleMs` with no page open, since closing the browser
+   * leaves nothing else to. A server can't be quit from a page.
+   */
+  quittable?: { idleMs: number };
 }) {
   const saves = saveStore(options.savesDir);
   const turns = liveTurns();
@@ -437,6 +440,26 @@ export function startServer(options: {
     settings,
     options.writePicture ?? ((ask, style, _template, signal) => writePicturePrompt(options, ask, style, signal)),
   );
+
+  // Requests in flight, a Turn's save among them, finish first.
+  const quit = (why: string) => {
+    log.startup(`NovelForge is closing: ${why}`);
+    void server.stop().then(() => process.exit(0));
+  };
+  // Pages check in, and the app quits once none has for `idleMs`, after any Turn or picture is done.
+  let pageSeen = Date.now();
+  if (options.quittable) {
+    const { idleMs } = options.quittable;
+    const every = Math.min(30_000, idleMs / 3);
+    let ticked = Date.now();
+    setInterval(() => {
+      const now = Date.now();
+      // The computer slept, pages and all, so they get the time to check in again.
+      if (now - ticked > every * 2) pageSeen = now;
+      ticked = now;
+      if (now - pageSeen > idleMs && !turns.busy() && !images.busy()) quit("no page has been open for a while");
+    }, every).unref();
+  }
 
   /** Every Chapter, oldest first, ending with the open one, whose `lastMessage` is null. A Chapter holds the Messages after the one before it, up to its own `lastMessage`. */
   function chaptersOf(id: string) {
@@ -699,7 +722,7 @@ export function startServer(options: {
       theme,
       logLevel: logLevel ?? null,
       defaultLogLevel: defaultLogLevel(),
-      canQuit: options.quittable ?? false,
+      canQuit: !!options.quittable,
     };
   };
 
@@ -714,13 +737,17 @@ export function startServer(options: {
     maxRequestBodySize: MAX_IMPORT_BYTES + 1,
     routes: logged({
       "/": spa,
-      // The download has no window to close, so the Menu's Quit ends it. Requests in flight, a Turn's save among them, finish first.
-      // A server doesn't quit, as everyone on the network shares it.
+      // The download has no window to close, so the Menu's Quit ends it. A server doesn't quit, as everyone on the network shares it.
       "/quit": {
         POST: () => {
           if (!options.quittable) return Response.json({ error: "Not found" }, { status: 404 });
-          log.startup("NovelForge is closing");
-          void server.stop().then(() => process.exit(0));
+          quit("the player quit");
+          return new Response(null, { status: 204 });
+        },
+      },
+      "/alive": {
+        POST: () => {
+          pageSeen = Date.now();
           return new Response(null, { status: 204 });
         },
       },

@@ -9,8 +9,8 @@ const executable = join(folder.path, process.platform === "win32" ? "novelforge.
 const provider = fakeOpenAi([[delta(JSON.stringify({ narration: "The tide rises." }))]]);
 
 // Loopback, as Windows Firewall asks about every new executable that opens a network port, and each run builds a new one.
-async function launch() {
-  const app = Bun.spawn([executable], { cwd: folder.path, env: { ...process.env, PORT: "0", HOST: "127.0.0.1", NO_BROWSER: "1" }, stdout: "pipe" });
+async function launch(...args: string[]) {
+  const app = Bun.spawn([executable, ...args], { cwd: folder.path, env: { ...process.env, PORT: "0", HOST: "127.0.0.1", NO_BROWSER: "1" }, stdout: "pipe" });
   const { value } = await app.stdout.getReader().read();
   const url = new TextDecoder().decode(value).match(/http:\S+/)![0];
   return { app, url: new URL(url) };
@@ -74,6 +74,51 @@ test("the compiled app offers Quit, which ends it", async () => {
   expect((await fetch(new URL("/quit", url), { method: "POST" })).status).toBe(204);
   expect(await app.exited).toBe(0);
 });
+
+test("the compiled app runs as a server with --server, which has no Quit", async () => {
+  const { app, url } = await launch("--server");
+  const settings = await fetch(new URL("/settings", url)).then((r) => r.json());
+  const quit = await fetch(new URL("/quit", url), { method: "POST" });
+  app.kill();
+  await app.exited;
+
+  expect(settings).toMatchObject({ canQuit: false });
+  expect(quit.status).toBe(404);
+});
+
+test("a Server build starts as a server with no flag", async () => {
+  const serverBuild = join(folder.path, process.platform === "win32" ? "novelforge-server.exe" : "novelforge-server");
+  const build = Bun.spawn([process.execPath, "build", "src/main.ts", "--compile", "--production", "--define", 'process.env.NOVELFORGE_MODE="server"', "--outfile", serverBuild], { stdout: "ignore" });
+  expect(await build.exited).toBe(0);
+  const app = Bun.spawn([serverBuild], { cwd: folder.path, env: { ...process.env, PORT: "0", HOST: "127.0.0.1", NO_BROWSER: "1" }, stdout: "pipe" });
+  const { value } = await app.stdout.getReader().read();
+  const url = new URL(new TextDecoder().decode(value).match(/http:\S+/)![0]);
+  const settings = await fetch(new URL("/settings", url)).then((r) => r.json());
+  app.kill();
+  await app.exited;
+
+  expect(settings).toMatchObject({ canQuit: false });
+}, 60_000);
+
+// Through Bun with --app, as the idle time is the same code built or not, and a build per run is slow.
+test("the app stays open while a page checks in, and quits by itself once none does", async () => {
+  const app = Bun.spawn([process.execPath, "run", join(import.meta.dir, "../src/main.ts"), "--app"], {
+    cwd: folder.path,
+    env: { ...process.env, PORT: "0", HOST: "127.0.0.1", NO_BROWSER: "1", IDLE_QUIT_MS: "1500" },
+    stdout: "pipe",
+    timeout: 15_000,
+  });
+  const { value } = await app.stdout.getReader().read();
+  const url = new URL(new TextDecoder().decode(value).match(/http:\S+/)![0]);
+
+  for (let i = 0; i < 10; i++) {
+    expect((await fetch(new URL("/alive", url), { method: "POST" })).status).toBe(204);
+    await Bun.sleep(300);
+  }
+  expect(app.exitCode).toBeNull();
+
+  expect(await app.exited).toBe(0);
+}, 15_000);
 
 // Through Bun, one program the firewall asks about once. It reads what the app says rather than connecting, as whether
 // a connection gets through depends on the firewall's rules for each network, not on the app.

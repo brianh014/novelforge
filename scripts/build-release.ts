@@ -1,5 +1,6 @@
-// Builds the downloads into dist/release, one file per system. Each is the app: it opens NovelForge in the browser
-// with no terminal, and the Menu's Quit ends it. The server is scripts/launch.ts instead.
+// Builds the downloads into dist/release, one file per system, in two sets:
+// - The app: opens NovelForge in the browser with no terminal, for this computer only, and the Menu's Quit ends it.
+// - The Server: serves the whole network from a terminal window, which shows its log, and closing it stops the server.
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
@@ -11,8 +12,10 @@ rmSync(work, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 mkdirSync(work, { recursive: true });
 
-async function compile(target: string, outfile: string, ...extra: string[]) {
-  const build = Bun.spawn([process.execPath, "build", "src/main.ts", "--compile", "--production", `--target=${target}`, ...extra, "--outfile", outfile], { cwd: root });
+async function compile(target: string, outfile: string, server: boolean, ...extra: string[]) {
+  // A define, so the download needs no flag to start as a server. src/main.ts reads it.
+  const mode = server ? ["--define", 'process.env.NOVELFORGE_MODE="server"'] : [];
+  const build = Bun.spawn([process.execPath, "build", "src/main.ts", "--compile", "--production", `--target=${target}`, ...mode, ...extra, "--outfile", outfile], { cwd: root });
   if ((await build.exited) !== 0) throw new Error(`The ${target} build failed`);
   return new Uint8Array(await Bun.file(outfile).arrayBuffer());
 }
@@ -53,38 +56,53 @@ function icns(png: Uint8Array) {
   return Buffer.concat([head, png]);
 }
 
+const text = (s: string) => new TextEncoder().encode(s);
 const png = new Uint8Array(await Bun.file(join(root, "src", "web", "icon.png")).arrayBuffer());
+const ico = join(root, "src", "web", "icon.ico");
 
-await compile("bun-windows-x64", join(out, "NovelForge-Windows.exe"), `--windows-icon=${join(root, "src", "web", "icon.ico")}`, "--windows-hide-console");
+for (const server of [false, true]) {
+  const name = server ? "NovelForge-Server" : "NovelForge";
+  const appName = server ? "NovelForge Server" : "NovelForge";
 
-for (const [arch, label] of [["arm64", "AppleSilicon"], ["x64", "Intel"]] as const) {
-  const program = await compile(`bun-darwin-${arch}`, join(work, `novelforge-darwin-${arch}`));
-  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+  // The app hides its console. The Server keeps it, as its window holds the log and closing it stops the server.
+  await compile("bun-windows-x64", join(out, `${name}-Windows.exe`), server, `--windows-icon=${ico}`, ...(server ? [] : ["--windows-hide-console"]));
+
+  for (const [arch, label] of [["arm64", "AppleSilicon"], ["x64", "Intel"]] as const) {
+    const program = await compile(`bun-darwin-${arch}`, join(work, `${name}-darwin-${arch}`), server);
+    const app = `${appName}.app/Contents`;
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleName</key><string>NovelForge</string>
-  <key>CFBundleDisplayName</key><string>NovelForge</string>
-  <key>CFBundleIdentifier</key><string>local.novelforge</string>
-  <key>CFBundleExecutable</key><string>NovelForge</string>
+  <key>CFBundleName</key><string>${appName}</string>
+  <key>CFBundleDisplayName</key><string>${appName}</string>
+  <key>CFBundleIdentifier</key><string>local.novelforge${server ? ".server" : ""}</string>
+  <key>CFBundleExecutable</key><string>${server ? "open-in-terminal" : "NovelForge"}</string>
   <key>CFBundleIconFile</key><string>icon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <!-- No Dock icon, as the app's only window is the browser. -->
+  <!-- No Dock icon, as the app's only window is the browser, and the Server's is Terminal. -->
   <key>LSUIElement</key><true/>
 </dict></plist>
 `;
-  await Bun.write(join(out, `NovelForge-Mac-${label}.tar.gz`), tarGz([
-    { name: "NovelForge.app/", mode: 0o755 },
-    { name: "NovelForge.app/Contents/", mode: 0o755 },
-    { name: "NovelForge.app/Contents/Info.plist", data: new TextEncoder().encode(plist), mode: 0o644 },
-    { name: "NovelForge.app/Contents/MacOS/", mode: 0o755 },
-    { name: "NovelForge.app/Contents/MacOS/NovelForge", data: program, mode: 0o755 },
-    { name: "NovelForge.app/Contents/Resources/", mode: 0o755 },
-    { name: "NovelForge.app/Contents/Resources/icon.icns", data: icns(png), mode: 0o644 },
-  ]));
-}
+    // The Server opens in Terminal, which shows its log, and closing it stops the server.
+    const opener = `#!/bin/sh
+here="$(cd "$(dirname "$0")" && pwd)"
+exec osascript -e 'on run argv' -e 'tell application "Terminal"' -e 'do script quoted form of item 1 of argv' -e 'activate' -e 'end tell' -e 'end run' "$here/NovelForge"
+`;
+    await Bun.write(join(out, `${name}-Mac-${label}.tar.gz`), tarGz([
+      { name: `${appName}.app/`, mode: 0o755 },
+      { name: `${app}/`, mode: 0o755 },
+      { name: `${app}/Info.plist`, data: text(plist), mode: 0o644 },
+      { name: `${app}/MacOS/`, mode: 0o755 },
+      { name: `${app}/MacOS/NovelForge`, data: program, mode: 0o755 },
+      ...(server ? [{ name: `${app}/MacOS/open-in-terminal`, data: text(opener), mode: 0o755 }] : []),
+      { name: `${app}/Resources/`, mode: 0o755 },
+      { name: `${app}/Resources/icon.icns`, data: icns(png), mode: 0o644 },
+    ]));
+  }
 
-const linux = await compile("bun-linux-x64", join(work, "novelforge-linux"));
-await Bun.write(join(out, "NovelForge-Linux.tar.gz"), tarGz([{ name: "NovelForge", data: linux, mode: 0o755 }]));
+  const linux = await compile("bun-linux-x64", join(work, `${name}-linux`), server);
+  await Bun.write(join(out, `${name}-Linux.tar.gz`), tarGz([{ name, data: linux, mode: 0o755 }]));
+}
 
 rmSync(work, { recursive: true, force: true });
 console.log(`Built the downloads in ${out}`);

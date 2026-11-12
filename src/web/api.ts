@@ -90,6 +90,9 @@ export const getSettings = () => request<Settings>("/settings");
 
 export const quitApp = () => fetch("/quit", { method: "POST" });
 
+/** A closed app answers nothing, which is no one's problem. */
+export const stillHere = () => void fetch("/alive", { method: "POST" }).catch(() => {});
+
 /** Fired with the saved Settings, so what is already on screen can follow a change, such as a new image family. */
 export const SETTINGS_SAVED = "novelforge-settings-saved";
 
