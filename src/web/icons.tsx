@@ -44,7 +44,7 @@ export function Quilling() {
           <stop offset=".7" stopColor="#fff" />
         </linearGradient>
         <mask id={fade} maskUnits="userSpaceOnUse" x="0" y="0" width="32" height="24">
-          <rect x="9" y="0" width="5" height="24" fill={`url(#${fade}g)`} />
+          <rect x="5.5" y="0" width="8.5" height="24" fill={`url(#${fade}g)`} />
         </mask>
       </defs>
       <g mask={`url(#${fade})`}>
