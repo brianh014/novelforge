@@ -238,6 +238,8 @@ export function imagePipeline(
   // shortcut: in memory and one per Save, so a restart or a second failure loses it, and that picture was never drawn anyway.
   const requestFailures = new Map<string, { error: string; words: string }>();
   let session = 0;
+  // Pictures for the New Story form, which no Save's work holds, so the app doesn't quit while one is paid for.
+  let drawingEarly = 0;
 
   // Below, only the error's type and status go to the Server Log, as an image model's message can repeat the Image Prompt.
   const about = (id: string, { kind, messageId }: Pick<Job, "kind" | "messageId">) => ({ save: id, kind, message: messageId });
@@ -399,8 +401,8 @@ export function imagePipeline(
 
   const pipeline = {
     ready: () => Boolean(ready()),
-    /** Whether any Save has a picture drawing or waiting. */
-    busy: () => work.size > 0,
+    /** Whether any Save, or the New Story form, has a picture drawing or waiting. */
+    busy: () => work.size > 0 || drawingEarly > 0,
 
     /**
      * A Cover or a portrait, for a world that has no Save yet. Its prompt holds only what the player reads, as
@@ -410,9 +412,14 @@ export function imagePipeline(
       if (!ready()) return undefined;
       const references = people.flatMap(({ role, bytes }) => reference(role, imageType(bytes) && { bytes, mediaType: imageType(bytes)! }));
       const payload = kind === "cover" ? coverPayload(prompt, references) : portraitPayload(prompt);
-      const bytes = await adapter(payload, signal);
-      session++;
-      return bytes;
+      drawingEarly++;
+      try {
+        const bytes = await adapter(payload, signal);
+        session++;
+        return bytes;
+      } finally {
+        drawingEarly--;
+      }
     },
 
     writer,

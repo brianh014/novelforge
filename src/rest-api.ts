@@ -88,7 +88,9 @@ export function startServer(options: ServerOptions) {
       // The computer slept, pages and all, so they get the time to check in again.
       if (now - ticked > every * 2) pageSeen = now;
       ticked = now;
-      if (now - pageSeen > idleMs && !turns.busy() && !images.busy()) quit("no page has been open for a while");
+      // A request still running, such as a world being built, would lose its work, so it finishes first.
+      const working = turns.busy() || images.busy() || server.pendingRequests > 0;
+      if (now - pageSeen > idleMs && !working) quit("no page has been open for a while");
     }, every).unref();
   }
 
