@@ -63,4 +63,4 @@ The code is TypeScript on Bun, with a React page bundled by Bun itself. Start wi
 
 ## License
 
-NovelForge is released under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). You may use, change and share it for any non-commercial purpose. Commercial use needs the author's permission.
+Copyright © 2026 BrianH. NovelForge is free software under the [GNU Affero General Public License 3.0](LICENSE). You may use, change, share and sell it. If you share a changed version, or run one as a server that other people use, you must offer them its source under the same license.

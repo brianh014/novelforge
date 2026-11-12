@@ -2,7 +2,7 @@
   "name": "novelforge",
   "version": "0.1.0",
   "description": "A choose-your-own visual novel, written as you play, by a text model you connect.",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://git.holtops.net/brianh014/novelforge"

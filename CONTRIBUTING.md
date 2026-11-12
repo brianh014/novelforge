@@ -38,4 +38,4 @@ Unit tests use the fakes in `test/` and never a real key. `SLOW_TESTS=1 bun test
 2. Run `bun run check` and `bun run e2e`.
 3. A visible change needs a look in the browser with `--fake`, and a screenshot in the pull request helps.
 
-By contributing, you agree that your contribution is licensed under the project's [license](LICENSE.md).
+By contributing, you agree that your contribution is licensed under the project's [license](LICENSE), the GNU AGPL 3.0.
