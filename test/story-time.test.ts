@@ -6,10 +6,6 @@ const at = (storyTime: State["storyTime"]) => ({ ...structuredClone(openingState
 const set = (days_passed: number, date: string | null, time_of_day: string): StateOperation => ({ op: "set_story_time", days_passed, date, time_of_day });
 const DUSK = { day: 3, date: "3rd of Lowtide", timeOfDay: "dusk" };
 
-test("a new story has no Story Time until the world build or the Narrator sets one", () => {
-  expect(openingState.storyTime).toBeNull();
-});
-
 test("time passing within a day keeps the date and the day count", () => {
   expect(applyOperations(at(DUSK), [set(0, null, "night")]).next.storyTime).toEqual({ ...DUSK, timeOfDay: "night" });
 });

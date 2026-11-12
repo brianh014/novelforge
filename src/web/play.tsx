@@ -767,7 +767,7 @@ export function Play({ id }: { id: string }) {
                         {chapter.title && <p>{chapter.title}</p>}
                       </div>
                     )}
-                    <div className={`message ${message.role}${opening.opens.has(message.id) ? " opens" : ""}`}>
+                    <div className={`message ${message.role}${opening.opens.has(message.id) ? " opens" : ""}`} data-testid={`message-${message.role}`}>
                       {messageBeats(message).map(line)}
                       {controls(message)}
                       {inlineImages(message)}

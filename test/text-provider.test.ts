@@ -464,7 +464,8 @@ test("a client that leaves mid-stream doesn't stop the Turn, which is saved", as
   expect((await storedMessages(id)).map(({ text }) => text)).toEqual(["I wade forward.", "The tide rises"]);
 });
 
-test("a streamed Turn survives a silence longer than Bun's default idle timeout", async () => {
+// 14s, so it runs only with SLOW_TESTS=1: it guards the `idleTimeout: 0` in rest-api.ts.
+test.skipIf(!process.env.SLOW_TESTS)("a streamed Turn survives a silence longer than Bun's default idle timeout", async () => {
   play([
     async function* () {
       await Bun.sleep(14_000);

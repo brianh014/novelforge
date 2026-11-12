@@ -5,7 +5,7 @@ import { assemblePrompt, type Prompt } from "../src/prompt-assembler";
 import { saveStore } from "../src/save-store";
 import { openingState, StateOperation, type WorldUpdate } from "../src/state-applier";
 import { ContentRefused } from "../src/turn-engine";
-import { logOf, narration, scriptedDice, scriptedTextProvider, startApp, tempFolder } from "./support";
+import { cachedSave, logOf, narration, scriptedDice, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
@@ -44,11 +44,12 @@ function seed(id: string, turns: number) {
   const saves = store();
   for (let turn = 0; turn < turns; turn++) saves.commitTurn(id, saves.latestMessageId(id), `Action ${turn}.`, `Reply ${turn}.`, undefined, (state) => state);
 }
-const seeded = (turns: number) => {
-  const id = createSave();
-  seed(id, turns);
-  return id;
-};
+const seeded = (turns: number) =>
+  cachedSave(savesDir, `seeded ${turns}`, () => {
+    const id = createSave();
+    seed(id, turns);
+    return id;
+  });
 
 const turn = async (id: string, input = "I wait.") => {
   const response = await app.post(`/saves/${id}/turns`, { input });
@@ -70,9 +71,6 @@ function downgrade(id: string) {
   db.run("DELETE FROM snapshot_sections WHERE name = 'sceneMemories'; ALTER TABLE save DROP COLUMN memory_start; PRAGMA user_version = 14");
 }
 
-test("a new story starts with no Scene Memories", () => {
-  expect(openingState.sceneMemories).toEqual([]);
-});
 
 test("a new story sends every Message and writes no memory below 80", async () => {
   play(narration("Rain falls."));

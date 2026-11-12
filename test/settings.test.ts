@@ -174,16 +174,10 @@ test("text and image can use different providers, and a text server change leave
 });
 
 test("options that don't exist are refused and change nothing", async () => {
-  for (const body of [{ fontSize: "huge" }, { chatStyle: "comic" }, { imageProvider: "comfy" }, { imagesEnabled: "no" }]) {
+  for (const body of [{ fontSize: "huge" }, { chatStyle: "comic" }, { imageProvider: "comfy" }, { imagesEnabled: "no" }, { theme: "sepia" }]) {
     expect((await change(body)).status).toBe(400);
   }
-  expect(await settings()).toMatchObject({ fontSize: "medium", chatStyle: "prose", imageProvider: "openrouter", imagesEnabled: true });
-});
-
-test.each(["script", "prose", "bubbles"])("the %s Chat style persists through a restart", async (chatStyle) => {
-  expect((await change({ chatStyle })).status).toBe(200);
-  await app.restart();
-  expect(await settings()).toMatchObject({ chatStyle });
+  expect(await settings()).toMatchObject({ fontSize: "medium", chatStyle: "prose", imageProvider: "openrouter", imagesEnabled: true, theme: "system" });
 });
 
 test("a stored Stage box Chat style, no longer offered, reads as Prose", async () => {

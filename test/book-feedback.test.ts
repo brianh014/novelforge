@@ -220,17 +220,6 @@ test("Ask the Narrator answers from what the PC knows and the Lore it activates,
   expect((await app.post(`/saves/${id}/questions`, { question: " " })).status).toBe(400);
 });
 
-test("the theme is a stored setting that follows the device until the player picks one", async () => {
-  app = startApp(savesDir, scriptedTextProvider().textProvider);
-  const read = async () => ((await (await app.get("/settings")).json()) as { theme: string }).theme;
-
-  expect(await read()).toBe("system");
-  expect((await app.patch("/settings", { theme: "dark" })).status).toBe(200);
-  await app.restart();
-  expect(await read()).toBe("dark");
-  expect((await app.patch("/settings", { theme: "sepia" })).status).toBe(400);
-});
-
 test("a Save from before the personality field went keeps it, and a new PC can't ask for one", async () => {
   const script = scriptedTextProvider(JSON.stringify({ startingHook: "H", name: "Ash", background: "B", physicalTraits: "T", inventory: "I" }));
   app = startApp(savesDir, script.textProvider);

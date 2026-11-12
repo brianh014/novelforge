@@ -8,6 +8,7 @@ let folder: ReturnType<typeof tempFolder>;
 let app: ReturnType<typeof startApp>;
 
 beforeEach(() => {
+  process.env.FAKE_STREAM_MS = "0";
   folder = tempFolder();
   app = startApp(join(folder.path, "Saves"), fakeTextProvider, () => 10, 2, fakeImages);
 });
@@ -52,8 +53,7 @@ test("the fake Narrator answers world creation, the Opening and a Turn with repl
   expect(Object.keys(state.pcKnown.summaries ?? {})).toEqual(expect.arrayContaining(state.scene.visibleCast));
   expect(state.status.injuries.length + state.status.conditions.length).toBeGreaterThan(2);
   expect(state.storyTime?.date).toBeTruthy();
-  // The fake streams each reply slowly, like a real model.
-}, 20_000);
+});
 
 test("the fake image model draws a real PNG in the shape asked for", async () => {
   const bytes = await fakeImages({ prompt: "", aspect_ratio: "16:9", reference_images: [], style_preset: "" }, new AbortController().signal);

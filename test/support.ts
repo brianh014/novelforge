@@ -1,5 +1,5 @@
 import { spyOn } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Dice } from "../src/check-resolver";
@@ -87,6 +87,30 @@ export function scriptedDice(...rolls: number[]): Dice {
 export function tempFolder() {
   const path = mkdtempSync(join(tmpdir(), "novelforge-"));
   return { path, remove: () => rmSync(path, { recursive: true, force: true }) };
+}
+
+const templates = new Map<string, string>();
+let templateFolder: ReturnType<typeof tempFolder> | undefined;
+process.on("exit", () => templateFolder?.remove());
+
+/**
+ * A Save in `savesDir` built by `build` the first time `key` is asked for, and copied from that one after: seeding a
+ * long story Turn by Turn is slow, and many tests start from the same one.
+ */
+export function cachedSave(savesDir: string, key: string, build: () => string) {
+  const template = templates.get(key);
+  if (!template) {
+    const id = build();
+    templateFolder ??= tempFolder();
+    const path = join(templateFolder.path, `${templates.size}.sqlite`);
+    copyFileSync(join(savesDir, `${id}.sqlite`), path);
+    templates.set(key, path);
+    return id;
+  }
+  const id = crypto.randomUUID();
+  mkdirSync(savesDir, { recursive: true });
+  copyFileSync(template, join(savesDir, `${id}.sqlite`));
+  return id;
 }
 
 const sendJson = (method: string, url: URL, body: unknown) =>

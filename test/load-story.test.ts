@@ -120,7 +120,8 @@ test("a route refuses anything that isn't a Save id, so no path can reach outsid
   writeFileSync(outside, "keep me");
   const id = await app.createSave();
 
-  for (const badId of ["not-a-uuid", "..%2Foutside", "..%5Coutside", `${id}%2F..%2F..%2Foutside`, `${id}.sqlite`]) {
+  for (const badId of ["not-a-uuid", "..%2Foutside", "..%5Coutside", `${id}%2F..%2F..%2Foutside`, `${id}.sqlite`, `..%2FSaves%2F${id}`]) {
+    expect((await app.get(`/saves/${badId}/messages`)).status).toBe(404);
     expect((await app.delete(`/saves/${badId}`)).status).toBe(404);
     expect((await app.get(`/saves/${badId}/export`)).status).toBe(404);
     expect((await app.post(`/saves/${badId}/duplicate`, {})).status).toBe(404);

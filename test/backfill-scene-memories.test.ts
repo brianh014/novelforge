@@ -7,7 +7,7 @@ import { backfill, mainSavesFolder } from "../scripts/backfill-scene-memories";
 import { assemblePrompt, memoryDue, OPENING_INPUT, type Prompt } from "../src/prompt-assembler";
 import { InvalidSave, type Message, saveStore } from "../src/save-store";
 import { ContentRefused, TurnFailed } from "../src/turn-engine";
-import { delta, fakeOpenAi, scriptedDice, scriptedTextProvider, startApp, tempFolder } from "./support";
+import { cachedSave, delta, fakeOpenAi, scriptedDice, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
 let savesDir: string;
@@ -63,10 +63,12 @@ function downgrade(id: string) {
 }
 
 function oldSave(turns: number, firstInput?: string) {
-  const id = createSave();
-  seed(id, turns, firstInput);
-  downgrade(id);
-  return id;
+  return cachedSave(savesDir, `old ${turns} ${firstInput}`, () => {
+    const id = createSave();
+    seed(id, turns, firstInput);
+    downgrade(id);
+    return id;
+  });
 }
 
 const print = (line: string) => void printed.push(line);

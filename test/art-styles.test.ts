@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { ART_EXAMPLES } from "../src/web/art-examples";
 import { artStyleText, OWN_ART_STYLE, readArtStyle } from "../src/web/art-style-picker";
 import { ART_STYLES, withArtStyleFor } from "../src/web/art-styles";
 
@@ -27,4 +28,8 @@ test("a Save's Art Style reads back as the named style it was saved as, or as th
   expect(readArtStyle(artStyleText(DIGITAL, ""))).toEqual({ name: DIGITAL, own: "" });
   expect(readArtStyle("Moody charcoal sketches")).toEqual({ name: OWN_ART_STYLE, own: "Moody charcoal sketches" });
   expect(readArtStyle(`${DIGITAL}: an older description`)).toEqual({ name: OWN_ART_STYLE, own: `${DIGITAL}: an older description` });
+});
+
+test("every named Art Style has an example, and a wrong name can't hide one", () => {
+  expect(Object.keys(ART_EXAMPLES).toSorted()).toEqual(Object.keys(ART_STYLES).toSorted());
 });

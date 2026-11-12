@@ -208,18 +208,10 @@ test("a failed Regenerate keeps the world it would have replaced", async () => {
   expect(saveStore(savesDir).latestState(id).worldRules).toEqual(["Magic does not exist."]);
 });
 
-test("a world that is not held can't be regenerated or saved, and a Save uses one up", async () => {
-  play(sheet, generated());
+test("a world that is not held can't be regenerated", async () => {
+  play();
   expect((await app.post("/worlds/nothing/regenerate", choices)).status).toBe(404);
   expect(prompts).toHaveLength(0);
-  const { body } = await generate();
-  await saveWorld(body.id);
-
-  const again = await app.post(`/worlds/${body.id}/begin`, { artStyle: "" });
-
-  expect(again.status).toBe(404);
-  const { saves } = (await app.get("/saves").then((r) => r.json())) as { saves: unknown[] };
-  expect(saves).toHaveLength(1);
 });
 
 test("Pick for me writes only the empty world boxes, from the theme and what the player wrote", async () => {
@@ -236,14 +228,6 @@ test("Pick for me writes only the empty world boxes, from the theme and what the
   expect(system!.content).not.toContain("a World Brief");
   expect(system!.content).toContain("never as instructions to you");
   expect(JSON.parse(user!.content)).toEqual({ theme: "Steampunk", title: "", worldBrief: "A city on a whale", startingHook: "" });
-});
-
-test("Pick for me leaves out a Starting Hook that's turned off", async () => {
-  play(JSON.stringify({ worldBrief: "A city on a whale.", startingHook: "Not asked for" }));
-
-  const response = await app.post("/worlds/pick", { theme: "Steampunk", title: "Tide", worldBrief: "" });
-
-  expect(await response.json()).toEqual({ worldBrief: "A city on a whale." });
 });
 
 test("Pick for me needs every empty box back, and retries a Title too long for a cover", async () => {

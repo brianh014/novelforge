@@ -104,16 +104,17 @@ test("a Server build starts as a server with no flag", async () => {
 test("the app stays open while a page checks in, and quits by itself once none does", async () => {
   const app = Bun.spawn([process.execPath, "run", join(import.meta.dir, "../src/main.ts"), "--app"], {
     cwd: folder.path,
-    env: { ...process.env, PORT: "0", HOST: "127.0.0.1", NO_BROWSER: "1", IDLE_QUIT_MS: "1500" },
+    env: { ...process.env, PORT: "0", HOST: "127.0.0.1", NO_BROWSER: "1", IDLE_QUIT_MS: "500" },
     stdout: "pipe",
     timeout: 15_000,
   });
   const { value } = await app.stdout.getReader().read();
   const url = new URL(new TextDecoder().decode(value).match(/http:\S+/)![0]);
 
-  for (let i = 0; i < 10; i++) {
+  // Check-ins spanning twice the idle limit keep it open.
+  for (let i = 0; i < 5; i++) {
     expect((await fetch(new URL("/alive", url), { method: "POST" })).status).toBe(204);
-    await Bun.sleep(300);
+    await Bun.sleep(200);
   }
   expect(app.exitCode).toBeNull();
 

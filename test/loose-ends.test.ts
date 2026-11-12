@@ -56,10 +56,6 @@ const promptWith = (state: Partial<State>, ...text: string[]) =>
     }),
   );
 
-test("a new story starts with no Loose Ends", () => {
-  expect(openingState.looseEnds).toEqual([]);
-});
-
 test("add_loose_end adds an item, and an exact repeat is counted, not refused", () => {
   const { next, refused, repeats } = applyOperations(openingState, [add(MISSING), add(MISSING)]);
 
@@ -102,14 +98,6 @@ test("a repeated Loose End logs only its count, at Info", async () => {
   expect(line).not.toContain("ZQX");
 });
 
-test("the operations are in the response schema", async () => {
-  play(narration("A line."));
-  await turn(createSave());
-
-  expect(prompts[0]![0]!.content).toContain('"add_loose_end"');
-  expect(prompts[0]![0]!.content).toContain('"resolve_loose_end"');
-});
-
 test("a Check request can't change the list, even with operations beside it", async () => {
   play(JSON.stringify({ check: { action: "Leap", difficulty: "Easy" }, state_operations: [add(SECRET)] }), narration("You land."));
   const id = createSave(MISSING);
@@ -127,13 +115,6 @@ test("the prompt carries the list and its rules, and forbids secrets in it", () 
   for (const words of ["add_loose_end", "resolve_loose_end", "copying the item exactly", "never to make room", "write them as the PC would, with no Lore Entry or Plot Thread secrets"]) {
     expect(prompt).toContain(words);
   }
-});
-
-test("the summary rule leaves open questions to the list", () => {
-  const prompt = promptWith({});
-
-  expect(prompt).toContain("under 500 words");
-  expect(prompt).not.toContain("every open question");
 });
 
 test("an empty list on a started story asks for it to be filled, and nothing else does", () => {

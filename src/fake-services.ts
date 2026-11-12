@@ -136,7 +136,8 @@ export const fakeTextProvider: TextProvider = async (prompt, { schema, onText, s
   if (sampled && Array.isArray(sampled.people) && Array.isArray(sampled.state_operations)) sampled.state_operations = storyChanges(sampled.people.map(({ name }: { name: string }) => name));
   const reply = sampled ? JSON.stringify(sampled) : "The fake Narrator is answering. Start without --fake to test a real model.";
   for (let at = 0; at < reply.length; at += 40) {
-    await pause(30, signal);
+    // Slow like a real model when played; tests and the e2e run set FAKE_STREAM_MS to go faster.
+    await pause(Number(process.env.FAKE_STREAM_MS ?? 30), signal);
     onText(reply.slice(at, at + 40));
   }
   return reply;

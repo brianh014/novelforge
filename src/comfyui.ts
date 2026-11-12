@@ -7,7 +7,8 @@ import { imageType } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 
 const LIMITS = {
-  pollMs: 1000,
+  // Tests poll fast, as their fake ComfyUI answers at once.
+  pollMs: process.env.NODE_ENV === "test" ? 20 : 1000,
   // A job can sit behind the player's own queue or a first model load, so this limits silence, not the whole job.
   silenceMs: 10 * 60 * 1000,
 };

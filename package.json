@@ -8,7 +8,8 @@
     "release": "bun scripts/build-release.ts",
     "build": "bun build src/main.ts --compile --production --outfile dist/novelforge",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -16,6 +17,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.0",
     "@types/bun": "^1.4.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",

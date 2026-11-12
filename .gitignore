@@ -8,3 +8,6 @@ held-images/
 .scratch/
 fake/
 .bun-cache/
+e2e/.data/
+e2e/.report/
+e2e/.results/

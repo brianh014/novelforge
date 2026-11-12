@@ -139,14 +139,6 @@ test("an unknown Save returns 404 without calling the Text Provider", async () =
   expect(prompts).toHaveLength(0);
 });
 
-test("a Save id cannot reach outside the Saves folder", async () => {
-  const { app } = play();
-  const id = await app.createSave();
-
-  const response = await app.get(`/saves/..%2FSaves%2F${id}/messages`);
-
-  expect(response.status).toBe(404);
-});
 
 test.each([
   ["a missing field", { pc: { name: "Ash" } }],

@@ -542,7 +542,9 @@ function connect(path: string) {
   const db = new Database(path, { create: true, strict: true });
   try {
     // secure_delete zeroes deleted rows, so a Reverted future cannot be read back from a shared Save file.
-    db.run("PRAGMA journal_mode = DELETE; PRAGMA synchronous = FULL; PRAGMA secure_delete = ON;");
+    // Tests skip the flush to disk, which only guards against power loss and makes up most of the suite's run time.
+    const sync = process.env.NODE_ENV === "test" ? "OFF" : "FULL";
+    db.run(`PRAGMA journal_mode = DELETE; PRAGMA synchronous = ${sync}; PRAGMA secure_delete = ON;`);
     migrate(db, basename(path, ".sqlite"));
     return db;
   } catch (error) {
