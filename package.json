@@ -3,7 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build src/main.ts --compile --production --outfile dist/novelforge",
+    "start": "bun scripts/launch.ts",
+    "install-launcher": "bun scripts/install-launcher.ts",
+    "build":"bun build src/main.ts --compile --production --outfile dist/novelforge",
     "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
