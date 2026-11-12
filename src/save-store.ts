@@ -369,7 +369,7 @@ const NOT_A_SAVE = "This file isn't a valid Save.";
 
 /** Every column that can hold a name, which a rename rewrites. The PC's name is left alone, as only NPCs are renamed. */
 const RENAMED: [string, string[]][] = [
-  ["save", ["world_brief", "starting_hook", "title", "pc_details", "pending_notes", "pending_edits"]],
+  ["save", ["world_brief", "starting_hook", "title", "pc_details", "pending_notes", "pending_edits", "important_characters"]],
   ["messages", ["text", "edits", "direction"]],
   ["sections", ["content"]],
   ["scene_images", ["caption", "prompt", "pictured"]],
