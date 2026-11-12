@@ -7,7 +7,18 @@ import { LONG_TEXT } from "./limits";
 import type { liveTurns } from "./live-turns";
 import { TurnRunning, WorldChanging } from "./live-turns";
 import { errorFields, log, withLogContext } from "./logger";
-import { EditNotFound, imageType, InvalidSave, MessageNotFound, NameTaken, NoteNotFound, PortraitNotFound, type SaveStore, SaveNotFound, StaleTurn } from "./save-store";
+import {
+  EditNotFound,
+  imageType,
+  InvalidSave,
+  MessageNotFound,
+  NameTaken,
+  NoteNotFound,
+  PortraitNotFound,
+  type SaveStore,
+  SaveNotFound,
+  StaleTurn,
+} from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { type TextProvider, TurnFailed } from "./turn-engine";
 
@@ -136,7 +147,9 @@ export function logged<Route extends string>(routes: Bun.Serve.Routes<undefined,
       // shortcut: a server open to the network takes any Host, so rebinding can still reach it there; check against a configured name if that matters.
       if (loopback && !LOOPBACK_HOST.test(req.headers.get("host") ?? "")) return Response.json({ error: "Not found" }, { status: 404 });
       const started = performance.now();
-      const response = await Promise.resolve().then(() => handler(req)).catch(errorResponse);
+      const response = await Promise.resolve()
+        .then(() => handler(req))
+        .catch(errorResponse);
       log.verbose("http", "Request", () => ({ method, status: response.status, ms: Math.round(performance.now() - started) }));
       return response;
     });

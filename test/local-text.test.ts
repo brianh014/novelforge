@@ -35,8 +35,7 @@ const streamTurn = (id: string, input: string) =>
     body: JSON.stringify({ input }),
   });
 
-const storedMessages = async (id: string) =>
-  ((await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { text: string }[] }).messages;
+const storedMessages = async (id: string) => ((await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { text: string }[] }).messages;
 
 /** A server that takes every request and never answers it. */
 function silentServer() {
@@ -83,9 +82,12 @@ test.each([
   ["in an unlabelled code fence", `\`\`\`\n${FINISHED}\n\`\`\`\n`],
   ["with prose around it", `Here is the reply:\n${FINISHED}\nLet me know what happens next.`],
   ["after a thinking block with braces in it", `<think>Maybe {"a":1}? Yes.</think>\n\n${FINISHED}`],
-  ["after thinking whose opening tag came from the chat template", `Maybe {"a":1}? Yes.</think>
+  [
+    "after thinking whose opening tag came from the chat template",
+    `Maybe {"a":1}? Yes.</think>
 
-${FINISHED}`],
+${FINISHED}`,
+  ],
   ["without the optional keys", '{"narration":"The tide rises."}'],
   ["in another key order", '{"state_operations":[],"narration":"The tide rises.","check":null}'],
 ])("a reply %s is accepted", async (_, reply) => {
@@ -233,7 +235,7 @@ test("a slow first response and gaps between chunks are fine, however long the r
         await Bun.sleep(300);
         yield delta('{"check":null,"narration":"The ');
         await Bun.sleep(300);
-        yield delta('tide ');
+        yield delta("tide ");
         await Bun.sleep(300);
         yield delta('rises."}');
       },
@@ -285,7 +287,12 @@ test("Settings lists a model's hosts once each, without prices, and sends only a
   startAt(new URL("/v1", server.url).href);
   const hosts = (model: string) => app.get(`/settings/text-hosts?model=${encodeURIComponent(model)}`).then((r) => r.json());
 
-  expect(await hosts("a/model:free")).toEqual({ hosts: [{ slug: "cheap", name: "Cheap" }, { slug: "dear", name: "Dear" }] });
+  expect(await hosts("a/model:free")).toEqual({
+    hosts: [
+      { slug: "cheap", name: "Cheap" },
+      { slug: "dear", name: "Dear" },
+    ],
+  });
   expect(await hosts("../../secret/x")).toEqual({ hosts: [] });
   expect(await hosts("")).toEqual({ hosts: [] });
   expect(paths).toEqual(["/v1/models/a/model/endpoints"]);

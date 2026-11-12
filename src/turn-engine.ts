@@ -4,7 +4,19 @@ import { type ImagePipeline, movedScene, portraitsDue, restyledBy, type Scene } 
 import { promptStyle } from "./graph-builder";
 import { withArtStyleFor } from "./web/art-styles";
 import { errorFields, log } from "./logger";
-import { assemblePrompt, chapterTitlePrompt, CONTINUE_INPUT, editInstruction, memoryDue, memoryPrompt, OPENING_INPUT, type Prompt, replacementInstruction, resultInstruction, SET_SCENE_NOTE } from "./prompt-assembler";
+import {
+  assemblePrompt,
+  chapterTitlePrompt,
+  CONTINUE_INPUT,
+  editInstruction,
+  memoryDue,
+  memoryPrompt,
+  OPENING_INPUT,
+  type Prompt,
+  replacementInstruction,
+  resultInstruction,
+  SET_SCENE_NOTE,
+} from "./prompt-assembler";
 import { type Message, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, introduce, Person, type SceneMemory, type State, StateOperation } from "./state-applier";
@@ -71,33 +83,38 @@ export function jsonSchemaOf(schema: z.ZodType) {
 // What the Narrator is asked for. It is flat because strict schema modes refuse a union at the root, and check
 // comes first so that a streamed reply shows it is not a Check request before any narration arrives.
 const ResponseShape = z.object({
-    check: CheckRequest.nullable(),
-    narration: z.string().nullable(),
-    state_operations: z.array(StateOperation),
-    // Described here for the same reason as chapter_ends: speakers kept going missing from it.
-    people: z
-      .array(Person)
-      .describe("everyone the narration names or gives a spoken line to, other than the PC, even someone only mentioned, each with their name and appearance. Someone new never gets a name the state already has for someone else, as people are matched by name"),
-    summary: z.string(),
-    recent_summary: z.string(),
-    scene_changed: z.boolean().nullable(),
-    // The length beside the field too, as the Narrator writes the people's looks itself and a rule mid-prompt gets ignored.
-    visual_description: z
-      .string()
-      .nullable()
-      .describe("the picture's prompt, written as the rules say and kept within their word limit with each person's looks counted in it"),
-    // Defined here, beside the field, as a rule mid-prompt is the kind Narrators ignore.
-    chapter_ends: z
-      .boolean()
-      .nullable()
-      .describe("true only when a Scene has just resolved and the story is about to move to a new place, a new time, or a new stage in a Plot Thread, which suggests ending the chapter here"),
-  });
+  check: CheckRequest.nullable(),
+  narration: z.string().nullable(),
+  state_operations: z.array(StateOperation),
+  // Described here for the same reason as chapter_ends: speakers kept going missing from it.
+  people: z
+    .array(Person)
+    .describe(
+      "everyone the narration names or gives a spoken line to, other than the PC, even someone only mentioned, each with their name and appearance. Someone new never gets a name the state already has for someone else, as people are matched by name",
+    ),
+  summary: z.string(),
+  recent_summary: z.string(),
+  scene_changed: z.boolean().nullable(),
+  // The length beside the field too, as the Narrator writes the people's looks itself and a rule mid-prompt gets ignored.
+  visual_description: z
+    .string()
+    .nullable()
+    .describe("the picture's prompt, written as the rules say and kept within their word limit with each person's looks counted in it"),
+  // Defined here, beside the field, as a rule mid-prompt is the kind Narrators ignore.
+  chapter_ends: z
+    .boolean()
+    .nullable()
+    .describe(
+      "true only when a Scene has just resolved and the story is about to move to a new place, a new time, or a new stage in a Plot Thread, which suggests ending the chapter here",
+    ),
+});
 const responseSchema = jsonSchemaOf(ResponseShape);
 // Once a Check is rolled, or none can be, the schema itself forbids one, as the prompt's "do not request another check" was ignored three times running.
 const noCheckSchema = jsonSchemaOf(ResponseShape.extend({ check: z.null() }));
 
 // shortcut: a reply in another key order or after prose shows no narration until the Turn is done, loosen this only if real models do that often.
 const NARRATION_START = /^\s*(?:```(?:json)?\s*)?\{\s*"check"\s*:\s*null\s*,\s*"narration"\s*:\s*"/;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: JSON strings may not hold raw control characters, so this matches what they can.
 const COMPLETE_JSON_CHARACTERS = /^(?:[^"\\\x00-\x1f]|\\["\\/bfnrt]|\\u[0-9a-fA-F]{4})*/;
 
 // A model's thoughts can hold stray JSON, or a draft that differs from its reply. A chat template may supply the
@@ -182,13 +199,7 @@ export async function playTurn(
 }
 
 /** The Narrator's first Message, which the player has done nothing to earn a Check in. A story already open is stale. */
-export function playOpening(
-  saves: SaveStore,
-  engine: Parameters<typeof playTurn>[1],
-  id: string,
-  signal: AbortSignal,
-  emit?: TurnEvents,
-) {
+export function playOpening(saves: SaveStore, engine: Parameters<typeof playTurn>[1], id: string, signal: AbortSignal, emit?: TurnEvents) {
   if (saves.latestMessageId(id) !== 0) throw new StaleTurn();
   return playTurn(saves, engine, id, OPENING_INPUT, signal, emit, false);
 }
@@ -403,7 +414,7 @@ export function spokenLineFault(narration: string) {
   const lines = new Map<string, number>();
   for (const line of narration.split("\n").map((text) => text.trim())) {
     if (/^[^[\]\s][^[\]]*\]:/.test(line)) return "a speaker tag without its [";
-    const speaker = line.match(/^\[([^[\]]+)\]:/)?.[1]!.trim();
+    const speaker = line.match(/^\[([^[\]]+)\]:/)?.[1]?.trim();
     if (speaker) lines.set(speaker, (lines.get(speaker) ?? 0) + 1);
   }
   return [...lines.values()].some((count) => count > 2) ? LONG_SPEECH : undefined;
@@ -443,13 +454,7 @@ function retryIfInvalid(cause: unknown, attempt: number, input: string, generati
   return playerReason(cause);
 }
 
-async function askNarrator(
-  textProvider: TextProvider,
-  prompt: Prompt,
-  request: Parameters<TextProvider>[1],
-  input: string,
-  refusal: string,
-) {
+async function askNarrator(textProvider: TextProvider, prompt: Prompt, request: Parameters<TextProvider>[1], input: string, refusal: string) {
   try {
     return await textProvider(prompt, request);
   } catch (cause) {
@@ -481,7 +486,14 @@ export async function askForChapterTitle(textProvider: TextProvider, memories: s
 }
 
 /** Runs beside the Turn, so the player waits no longer. A missed memory costs nothing: the window keeps its Messages, and the next Turn asks again. */
-async function nextMemory(textProvider: TextProvider, messages: Message[], sceneMemories: SceneMemory[], memoryStart: number, windowMessages: number, signal: AbortSignal) {
+async function nextMemory(
+  textProvider: TextProvider,
+  messages: Message[],
+  sceneMemories: SceneMemory[],
+  memoryStart: number,
+  windowMessages: number,
+  signal: AbortSignal,
+) {
   const range = memoryDue(messages, sceneMemories, memoryStart, windowMessages);
   if (!range) return null;
   const batch = readable(messages.filter(({ id }) => id >= range.firstMessage && id <= range.lastMessage));
@@ -493,13 +505,7 @@ async function nextMemory(textProvider: TextProvider, messages: Message[], scene
   }
 }
 
-export async function askForJson<T>(
-  textProvider: TextProvider,
-  prompt: Prompt,
-  schema: z.ZodType<T>,
-  refusal: string,
-  signal: AbortSignal,
-) {
+export async function askForJson<T>(textProvider: TextProvider, prompt: Prompt, schema: z.ZodType<T>, refusal: string, signal: AbortSignal) {
   let generation: string | undefined;
   const request = { schema: jsonSchemaOf(schema), onText: () => {}, onGeneration: (id: string) => (generation = id), signal };
   for (let attempt = 1; ; attempt++) {

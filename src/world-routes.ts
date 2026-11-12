@@ -1,7 +1,20 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import { ArtStyleRequest, IMAGES_OFF, imageResponse, longText, Nudge, parseBody, PromptRequest, routes, type ServerContext, someWords, uploaded, WorldNotFound } from "./http";
+import {
+  ArtStyleRequest,
+  IMAGES_OFF,
+  imageResponse,
+  longText,
+  Nudge,
+  parseBody,
+  PromptRequest,
+  routes,
+  type ServerContext,
+  someWords,
+  uploaded,
+  WorldNotFound,
+} from "./http";
 import { coverPeople, type EarlyImage, type ImageKind, pcLooks, shownFailure, unnamed } from "./image-pipeline";
 import { LONG_TEXT } from "./limits";
 import { errorType, log } from "./logger";
@@ -22,7 +35,10 @@ const WorldRequest = z.object({
   theme: z.string().trim().min(1),
   worldBrief: longText.min(1),
   startingHook: longText,
-  characters: z.array(z.object({ name: z.string().trim().min(1).max(80), description: longText, ref: Ref.optional(), onCover: z.boolean().optional() })).max(10).default([]),
+  characters: z
+    .array(z.object({ name: z.string().trim().min(1).max(80), description: longText, ref: Ref.optional(), onCover: z.boolean().optional() }))
+    .max(10)
+    .default([]),
   artStyle: z.string().max(LONG_TEXT).optional(),
   pcOnCover: z.boolean().default(true),
 });
@@ -45,7 +61,10 @@ const DrawRequest = z.discriminatedUnion("kind", [
     // Whoever the form holds so far, to be on the cover.
     pc: z.object({ name: z.string().trim().max(80), physicalTraits: longText }).default({ name: "", physicalTraits: "" }),
     pcOnCover: z.boolean().default(true),
-    characters: z.array(z.object({ name: z.string().trim().max(80), description: longText, ref: Ref.optional(), onCover: z.boolean().optional() })).max(10).default([]),
+    characters: z
+      .array(z.object({ name: z.string().trim().max(80), description: longText, ref: Ref.optional(), onCover: z.boolean().optional() }))
+      .max(10)
+      .default([]),
     // The form's wearing and carrying box, so the PC is drawn dressed before the Narrator has sorted it.
     inventory: longText.default(""),
     artStyle: z.string().max(LONG_TEXT).default(""),
@@ -134,7 +153,8 @@ export function worldRoutes({ options, saves, images }: ServerContext) {
   // shortcut: a form abandoned for a month loses its pictures at the next start, keep them longer if players come back later.
   pruneHeld(heldDir, 30 * 24 * 60 * 60 * 1000);
   // An id or ref reaches a file name only once it's this plain, so no request can name a path of its own.
-  const heldFile = (id: string, image: string) => (HELD_ID.test(id) && /^(cover|portrait|npcs\/[\w-]{1,40})$/.test(image) ? join(heldDir, id, image.replace("/", "-")) : undefined);
+  const heldFile = (id: string, image: string) =>
+    HELD_ID.test(id) && /^(cover|portrait|npcs\/[\w-]{1,40})$/.test(image) ? join(heldDir, id, image.replace("/", "-")) : undefined;
 
   function keepHeld(id: string, image: string, { prompt, bytes, pictured }: DrawnImage) {
     const file = heldFile(id, image);
@@ -155,7 +175,10 @@ export function worldRoutes({ options, saves, images }: ServerContext) {
     if (current || !file || !existsSync(`${file}.json`)) return current;
     try {
       const { prompt, pictured } = JSON.parse(readFileSync(`${file}.json`, "utf8")) as { prompt: string; pictured?: string[] };
-      const kept = { drawn: Promise.resolve<DrawnImage>({ prompt, pictured, bytes: new Uint8Array(readFileSync(`${file}.image`)) }), stop: new AbortController() };
+      const kept = {
+        drawn: Promise.resolve<DrawnImage>({ prompt, pictured, bytes: new Uint8Array(readFileSync(`${file}.image`)) }),
+        stop: new AbortController(),
+      };
       held.set(heldAt(id, image), kept);
       return kept;
     } catch (error) {
@@ -173,7 +196,13 @@ export function worldRoutes({ options, saves, images }: ServerContext) {
    * image, and with no `before` keeps its prompt for a retry. `prompt` is a player's own, or written by the text model first.
    * `cast` is a Cover's people by held portrait. A Cover drawn from a player's own prompt shows whoever it showed before.
    */
-  function drawHeld(id: string, image: string, prompt: string | ((signal: AbortSignal) => Promise<string>), before?: DrawnImage | Promise<DrawnImage>, cast?: string[]) {
+  function drawHeld(
+    id: string,
+    image: string,
+    prompt: string | ((signal: AbortSignal) => Promise<string>),
+    before?: DrawnImage | Promise<DrawnImage>,
+    cast?: string[],
+  ) {
     const key = heldAt(id, image);
     const kind = kindOf(image);
     held.get(key)?.stop.abort();
@@ -187,9 +216,17 @@ export function worldRoutes({ options, saves, images }: ServerContext) {
         if (kind === "cover") pictured = cast ?? (await before)?.pictured ?? ["portrait"];
         // A Cover waits for the portraits of those it shows, drawn or drawing, to draw them from.
         const portraits = await Promise.all(
-          (pictured ?? []).map(async (who) => ({ role: who === "portrait" ? ("pc" as const) : ("npc" as const), bytes: (await heldOf(id, who)?.drawn)?.bytes })),
+          (pictured ?? []).map(async (who) => ({
+            role: who === "portrait" ? ("pc" as const) : ("npc" as const),
+            bytes: (await heldOf(id, who)?.drawn)?.bytes,
+          })),
         );
-        const bytes = await images.drawEarly(kind, written, stop.signal, portraits.flatMap(({ role, bytes }) => (bytes ? [{ role, bytes }] : [])));
+        const bytes = await images.drawEarly(
+          kind,
+          written,
+          stop.signal,
+          portraits.flatMap(({ role, bytes }) => (bytes ? [{ role, bytes }] : [])),
+        );
         if (bytes) log.info("images", "Image drawn", { kind });
         const finished = { prompt: written, bytes: bytes as Uint8Array<ArrayBuffer> | undefined, pictured };
         // Unless the form has moved on to another, as this one is no longer the player's.
@@ -225,7 +262,8 @@ export function worldRoutes({ options, saves, images }: ServerContext) {
     // The portraits first, as the Cover draws its people from them. Someone with no looks gets no portrait.
     if (pc.physicalTraits?.trim()) drawIfMissing(id, "portrait", { kind: "portrait", looks: pcLooks(pc, wearing), ...setting });
     for (const character of characters) {
-      if (character.ref && character.description.trim()) drawIfMissing(id, `npcs/${character.ref}`, { kind: "portrait", looks: characterLooks(pc.name, character), ...setting });
+      if (character.ref && character.description.trim())
+        drawIfMissing(id, `npcs/${character.ref}`, { kind: "portrait", looks: characterLooks(pc.name, character), ...setting });
     }
     const people = coverPeople(pc, wearing, characters, "", pcOnCover);
     drawIfMissing(id, "cover", { kind: "cover", title, ...setting, world: overview, people: people.map(({ looks }) => looks) }, castOf(people));

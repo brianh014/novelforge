@@ -111,7 +111,10 @@ const MAX_CHARACTERS = 10;
 /** Says why typing stopped, as a full box gives no sign of its own. */
 const full = (text: string) => text.length >= LONG_TEXT && <p className="muted">That's the most this box can hold: {LONG_TEXT} characters.</p>;
 
-const redrew = (drawn: typeof blank.drawn, ...pictures: HeldPicture[]) => ({ ...drawn, ...Object.fromEntries(pictures.map((picture) => [picture, (drawn[picture] ?? 0) + 1])) });
+const redrew = (drawn: typeof blank.drawn, ...pictures: HeldPicture[]) => ({
+  ...drawn,
+  ...Object.fromEntries(pictures.map((picture) => [picture, (drawn[picture] ?? 0) + 1])),
+});
 
 const npcPicture = ({ ref }: FormCharacter) => `npcs/${ref}`;
 
@@ -151,7 +154,9 @@ function HeldArt(props: { id: string; picture: HeldPicture; naming: Naming; vers
   const redraw = (prompt: string) => {
     setRedrawing(true);
     setFailure("");
-    redrawHeldImage(id, picture, prompt).then(onRedrawn, (error: Error) => setFailure(error.message)).finally(() => setRedrawing(false));
+    redrawHeldImage(id, picture, prompt)
+      .then(onRedrawn, (error: Error) => setFailure(error.message))
+      .finally(() => setRedrawing(false));
   };
   const box = <PromptBox prompt={image.prompt} redrawing={redrawing} failure={failure} canRedraw={image.canRedraw} onRedraw={redraw} />;
 
@@ -180,7 +185,9 @@ function HeldArt(props: { id: string; picture: HeldPicture; naming: Naming; vers
 function Working({ message, onCancel }: { message: string; onCancel: () => void }) {
   return (
     <div className="working">
-      <p role="status" className="waiting">{message}</p>
+      <p role="status" className="waiting">
+        {message}
+      </p>
       <div className="progress" />
       <button type="button" className="quiet" autoFocus onClick={onCancel}>
         Cancel
@@ -198,7 +205,9 @@ function Heading({ step, title, busy }: { step: number; title: string; busy: boo
   return (
     <>
       <p className="muted">Step {step} of 3</p>
-      <h1 ref={heading} tabIndex={-1} className="big">{title}</h1>
+      <h1 ref={heading} tabIndex={-1} className="big">
+        {title}
+      </h1>
     </>
   );
 }
@@ -213,10 +222,11 @@ function LeaveWorld({ to, onClose }: { to: string; onClose: () => void }) {
       <p>Going back discards the generated world, and you'll generate a new one from your changes. Your pictures stay.</p>
       {/* Stay comes first because a modal focuses its first control, and that must not be the discarding one. */}
       <div className="row">
-        <button className="quiet" onClick={() => dialog.current!.close()}>
+        <button type="button" className="quiet" onClick={() => dialog.current!.close()}>
           Stay
         </button>
         <button
+          type="button"
           className="action"
           onClick={() => {
             location.hash = to;
@@ -240,10 +250,11 @@ function PickForMe({ onPick, onClose }: { onPick: () => void; onClose: () => voi
       <h2 id="pick-title">Pick for me?</h2>
       <p>The Narrator writes every empty box on this page for you. Boxes you've already filled stay as they are, and Important Characters are left alone.</p>
       <div className="row">
-        <button className="quiet" onClick={() => dialog.current!.close()}>
+        <button type="button" className="quiet" onClick={() => dialog.current!.close()}>
           Cancel
         </button>
         <button
+          type="button"
           className="action"
           onClick={() => {
             onPick();
@@ -290,10 +301,13 @@ export function NewStory({ step }: { step?: string }) {
     if (page !== "overview" && world) set({ world: undefined });
   }, [page]);
   useEffect(() => {
-    getSettings().then((settings) => {
-      setSetupNotice(setupProblem(settings));
-      setImagesReady(settings.imagesReady);
-    }, () => {});
+    getSettings().then(
+      (settings) => {
+        setSetupNotice(setupProblem(settings));
+        setImagesReady(settings.imagesReady);
+      },
+      () => {},
+    );
   }, []);
 
   const theme = draft.theme === OWN_THEME ? draft.ownTheme.trim() : draft.theme;
@@ -316,7 +330,14 @@ export function NewStory({ step }: { step?: string }) {
     setBusy("");
   }
 
-  const worldChoices = { title: draft.title, theme: themeForNarrator, worldBrief: draft.worldBrief, startingHook: draft.hookOn ? draft.startingHook : "", characters: withCoverChoice(draft.characters), pcOnCover: draft.pcOnCover };
+  const worldChoices = {
+    title: draft.title,
+    theme: themeForNarrator,
+    worldBrief: draft.worldBrief,
+    startingHook: draft.hookOn ? draft.startingHook : "",
+    characters: withCoverChoice(draft.characters),
+    pcOnCover: draft.pcOnCover,
+  };
 
   const fillForm = () =>
     run("The Narrator is thinking…", async (signal) => {
@@ -354,7 +375,12 @@ export function NewStory({ step }: { step?: string }) {
   function generate() {
     const problem = formProblem() || (artStyle.trim() ? "" : "Describe your art style, or pick one.");
     if (problem) return setError(problem);
-    const characters = worldChoices.characters.map(({ name, description, ref, onCover }) => ({ name: name.trim(), description: description.trim(), ref, onCover }));
+    const characters = worldChoices.characters.map(({ name, description, ref, onCover }) => ({
+      name: name.trim(),
+      description: description.trim(),
+      ref,
+      onCover,
+    }));
     const { inventory, ...pc } = draft.pc;
     return run("The Narrator is building the world. Missing pictures are drawn as well. This can take a few minutes.", async (signal) => {
       const { id, overview } = await generateWorld({ ...worldChoices, characters, artStyle, id: draft.id, pc, inventory }, signal);
@@ -396,7 +422,11 @@ export function NewStory({ step }: { step?: string }) {
           {setupNotice} The Narrator can't write the world until then. <a href="#/settings">Open Settings</a>
         </p>
       )}
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
     </>
   );
 
@@ -410,7 +440,12 @@ export function NewStory({ step }: { step?: string }) {
         <nav aria-label="Steps" className="wizard-steps">
           {STEPS.map(({ name, hash }, index) => {
             const label = `${roman(index + 1)}. ${name}`;
-            if (index === here) return <a key={name} href={`#${hash}`} aria-current="step">{label}</a>;
+            if (index === here)
+              return (
+                <a key={name} href={`#${hash}`} aria-current="step">
+                  {label}
+                </a>
+              );
             // Only back, as a later step needs the earlier ones done. Leaving the world asks first, as it discards it.
             if (index > here) return <span key={name}>{label}</span>;
             return page === "overview" ? (
@@ -418,7 +453,9 @@ export function NewStory({ step }: { step?: string }) {
                 {label}
               </button>
             ) : (
-              <a key={name} href={`#${hash}`}>{label}</a>
+              <a key={name} href={`#${hash}`}>
+                {label}
+              </a>
             );
           })}
         </nav>
@@ -451,8 +488,7 @@ export function NewStory({ step }: { step?: string }) {
   const setCharacter = (index: number, change: Partial<Character>) =>
     setDraft((current) => ({ ...current, characters: current.characters.map((character, at) => (at === index ? { ...character, ...change } : character)) }));
 
-  const setPc = (field: keyof PcDraft, text: string) =>
-    setDraft((current) => ({ ...current, pc: { ...current.pc, [field]: text } }));
+  const setPc = (field: keyof PcDraft, text: string) => setDraft((current) => ({ ...current, pc: { ...current.pc, [field]: text } }));
 
   const enhanceTools = (field: EnhanceField, label: string, value: string, write: (text: string) => void, row?: { key: string; character: Character }) => {
     const key = row?.key ?? field;
@@ -494,7 +530,14 @@ export function NewStory({ step }: { step?: string }) {
    * what it's drawn from. Each stays in place after the world is written, as changing a picture changes nothing in the world.
    */
   /** `onCover` is a character's choice to be on the Cover, which a Cover has none of. */
-  const pictureSection = (picture: HeldPicture, legend: string, naming: Naming, missing: string, ask: Parameters<typeof drawOnForm>[0], onCover?: { on: boolean; set: (on: boolean) => void }) => {
+  const pictureSection = (
+    picture: HeldPicture,
+    legend: string,
+    naming: Naming,
+    missing: string,
+    ask: Parameters<typeof drawOnForm>[0],
+    onCover?: { on: boolean; set: (on: boolean) => void },
+  ) => {
     const version = draft.drawn[picture];
     const held = draft.id && version !== undefined;
     return (
@@ -530,9 +573,9 @@ export function NewStory({ step }: { step?: string }) {
                 On the Cover
               </label>
             )}
-            {imagesReady !== false && (
+            {imagesReady !== false &&
               // Redo is an icon beside Nudge and Upload, as the Gallery's Update is. A first Draw stays in words, as nothing is there yet.
-              held ? (
+              (held ? (
                 <button
                   type="button"
                   className="icon"
@@ -547,10 +590,14 @@ export function NewStory({ step }: { step?: string }) {
                 <button type="button" className="quiet" disabled={!!missing || asking} onClick={() => drawFirst(picture, ask)}>
                   Draw the {naming.name}
                 </button>
-              )
-            )}
+              ))}
             {imagesReady !== false && (
-              <NudgeButton label={`Nudge the ${naming.name}: ${legend}`} disabled={!!missing || asking} initial={draft.nudges[picture]} onNudge={(nudge) => drawFirst(picture, ask, nudge)} />
+              <NudgeButton
+                label={`Nudge the ${naming.name}: ${legend}`}
+                disabled={!!missing || asking}
+                initial={draft.nudges[picture]}
+                onNudge={(nudge) => drawFirst(picture, ask, nudge)}
+              />
             )}
             <UploadButton label={`Upload your own ${naming.name}: ${legend}`} disabled={asking} onFile={(file) => uploadOwn(picture, file)} />
           </div>
@@ -590,7 +637,15 @@ export function NewStory({ step }: { step?: string }) {
       : unpictured.length > 0
         ? "Everyone on the Cover needs a picture first, as it draws them from those pictures. Draw or upload theirs, or take them off the Cover."
         : "",
-    { kind: "cover", title, ...setting, pc: { name: draft.pc.name, physicalTraits }, pcOnCover: draft.pcOnCover, characters: worldChoices.characters, inventory: draft.pc.inventory },
+    {
+      kind: "cover",
+      title,
+      ...setting,
+      pc: { name: draft.pc.name, physicalTraits },
+      pcOnCover: draft.pcOnCover,
+      characters: worldChoices.characters,
+      inventory: draft.pc.inventory,
+    },
   );
 
   if (page === "overview") {
@@ -622,7 +677,9 @@ export function NewStory({ step }: { step?: string }) {
       <div className="fields wizard review">
         <div>
           <Heading step={3} title={draft.title} busy={!!busy} />
-          <p className="muted">What your PC would know. Begin the story in this world, or have the Narrator make another. Changing a picture keeps the world.</p>
+          <p className="muted">
+            What your PC would know. Begin the story in this world, or have the Narrator make another. Changing a picture keeps the world.
+          </p>
         </div>
         <div className="overview">
           <p>{world!.overview}</p>
@@ -683,7 +740,9 @@ export function NewStory({ step }: { step?: string }) {
           <ArtStylePicker
             name={draft.artStyle}
             own={draft.ownArtStyle}
-            intro={<p className="muted">Every picture in your story is drawn in this style. You can change it during the story, and it affects new pictures only.</p>}
+            intro={
+              <p className="muted">Every picture in your story is drawn in this style. You can change it during the story, and it affects new pictures only.</p>
+            }
             onName={(artStyle) => set({ artStyle })}
             onOwn={(ownArtStyle) => set({ ownArtStyle })}
           />
@@ -691,8 +750,8 @@ export function NewStory({ step }: { step?: string }) {
         <div>
           <h2>Pictures</h2>
           <p className="muted">
-            A portrait of your character and each Important Character, and the Cover, which shows them. Draw or upload each now, or leave any and it's drawn when the world is
-            written.
+            A portrait of your character and each Important Character, and the Cover, which shows them. Draw or upload each now, or leave any and it's drawn
+            when the world is written.
           </p>
         </div>
         <div className="drawn-pair">
@@ -772,32 +831,54 @@ export function NewStory({ step }: { step?: string }) {
       <div id="characters" className="fields wizard">
         <div>
           <h2>Important Characters</h2>
-          <p className="muted">People you want in the story besides your PC. Each gets a portrait drawn from their description. Pick for me leaves these alone, so there are only those you add.</p>
+          <p className="muted">
+            People you want in the story besides your PC. Each gets a portrait drawn from their description. Pick for me leaves these alone, so there are only
+            those you add.
+          </p>
         </div>
         {draft.characters.map((character, index) => {
           const label = characterLabel(character, index);
           const box = (field: "name" | "description", enhanceField: EnhanceField, name: string, input: ReactNode) => (
             <div className="enhanceable">
+              {/* biome-ignore lint/a11y/noLabelWithoutControl: `input` is the control, passed in by the caller. */}
               <label>
                 {name}
                 {input}
               </label>
-              {enhanceTools(enhanceField, `${name}: ${label}`, character[field] ?? "", (text) => setCharacter(index, { [field]: text }), { key: `${enhanceField}:${character.ref}`, character })}
+              {enhanceTools(enhanceField, `${name}: ${label}`, character[field] ?? "", (text) => setCharacter(index, { [field]: text }), {
+                key: `${enhanceField}:${character.ref}`,
+                character,
+              })}
             </div>
           );
           return (
             <fieldset key={character.ref}>
               <legend>{label}</legend>
-              {box("name", "characterName", "Name", <input maxLength={80} value={character.name} onChange={(e) => setCharacter(index, { name: e.target.value })} />)}
+              {box(
+                "name",
+                "characterName",
+                "Name",
+                <input maxLength={80} value={character.name} onChange={(e) => setCharacter(index, { name: e.target.value })} />,
+              )}
               {box(
                 "description",
                 "characterDescription",
                 "Description",
-                <textarea rows={3} maxLength={LONG_TEXT} value={character.description} onChange={(e) => setCharacter(index, { description: e.target.value })} />,
+                <textarea
+                  rows={3}
+                  maxLength={LONG_TEXT}
+                  value={character.description}
+                  onChange={(e) => setCharacter(index, { description: e.target.value })}
+                />,
               )}
               {full(character.description)}
               <div className="row">
-                <button type="button" className="quiet" aria-label={`Remove ${label}`} onClick={() => set({ characters: draft.characters.filter((_, at) => at !== index) })}>
+                <button
+                  type="button"
+                  className="quiet"
+                  aria-label={`Remove ${label}`}
+                  onClick={() => set({ characters: draft.characters.filter((_, at) => at !== index) })}
+                >
                   Remove
                 </button>
               </div>
@@ -837,7 +918,15 @@ export function NewStory({ step }: { step?: string }) {
     </div>,
     null,
     <>
-      <button type="button" className="icon pick" title="Pick for me" aria-label="Pick for me" aria-haspopup="dialog" disabled={!theme || [...worldBoxes, ...Object.values(draft.pc)].every((text) => text.trim())} onClick={() => setPicking(true)}>
+      <button
+        type="button"
+        className="icon pick"
+        title="Pick for me"
+        aria-label="Pick for me"
+        aria-haspopup="dialog"
+        disabled={!theme || [...worldBoxes, ...Object.values(draft.pc)].every((text) => text.trim())}
+        onClick={() => setPicking(true)}
+      >
         {DecideIcon}
       </button>
       <button type="button" className="action" onClick={next}>

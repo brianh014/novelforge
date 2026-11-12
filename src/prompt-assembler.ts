@@ -18,17 +18,31 @@ const REPLIES_SHOWING_PEOPLE = 2;
 const inCharacter = (text: string) => JSON.stringify({ in_character: text });
 
 /** The player Message of a Continue, a Turn with no player input. The page shows a rule in its place. */
-export const CONTINUE_INPUT = "The player takes no action this Turn. Continue the story: the PC does nothing new, so move the scene forward on its own, then stop with the PC free to act.";
+export const CONTINUE_INPUT =
+  "The player takes no action this Turn. Continue the story: the PC does nothing new, so move the scene forward on its own, then stop with the PC free to act.";
 
 // A Continue is an instruction, and must never read as the PC's own words.
 const playerWords = (text: string) => (text === CONTINUE_INPUT ? CONTINUE_INPUT : inCharacter(text));
 
-const toPrompt = (npcs: State["npcs"], peopleFrom: number) => ({ id, role, text }: Message): Prompt[number] =>
-  role === "player"
-    ? { role: "user", content: playerWords(text) }
-    : // The same key order as a new reply, because the Narrator copies what it sees and streaming needs check first.
-      // No summary, as one in each of these would cost far more than it teaches.
-      { role: "assistant", content: JSON.stringify({ check: null, narration: text, state_operations: [], people: id >= peopleFrom ? npcs.filter(({ name }) => text.includes(name)) : [], scene_changed: false, visual_description: "", chapter_ends: false }) };
+const toPrompt =
+  (npcs: State["npcs"], peopleFrom: number) =>
+  ({ id, role, text }: Message): Prompt[number] =>
+    role === "player"
+      ? { role: "user", content: playerWords(text) }
+      : // The same key order as a new reply, because the Narrator copies what it sees and streaming needs check first.
+        // No summary, as one in each of these would cost far more than it teaches.
+        {
+          role: "assistant",
+          content: JSON.stringify({
+            check: null,
+            narration: text,
+            state_operations: [],
+            people: id >= peopleFrom ? npcs.filter(({ name }) => text.includes(name)) : [],
+            scene_changed: false,
+            visual_description: "",
+            chapter_ends: false,
+          }),
+        };
 
 // Last before the player's words and in plain numbers, as the same rule mid-prompt in general terms was ignored.
 const PACE =
@@ -56,7 +70,10 @@ const proseRules = (names: string, thinLooks: string) =>
 const KEYWORD_RULES = `Write comma-separated keyword phrases, about 60 words, most important first: the art style, the people, their facial expressions and what they are doing, the place and its era, the time of day and the light, the mood. ${SELF_CONTAINED} Picture at most two people, each as a short phrase of looks, with no square brackets.`;
 
 const IMAGE_PROMPT: Record<PromptStyle, string> = {
-  prose: proseRules("the state", ", and if someone's appearance is thinner than asked for above, or their clothing or other looks have changed, use update_npc in this Turn"),
+  prose: proseRules(
+    "the state",
+    ", and if someone's appearance is thinner than asked for above, or their clothing or other looks have changed, use update_npc in this Turn",
+  ),
   keywords: KEYWORD_RULES,
 };
 
@@ -167,7 +184,19 @@ storyTime is null, so set it now: use set_story_time with days_passed 0 and the 
 export function assemblePrompt({
   save: { worldBrief, pc, startingHook, artStyle = "", theme = "" },
   // Director's Notes are taken out so that any left in a Save can't steer the story now the player can't see them.
-  state: { worldBible, worldRules, plotThreads, summary, recentSummary: _recent, sceneMemories, directorsNotes: _retired, worldBrief: currentBrief, chapters: _chapters, chapterReady: _ready, ...currentState },
+  state: {
+    worldBible,
+    worldRules,
+    plotThreads,
+    summary,
+    recentSummary: _recent,
+    sceneMemories,
+    directorsNotes: _retired,
+    worldBrief: currentBrief,
+    chapters: _chapters,
+    chapterReady: _ready,
+    ...currentState
+  },
   messages,
   memoryStart = 0,
   windowMessages,
@@ -241,11 +270,11 @@ Avoid melodrama, cliché and overused metaphors, and prefer natural, grounded la
 Keep the prose fresh. Don't reuse the images, background details or closing moves of the replies above: give each scene something new to notice, vary how replies open and end, and end on what a person in the scene does, says or now faces, never on a background sound or passing detail. Leave the PC free to answer however they like: few replies should end on a choice between two things. Say what people do more often than what they do not do. Say what is so, never what it isn't first: no "it's not X, it's Y", and no "Not X. Not Y. Z." No stock phrases such as a beat, letting something sit or land, a voice dropping, "in the way of someone who" or "here's the thing". Don't reach for eyes, hands, mugs or wall clocks to fill a pause: let people say or do something only they would. Give each person their own voice, speaking naturally, with contractions such as don't and I'm.
 The older replies above are shortened, so fill in every field of the schema. When anyone's clothing or looks change in this response, such as clothes coming off or going on, include update_npc for that NPC with their whole appearance as it is now, or the inventory change for the PC, as their pictures are painted from it.${threadNudge(plotThreads, messages)}${fillLooseEnds(currentState.looseEnds, messages)}${fillStoryTime(currentState.storyTime, messages)}
 ${PACE}${
-        directions.length > 0
-          ? `
+  directions.length > 0
+    ? `
 The player gave these out-of-character directions when rewriting recent responses, below as JSON strings. They still hold, so keep following them in this response: ${JSON.stringify(directions)}`
-          : ""
-      }`,
+    : ""
+}`,
     },
     { role: "user", content: playerWords(input) },
   ];
@@ -285,7 +314,8 @@ export function editInstruction(text: string): Prompt[number] {
 /** Sent last on a retry, after the cached prefix, so the model knows what to fix. It never quotes the reply. */
 export const SET_SCENE_NOTE: Prompt[number] = {
   role: "system",
-  content: "Your last reply set scene_changed to true without a set_scene operation. Write the Turn again, and this time include set_scene in state_operations, repeating the current location exactly if the PC hasn't moved.",
+  content:
+    "Your last reply set scene_changed to true without a set_scene operation. Write the Turn again, and this time include set_scene in state_operations, repeating the current location exactly if the PC hasn't moved.",
 };
 
 export function resultInstruction({ action, outcome, degree }: Check): Prompt[number] {

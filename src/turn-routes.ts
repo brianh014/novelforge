@@ -61,7 +61,8 @@ async function turnResponse(req: Request, turn: BegunTurn, run: (emit: TurnEvent
       // A client that leaves stops hearing the Turn. A write to a closed stream throws, and that must never reach the Turn.
       const there = () => !gone && !req.signal.aborted;
       const send = (event: string, data: object) => {
-        if (there()) controller.enqueue(`event: ${event}
+        if (there())
+          controller.enqueue(`event: ${event}
 data: ${JSON.stringify(data)}
 
 `);
@@ -90,18 +91,14 @@ export function turnRoutes({ options, saves, turns, images }: ServerContext) {
       POST: async (req) => {
         const { input } = await parseBody(req, NewTurnRequest);
         const { id } = req.params;
-        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), input), (emit, signal) =>
-          playTurn(saves, engine, id, input, signal, emit),
-        );
+        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), input), (emit, signal) => playTurn(saves, engine, id, input, signal, emit));
       },
     },
     "/saves/:id/opening": {
       POST: async (req) => {
         await parseBody(req, NoFields);
         const { id } = req.params;
-        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), ""), (emit, signal) =>
-          playOpening(saves, engine, id, signal, emit),
-        );
+        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), ""), (emit, signal) => playOpening(saves, engine, id, signal, emit));
       },
     },
     "/saves/:id/turn": {

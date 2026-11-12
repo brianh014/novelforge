@@ -100,11 +100,7 @@ test("the player says what the PC wears and carries in their own words, and the 
 });
 
 test("the opening status comes from the Narrator under the Turn's rules, so a status with numerals is retried", async () => {
-  play(
-    sheet({ health: "12 of 20 hit points" }),
-    sheet({ health: "tired", injuries: ["a healed burn"], conditions: ["blind in one eye"] }),
-    generated(),
-  );
+  play(sheet({ health: "12 of 20 hit points" }), sheet({ health: "tired", injuries: ["a healed burn"], conditions: ["blind in one eye"] }), generated());
 
   const { id } = await createPc();
 

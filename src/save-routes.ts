@@ -25,7 +25,15 @@ const RECENT_CHARACTERS = 6;
 const NoteRequest = z.object({ text: z.string().trim().min(1) });
 
 // No quote or backslash, which every JSON column would hold escaped. One line, as a name.
-const RenameRequest = z.object({ name: z.string().min(1), newName: z.string().trim().min(1).max(100).regex(/^[^"\\\n\r]+$/, "A name can't have quotes, backslashes or line breaks") });
+const RenameRequest = z.object({
+  name: z.string().min(1),
+  newName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .regex(/^[^"\\\n\r]+$/, "A name can't have quotes, backslashes or line breaks"),
+});
 
 // shortcut: Notes are addressed by position, so a second tab can change the wrong one, give them ids if that ever matters.
 function spliceNote(notes: string[], index: string, ...replacement: string[]) {
@@ -196,8 +204,7 @@ export function saveRoutes({ options, saves, turns, images }: ServerContext) {
         const { text } = await parseBody(req, NoteRequest);
         return Response.json({ notes: saves.changeNotes(req.params.id, (notes) => spliceNote(notes, req.params.index, text)) });
       },
-      DELETE: (req) =>
-        Response.json({ notes: saves.changeNotes(req.params.id, (notes) => spliceNote(notes, req.params.index)) }),
+      DELETE: (req) => Response.json({ notes: saves.changeNotes(req.params.id, (notes) => spliceNote(notes, req.params.index)) }),
     },
     "/saves/:id/edits": {
       POST: async (req) => {
@@ -228,7 +235,12 @@ export function saveRoutes({ options, saves, turns, images }: ServerContext) {
           const before = saves.latestState(id);
           // The PC's looks as they stand, so a change to them keeps all they don't change.
           const looksNow = pcNow(saves.read(id).pc, before).physicalTraits ?? "";
-          const { world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status, ...update } = await changeWorld(options, { ...before, pcAppearance: looksNow }, change, req.signal);
+          const { world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status, ...update } = await changeWorld(
+            options,
+            { ...before, pcAppearance: looksNow },
+            change,
+            req.signal,
+          );
           if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
           const journal: WorldEdit[] = [
             ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),

@@ -170,7 +170,10 @@ test("an older Save logs its upgrade only once it's done", async () => {
     db.run(change);
   };
   const upgrades = await app.createSave();
-  older(upgrades, "ALTER TABLE save DROP COLUMN art_style; ALTER TABLE save DROP COLUMN starting_hook; ALTER TABLE save DROP COLUMN pc_details; PRAGMA user_version = 1");
+  older(
+    upgrades,
+    "ALTER TABLE save DROP COLUMN art_style; ALTER TABLE save DROP COLUMN starting_hook; ALTER TABLE save DROP COLUMN pc_details; PRAGMA user_version = 1",
+  );
   // Its columns are all there already, so the step that adds one fails.
   const fails = await app.createSave();
   older(fails, "PRAGMA user_version = 1");
@@ -336,8 +339,17 @@ const SECRETS = ["BIBLE", "THREAD", "RULE", "NARRATION", "INPUT", "FEEDBACK", "C
 
 test("a Turn, Rewrite, World Change and Requested Image log none of the story at Verbose, even when providers fail and echo it", async () => {
   const echo = (mark: string) => Response.json({ error: { message: `You sent: ${mark}` } }, { status: 500 });
-  const turnReply = (visual_description: string) =>
-    [delta(JSON.stringify({ check: null, narration: hide("NARRATION"), state_operations: [{ op: "set_scene", location: "A place", visible_cast: [] }], scene_changed: true, visual_description }))];
+  const turnReply = (visual_description: string) => [
+    delta(
+      JSON.stringify({
+        check: null,
+        narration: hide("NARRATION"),
+        state_operations: [{ op: "set_scene", location: "A place", visible_cast: [] }],
+        scene_changed: true,
+        visual_description,
+      }),
+    ),
+  ];
   const provider = fakeOpenAi([
     echo(hide("BIBLE")),
     [delta(`prose with ${hide("NARRATION")} and no JSON`)],
@@ -345,7 +357,20 @@ test("a Turn, Rewrite, World Change and Requested Image log none of the story at
     new Response(`{"error":{"message":"bad ${hide("INPUT")}"}}`, { status: 500 }),
     turnReply(hide("IMAGEPROMPT")),
     echo(hide("THREAD")),
-    [delta(JSON.stringify({ lore_entries: [{ title: hide("NEWLORE"), keywords: ["a", "b", "c"], content: hide("NEWLORE") }], removed_lore: [], world_rules: [], plot_threads: [], world_brief: null, summary: null, facts: [], npc_summaries: [] }))],
+    [
+      delta(
+        JSON.stringify({
+          lore_entries: [{ title: hide("NEWLORE"), keywords: ["a", "b", "c"], content: hide("NEWLORE") }],
+          removed_lore: [],
+          world_rules: [],
+          plot_threads: [],
+          world_brief: null,
+          summary: null,
+          facts: [],
+          npc_summaries: [],
+        }),
+      ),
+    ],
     echo(hide("RULE")),
     [delta(JSON.stringify({ text: hide("IMAGEPROMPT") }))],
     [delta(JSON.stringify({ text: hide("IMAGEPROMPT") }))],
@@ -354,11 +379,21 @@ test("a Turn, Rewrite, World Change and Requested Image log none of the story at
   const savesDir = join(folder.path, "Saves");
   const settings = settingsStore(join(folder.path, "settings.json"));
   const app = startApp(savesDir, textProvider(settings), undefined, undefined, images.imageAdapter);
-  await app.patch("/settings", { textBaseUrl: provider.baseUrl, textModel: "fake/model", textApiKey: hide("APIKEY"), imageModel: "fake/image", imageApiKey: hide("APIKEY") });
+  await app.patch("/settings", {
+    textBaseUrl: provider.baseUrl,
+    textModel: "fake/model",
+    textApiKey: hide("APIKEY"),
+    imageModel: "fake/image",
+    imageApiKey: hide("APIKEY"),
+  });
   const id = saveStore(savesDir).create({
     worldBrief: "A drowned city",
     pc: { name: "Ash" },
-    opening: { worldBible: [{ title: "Lore", keywords: ["city"], content: hide("BIBLE"), alwaysOn: true }], plotThreads: [hide("THREAD")], worldRules: [hide("RULE")] },
+    opening: {
+      worldBible: [{ title: "Lore", keywords: ["city"], content: hide("BIBLE"), alwaysOn: true }],
+      plotThreads: [hide("THREAD")],
+      worldRules: [hide("RULE")],
+    },
   });
   const settled = async () => {
     for (let i = 0; i < 200; i++) {
@@ -387,7 +422,18 @@ test("a Turn, Rewrite, World Change and Requested Image log none of the story at
 
   for (const secret of SECRETS) expect(line).not.toContain(secret);
   expect(line).not.toContain("ZQX");
-  for (const said of ["Turn committed", "Text Provider error", "Image queued", "Image started", "Image failed", '"kind":"rewrite"', "World Change applied", "A World Change failed", "A requested image failed"]) expect(line).toContain(said);
+  for (const said of [
+    "Turn committed",
+    "Text Provider error",
+    "Image queued",
+    "Image started",
+    "Image failed",
+    '"kind":"rewrite"',
+    "World Change applied",
+    "A World Change failed",
+    "A requested image failed",
+  ])
+    expect(line).toContain(said);
   provider.stop();
   await app.stop();
 });

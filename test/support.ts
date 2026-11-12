@@ -14,7 +14,9 @@ import type { TextProvider } from "../src/turn-engine";
 /** Everything the Server Log writes while `run` goes, as one string, at Verbose unless told otherwise. */
 export async function logOf(run: () => Promise<unknown>, level: LogLevel = "verbose") {
   const lines: string[] = [];
-  const spies = (["error", "warn", "info", "debug"] as const).map((method) => spyOn(console, method).mockImplementation((...args: unknown[]) => void lines.push(args.join(" "))));
+  const spies = (["error", "warn", "info", "debug"] as const).map((method) =>
+    spyOn(console, method).mockImplementation((...args: unknown[]) => void lines.push(args.join(" "))),
+  );
   setLogLevel(level);
   try {
     await run();
@@ -25,8 +27,7 @@ export async function logOf(run: () => Promise<unknown>, level: LogLevel = "verb
   }
 }
 
-export const narration = (text: string, ...state_operations: unknown[]) =>
-  JSON.stringify({ narration: text, state_operations });
+export const narration = (text: string, ...state_operations: unknown[]) => JSON.stringify({ narration: text, state_operations });
 
 /** Replies with each entry in turn, throwing Errors, and records every prompt. */
 export function scriptedTextProvider(...replies: (string | Error)[]) {
@@ -43,10 +44,7 @@ export function scriptedTextProvider(...replies: (string | Error)[]) {
 }
 
 /** A real one-pixel PNG. */
-export const PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-  "base64",
-);
+export const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 
 /** The same picture with a trailing byte, to tell one image from another. */
 export const png = (mark: number) => Uint8Array.of(...PNG, mark);
@@ -171,7 +169,12 @@ export function fakeOpenAi(replies: FakeReply[], initialModels: unknown = { data
         requests.push({ body: await req.json(), authorization: req.headers.get("authorization") });
         const reply = replies.shift() ?? new Response("script exhausted", { status: 500 });
         if (reply instanceof Response) return reply;
-        const parts = typeof reply === "function" ? reply() : (async function* () { yield* reply; })();
+        const parts =
+          typeof reply === "function"
+            ? reply()
+            : (async function* () {
+                yield* reply;
+              })();
         return new Response(parts as unknown as ReadableStream, { headers: { "Content-Type": "text/event-stream" } });
       },
     },
@@ -179,7 +182,9 @@ export function fakeOpenAi(replies: FakeReply[], initialModels: unknown = { data
   return {
     requests,
     baseUrl: new URL("/v1", server.url).href,
-    setModels: (next: unknown) => void (models = next),
+    setModels: (next: unknown) => {
+      models = next;
+    },
     stop: () => server.stop(true),
   };
 }

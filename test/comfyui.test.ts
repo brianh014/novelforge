@@ -7,7 +7,7 @@ import { settingsStore } from "../src/settings-store";
 import { fakeComfyUI } from "./fake-comfyui";
 import { PNG, png, scriptedTextProvider, startApp, tempFolder } from "./support";
 
-type Images = { images: { messageId: number; caption: string, redraws: 0 }[]; pending: boolean; session: number };
+type Images = { images: { messageId: number; caption: string; redraws: 0 }[]; pending: boolean; session: number };
 
 let folder: ReturnType<typeof tempFolder>;
 let app: ReturnType<typeof startApp> | undefined;
@@ -109,7 +109,18 @@ test("a ComfyUI from before Qwen Image 2.1 says it lacks the nodes", async () =>
   expect((await listModels()).hasQwen21).toBe(false);
 });
 
-const nothing = { reachable: false, hasFlux2: false, hasQwen21: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [], samplers: [], schedulers: [] };
+const nothing = {
+  reachable: false,
+  hasFlux2: false,
+  hasQwen21: false,
+  checkpoints: [],
+  diffusionModels: [],
+  textEncoders: [],
+  vaes: [],
+  loras: [],
+  samplers: [],
+  schedulers: [],
+};
 
 test("a server that isn't running lists nothing and says it can't be reached", async () => {
   await play().patch("/settings", { comfyUrl: comfy.url });
@@ -460,7 +471,10 @@ test.each([
 test("a half-written workflow doesn't stop other settings while it isn't in use", async () => {
   const running = play();
 
-  for (const change of [{ comfyWorkflow: "{", imageProvider: "local" }, { comfyMode: "advanced", imageProvider: "openrouter" }]) {
+  for (const change of [
+    { comfyWorkflow: "{", imageProvider: "local" },
+    { comfyMode: "advanced", imageProvider: "openrouter" },
+  ]) {
     expect((await running.patch("/settings", change)).status).toBe(200);
   }
   expect((await running.patch("/settings", { imageProvider: "local" })).status).toBe(422);

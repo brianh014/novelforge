@@ -23,14 +23,25 @@ test("each chapter's heading sits above its first Message, and its large letter 
   ]);
   expect([...opens]).toEqual([2, 4]);
   // A closed chapter with nothing after it yet has no heading for the next.
-  expect(chapterOpenings([{ title: "The Quay", lastMessage: 4 }, { title: "", lastMessage: null }], [...messages]).heads.size).toBe(1);
+  expect(
+    chapterOpenings(
+      [
+        { title: "The Quay", lastMessage: 4 },
+        { title: "", lastMessage: null },
+      ],
+      [...messages],
+    ).heads.size,
+  ).toBe(1);
   expect([4, 9, 14, 40, 1994].map(roman)).toEqual(["IV", "IX", "XIV", "XL", "MCMXCIV"]);
 });
 
 test("a Continue shows as a rule in the story, and the Stage box skips it", () => {
   const [beat] = messageBeats({ role: "player", text: CONTINUE_INPUT });
   expect(renderToStaticMarkup(<BeatLine beat={beat!} style="script" pc="Ash" />)).toContain('<hr class="continued"');
-  const told = [{ id: 1, role: "player", text: CONTINUE_INPUT }, { id: 2, role: "narrator", text: "The rain keeps on." }] as Parameters<typeof stageBeats>[0];
+  const told = [
+    { id: 1, role: "player", text: CONTINUE_INPUT },
+    { id: 2, role: "narrator", text: "The rain keeps on." },
+  ] as Parameters<typeof stageBeats>[0];
   expect(stageBeats(told).map(({ beat }) => beat.text)).toEqual(["The rain keeps on."]);
 });
 
@@ -47,7 +58,7 @@ test("each spoken line and each line of description is its own beat", () => {
 test("a spoken line without the brackets still has its speaker", () => {
   expect(narrator("Dov Marchetti: “Sure. That's fair.”\nMary O'Neil-Vance: \"Well?\"")).toEqual([
     { speaker: "Dov Marchetti", text: "“Sure. That's fair.”" },
-    { speaker: "Mary O'Neil-Vance", text: "\"Well?\"" },
+    { speaker: "Mary O'Neil-Vance", text: '"Well?"' },
   ]);
 });
 
@@ -90,9 +101,7 @@ test("a name's padding isn't part of it", () => {
 });
 
 test("what the player wrote is one beat of theirs, whatever it looks like", () => {
-  expect(messageBeats({ role: "player", text: "[Ashley]: “Fake line.”\nI wave." })).toEqual([
-    { player: true, text: "[Ashley]: “Fake line.”\nI wave." },
-  ]);
+  expect(messageBeats({ role: "player", text: "[Ashley]: “Fake line.”\nI wave." })).toEqual([{ player: true, text: "[Ashley]: “Fake line.”\nI wave." }]);
 });
 
 const CHAT_STYLES = ["script", "prose", "bubbles", "stage"] as const;
@@ -101,11 +110,7 @@ const shown = (beat: Beat, style: (typeof CHAT_STYLES)[number], face?: string) =
 
 test.each(CHAT_STYLES)("%s shows markup in a story as plain text", (style) => {
   const attack = `<img src=x onerror=alert(1)>`;
-  for (const beat of [
-    { text: attack },
-    { speaker: attack, text: attack },
-    { player: true, text: attack },
-  ]) {
+  for (const beat of [{ text: attack }, { speaker: attack, text: attack }, { player: true, text: attack }]) {
     expect(shown(beat, style)).not.toContain("<img");
     expect(shown(beat, style)).toContain("&lt;img");
   }

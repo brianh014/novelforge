@@ -32,17 +32,14 @@ const savePath = (id: string) => join(savesDir, `${id}.sqlite`);
 const listed = async () => ((await app.get("/saves").then((r) => r.json())) as { saves: ListedSave[] }).saves;
 const listedIds = async () => (await listed()).map(({ id }) => id).sort();
 
-const messagesOf = async (id: string) =>
-  ((await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: Message[] })
-    .messages;
+const messagesOf = async (id: string) => ((await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: Message[] }).messages;
 
 const exportSave = async (id: string) => (await app.get(`/saves/${id}/export`)).bytes();
 
 const importSave = (bytes: Uint8Array<ArrayBuffer>, contentType = "application/octet-stream") =>
   fetch(app.url("/saves/import"), { method: "POST", headers: { "Content-Type": contentType }, body: bytes });
 
-const importedId = async (bytes: Uint8Array<ArrayBuffer>) =>
-  ((await (await importSave(bytes)).json()) as { id: string }).id;
+const importedId = async (bytes: Uint8Array<ArrayBuffer>) => ((await (await importSave(bytes)).json()) as { id: string }).id;
 
 test("the list shows every Save, most recently played first", async () => {
   play(narration("The tide rises."));
@@ -145,7 +142,15 @@ test("an exported Save imports as a new Save with the same story", async () => {
   expect(copy).not.toBe(id);
   expect(await listedIds()).toEqual([id, copy].sort());
   expect(await messagesOf(copy)).toEqual(await messagesOf(id));
-  expect(await app.get(`/saves/${copy}`).then((r) => r.json())).toEqual({ title: "", worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "", startingHook: "", hasCover: false, coverRedraws: 0 });
+  expect(await app.get(`/saves/${copy}`).then((r) => r.json())).toEqual({
+    title: "",
+    worldBrief: "A drowned city",
+    pc: { name: "Ash" },
+    artStyle: "",
+    startingHook: "",
+    hasCover: false,
+    coverRedraws: 0,
+  });
 });
 
 test("importing the same file twice gives two Saves", async () => {
@@ -232,11 +237,13 @@ function writeOldSave(path: string) {
   db.run(SCHEMA_BEFORE_CHECKS);
   db.run("INSERT INTO save (id, world_brief, pc_name) VALUES (1, 'A drowned city', 'Ash')");
   db.run("INSERT INTO messages (role, text) VALUES ('player', 'I wade forward.'), ('narrator', 'You find a rope.')");
-  for (const [messageId, state] of [[0, OLD_OPENING], [1, OLD_OPENING], [2, OLD_LATEST]] as const) {
+  for (const [messageId, state] of [
+    [0, OLD_OPENING],
+    [1, OLD_OPENING],
+    [2, OLD_LATEST],
+  ] as const) {
     for (const [name, value] of Object.entries(state)) {
-      const { id } = db
-        .query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id")
-        .get(JSON.stringify(value))!;
+      const { id } = db.query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id").get(JSON.stringify(value))!;
       db.run("INSERT INTO snapshot_sections VALUES (?, ?, ?)", [messageId, name, id]);
     }
   }
@@ -456,12 +463,16 @@ const withPortrait = (messageId: number, npc: string, bytesSql: string) => (db: 
 };
 
 /** Adds a Turn and an image the player asked for on `messageId`. */
-const withRequested = (messageId: number, bytesSql: string, pictured = "'[]'") => (db: Database) => {
-  db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello'), ('narrator', 'Hi')");
-  db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections WHERE message_id = 0");
-  db.run("INSERT INTO snapshot_sections SELECT 2, name, section_id FROM snapshot_sections WHERE message_id = 0");
-  db.run(`INSERT INTO requested_images (message_id, caption, bytes, prompt, pictured) VALUES (${messageId}, 'The bench', ${bytesSql}, 'A bench', ${pictured})`);
-};
+const withRequested =
+  (messageId: number, bytesSql: string, pictured = "'[]'") =>
+  (db: Database) => {
+    db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello'), ('narrator', 'Hi')");
+    db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections WHERE message_id = 0");
+    db.run("INSERT INTO snapshot_sections SELECT 2, name, section_id FROM snapshot_sections WHERE message_id = 0");
+    db.run(
+      `INSERT INTO requested_images (message_id, caption, bytes, prompt, pictured) VALUES (${messageId}, 'The bench', ${bytesSql}, 'A bench', ${pictured})`,
+    );
+  };
 
 const TAMPERED: [string, (db: Database) => void][] = [
   ["a Save with no Art Style column", (db) => db.run("ALTER TABLE save DROP COLUMN art_style")],
@@ -478,16 +489,22 @@ const TAMPERED: [string, (db: Database) => void][] = [
   ["a Snapshot missing a section", (db) => db.run("DELETE FROM snapshot_sections WHERE name = 'npcs'")],
   ["a Snapshot for no Message", (db) => db.run("INSERT INTO snapshot_sections SELECT 9, name, section_id FROM snapshot_sections")],
   ["a Message with no Snapshot", (db) => db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello')")],
-  ["a malformed Check", (db) => {
-    db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello')");
-    db.run("INSERT INTO messages (role, text, hidden_check) VALUES ('narrator', 'Hi', '{\"roll\":\"six\"}')");
-    db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections WHERE message_id = 0");
-    db.run("INSERT INTO snapshot_sections SELECT 2, name, section_id FROM snapshot_sections WHERE message_id = 0");
-  }],
-  ["a Narrator Message with no player Message before it", (db) => {
-    db.run("INSERT INTO messages (role, text) VALUES ('narrator', 'Hi')");
-    db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections");
-  }],
+  [
+    "a malformed Check",
+    (db) => {
+      db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello')");
+      db.run("INSERT INTO messages (role, text, hidden_check) VALUES ('narrator', 'Hi', '{\"roll\":\"six\"}')");
+      db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections WHERE message_id = 0");
+      db.run("INSERT INTO snapshot_sections SELECT 2, name, section_id FROM snapshot_sections WHERE message_id = 0");
+    },
+  ],
+  [
+    "a Narrator Message with no player Message before it",
+    (db) => {
+      db.run("INSERT INTO messages (role, text) VALUES ('narrator', 'Hi')");
+      db.run("INSERT INTO snapshot_sections SELECT 1, name, section_id FROM snapshot_sections");
+    },
+  ],
   ["no Scene Image table", (db) => db.run("DROP TABLE scene_images")],
   ["an extra Scene Image column", (db) => db.run("ALTER TABLE scene_images ADD COLUMN extra TEXT")],
   ["a Scene Image that is really HTML", withImage(2, "x'3c21646f63747970652068746d6c3e'")],
@@ -497,10 +514,13 @@ const TAMPERED: [string, (db: Database) => void][] = [
   ["a Scene Image too large to be one", withImage(2, "x'89504e470d0a1a0a' || zeroblob(33 * 1024 * 1024)")],
   ["a Scene Image for no Message", withImage(9, PNG_SQL)],
   ["a Scene Image on a player Message", withImage(1, PNG_SQL)],
-  ["a caption that isn't text", (db) => {
-    withImage(2, PNG_SQL)(db);
-    db.run("UPDATE scene_images SET caption = x'00ff'");
-  }],
+  [
+    "a caption that isn't text",
+    (db) => {
+      withImage(2, PNG_SQL)(db);
+      db.run("UPDATE scene_images SET caption = x'00ff'");
+    },
+  ],
   ["no requested image table", (db) => db.run("DROP TABLE requested_images")],
   ["an extra requested image column", (db) => db.run("ALTER TABLE requested_images ADD COLUMN extra TEXT")],
   ["a requested image that is really HTML", withRequested(2, "x'3c21646f63747970652068746d6c3e'")],
@@ -516,9 +536,12 @@ const TAMPERED: [string, (db: Database) => void][] = [
   ["a portrait for no Message", withPortrait(9, "'Hesper'", PNG_SQL)],
   ["an NPC portrait on a player Message", withPortrait(1, "'Hesper'", PNG_SQL)],
   ["a PC portrait tied to a Message", withPortrait(2, "NULL", PNG_SQL)],
-  ["two PC portraits", (db) => {
-    db.run(`INSERT INTO portraits (npc, message_id, bytes) VALUES (NULL, 0, ${PNG_SQL}), (NULL, 0, ${PNG_SQL})`);
-  }],
+  [
+    "two PC portraits",
+    (db) => {
+      db.run(`INSERT INTO portraits (npc, message_id, bytes) VALUES (NULL, 0, ${PNG_SQL}), (NULL, 0, ${PNG_SQL})`);
+    },
+  ],
   ["malformed pending Notes", (db) => db.run("UPDATE save SET pending_notes = '[1]'")],
   ["malformed pending edits", (db) => db.run(`UPDATE save SET pending_edits = '[{"edit":"nothing"}]'`)],
   ["pending edits that aren't JSON", (db) => db.run("UPDATE save SET pending_edits = 'oops'")],
@@ -530,10 +553,13 @@ const TAMPERED: [string, (db: Database) => void][] = [
   ["a trigger", (db) => db.run("CREATE TRIGGER wipe AFTER INSERT ON messages BEGIN DELETE FROM messages; END")],
   ["a view", (db) => db.run("CREATE VIEW extra AS SELECT 1")],
   ["an index on an expression", (db) => db.run("CREATE INDEX extra ON messages (lower(text))")],
-  ["a table swapped for a view", (db) => {
-    db.run("ALTER TABLE save RENAME TO hidden");
-    db.run("CREATE VIEW save AS SELECT * FROM hidden");
-  }],
+  [
+    "a table swapped for a view",
+    (db) => {
+      db.run("ALTER TABLE save RENAME TO hidden");
+      db.run("CREATE VIEW save AS SELECT * FROM hidden");
+    },
+  ],
 ];
 
 test.each(TAMPERED)("import refuses %s", async (_name, tamper) => {
@@ -567,23 +593,37 @@ test("a Message can follow a player Message that a Revert left unanswered", asyn
 });
 
 const TABLE_TRICKS: [string, (db: Database) => void][] = [
-  ["a CHECK that stops new Messages", (db) => {
-    db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, CHECK (id < 1))");
-  }],
-  ["Message ids with no primary key", (db) => {
-    db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT)");
-  }],
-  ["a generated column", (db) => {
-    db.run("DROP TABLE messages");
-    db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, text TEXT AS ('x'))");
-  }],
-  ["an exhausted id sequence", (db) => {
-    db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello')");
-    db.run("DELETE FROM messages");
-    db.run("UPDATE sqlite_sequence SET seq = 9223372036854775807 WHERE name = 'messages'");
-  }],
+  [
+    "a CHECK that stops new Messages",
+    (db) => {
+      db.run("DROP TABLE messages");
+      db.run(
+        "CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, CHECK (id < 1))",
+      );
+    },
+  ],
+  [
+    "Message ids with no primary key",
+    (db) => {
+      db.run("DROP TABLE messages");
+      db.run("CREATE TABLE messages (id INTEGER, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT)");
+    },
+  ],
+  [
+    "a generated column",
+    (db) => {
+      db.run("DROP TABLE messages");
+      db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, text TEXT AS ('x'))");
+    },
+  ],
+  [
+    "an exhausted id sequence",
+    (db) => {
+      db.run("INSERT INTO messages (role, text) VALUES ('player', 'Hello')");
+      db.run("DELETE FROM messages");
+      db.run("UPDATE sqlite_sequence SET seq = 9223372036854775807 WHERE name = 'messages'");
+    },
+  ],
 ];
 
 test.each(TABLE_TRICKS)("a file with %s imports into the app's own tables, and plays", async (_name, tamper) => {

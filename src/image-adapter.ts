@@ -66,9 +66,7 @@ export function openRouterImages(settings: SettingsStore, baseUrl: string): Imag
     const takesRatio = ratios && (ratios.values?.includes(aspect_ratio) ?? true);
     const resolution = closestTier(parameters.resolution?.values, imageResolution);
     const takesImages = info?.architecture?.input_modalities?.includes("image");
-    const references = takesImages
-      ? reference_images.slice(0, parameters.input_references?.max ?? MOST_REFERENCES)
-      : [];
+    const references = takesImages ? reference_images.slice(0, parameters.input_references?.max ?? MOST_REFERENCES) : [];
 
     const response = await fetch(`${baseUrl}/images`, {
       method: "POST",

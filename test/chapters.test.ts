@@ -43,10 +43,16 @@ test("closing ends the chapter after the latest Message, titled by the model fro
   expect((await close(id)).status).toBe(200);
   expect(prompts[1]!.at(-1)!.content).toContain("The ferry docks.");
   expect(JSON.stringify(prompts[1])).not.toContain("A drowned city");
-  expect((await chaptersOf(id)).chapters).toEqual([{ title: "The Last Ferry", lastMessage: 2 }, { title: "", lastMessage: null }]);
+  expect((await chaptersOf(id)).chapters).toEqual([
+    { title: "The Last Ferry", lastMessage: 2 },
+    { title: "", lastMessage: null },
+  ]);
 
   await turn(id);
-  expect((await chaptersOf(id)).chapters).toEqual([{ title: "The Last Ferry", lastMessage: 2 }, { title: "", lastMessage: null }]);
+  expect((await chaptersOf(id)).chapters).toEqual([
+    { title: "The Last Ferry", lastMessage: 2 },
+    { title: "", lastMessage: null },
+  ]);
   expect(JSON.stringify(prompts[2])).not.toContain("The Last Ferry");
 });
 
@@ -95,7 +101,13 @@ test("a Revert to before the close reopens the chapter", async () => {
 
 test("the Narrator's suggestion to end the chapter is offered only once the chapter is long enough, and only until the next reply", async () => {
   const turns = MIN_CHAPTER_MESSAGES / 2;
-  play(...Array.from({ length: turns }, (_, index) => reply(`Beat ${index}.`, true)), reply("Quiet."), reply("Done.", true), title("Done"), reply("Again.", true));
+  play(
+    ...Array.from({ length: turns }, (_, index) => reply(`Beat ${index}.`, true)),
+    reply("Quiet."),
+    reply("Done.", true),
+    title("Done"),
+    reply("Again.", true),
+  );
   const id = await app.createSave();
   for (let index = 0; index < turns - 1; index++) await turn(id);
   expect((await chaptersOf(id)).offer).toBe(false);

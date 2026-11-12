@@ -267,8 +267,7 @@ test("FLUX.2 Klein keeps the first four references, as BFL lists that as its lim
 });
 
 test("Klein 9B draws in 8 steps, and its base model and FLUX.2 Dev keep 20", () => {
-  const steps = (comfyDiffusionModel: string) =>
-    only(buildGraph({ ...flux2, comfyDiffusionModel }, request), "Flux2Scheduler").inputs.steps;
+  const steps = (comfyDiffusionModel: string) => only(buildGraph({ ...flux2, comfyDiffusionModel }, request), "Flux2Scheduler").inputs.steps;
 
   expect(steps("flux-2-klein-9b.safetensors")).toBe(8);
   expect(steps("flux-2-klein-9b-Q4_K_M.gguf")).toBe(8);

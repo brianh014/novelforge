@@ -17,7 +17,14 @@ export function readArtStyle(text: string) {
 }
 
 /** Radio buttons drawn as chips, with each option's example image when `art` gives them. An `intro` sits under the legend, which becomes a heading. */
-export function Choices(props: { legend: string; intro?: ReactNode; options: string[]; value: string; art?: Record<string, string>; onChange: (value: string) => void }) {
+export function Choices(props: {
+  legend: string;
+  intro?: ReactNode;
+  options: string[];
+  value: string;
+  art?: Record<string, string>;
+  onChange: (value: string) => void;
+}) {
   return (
     <fieldset>
       <legend>{props.intro ? <h2>{props.legend}</h2> : props.legend}</legend>
@@ -25,15 +32,15 @@ export function Choices(props: { legend: string; intro?: ReactNode; options: str
       <div className={props.art ? "chips art" : "chips"}>
         {props.options.map((option) => (
           <label key={option}>
-            <input
-              className="visually-hidden"
-              type="radio"
-              name={props.legend}
-              checked={props.value === option}
-              onChange={() => props.onChange(option)}
-            />
+            <input className="visually-hidden" type="radio" name={props.legend} checked={props.value === option} onChange={() => props.onChange(option)} />
             {props.art &&
-              (props.art[option] ? <img src={props.art[option]} alt="" /> : <span className="no-example" aria-hidden="true">No example</span>)}
+              (props.art[option] ? (
+                <img src={props.art[option]} alt="" />
+              ) : (
+                <span className="no-example" aria-hidden="true">
+                  No example
+                </span>
+              ))}
             {option}
           </label>
         ))}

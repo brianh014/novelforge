@@ -46,8 +46,16 @@ export function PromptBox({
         <textarea rows={5} value={text} onChange={(event) => setText(event.target.value)} />
       </label>
       {prompt === null && <p className="muted">This image's prompt wasn't kept.</p>}
-      {failure && <p role="alert" className="error">{failure}</p>}
-      {redrawing && <p role="status" className="waiting">This image is being redrawn…</p>}
+      {failure && (
+        <p role="alert" className="error">
+          {failure}
+        </p>
+      )}
+      {redrawing && (
+        <p role="status" className="waiting">
+          This image is being redrawn…
+        </p>
+      )}
       {!canRedraw && <p className="muted">Images are turned off or not set up in Settings.</p>}
       {note && <p className="muted">{note}</p>}
       <p className="muted">Each Redraw draws one new image, which may cost money.</p>
@@ -64,7 +72,17 @@ export function PromptBox({
  * An icon that opens a dialog for a few words of the player's own, such as "smiling", worked into the picture's next prompt,
  * which is then drawn. `initial` is the nudge used last, where one is kept.
  */
-export function NudgeButton({ label, disabled, initial = "", onNudge }: { label: string; disabled?: boolean; initial?: string; onNudge: (nudge: string) => void }) {
+export function NudgeButton({
+  label,
+  disabled,
+  initial = "",
+  onNudge,
+}: {
+  label: string;
+  disabled?: boolean;
+  initial?: string;
+  onNudge: (nudge: string) => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [nudge, setNudge] = useState(initial);
   const title = useId();
@@ -221,8 +239,16 @@ export function RedrawableImage({
         busy={false}
         status={
           <>
-            {(shown.failure || refused) && <p role="alert" className="error">{shown.failure || refused}</p>}
-            {shown.redrawing && <p role="status" className="waiting">This image is being drawn…</p>}
+            {(shown.failure || refused) && (
+              <p role="alert" className="error">
+                {shown.failure || refused}
+              </p>
+            )}
+            {shown.redrawing && (
+              <p role="status" className="waiting">
+                This image is being drawn…
+              </p>
+            )}
           </>
         }
         actions={
@@ -243,8 +269,16 @@ export function RedrawableImage({
                 {RegenerateIcon}
               </button>
             )}
-            {canUpdate && <NudgeButton label={`Nudge: ${shownAlt}`} disabled={shown.redrawing || !canRedraw} onNudge={(nudge) => started(updateImage(id, shown, nudge))} />}
-            {canUpdate && <UploadButton label={`Upload your own picture: ${shownAlt}`} disabled={shown.redrawing} onFile={(file) => started(uploadGalleryImage(id, shown, file))} />}
+            {canUpdate && (
+              <NudgeButton label={`Nudge: ${shownAlt}`} disabled={shown.redrawing || !canRedraw} onNudge={(nudge) => started(updateImage(id, shown, nudge))} />
+            )}
+            {canUpdate && (
+              <UploadButton
+                label={`Upload your own picture: ${shownAlt}`}
+                disabled={shown.redrawing}
+                onFile={(file) => started(uploadGalleryImage(id, shown, file))}
+              />
+            )}
             {onDelete && (
               <button type="button" className="icon" title="Delete" aria-label="Delete" aria-haspopup="dialog" disabled={shown.redrawing} onClick={onDelete}>
                 {DeleteIcon}
@@ -296,7 +330,14 @@ export function Zoomable(props: {
           onError={props.onError}
         />
       </button>
-      <dialog ref={dialog} className="viewer" aria-label={props.alt} onClose={props.onClose} onClick={(event) => event.target === dialog.current && dialog.current.close()}>
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: a click on the backdrop closes it, as Escape already does by keyboard. */}
+      <dialog
+        ref={dialog}
+        className="viewer"
+        aria-label={props.alt}
+        onClose={props.onClose}
+        onClick={(event) => event.target === dialog.current && dialog.current.close()}
+      >
         <img src={props.largeSrc ?? props.src} alt={props.alt} loading="lazy" />
         {props.children}
         <div className="row">

@@ -14,8 +14,7 @@ test("Qwen Image 2.1 gets its own wording for a named style that it draws wrong"
 });
 
 test("the shared wording stays for other families, other ways of drawing, other styles and the player's own words", () => {
-  const same = (artStyle: string, settings: Parameters<typeof withArtStyleFor>[1]) =>
-    expect(withArtStyleFor({ artStyle }, settings).artStyle).toBe(artStyle);
+  const same = (artStyle: string, settings: Parameters<typeof withArtStyleFor>[1]) => expect(withArtStyleFor({ artStyle }, settings).artStyle).toBe(artStyle);
 
   same(stored, { ...qwen, comfyFamily: "flux2" });
   same(stored, { ...qwen, comfyMode: "advanced" });

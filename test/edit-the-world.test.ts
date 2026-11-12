@@ -35,7 +35,10 @@ const WORLD = {
   plotThreads: [`${SECRET} the bees are spies.`, `${SECRET} the tide is rising.`],
 };
 const KNOWN = { facts: ["The city is flooded.", "Ferries stop at dusk."], npcs: ["Hesper"], summaries: { Hesper: "A ferry pilot." } };
-const NPCS = [{ name: "Hesper", appearance: "a woman" }, { name: "Corvin", appearance: "a man" }];
+const NPCS = [
+  { name: "Hesper", appearance: "a woman" },
+  { name: "Corvin", appearance: "a man" },
+];
 
 const store = () => saveStore(savesDir);
 const createSave = () =>
@@ -87,7 +90,10 @@ test("facts can be edited in place, added and removed", async () => {
 });
 
 test("text stored with stray spaces can still be named exactly", async () => {
-  play(narration("One.", { op: "add_known_fact", fact: "Bees sing. " }, { op: "add_plot_thread", thread: "Bees spy. " }), update({ plot_threads: [{ old: "Bees spy. ", new: "Bees rest." }] }));
+  play(
+    narration("One.", { op: "add_known_fact", fact: "Bees sing. " }, { op: "add_plot_thread", thread: "Bees spy. " }),
+    update({ plot_threads: [{ old: "Bees spy. ", new: "Bees rest." }] }),
+  );
   const id = createSave();
   await turn(id);
 
@@ -338,7 +344,17 @@ test("import refuses malformed edits carried on a Message", async () => {
 
 const change = (id: string, text = "the mayor is secretly a smuggler") => app.post(`/saves/${id}/world-change`, { change: text });
 const update = (fields: object = {}) =>
-  JSON.stringify({ lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [], world_brief: null, summary: null, facts: [], npc_summaries: [], ...fields });
+  JSON.stringify({
+    lore_entries: [],
+    removed_lore: [],
+    world_rules: [],
+    plot_threads: [],
+    world_brief: null,
+    summary: null,
+    facts: [],
+    npc_summaries: [],
+    ...fields,
+  });
 const SMUGGLER = { title: "The Mayor", keywords: ["mayor", "harbour", "smuggler"], content: `${SECRET} the mayor smuggles.` };
 const hidden = (id: string) => {
   const { worldBible, worldRules, plotThreads } = store().latestState(id);
@@ -351,12 +367,18 @@ test("a merge touches only what a change names, and an entry it leaves out stays
   const merged = mergeWorldUpdate(WORLD, {
     lore_entries: [{ ...SMUGGLER }, { title: "The Bees", keywords: ["a", "b", "c"], content: "New." }],
     removed_lore: ["The Tide"],
-    world_rules: [{ old: WORLD.worldRules[0]!, new: "Magic is real." }, { old: null, new: "Guns jam." }],
+    world_rules: [
+      { old: WORLD.worldRules[0]!, new: "Magic is real." },
+      { old: null, new: "Guns jam." },
+    ],
     plot_threads: [{ old: WORLD.plotThreads[1]!, new: null }],
   });
 
   expect(merged).toEqual({
-    worldBible: [{ ...SMUGGLER, alwaysOn: false }, { title: "The Bees", keywords: ["a", "b", "c"], content: "New.", alwaysOn: false }],
+    worldBible: [
+      { ...SMUGGLER, alwaysOn: false },
+      { title: "The Bees", keywords: ["a", "b", "c"], content: "New.", alwaysOn: false },
+    ],
     worldRules: ["Magic is real.", WORLD.worldRules[1]!, "Guns jam."],
     plotThreads: [WORLD.plotThreads[0]!],
   });
@@ -367,7 +389,10 @@ test("rewriting a Lore Entry keeps its place and whether it's always on", () => 
 
   const { worldBible } = mergeWorldUpdate(world, { lore_entries: [SMUGGLER], removed_lore: [], world_rules: [], plot_threads: [] });
 
-  expect(worldBible.map(({ title, alwaysOn }) => [title, alwaysOn])).toEqual([["The Mayor", true], ["The Tide", false]]);
+  expect(worldBible.map(({ title, alwaysOn }) => [title, alwaysOn])).toEqual([
+    ["The Mayor", true],
+    ["The Tide", false],
+  ]);
 });
 
 test("one Narrator call applies a hidden change, and the player hears only that it was done", async () => {
@@ -401,7 +426,10 @@ test("a World Change can fix what the PC wears and carries, and their status, wh
 });
 
 test("a World Change can rewrite an NPC's looks, which stay hidden, and one for a name it doesn't know is retried", async () => {
-  play(update({ npc_looks: [{ name: "Nobody", appearance: "a ghost" }] }), update({ npc_looks: [{ name: "Corvin", appearance: "a man in a hooded wool cloak" }] }));
+  play(
+    update({ npc_looks: [{ name: "Nobody", appearance: "a ghost" }] }),
+    update({ npc_looks: [{ name: "Corvin", appearance: "a man in a hooded wool cloak" }] }),
+  );
   const id = createSave();
 
   const response = await change(id, "Corvin dresses for his era");
@@ -416,7 +444,11 @@ test("a World Change can rewrite an NPC's looks, which stay hidden, and one for 
 
 test("a World Change can rewrite the PC's looks from those they have now, which stay hidden", async () => {
   play(update({ pc_looks: "short, with a scar across the chin" }));
-  const id = store().create({ worldBrief: "A drowned city", pc: { name: "Ash", physicalTraits: "short" }, opening: { ...WORLD, npcs: NPCS, pcKnown: KNOWN, summary: "" } });
+  const id = store().create({
+    worldBrief: "A drowned city",
+    pc: { name: "Ash", physicalTraits: "short" },
+    opening: { ...WORLD, npcs: NPCS, pcKnown: KNOWN, summary: "" },
+  });
 
   expect((await change(id, "Ash has a scar on the chin")).status).toBe(200);
 
@@ -622,7 +654,12 @@ test("a Revert to before a hidden change undoes it", async () => {
 });
 
 test("Regenerate keeps a hidden change, however often it runs", async () => {
-  play(narration("One."), update({ removed_lore: ["The Tide"], plot_threads: [{ old: WORLD.plotThreads[0], new: "Rewritten." }] }), narration("Two."), narration("Three."));
+  play(
+    narration("One."),
+    update({ removed_lore: ["The Tide"], plot_threads: [{ old: WORLD.plotThreads[0], new: "Rewritten." }] }),
+    narration("Two."),
+    narration("Three."),
+  );
   const id = createSave();
   await turn(id);
   await change(id);
@@ -707,7 +744,10 @@ test("renaming an NPC changes their name in every Message, Snapshot and portrait
   const id = store().create({
     worldBrief: "A drowned city",
     pc: { name: "Ash" },
-    opening: { npcs: [{ name: "Hesper Vane", appearance: "a woman" }, NPCS[1]!], pcKnown: { facts: [], npcs: ["Hesper Vane"], summaries: { "Hesper Vane": "A ferry pilot." } } },
+    opening: {
+      npcs: [{ name: "Hesper Vane", appearance: "a woman" }, NPCS[1]!],
+      pcKnown: { facts: [], npcs: ["Hesper Vane"], summaries: { "Hesper Vane": "A ferry pilot." } },
+    },
   });
   await turn(id, "I greet Hesper.");
   store().addPortrait(id, 0, "Hesper Vane", png(1));
@@ -716,10 +756,18 @@ test("renaming an NPC changes their name in every Message, Snapshot and portrait
   expect((await app.post(`/saves/${id}/rename`, { name: "Nobody", newName: "Mira" })).status).toBe(404);
   expect((await app.post(`/saves/${id}/rename`, { name: "Hesper Vane", newName: "Mira Vane" })).status).toBe(200);
 
-  expect(store().messages(id).map(({ text }) => text)).toEqual(["I greet Mira.", "Mira Vane waves. Mira's ferry waits. Hespera stays."]);
+  expect(
+    store()
+      .messages(id)
+      .map(({ text }) => text),
+  ).toEqual(["I greet Mira.", "Mira Vane waves. Mira's ferry waits. Hespera stays."]);
   const state = store().latestState(id);
   expect(state.npcs.map(({ name }) => name)).toEqual(["Mira Vane", "Corvin"]);
   expect(state.pcKnown).toMatchObject({ npcs: ["Mira Vane"], summaries: { "Mira Vane": "A ferry pilot." } });
   expect(store().snapshot(id, 1).pcKnown.npcs).toEqual(["Mira Vane"]);
-  expect(store().portraits(id).map(({ npc }) => npc)).toEqual(["Mira Vane"]);
+  expect(
+    store()
+      .portraits(id)
+      .map(({ npc }) => npc),
+  ).toEqual(["Mira Vane"]);
 });

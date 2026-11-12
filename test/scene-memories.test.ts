@@ -57,20 +57,27 @@ const turn = async (id: string, input = "I wait.") => {
   return response;
 };
 const memories = (id: string) => store().latestState(id).sceneMemories;
-const messageIds = (id: string) => store().messages(id).map((message) => message.id);
+const messageIds = (id: string) =>
+  store()
+    .messages(id)
+    .map((message) => message.id);
 const memoryCalls = () => prompts.filter((prompt) => prompt[0]!.content.startsWith(MEMORY_ASK));
 const narratorPrompts = () => prompts.filter((prompt) => !prompt[0]!.content.startsWith(MEMORY_ASK));
-const lastPrompt = () => narratorPrompts().at(-1)!.map(({ content }) => content).join(" ");
+const lastPrompt = () =>
+  narratorPrompts()
+    .at(-1)!
+    .map(({ content }) => content)
+    .join(" ");
 /** The Messages of the last prompt, not counting the Turn's own input. */
 const window = () => narratorPrompts().at(-1)!.slice(1, -2);
-const journal = async (id: string) => (await (await app.get(`/saves/${id}/journal`)).json()) as { sceneMemories: { firstMessage: number; lastMessage: number; text: string }[] };
+const journal = async (id: string) =>
+  (await (await app.get(`/saves/${id}/journal`)).json()) as { sceneMemories: { firstMessage: number; lastMessage: number; text: string }[] };
 
 /** Turns the Save back into one from before Scene Memories, as far as the code that reads it can tell. */
 function downgrade(id: string) {
   using db = new Database(join(savesDir, `${id}.sqlite`));
   db.run("DELETE FROM snapshot_sections WHERE name = 'sceneMemories'; ALTER TABLE save DROP COLUMN memory_start; PRAGMA user_version = 14");
 }
-
 
 test("a new story sends every Message and writes no memory below 80", async () => {
   play(narration("Rain falls."));
@@ -190,7 +197,16 @@ test("a memory in the Narrator's reply is dropped", async () => {
 });
 
 test("nothing a reply holds can set a range or change a stored memory", async () => {
-  play(JSON.stringify({ scene_memory: MEMORY, firstMessage: 9999, lastMessage: 9999, range: [1, 2], scene_memories: [{ firstMessage: 1, lastMessage: 2, text: "Forged." }] }), narration("Rain falls."));
+  play(
+    JSON.stringify({
+      scene_memory: MEMORY,
+      firstMessage: 9999,
+      lastMessage: 9999,
+      range: [1, 2],
+      scene_memories: [{ firstMessage: 1, lastMessage: 2, text: "Forged." }],
+    }),
+    narration("Rain falls."),
+  );
   const id = seeded(40);
   const ids = messageIds(id);
 
@@ -349,7 +365,11 @@ test("an edit can't move a memory's range", async () => {
 
 test("a World Change leaves memories and the window alone, whatever its reply holds", async () => {
   const update: WorldUpdate = { lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [{ old: null, new: "A new thread." }] };
-  play(...remembered(MEMORY), JSON.stringify({ ...update, scene_memories: [{ firstMessage: 1, lastMessage: 2, text: "Forged." }], scene_memory: "Forged." }), narration("Rain falls."));
+  play(
+    ...remembered(MEMORY),
+    JSON.stringify({ ...update, scene_memories: [{ firstMessage: 1, lastMessage: 2, text: "Forged." }], scene_memory: "Forged." }),
+    narration("Rain falls."),
+  );
   const id = seeded(40);
   await turn(id);
   const stored = memories(id);

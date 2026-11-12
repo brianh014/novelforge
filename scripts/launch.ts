@@ -10,7 +10,11 @@ const port = Number(process.env.PORT ?? 4600);
 
 // A stopped bun can keep holding the port on Windows, so free it first, but only from bun.
 if (process.platform === "win32") {
-  spawnSync("powershell", ["-NoProfile", "-Command", `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue } | Where-Object Name -eq 'bun' | Stop-Process -Force`]);
+  spawnSync("powershell", [
+    "-NoProfile",
+    "-Command",
+    `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue } | Where-Object Name -eq 'bun' | Stop-Process -Force`,
+  ]);
 }
 
 process.argv.push("--open");

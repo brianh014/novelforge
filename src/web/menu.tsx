@@ -24,7 +24,9 @@ export function Book(props: { left: ReactNode; children: ReactNode; tabs?: React
   return (
     <main className="desk">
       <div className={`book${props.narrowLeft ? " narrow-left" : ""}${props.leftFolded ? " left-folded" : ""}`}>
-        <section className="page left" inert={props.lockLeft}>{props.left}</section>
+        <section className="page left" inert={props.lockLeft}>
+          {props.left}
+        </section>
         <section className="page right">{props.children}</section>
         {props.tabs}
       </div>
@@ -83,7 +85,11 @@ export function Sheet(props: { rail?: ReactNode; children: ReactNode; foot?: Rea
   return (
     <main className="desk">
       <div className="book sheet">
-        {props.rail !== undefined && <aside className="sheet-rail" inert={props.lockRail}>{props.rail}</aside>}
+        {props.rail !== undefined && (
+          <aside className="sheet-rail" inert={props.lockRail}>
+            {props.rail}
+          </aside>
+        )}
         <section className="sheet-main">
           <Fold view={props.view}>{props.children}</Fold>
           {props.foot && <div className="sheet-foot">{props.foot}</div>}
@@ -95,7 +101,13 @@ export function Sheet(props: { rail?: ReactNode; children: ReactNode; foot?: Rea
 }
 
 /** Asks before anything permanent goes. `onDelete` does it, and its failure stays in the dialog. */
-export function DeleteDialog(props: { name: string; warning: string; onDelete: () => Promise<unknown>; onClose: () => void; onDeleted: (name: string) => void }) {
+export function DeleteDialog(props: {
+  name: string;
+  warning: string;
+  onDelete: () => Promise<unknown>;
+  onClose: () => void;
+  onDeleted: (name: string) => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -120,13 +132,17 @@ export function DeleteDialog(props: { name: string; warning: string; onDelete: (
     <dialog ref={dialog} onClose={props.onClose} aria-labelledby="delete-title">
       <h2 id="delete-title">Delete {props.name}?</h2>
       <p>{props.warning}</p>
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
       {/* Cancel comes first because a modal focuses its first control, and that must not be the deleting one. */}
       <div className="row">
-        <button className="quiet" onClick={() => dialog.current!.close()}>
+        <button type="button" className="quiet" onClick={() => dialog.current!.close()}>
           Cancel
         </button>
-        <button className="action" disabled={busy} onClick={confirmDelete}>
+        <button type="button" className="action" disabled={busy} onClick={confirmDelete}>
           Delete
         </button>
       </div>
@@ -138,10 +154,18 @@ export function BookTabs({ id, current }: { id: string; current: "Story" | "Jour
   const here = (tab: typeof current) => (tab === current ? "page" : undefined);
   return (
     <nav className="tabs" aria-label="Book sections">
-      <a href={`#/play/${id}`} aria-current={here("Story")}>Story</a>
-      <a href={`#/journal/${id}`} aria-current={here("Journal")}>Journal</a>
-      <a href={`#/gallery/${id}`} aria-current={here("Gallery")}>Gallery</a>
-      <a href={`#/settings/${id}`} aria-current={here("Settings")}>Settings</a>
+      <a href={`#/play/${id}`} aria-current={here("Story")}>
+        Story
+      </a>
+      <a href={`#/journal/${id}`} aria-current={here("Journal")}>
+        Journal
+      </a>
+      <a href={`#/gallery/${id}`} aria-current={here("Gallery")}>
+        Gallery
+      </a>
+      <a href={`#/settings/${id}`} aria-current={here("Settings")}>
+        Settings
+      </a>
       <a href="#/">Menu</a>
     </nav>
   );
@@ -159,7 +183,10 @@ export function Menu() {
   const [closed, setClosed] = useState(false);
 
   useEffect(() => {
-    getSettings().then((settings) => setCanQuit(settings.canQuit), () => {});
+    getSettings().then(
+      (settings) => setCanQuit(settings.canQuit),
+      () => {},
+    );
   }, []);
 
   return (
@@ -182,13 +209,26 @@ export function Menu() {
         </div>
       ) : (
         <div className="menu">
-          <p className="eyebrow" aria-hidden="true">Contents</p>
+          <p className="eyebrow" aria-hidden="true">
+            Contents
+          </p>
           <nav aria-label="Main Menu">
             <a href="#/new">New Story</a>
             <a href="#/load">Load Story</a>
             <a href="#/settings">Settings</a>
             {/* A server gone by now still counts as closed. */}
-            {canQuit && <button type="button" onClick={() => void quitApp().catch(() => {}).then(() => setClosed(true))}>Quit</button>}
+            {canQuit && (
+              <button
+                type="button"
+                onClick={() =>
+                  void quitApp()
+                    .catch(() => {})
+                    .then(() => setClosed(true))
+                }
+              >
+                Quit
+              </button>
+            )}
           </nav>
         </div>
       )}

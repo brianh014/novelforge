@@ -123,7 +123,5 @@ export async function fillWorkflow(
         values[name] = name === slot ? await store(image ?? { bytes: Buffer.from(BLANK, "base64"), mediaType: "image/png" }) : Number(image !== undefined);
       }),
   );
-  return Object.fromEntries(
-    Object.entries(workflow).map(([id, node]) => [id, { ...node, inputs: filled(node.inputs, values) }]),
-  ) as Graph;
+  return Object.fromEntries(Object.entries(workflow).map(([id, node]) => [id, { ...node, inputs: filled(node.inputs, values) }])) as Graph;
 }

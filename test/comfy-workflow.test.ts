@@ -44,7 +44,7 @@ test("a placeholder inside longer text joins it", async () => {
 });
 
 test.each([
-  ['quotes and braces', 'He said "stop"}, {"2": {"class_type": "Evil"}}'],
+  ["quotes and braces", 'He said "stop"}, {"2": {"class_type": "Evil"}}'],
   ["text that looks like another placeholder", "{{seed}} and {{negative_prompt}}"],
   ["a replacement pattern", "$& $1 $`"],
 ])("prompt text with %s stays plain text", async (_name, prompt) => {
@@ -138,10 +138,7 @@ test("references past the workflow's slots aren't uploaded", async () => {
 });
 
 test("a slot with no image this time gets the blank image and its switch says so", async () => {
-  const { inputs, stored } = await withReferences(
-    { image: "{{npc_2}}", weight: "{{has_npc_2}}", there: "{{has_npc_1}}" },
-    [image("npc", 1)],
-  );
+  const { inputs, stored } = await withReferences({ image: "{{npc_2}}", weight: "{{has_npc_2}}", there: "{{has_npc_1}}" }, [image("npc", 1)]);
 
   expect(inputs).toMatchObject({ weight: 0, there: 1 });
   expect(stored).toHaveLength(1);

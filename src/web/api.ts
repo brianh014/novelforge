@@ -22,7 +22,21 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   canQuit: boolean;
 };
 export type TextHost = Awaited<ReturnType<typeof textHosts>>[number];
-export type Journal = { status: Status; storyTime: { date: string; timeOfDay: string } | null; summary: string; recentSummary: string; facts: string[]; looseEnds: string[]; sceneMemories: State["sceneMemories"]; npcs: string[]; npcSummaries: Record<string, string>; recentNpcs: string[]; portraits: Portrait[]; fullLog: Message[]; chapters: Chapter[] };
+export type Journal = {
+  status: Status;
+  storyTime: { date: string; timeOfDay: string } | null;
+  summary: string;
+  recentSummary: string;
+  facts: string[];
+  looseEnds: string[];
+  sceneMemories: State["sceneMemories"];
+  npcs: string[];
+  npcSummaries: Record<string, string>;
+  recentNpcs: string[];
+  portraits: Portrait[];
+  fullLog: Message[];
+  chapters: Chapter[];
+};
 /** The open Chapter is last, with a null `lastMessage`. */
 export type Chapter = { title: string; lastMessage: number | null };
 /** A null `npc` is the PC. */
@@ -69,8 +83,7 @@ export const listSaves = () => request<{ saves: ListedSave[] }>("/saves").then((
 
 export const getSave = (id: string) => request<OpenSave>(`/saves/${id}`);
 
-export const saveArtStyle = (id: string, artStyle: string) =>
-  request<{ artStyle: string }>(`/saves/${id}`, { ...jsonBody({ artStyle }), method: "PATCH" });
+export const saveArtStyle = (id: string, artStyle: string) => request<{ artStyle: string }>(`/saves/${id}`, { ...jsonBody({ artStyle }), method: "PATCH" });
 
 export async function deleteSave(id: string) {
   const response = await fetch(`/saves/${id}`, { method: "DELETE" });
@@ -106,8 +119,7 @@ export type ComfyModels = Awaited<ReturnType<typeof comfyModels>>;
 export const getComfyModels = () => request<ComfyModels>("/settings/comfy-models");
 
 export type TextTest = { reply: string; seconds: number; firstSeconds: number; tokens: number; model: string };
-export const askTextTest = (prompt: string, signal: AbortSignal) =>
-  request<TextTest>("/settings/text-test", { ...jsonBody({ prompt }), signal });
+export const askTextTest = (prompt: string, signal: AbortSignal) => request<TextTest>("/settings/text-test", { ...jsonBody({ prompt }), signal });
 
 /** `model`, `steps` and `seed` are left out for an Advanced workflow, which decides those itself. */
 export type ComfyTestStats = { seconds: number; model?: string; steps?: number; seed?: number };
@@ -126,18 +138,13 @@ export const getTextHosts = (model: string) =>
   request<{ hosts: TextHost[] }>(`/settings/text-hosts?model=${encodeURIComponent(model)}`).then(({ hosts }) => hosts);
 
 /** What stops the Narrator replying, if anything. */
-export function setupProblem({
-  textBaseUrl,
-  textModel,
-  hasTextApiKey,
-}: Pick<Settings, "textBaseUrl" | "textModel" | "hasTextApiKey">) {
+export function setupProblem({ textBaseUrl, textModel, hasTextApiKey }: Pick<Settings, "textBaseUrl" | "textModel" | "hasTextApiKey">) {
   if (!textModel) return "No text model is set.";
   // shortcut: local servers need no key, so only OpenRouter is checked, ask per server if more keyed hosts appear.
   if (!hasTextApiKey && textBaseUrl.includes("openrouter.ai")) return "No API key is set.";
 }
 
-export const getMessages = (id: string) =>
-  request<{ messages: Message[] }>(`/saves/${id}/messages`).then(({ messages }) => messages);
+export const getMessages = (id: string) => request<{ messages: Message[] }>(`/saves/${id}/messages`).then(({ messages }) => messages);
 
 export const getJournal = (id: string) => request<Journal>(`/saves/${id}/journal`);
 
@@ -189,7 +196,8 @@ export const redrawImage = (id: string, { kind, ref }: GalleryImage, prompt: str
   request<object>(`/saves/${id}/gallery/redraw`, jsonBody({ kind, ref, prompt }));
 
 /** A Cover or portrait drawn again from a new Image Prompt, written from the story as it is now. */
-export const updateImage = (id: string, { kind, ref }: GalleryImage, nudge = "") => request<object>(`/saves/${id}/gallery/update`, jsonBody({ kind, ref, nudge }));
+export const updateImage = (id: string, { kind, ref }: GalleryImage, nudge = "") =>
+  request<object>(`/saves/${id}/gallery/update`, jsonBody({ kind, ref, nudge }));
 
 export const deleteImage = (id: string, { kind, ref }: GalleryImage) => request<object>(`/saves/${id}/gallery/delete`, jsonBody({ kind, ref }));
 
@@ -201,7 +209,16 @@ export const redrawHeldImage = (id: string, picture: HeldPicture, prompt: string
 /** Starts drawing on the form and answers at once. `id` is the one this form's images are held under, if it has one yet. */
 export const drawOnForm = (
   ask: { id?: string; artStyle: string; nudge?: string } & (
-    | { kind: "cover"; title: string; theme: string; worldBrief: string; pc: { name: string; physicalTraits: string }; pcOnCover: boolean; characters: Character[]; inventory: string }
+    | {
+        kind: "cover";
+        title: string;
+        theme: string;
+        worldBrief: string;
+        pc: { name: string; physicalTraits: string };
+        pcOnCover: boolean;
+        characters: Character[];
+        inventory: string;
+      }
     | { kind: "portrait"; name: string; physicalTraits: string; inventory: string; theme: string; worldBrief: string }
     | { kind: "npc"; ref: string; name: string; pcName: string; description: string; theme: string; worldBrief: string }
   ),
@@ -214,12 +231,9 @@ export const decideForMe = (id: string, draft: string, signal?: AbortSignal) =>
 export const askNarrator = (id: string, question: string, signal?: AbortSignal) =>
   request<{ text: string }>(`/saves/${id}/questions`, { ...jsonBody({ question }), signal }).then(({ text }) => text);
 
-export const portraitUrl = (id: string, { id: portraitId, redraws }: Pick<Portrait, "id" | "redraws">) =>
-  `/saves/${id}/portraits/${portraitId}?v=${redraws}`;
+export const portraitUrl = (id: string, { id: portraitId, redraws }: Pick<Portrait, "id" | "redraws">) => `/saves/${id}/portraits/${portraitId}?v=${redraws}`;
 
-
-export const statusWords = ({ health, injuries, conditions }: Status) =>
-  [health, ...injuries, ...conditions].join(", ");
+export const statusWords = ({ health, injuries, conditions }: Status) => [health, ...injuries, ...conditions].join(", ");
 
 /** `id` is the one this form's images are held under, if it has one yet. */
 export const generateWorld = (world: WorldChoices & WorldPc & { id?: string }, signal?: AbortSignal) =>
@@ -258,13 +272,11 @@ export const tellNarrator = (id: string, change: string) => request<object>(`/sa
 export const previewRevert = (id: string, messageId: number) =>
   request<{ messages: number; images: number; portraits: number }>(`/saves/${id}/messages/${messageId}/revert`);
 
-export const revert = (id: string, messageId: number) =>
-  request<object>(`/saves/${id}/messages/${messageId}/revert`, jsonBody({}));
+export const revert = (id: string, messageId: number) => request<object>(`/saves/${id}/messages/${messageId}/revert`, jsonBody({}));
 
 export const duplicateSave = (id: string) => request<{ id: string }>(`/saves/${id}/duplicate`, jsonBody({}));
 
-export const duplicateFrom = (id: string, fromMessage: number) =>
-  request<{ id: string }>(`/saves/${id}/duplicate`, jsonBody({ fromMessage }));
+export const duplicateFrom = (id: string, fromMessage: number) => request<{ id: string }>(`/saves/${id}/duplicate`, jsonBody({ fromMessage }));
 
 /** Each event of a Turn's stream, which the server always writes as one `event` line and one JSON `data` line. */
 async function* turnEvents(body: ReadableStream) {
@@ -285,36 +297,15 @@ async function* turnEvents(body: ReadableStream) {
  * Plays one Turn, passing all the narration so far to `show` each time it changes. `after` is the latest Message
  * before this Turn, because a dropped stream may still have committed.
  */
-export const playTurn = (
-  id: string,
-  input: string,
-  after: number,
-  show: Show,
-  signal: AbortSignal,
-) => streamTurn(id, "turns", { input }, input, after, "Send it again to retry.", show, signal);
+export const playTurn = (id: string, input: string, after: number, show: Show, signal: AbortSignal) =>
+  streamTurn(id, "turns", { input }, input, after, "Send it again to retry.", show, signal);
 
 /** The story's first Message. A failure hands back no input, as the player wrote nothing. */
-export const playOpening = (id: string, show: Show, signal: AbortSignal) =>
-  streamTurn(id, "opening", {}, "", 0, "Try again.", show, signal);
+export const playOpening = (id: string, show: Show, signal: AbortSignal) => streamTurn(id, "opening", {}, "", 0, "Try again.", show, signal);
 
 /** Rewrite, with feedback, or Regenerate. A replacement commits under a new id, so `messageId` works as `after` does. */
-export const replaceResponse = (
-  id: string,
-  messageId: number,
-  feedback: string,
-  show: Show,
-  signal: AbortSignal,
-) =>
-  streamTurn(
-    id,
-    `messages/${messageId}/${feedback ? "rewrite" : "regenerate"}`,
-    feedback ? { feedback } : {},
-    feedback,
-    messageId,
-    "Try again.",
-    show,
-    signal,
-  );
+export const replaceResponse = (id: string, messageId: number, feedback: string, show: Show, signal: AbortSignal) =>
+  streamTurn(id, `messages/${messageId}/${feedback ? "rewrite" : "regenerate"}`, feedback ? { feedback } : {}, feedback, messageId, "Try again.", show, signal);
 
 /** An Edit: the player's own words for the latest response, which keeps its id. Nothing streams, as the words are the player's. */
 export const editResponse = (id: string, messageId: number, text: string, signal: AbortSignal) =>
@@ -339,17 +330,10 @@ const retryHintFor = ({ input, replaces }: { input: string; replaces?: number })
   input && replaces === undefined ? "Send it again to retry." : "Try again.";
 
 /** What to tell the player about a Turn that failed while they were away. */
-export const failureMessage = ({ error, status, input, replaces }: FailedTurn) =>
-  withHint(error, status, retryHintFor({ input, replaces }));
+export const failureMessage = ({ error, status, input, replaces }: FailedTurn) => withHint(error, status, retryHintFor({ input, replaces }));
 
 /** Follows a Turn from the server until it ends, for a page that lost its stream or never had one. */
-async function awaitTurn(
-  id: string,
-  input: string,
-  after: number,
-  retryHint: string,
-  show: Show,
-): Promise<TurnResult> {
+async function awaitTurn(id: string, input: string, after: number, retryHint: string, show: Show): Promise<TurnResult> {
   reportEvent("polling-fallback", { save: id, after });
   for (let misses = 0; misses < turnPolling.tries; ) {
     try {
@@ -403,10 +387,14 @@ async function streamTurn(
     let narration = "";
     let retry: string | undefined;
     for await (const { event, data } of turnEvents(response.body!)) {
-      if (event === "narration") show((narration += data.text), retry);
+      if (event === "narration") {
+        narration += data.text;
+        show(narration, retry);
+      }
       if (event === "restart") {
         retry = data.reason;
-        show((narration = ""), retry);
+        narration = "";
+        show(narration, retry);
         reportEvent("narration-restarted", { save: id, after });
       }
       if (event === "done") return { messages: data.messages };

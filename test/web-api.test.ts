@@ -36,7 +36,10 @@ function start(textProvider: TextProvider, tamper = (send: () => Promise<Respons
   }) as typeof fetch);
 }
 
-const reply = (text: string): TextProvider => async () => narration(text);
+const reply =
+  (text: string): TextProvider =>
+  async () =>
+    narration(text);
 
 /** Writes `parts` as streamed reply text, then returns the whole reply. */
 const streamed =
@@ -146,7 +149,14 @@ test("events split across network chunks still parse, even inside a character", 
   const middle = bytes.indexOf(0xc3) + 1;
   start(reply("Unused."), async () => {
     const parts = [bytes.subarray(0, 5), bytes.subarray(5, middle), bytes.subarray(middle)];
-    return new Response(new ReadableStream({ start: (c) => (parts.forEach((p) => c.enqueue(p)), c.close()) }));
+    return new Response(
+      new ReadableStream({
+        start: (c) => {
+          for (const part of parts) c.enqueue(part);
+          c.close();
+        },
+      }),
+    );
   });
   const id = await app.createSave();
 
@@ -332,7 +342,13 @@ const worldReply = (overview: string) =>
 
 test("the wizard's calls carry a world from Pick for me to a Save", async () => {
   const sheet = JSON.stringify({ wearing: ["coat"], carrying: [], health: "unhurt", injuries: [], conditions: [] });
-  const replies = [JSON.stringify({ worldBrief: "A city on a whale.", title: "The Salt Reckoning", background: "Sailing" }), JSON.stringify({ text: "A vast city on a sleeping whale." }), sheet, worldReply("First."), worldReply("Second.")];
+  const replies = [
+    JSON.stringify({ worldBrief: "A city on a whale.", title: "The Salt Reckoning", background: "Sailing" }),
+    JSON.stringify({ text: "A vast city on a sleeping whale." }),
+    sheet,
+    worldReply("First."),
+    worldReply("Second."),
+  ];
   start(async () => replies.shift()!);
 
   const pc = { name: "Ash", background: "", physicalTraits: "T", inventory: "coat" };

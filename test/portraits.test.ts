@@ -180,7 +180,13 @@ test("neither a new Save nor its first Turn waits for the PC's portrait, and a T
 
 test("a failed portrait doesn't touch play, tells the client nothing, and the next move of the Scene tries again", async () => {
   const restore = allowLogged();
-  play([turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn(), turn(moveTo("The pier", "Hesper"))], new Error("SECRET-API-FAILURE"), png(1), png(2), png(3));
+  play(
+    [turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn(), turn(moveTo("The pier", "Hesper"))],
+    new Error("SECRET-API-FAILURE"),
+    png(1),
+    png(2),
+    png(3),
+  );
   await enableImages();
   const id = await app.createSave();
 
@@ -285,7 +291,9 @@ test("a Scene Image gets the portraits of the PC first, then those marked in it,
     { role: "npc", bytes: png(3), mediaType: "image/png" },
     { role: "npc", bytes: png(4), mediaType: "image/png" },
   ]);
-  expect(second.prompt).toContain("the person from image 2, Stooped, red scarf, nods to the person from image 3, Tall, in oilskins, while the person from image 1, wearing");
+  expect(second.prompt).toContain(
+    "the person from image 2, Stooped, red scarf, nods to the person from image 3, Tall, in oilskins, while the person from image 1, wearing",
+  );
   expect(second.prompt).toContain("wearing a tin badge");
   expect(second.prompt).not.toContain("Orin");
   expect(second.prompt).not.toContain("Unseen");
@@ -343,7 +351,13 @@ test("Revert counts and deletes a portrait from a Reverted first appearance, and
 });
 
 test("Regenerate takes the portrait with the old response and draws one for the new response", async () => {
-  play([turn(meet("Hesper", "First looks"), know("Hesper"), inView("Hesper")), turn(meet("Hesper", "Second looks"), know("Hesper"), inView("Hesper"))], png(1), png(2), png(3), png(4));
+  play(
+    [turn(meet("Hesper", "First looks"), know("Hesper"), inView("Hesper")), turn(meet("Hesper", "Second looks"), know("Hesper"), inView("Hesper"))],
+    png(1),
+    png(2),
+    png(3),
+    png(4),
+  );
   await enableImages();
   const id = await app.createSave();
   await playSettled(id);
@@ -407,7 +421,14 @@ test("deleting a Save aborts its PC's portrait, and nothing brings the file back
 });
 
 test("a Duplicate from here keeps the PC and the portraits up to that Message", async () => {
-  play([turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn(meet("Orin"), know("Orin"), inView("Hesper", "Orin"))], png(1), png(2), png(3), png(4), png(5));
+  play(
+    [turn(meet("Hesper"), know("Hesper"), inView("Hesper")), turn(meet("Orin"), know("Orin"), inView("Hesper", "Orin"))],
+    png(1),
+    png(2),
+    png(3),
+    png(4),
+    png(5),
+  );
   await enableImages();
   const id = await createPc();
   await playSettled(id);
@@ -647,7 +668,14 @@ test("a malformed list of people doesn't cost the Turn", async () => {
 });
 
 test("older responses show who they named, so that the Narrator has a filled list to copy", async () => {
-  const named = JSON.stringify({ check: null, narration: "Priya waves.", state_operations: [], people: [person("Priya")], scene_changed: false, visual_description: "" });
+  const named = JSON.stringify({
+    check: null,
+    narration: "Priya waves.",
+    state_operations: [],
+    people: [person("Priya")],
+    scene_changed: false,
+    visual_description: "",
+  });
   const provider = scriptedTextProvider(named, turn());
   images = scriptedImages();
   app = startApp(join(folder.path, "Saves"), provider.textProvider, undefined, undefined, images.imageAdapter);

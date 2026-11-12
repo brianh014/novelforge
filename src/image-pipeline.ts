@@ -11,7 +11,16 @@ export type ImagePipeline = ReturnType<typeof imagePipeline>;
 
 type Npc = State["npcs"][number];
 /** `restyled` is everyone whose looks the Turn changed, with null for the PC, whose portrait may be updated to match. */
-export type Scene = { changed: boolean; moved: boolean; description: string; location: string; npcs: Npc[]; wearing: string[]; portraits: Npc[]; restyled?: (Npc | null)[] };
+export type Scene = {
+  changed: boolean;
+  moved: boolean;
+  description: string;
+  location: string;
+  npcs: Npc[];
+  wearing: string[];
+  portraits: Npc[];
+  restyled?: (Npc | null)[];
+};
 /** A `redraw` key marks what the player asked for by hand, which draws whatever the Settings now say. */
 type Job = { kind: string; messageId: number; draw: (signal: AbortSignal) => Promise<void>; redraw?: string; scene?: boolean };
 /** `world` is what the player can read of it: the World Overview, or the World Brief before there is one. */
@@ -35,11 +44,9 @@ const COVER_AVOID = "captions, author names, subtitles, taglines, labels, charac
 const castOf = ({ scene }: State) => JSON.stringify(scene.visibleCast.toSorted());
 
 /** Compares the structured scene, never a description of it. */
-export const movedScene = (before: State, after: State) =>
-  before.scene.location !== after.scene.location || castOf(before) !== castOf(after);
+export const movedScene = (before: State, after: State) => before.scene.location !== after.scene.location || castOf(before) !== castOf(after);
 
-export const visibleNpcs = ({ scene, npcs }: State) =>
-  scene.visibleCast.flatMap((name) => npcs.filter((npc) => npc.name === name));
+export const visibleNpcs = ({ scene, npcs }: State) => scene.visibleCast.flatMap((name) => npcs.filter((npc) => npc.name === name));
 
 /**
  * Who to ask for a portrait after a Turn. Anyone the PC just came to know, in view or not, and on every move of the
@@ -47,9 +54,7 @@ export const visibleNpcs = ({ scene, npcs }: State) =>
  */
 export function portraitsDue(before: State, after: State) {
   const { scene, pcKnown } = after;
-  const due = movedScene(before, after)
-    ? [...scene.visibleCast, ...pcKnown.npcs]
-    : pcKnown.npcs.filter((name) => !before.pcKnown.npcs.includes(name));
+  const due = movedScene(before, after) ? [...scene.visibleCast, ...pcKnown.npcs] : pcKnown.npcs.filter((name) => !before.pcKnown.npcs.includes(name));
   return [...new Set(due)].flatMap((name) => after.npcs.filter((npc) => npc.name === name));
 }
 
@@ -71,7 +76,12 @@ export const pcNow = <Pc extends Save["pc"]>(pc: Pc, { pcAppearance }: Pick<Stat
 export function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: string[], outfit = "") {
   // A PC on the form may have no name yet, and an empty search would match between every letter.
   const unnamed = (text: string) => (name ? text.replaceAll(name, "this person") : text);
-  const traits = unnamed(physicalTraits.trim().replace(/\s*\n\s*/g, " ").replace(/\.$/, ""));
+  const traits = unnamed(
+    physicalTraits
+      .trim()
+      .replace(/\s*\n\s*/g, " ")
+      .replace(/\.$/, ""),
+  );
   const dressed =
     wearing.length > 0
       ? `wearing ${wearing.join(", ")}`
@@ -81,8 +91,7 @@ export function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: stri
   return [traits, dressed].filter(Boolean).join(", ");
 }
 
-const named = (full: string, mark: string) =>
-  full.toLowerCase() === mark.toLowerCase() || full.toLowerCase().split(" ").includes(mark.toLowerCase());
+const named = (full: string, mark: string) => full.toLowerCase() === mark.toLowerCase() || full.toLowerCase().split(" ").includes(mark.toLowerCase());
 
 /** Narrators shorten names, so part of one counts when it can only mean one person. */
 function findPerson(npcs: Npc[], mark: string) {
@@ -121,7 +130,8 @@ export function expandMarks(text: string, npcs: Npc[], pcName: string, reference
 }
 
 // What a head and shoulders frame can't show, as an image model squeezes the whole body in to fit a mention of feet.
-const BELOW_THE_FRAME = /\b(?:hands?|wrists?|fingers?|arms?|legs?|knees?|feet|foot|barefoot|toes?|boots?|shoes?|sandals?|hose|breeches|trousers|pants|skirt|holding|carrying|clutching|gripping)\b/i;
+const BELOW_THE_FRAME =
+  /\b(?:hands?|wrists?|fingers?|arms?|legs?|knees?|feet|foot|barefoot|toes?|boots?|shoes?|sandals?|hose|breeches|trousers|pants|skirt|holding|carrying|clutching|gripping)\b/i;
 
 /** shortcut: drops whole comma clauses, so a clause naming hair and feet together loses the hair, split finer if fallbacks get common. */
 export const chestUp = (looks: string) =>
@@ -154,7 +164,13 @@ export const unnamed = (names: string[], text: string) => names.filter(Boolean).
  * The PC, unless `withPc` is false, and the Important Characters the player put on it, as a cover shows them, by looks alone. `ref` is whose portrait each is drawn from: null for the PC.
  * shortcut: a character with no description is left off, and one is only as drawn as their description says, ask for looks if covers miss them.
  */
-export function coverPeople(pc: Save["pc"], wearing: string[], characters: { name: string; description: string; ref?: string; onCover?: boolean }[], outfit = "", withPc = true) {
+export function coverPeople(
+  pc: Save["pc"],
+  wearing: string[],
+  characters: { name: string; description: string; ref?: string; onCover?: boolean }[],
+  outfit = "",
+  withPc = true,
+) {
   const names = [pc.name, ...characters.map(({ name }) => name)];
   const hero = withPc ? [{ looks: pcLooks(pc, wearing, outfit), ref: null as string | null | undefined }] : [];
   const others = characters.filter(({ onCover = true }) => onCover);
@@ -190,8 +206,7 @@ export function shownFailure(error: unknown) {
 }
 
 type Role = ImagePayload["reference_images"][number]["role"];
-const reference = (role: Role, image: { bytes: Uint8Array; mediaType: string } | null | undefined) =>
-  image ? [{ role, ...image }] : [];
+const reference = (role: Role, image: { bytes: Uint8Array; mediaType: string } | null | undefined) => (image ? [{ role, ...image }] : []);
 
 /**
  * Decides when a Scene Image or portrait is drawn, and draws it in the background. Jobs live in memory, so stopping the
@@ -237,8 +252,7 @@ export function imagePipeline(
   function ready() {
     const current = settings.read();
     // An unfinished setup is silent too, as there is no image to report failing.
-    const setUp =
-      current.imageProvider === "local" ? localIsSetUp(current) : current.imageModel && current.imageApiKey;
+    const setUp = current.imageProvider === "local" ? localIsSetUp(current) : current.imageModel && current.imageApiKey;
     return current.imagesEnabled && setUp;
   }
 
@@ -259,7 +273,13 @@ export function imagePipeline(
   const referenced = (id: string, pictured: Pictured) => {
     const people = references(id, pictured);
     const current = settings.read();
-    const reaching = current.imageProvider === "local" && current.comfyMode === "simple" ? usableReferences(current, people.map(({ image }) => image)).length : people.length;
+    const reaching =
+      current.imageProvider === "local" && current.comfyMode === "simple"
+        ? usableReferences(
+            current,
+            people.map(({ image }) => image),
+          ).length
+        : people.length;
     return people.slice(0, reaching).map(({ person }) => person);
   };
 
@@ -447,7 +467,13 @@ export function imagePipeline(
      * `write` makes the Image Prompt, so the player needn't wait for it. A failure is held for the player, and only the step that failed
      * reaches the log, as a provider's error can repeat the prompt and the story.
      */
-    drawRequested(id: string, messageId: number, words: string, moment: Omit<Moment, "description">, write: (signal: AbortSignal) => Promise<{ text: string; title: string }>) {
+    drawRequested(
+      id: string,
+      messageId: number,
+      words: string,
+      moment: Omit<Moment, "description">,
+      write: (signal: AbortSignal) => Promise<{ text: string; title: string }>,
+    ) {
       requestFailures.delete(id);
       const draw = async (signal: AbortSignal) => {
         let step = "writing its prompt";
@@ -504,7 +530,9 @@ export function imagePipeline(
       if (!updatePortraits) return;
       // A portrait whose update failed is tried again when the Scene moves, as missing portraits are.
       const stale = scene.moved
-        ? saves.portraits(id).filter(({ id: ref }) => outOfDate.has(redrawKey(id, { kind: "portrait", ref })))
+        ? saves
+            .portraits(id)
+            .filter(({ id: ref }) => outOfDate.has(redrawKey(id, { kind: "portrait", ref })))
             .flatMap(({ npc }) => (npc === null ? [null] : scene.npcs.filter(({ name }) => name === npc)))
         : [];
       pipeline.restyled(id, [...new Set([...(scene.restyled ?? []), ...stale])], scene.wearing);

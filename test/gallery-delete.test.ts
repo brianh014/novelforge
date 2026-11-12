@@ -88,7 +88,13 @@ test("the Gallery goes Cover, the PC, NPCs by name, then Scenes newest first", a
 
 test("a Message's images sort newest first too, and a Redraw moves none of them", async () => {
   await play(
-    [turn("A wet street", meet("Bram"), know("Bram"), scene("The ferry", "Bram")), written("One"), written("Two"), turn("A pier", scene("The pier")), written("Three")],
+    [
+      turn("A wet street", meet("Bram"), know("Bram"), scene("The ferry", "Bram")),
+      written("One"),
+      written("Two"),
+      turn("A pier", scene("The pier")),
+      written("Three"),
+    ],
     ...Array.from({ length: 11 }, (_, mark) => png(mark)),
   );
   const id = await newSave();
@@ -198,14 +204,7 @@ test("an image being Redrawn can't be deleted, running or queued, and can be onc
 });
 
 test("a deleted image can't be Redrawn, and a later one still can", async () => {
-  await play(
-    [turn("One", scene("The ferry")), turn("Two", scene("The ferry")), turn("Three", scene("The ferry"))],
-    png(1),
-    png(2),
-    png(3),
-    png(4),
-    png(5),
-  );
+  await play([turn("One", scene("The ferry")), turn("Two", scene("The ferry")), turn("Three", scene("The ferry"))], png(1), png(2), png(3), png(4), png(5));
   const id = await newSave();
   await playTurn(id);
   await playTurn(id);
@@ -268,13 +267,7 @@ test("a Revert doesn't bring a deleted image back", async () => {
 
 test("a deleted image leaves the Save's file, exports and duplicates, and its id isn't reused", async () => {
   const mark = (text: string) => Uint8Array.of(...PNG, ...Buffer.from(text));
-  await play(
-    [turn("One", scene("The ferry")), written("One"), written("Two")],
-    png(1),
-    mark("deleted-scene-image"),
-    mark("deleted-requested-image"),
-    png(4),
-  );
+  await play([turn("One", scene("The ferry")), written("One"), written("Two")], png(1), mark("deleted-scene-image"), mark("deleted-requested-image"), png(4));
   const id = await newSave();
   await playTurn(id);
   const gallery = await asked(id, "gone");

@@ -19,20 +19,27 @@ let made: string;
 if (process.platform === "win32") {
   const quote = (s: string) => `'${s.replaceAll("'", "''")}'`;
   made = "NovelForge on the desktop";
-  run("powershell", "-NoProfile", "-Command", [
-    `$s = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'NovelForge.lnk'))`,
-    `$s.TargetPath = ${quote(bun)}`,
-    `$s.Arguments = ${quote(`"${launch}"`)}`,
-    `$s.WorkingDirectory = ${quote(repo)}`,
-    `$s.IconLocation = ${quote(icon("ico"))}`,
-    `$s.Save()`,
-  ].join("; "));
+  run(
+    "powershell",
+    "-NoProfile",
+    "-Command",
+    [
+      `$s = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'NovelForge.lnk'))`,
+      `$s.TargetPath = ${quote(bun)}`,
+      `$s.Arguments = ${quote(`"${launch}"`)}`,
+      `$s.WorkingDirectory = ${quote(repo)}`,
+      `$s.IconLocation = ${quote(icon("ico"))}`,
+      `$s.Save()`,
+    ].join("; "),
+  );
 } else if (process.platform === "darwin") {
   made = join(homedir(), "Applications", "NovelForge.app");
   const contents = join(made, "Contents");
   mkdirSync(join(contents, "MacOS"), { recursive: true });
   mkdirSync(join(contents, "Resources"), { recursive: true });
-  writeFileSync(join(contents, "Info.plist"), `<?xml version="1.0" encoding="UTF-8"?>
+  writeFileSync(
+    join(contents, "Info.plist"),
+    `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>CFBundleName</key><string>NovelForge</string>
@@ -41,14 +48,18 @@ if (process.platform === "win32") {
   <key>CFBundleIconFile</key><string>icon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
 </dict></plist>
-`);
+`,
+  );
   // Terminal shows the server's log, and closing its window stops the server, as on the other systems.
   const shell = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
-  writeFileSync(join(contents, "Resources", "open.applescript"), `tell application "Terminal"
+  writeFileSync(
+    join(contents, "Resources", "open.applescript"),
+    `tell application "Terminal"
   do script ${JSON.stringify(`${shell(bun)} ${shell(launch)}`)}
   activate
 end tell
-`);
+`,
+  );
   const executable = join(contents, "MacOS", "NovelForge");
   writeFileSync(executable, `#!/bin/sh\nexec osascript "$(dirname "$0")/../Resources/open.applescript"\n`);
   chmodSync(executable, 0o755);
@@ -57,7 +68,9 @@ end tell
   const apps = join(homedir(), ".local", "share", "applications");
   made = join(apps, "novelforge.desktop");
   mkdirSync(apps, { recursive: true });
-  writeFileSync(made, `[Desktop Entry]
+  writeFileSync(
+    made,
+    `[Desktop Entry]
 Type=Application
 Name=NovelForge
 Exec="${bun}" "${launch}"
@@ -65,6 +78,7 @@ Path=${repo}
 Icon=${icon("svg")}
 Terminal=true
 Categories=Game;
-`);
+`,
+  );
 }
 console.log(`Made ${made}.`);

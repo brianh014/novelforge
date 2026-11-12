@@ -92,7 +92,14 @@ test("every setting survives a restart, and no key comes back", async () => {
     comfySampler: "euler",
     comfyScheduler: "karras",
     comfyFamilyPicks: {
-      qwen21: { comfyDiffusionModel: "qwen.safetensors", comfyTextEncoder: "vl.safetensors", comfyVae: "q.safetensors", comfyLoras: [], comfySteps: null, comfyCfg: 1 },
+      qwen21: {
+        comfyDiffusionModel: "qwen.safetensors",
+        comfyTextEncoder: "vl.safetensors",
+        comfyVae: "q.safetensors",
+        comfyLoras: [],
+        comfySteps: null,
+        comfyCfg: 1,
+      },
     },
     comfyMode: "advanced",
     comfyWorkflow: JSON.stringify({ "1": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}" } } }),
@@ -230,10 +237,7 @@ const importBytes = (body: Uint8Array) =>
 
 test("Art Style survives a Turn, a Revert, both kinds of duplicate, and export then import", async () => {
   await app.stop();
-  app = startApp(
-    join(folder.path, "Saves"),
-    scriptedTextProvider(narration("The tide rises."), narration("The tide falls.")).textProvider,
-  );
+  app = startApp(join(folder.path, "Saves"), scriptedTextProvider(narration("The tide rises."), narration("The tide falls.")).textProvider);
   const id = await app.createSave();
   await setArtStyle(id, "Ukiyo-e");
   await app.post(`/saves/${id}/turns`, { input: "I wait." });
@@ -295,7 +299,12 @@ test("API keys never enter a Save, its duplicates or its export", async () => {
 
 test("a resolution saved by its old video name reads as megapixels, and 4K as the largest left", () => {
   const path = join(folder.path, "old-settings.json");
-  for (const [old, now] of [["480p", "0.5mp"], ["720p", "1mp"], ["1080p", "2mp"], ["4k", "2mp"]]) {
+  for (const [old, now] of [
+    ["480p", "0.5mp"],
+    ["720p", "1mp"],
+    ["1080p", "2mp"],
+    ["4k", "2mp"],
+  ]) {
     writeFileSync(path, JSON.stringify({ imageResolution: old }));
     expect(settingsStore(path).read().imageResolution).toBe(now as never);
   }

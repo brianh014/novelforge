@@ -126,9 +126,7 @@ export const usesPortraits = ({ imageProvider, comfyMode, comfyFamily }: Pick<Se
 
 /** What a family needs chosen before it can draw. */
 export const chosenModels = (choices: GraphChoices) =>
-  isSplit(choices.comfyFamily)
-    ? [choices.comfyDiffusionModel, choices.comfyTextEncoder, choices.comfyVae]
-    : [choices.comfyCheckpoint];
+  isSplit(choices.comfyFamily) ? [choices.comfyDiffusionModel, choices.comfyTextEncoder, choices.comfyVae] : [choices.comfyCheckpoint];
 
 /** Whether Local has what it needs to draw. A workflow brings its own models. */
 export const localIsSetUp = (choices: GraphChoices & Pick<Settings, "comfyMode" | "comfyWorkflow">) =>
@@ -278,7 +276,10 @@ export function buildGraph(choices: GraphChoices, request: GraphRequest) {
     return [id, 0];
   };
 
-  const triggerWords = choices.comfyLoras.map(({ triggerWords }) => triggerWords.trim()).filter(Boolean).join(", ");
+  const triggerWords = choices.comfyLoras
+    .map(({ triggerWords }) => triggerWords.trim())
+    .filter(Boolean)
+    .join(", ");
   // FLUX.2 cuts a long prompt from the end and weighs the start most, so what the image shows goes before how it's drawn.
   const written = isSplit(choices.comfyFamily) ? [request.prompt, request.style_preset] : [request.style_preset, request.prompt];
   const text = [triggerWords, ...written].filter(Boolean).join("\n");

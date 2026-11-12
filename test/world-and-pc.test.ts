@@ -166,14 +166,21 @@ test("a portrait drawn on the form is dressed from the wearing and carrying box,
 
 test("a Cover shows the PC and the Important Characters by looks alone, and only its title as words", async () => {
   const { payloads } = await withImages([], png(1));
-  const characters = [{ name: "Mara", description: "Ash's sister, a smuggler in a red scarf" }, { name: "Orin", description: "" }];
+  const characters = [
+    { name: "Mara", description: "Ash's sister, a smuggler in a red scarf" },
+    { name: "Orin", description: "" },
+  ];
 
-  const { id } = await json(app.post("/worlds/draw", { ...coverAsk, pc: { name: "Ash", physicalTraits: "Tall and grey-eyed" }, characters, inventory: "an oilskin coat" }));
+  const { id } = await json(
+    app.post("/worlds/draw", { ...coverAsk, pc: { name: "Ash", physicalTraits: "Tall and grey-eyed" }, characters, inventory: "an oilskin coat" }),
+  );
 
   await details(id, "cover");
   const { prompt, negative_prompt } = payloads[0]!;
   expect(prompt).toContain("the only writing anywhere on the cover");
-  expect(prompt).toContain("(Tall and grey-eyed, fully clothed in what this says they wear, leaving out what they only carry: an oilskin coat) (someone's sister, a smuggler in a red scarf)");
+  expect(prompt).toContain(
+    "(Tall and grey-eyed, fully clothed in what this says they wear, leaving out what they only carry: an oilskin coat) (someone's sister, a smuggler in a red scarf)",
+  );
   expect(prompt).not.toContain("Mara");
   expect(prompt).not.toContain("Ash");
   expect(negative_prompt).toContain("character names");
@@ -422,7 +429,14 @@ const emptyPc = { name: "", background: "", physicalTraits: "", inventory: "" };
 
 test("Pick for me is one call over the whole form's empty boxes, seeing every other box", async () => {
   const { prompts } = await withImages([
-    JSON.stringify({ title: "The Whale City", startingHook: "The whale wakes.", name: "Ash", worldBrief: "Not asked for", background: "Not asked for", characters: [{ name: "Not asked for", description: "" }] }),
+    JSON.stringify({
+      title: "The Whale City",
+      startingHook: "The whale wakes.",
+      name: "Ash",
+      worldBrief: "Not asked for",
+      background: "Not asked for",
+      characters: [{ name: "Not asked for", description: "" }],
+    }),
   ]);
 
   const response = await app.post("/worlds/pick", {
@@ -468,7 +482,14 @@ test.each([
   ["physicalTraits", "the PC's physical traits"],
 ])("the button on an empty %s box writes it from scratch, seeing every other box", async (field, about) => {
   const { prompts } = await withImages([JSON.stringify({ text: "Written." })]);
-  const setup = { theme: "Steampunk", title: "Tide", worldBrief: "", startingHook: "", characters: [{ name: "Mara", description: "A smuggler" }], pc: { ...emptyPc, background: "Sailing" } };
+  const setup = {
+    theme: "Steampunk",
+    title: "Tide",
+    worldBrief: "",
+    startingHook: "",
+    characters: [{ name: "Mara", description: "A smuggler" }],
+    pc: { ...emptyPc, background: "Sailing" },
+  };
 
   const response = await app.post("/enhance", { ...setup, field, text: "  " });
 
@@ -480,14 +501,16 @@ test.each([
   expect(JSON.parse(user!.content)).toEqual(setup);
 });
 
-
 const mara = { name: "Mara", description: "Ash's sister, a smuggler in a red scarf", ref: "m1" };
-const put = (path: string, bytes: Uint8Array<ArrayBuffer>, type = "application/octet-stream") => fetch(app.url(path), { method: "PUT", headers: { "content-type": type }, body: bytes });
+const put = (path: string, bytes: Uint8Array<ArrayBuffer>, type = "application/octet-stream") =>
+  fetch(app.url(path), { method: "PUT", headers: { "content-type": type }, body: bytes });
 
 test("an Important Character's portrait is drawn on the form from their description, with nobody named", async () => {
   const { payloads } = await withImages([], png(1));
 
-  const { id } = await json(app.post("/worlds/draw", { kind: "npc", ref: "m1", name: "Mara", pcName: "Ash", description: mara.description, theme: "Western", artStyle: "Ink wash" }));
+  const { id } = await json(
+    app.post("/worlds/draw", { kind: "npc", ref: "m1", name: "Mara", pcName: "Ash", description: mara.description, theme: "Western", artStyle: "Ink wash" }),
+  );
 
   expect(await bytesOf(`/worlds/${id}/npcs/m1`)).toEqual(png(1));
   expect(payloads[0]).toMatchObject({ aspect_ratio: "1:1", reference_images: [] });
@@ -518,7 +541,10 @@ test("a Cover shows only the characters the player put on it, from their portrai
 
   const cover = payloads.find(({ aspect_ratio }) => aspect_ratio === "2:3")!;
   const roles = (payload: typeof cover) => payload.reference_images.map(({ role, bytes }) => [role, bytes]);
-  expect(roles(cover)).toEqual([["pc", png(1)], ["npc", await bytesOf(`/worlds/${id}/npcs/m1`)]]);
+  expect(roles(cover)).toEqual([
+    ["pc", png(1)],
+    ["npc", await bytesOf(`/worlds/${id}/npcs/m1`)],
+  ]);
   expect(cover.prompt).toContain("someone's sister");
   expect(cover.prompt).not.toContain("long dead");
   expect(roles(payloads.at(-1)!)).toEqual(roles(cover));
@@ -527,7 +553,9 @@ test("a Cover shows only the characters the player put on it, from their portrai
 test("a Cover with nobody on it waits for no portrait", async () => {
   const { payloads } = await withImages([], png(1));
 
-  const { id } = await json(app.post("/worlds/draw", { ...coverAsk, pcOnCover: false, pc: { name: "Ash", physicalTraits: "Tall" }, characters: [{ ...mara, onCover: false }] }));
+  const { id } = await json(
+    app.post("/worlds/draw", { ...coverAsk, pcOnCover: false, pc: { name: "Ash", physicalTraits: "Tall" }, characters: [{ ...mara, onCover: false }] }),
+  );
 
   expect(await bytesOf(`/worlds/${id}/cover`)).toEqual(png(1));
   expect(payloads[0]!.reference_images).toEqual([]);
@@ -568,7 +596,10 @@ test("the player's own picture replaces a Cover in the Gallery, keeping its prom
   await details(world, "cover");
   const { id } = await begin(world);
   for (let tries = 0; tries < 100 && !saveStore(savesDir).read(id).hasCover; tries++) await Bun.sleep(5);
-  const cover = () => json<{ images: { kind: string; ref: number; prompt: string }[] }>(app.get(`/saves/${id}/gallery`)).then(({ images }) => images.find(({ kind }) => kind === "cover")!);
+  const cover = () =>
+    json<{ images: { kind: string; ref: number; prompt: string }[] }>(app.get(`/saves/${id}/gallery`)).then(
+      ({ images }) => images.find(({ kind }) => kind === "cover")!,
+    );
   const before = await cover();
 
   expect((await put(`/saves/${id}/gallery/cover/${before.ref}`, png(9))).status).toBe(200);
@@ -580,7 +611,9 @@ test("the player's own picture replaces a Cover in the Gallery, keeping its prom
 
 test("pictures drawn or uploaded on the form survive a restart, and Begin takes them and clears them away", async () => {
   const { payloads } = await withImages([sheet, generated()], png(1), png(2));
-  const { id } = await json(app.post("/worlds/draw", { kind: "npc", ref: "m1", name: "Mara", pcName: "Ash", description: mara.description, theme: "Western", artStyle: "Ink wash" }));
+  const { id } = await json(
+    app.post("/worlds/draw", { kind: "npc", ref: "m1", name: "Mara", pcName: "Ash", description: mara.description, theme: "Western", artStyle: "Ink wash" }),
+  );
   expect((await details(id, "npcs/m1")).hasImage).toBe(true);
   await put(`/worlds/${id}/cover`, png(7));
 

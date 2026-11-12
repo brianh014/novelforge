@@ -64,7 +64,10 @@ export function sample(schema: Schema, key = "", root: Schema = schema): unknown
     case "object":
       // In the schema's own order, as a Turn's narration only streams once "check" has come first.
       return Object.fromEntries(
-        Object.entries(schema.properties ?? {}).map(([name, value]) => [name, name === "check" ? null : key === "people" && name === "name" ? newcomer() : sample(value, name, root)]),
+        Object.entries(schema.properties ?? {}).map(([name, value]) => [
+          name,
+          name === "check" ? null : key === "people" && name === "name" ? newcomer() : sample(value, name, root),
+        ]),
       );
     case "array":
       return schema.items ? [0, 1, 2].map(() => sample(schema.items!, key, root)) : [];
@@ -82,9 +85,30 @@ export function sample(schema: Schema, key = "", root: Schema = schema): unknown
   }
 }
 
-const FACTS = ["The harbourmaster takes bribes", "The lighthouse has been dark for a week", "Smugglers use the old sea wall", "The bell tolls at the wrong hours", "No ship has left port since the storm", "The chapel keeps a locked crypt"];
-const LOOSE_ENDS = ["Who was the stranger in the grey coat?", "What is hidden under the sea wall?", "Why did the lighthouse go dark?", "Where did the missing fishermen go?", "Who rings the bell at night?", "What does the harbourmaster owe?"];
-const WHO = ["A dockhand who owes the harbourmaster money", "A widow who keeps the lamp shop by the quay", "A sailor stranded since the storm", "A clerk at the customs house", "A priest who rarely leaves the chapel", "A smuggler posing as a net mender"];
+const FACTS = [
+  "The harbourmaster takes bribes",
+  "The lighthouse has been dark for a week",
+  "Smugglers use the old sea wall",
+  "The bell tolls at the wrong hours",
+  "No ship has left port since the storm",
+  "The chapel keeps a locked crypt",
+];
+const LOOSE_ENDS = [
+  "Who was the stranger in the grey coat?",
+  "What is hidden under the sea wall?",
+  "Why did the lighthouse go dark?",
+  "Where did the missing fishermen go?",
+  "Who rings the bell at night?",
+  "What does the harbourmaster owe?",
+];
+const WHO = [
+  "A dockhand who owes the harbourmaster money",
+  "A widow who keeps the lamp shop by the quay",
+  "A sailor stranded since the storm",
+  "A clerk at the customs house",
+  "A priest who rarely leaves the chapel",
+  "A smuggler posing as a net mender",
+];
 const CONDITIONS = ["Soaked to the skin", "Tired from the long walk", "Uneasy", "Hungry"];
 const INJURIES = ["A grazed hand", "A bruised shoulder", "A twisted ankle"];
 const HEALTH = ["unhurt", "lightly hurt", "hurt"];
@@ -115,7 +139,14 @@ function storyChanges(people: string[]) {
 const pause = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => (clearTimeout(timer), reject(signal.reason)), { once: true });
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      },
+      { once: true },
+    );
   });
 
 /** The title a request's JSON names, if any: a Cover's picture prompt must quote it. */
@@ -153,7 +184,8 @@ function meetImportant(prompt: Parameters<TextProvider>[0], people: { name: stri
 export const fakeTextProvider: TextProvider = async (prompt, { schema, onText, signal }) => {
   const sampled = schema && (sample(schema as Schema) as Record<string, unknown>);
   const title = titleIn(prompt);
-  if (sampled && title && typeof sampled.text === "string") sampled.text = `A book cover with large bold title text reading "${title}" across the top. Rain on a harbour at dusk.`;
+  if (sampled && title && typeof sampled.text === "string")
+    sampled.text = `A book cover with large bold title text reading "${title}" across the top. Rain on a harbour at dusk.`;
   if (sampled) meetImportant(prompt, Array.isArray(sampled.people) ? sampled.people : []);
   if (sampled && Array.isArray(sampled.people) && Array.isArray(sampled.state_operations)) {
     sampled.state_operations = storyChanges(sampled.people.map(({ name }: { name: string }) => name));

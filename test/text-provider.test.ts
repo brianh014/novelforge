@@ -31,8 +31,7 @@ const streamTurn = (id: string, input: string, signal?: AbortSignal) =>
     signal,
   });
 
-const storedMessages = async (id: string) =>
-  ((await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { text: string }[] }).messages;
+const storedMessages = async (id: string) => ((await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { text: string }[] }).messages;
 
 beforeEach(() => {
   folder = tempFolder();
@@ -46,7 +45,7 @@ afterEach(async () => {
 
 test("a spoken line streams intact, even when a chunk ends inside its line break", async () => {
   const { promise: released, resolve: release } = Promise.withResolvers<void>();
-  const text = "[Ashley]: \“Hey [sic].\”\n\nShe looks up.";
+  const text = "[Ashley]: “Hey [sic].”\n\nShe looks up.";
   const reply = JSON.stringify({ check: null, narration: text, state_operations: [] });
   const cut = reply.indexOf("\\n") + 1;
   play([
@@ -62,7 +61,7 @@ test("a spoken line streams intact, even when a chunk ends inside its line break
   const response = await streamTurn(id, "I wave.");
   const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
   const { value: first } = await reader.read();
-  expect(first).toContain('"[Ashley]: \“Hey [sic].\”"');
+  expect(first).toContain('"[Ashley]: “Hey [sic].”"');
   release();
   let rest = "";
   for (let part = await reader.read(); !part.done; part = await reader.read()) rest += part.value;
@@ -158,10 +157,7 @@ test("a Check request shows no narration, and the result narration streams after
 
 test("narration written before the reply shows it is not a Check request is never shown early", async () => {
   play(
-    [
-      [delta('{"narration":"You start to leap","check":{"action":"Leap the gap","difficulty":"Hard"}}')],
-      [delta('{"narration":"You land."}')],
-    ],
+    [[delta('{"narration":"You start to leap","check":{"action":"Leap the gap","difficulty":"Hard"}}')], [delta('{"narration":"You land."}')]],
     undefined,
     scriptedDice(18),
   );
@@ -186,14 +182,7 @@ test("a retry tells the client to discard the narration of the failed attempt", 
 });
 
 test("a reply that turns into a Check request after narration began restarts the client", async () => {
-  play(
-    [
-      [delta('{"check":null,"narration":"You leap","check":{"action":"Leap","difficulty":"Easy"}}')],
-      narrated("You land."),
-    ],
-    undefined,
-    scriptedDice(18),
-  );
+  play([[delta('{"check":null,"narration":"You leap","check":{"action":"Leap","difficulty":"Easy"}}')], narrated("You land.")], undefined, scriptedDice(18));
   const id = await app.createSave();
 
   const events = await turnEvents(await streamTurn(id, "I leap."));
@@ -232,10 +221,7 @@ const refusals: [string, () => Parameters<typeof fakeOpenAi>[0][number]][] = [
   ["a refusal delta", () => [sse({ choices: [{ delta: { refusal: "I cannot" } }] })]],
   ["a content_filter finish", () => [sse({ choices: [{ delta: {}, finish_reason: "content_filter" }] })]],
   ["a refusal error mid-stream", () => [errorChunk({ code: 403, metadata: { error_type: "refusal" } })]],
-  [
-    "a content policy error before the stream",
-    httpError({ code: 403, metadata: { error_type: "content_policy_violation" } }, 403),
-  ],
+  ["a content policy error before the stream", httpError({ code: 403, metadata: { error_type: "content_policy_violation" } }, 403)],
   ["a moderation error", httpError({ code: 403, metadata: { reasons: ["violence"] } }, 403)],
 ];
 
@@ -321,7 +307,17 @@ test("the schema keeps to what strict schema modes accept, with check first", as
   const { schema } = provider.requests[0]!.body.response_format.json_schema;
 
   expect(schema.type).toBe("object");
-  expect(Object.keys(schema.properties)).toEqual(["check", "narration", "state_operations", "people", "summary", "recent_summary", "scene_changed", "visual_description", "chapter_ends"]);
+  expect(Object.keys(schema.properties)).toEqual([
+    "check",
+    "narration",
+    "state_operations",
+    "people",
+    "summary",
+    "recent_summary",
+    "scene_changed",
+    "visual_description",
+    "chapter_ends",
+  ]);
   const visit = (node: any) => {
     if (typeof node !== "object" || node === null) return;
     for (const refused of ["oneOf", "minLength", "$schema"]) expect(Object.keys(node)).not.toContain(refused);
@@ -465,19 +461,23 @@ test("a client that leaves mid-stream doesn't stop the Turn, which is saved", as
 });
 
 // 14s, so it runs only with SLOW_TESTS=1: it guards the `idleTimeout: 0` in rest-api.ts.
-test.skipIf(!process.env.SLOW_TESTS)("a streamed Turn survives a silence longer than Bun's default idle timeout", async () => {
-  play([
-    async function* () {
-      await Bun.sleep(14_000);
-      yield* narrated("The tide rises.");
-    },
-  ]);
-  const id = await app.createSave();
+test.skipIf(!process.env.SLOW_TESTS)(
+  "a streamed Turn survives a silence longer than Bun's default idle timeout",
+  async () => {
+    play([
+      async function* () {
+        await Bun.sleep(14_000);
+        yield* narrated("The tide rises.");
+      },
+    ]);
+    const id = await app.createSave();
 
-  const events = await turnEvents(await streamTurn(id, "I wade forward."));
+    const events = await turnEvents(await streamTurn(id, "I wade forward."));
 
-  expect(events.at(-1)!.event).toBe("done");
-}, 20_000);
+    expect(events.at(-1)!.event).toBe("done");
+  },
+  20_000,
+);
 
 test("every reply is sent with the token limit from Settings", async () => {
   play([narrated("Rain."), narrated("Sleet.")]);
@@ -490,9 +490,14 @@ test("every reply is sent with the token limit from Settings", async () => {
 });
 
 test("a reply cut off at the token limit fails the Turn at once, without the retries that would each run as long", async () => {
-  play([[delta('{"check":null,"narration":"On and on'), `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "length" }] })}
+  play([
+    [
+      delta('{"check":null,"narration":"On and on'),
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: "length" }] })}
 
-`]]);
+`,
+    ],
+  ]);
   const id = await app.createSave();
 
   const failed = await app.post(`/saves/${id}/turns`, { input: "I wait." });

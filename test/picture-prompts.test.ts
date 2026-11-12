@@ -96,9 +96,16 @@ test("a Cover's title may be lettered in capitals", async () => {
 });
 
 test("a Cover's template takes only the opening of a long world and of each person", () => {
-  const long = coverPrompt({ title: "The Salt Reckoning", theme: "Western", world: `Rain never stops. ${"word ".repeat(500)}`, people: [`Tall.
+  const long = coverPrompt({
+    title: "The Salt Reckoning",
+    theme: "Western",
+    world: `Rain never stops. ${"word ".repeat(500)}`,
+    people: [
+      `Tall.
 
-${"more ".repeat(500)}`] });
+${"more ".repeat(500)}`,
+    ],
+  });
 
   expect(long).toContain("Rain never stops.");
   expect(long).toContain("(Tall. more");
@@ -117,7 +124,10 @@ test("a nudge is the player's request for that picture, which the prompt must sh
 });
 
 test("an Update's portrait prompt is a short edit of the old portrait: the same face, then how they look now", async () => {
-  const reply = JSON.stringify({ keep: "The same woman with her face preserved.", changes: "She is wearing an oilskin coat. Standing in front of a plain neutral background." });
+  const reply = JSON.stringify({
+    keep: "The same woman with her face preserved.",
+    changes: "She is wearing an oilskin coat. Standing in front of a plain neutral background.",
+  });
   const { written, prompts } = write({ ...portrait, was: "A tall woman in a green shirt." }, "prose", reply);
 
   // The person first, as the text model ignored the order it was given, and nothing added that the model didn't write.

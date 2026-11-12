@@ -141,7 +141,6 @@ test("an unknown Save returns 404 without calling the Text Provider", async () =
   expect(prompts).toHaveLength(0);
 });
 
-
 test.each([
   ["a missing field", { pc: { name: "Ash" } }],
   ["an empty World Brief", { worldBrief: "", pc: { name: "Ash" } }],
@@ -178,9 +177,7 @@ const snapshotAt = (app: ReturnType<typeof startApp>, id: string, messageId: num
   app.get(`/saves/${id}/messages/${messageId}/snapshot`).then((r) => r.json());
 
 test("a finished Turn's state operations change the Snapshot of its Narrator Message", async () => {
-  const { app } = play(
-    narration("You find a lantern.", { op: "add_item", slot: "carrying", item: "lantern" }),
-  );
+  const { app } = play(narration("You find a lantern.", { op: "add_item", slot: "carrying", item: "lantern" }));
   const id = await app.createSave();
 
   await app.post(`/saves/${id}/turns`, { input: "I search the crate." });
@@ -268,8 +265,18 @@ test.each([
 
 test("repeating a known fact or NPC is harmless, so the response stands with no retry", async () => {
   const { app, prompts } = play(
-    narration("Setup.", { op: "add_known_fact", fact: "The gate is broken" }, { op: "add_npc", name: "Mara", appearance: "grey coat" }, { op: "add_known_npc", name: "Mara" }),
-    narration("Again.", { op: "add_known_fact", fact: "The gate is broken" }, { op: "add_known_npc", name: "Mara" }, { op: "add_known_fact", fact: "Bees sing" }),
+    narration(
+      "Setup.",
+      { op: "add_known_fact", fact: "The gate is broken" },
+      { op: "add_npc", name: "Mara", appearance: "grey coat" },
+      { op: "add_known_npc", name: "Mara" },
+    ),
+    narration(
+      "Again.",
+      { op: "add_known_fact", fact: "The gate is broken" },
+      { op: "add_known_npc", name: "Mara" },
+      { op: "add_known_fact", fact: "Bees sing" },
+    ),
   );
   const id = await app.createSave();
   await app.post(`/saves/${id}/turns`, { input: "One." });
@@ -282,11 +289,7 @@ test("repeating a known fact or NPC is harmless, so the response stands with no 
 
 test("a Narrator can update an NPC, and the next Turn's prompt carries the state", async () => {
   const { app, prompts } = play(
-    narration(
-      "Mara appears.",
-      { op: "add_npc", name: "Mara", appearance: "grey coat" },
-      { op: "update_npc", name: "Mara", appearance: "scarred, grey coat" },
-    ),
+    narration("Mara appears.", { op: "add_npc", name: "Mara", appearance: "grey coat" }, { op: "update_npc", name: "Mara", appearance: "scarred, grey coat" }),
     narration("Mara nods."),
   );
   const id = await app.createSave();
@@ -298,9 +301,7 @@ test("a Narrator can update an NPC, and the next Turn's prompt carries the state
 });
 
 test("the Snapshot the player can read never contains the NPC section", async () => {
-  const { app } = play(
-    narration("Someone watches.", { op: "add_npc", name: "SECRET-SPY", appearance: "SECRET-COAT" }),
-  );
+  const { app } = play(narration("Someone watches.", { op: "add_npc", name: "SECRET-SPY", appearance: "SECRET-COAT" }));
   const id = await app.createSave();
 
   await app.post(`/saves/${id}/turns`, { input: "I wait." });
@@ -604,11 +605,7 @@ test("a third invalid reply fails cleanly, with no fourth attempt", async () => 
 });
 
 test("a refused operation is retried, and its valid operations never reach the Snapshot", async () => {
-  const refused = narration(
-    "You trade the lantern for a rope.",
-    { op: "add_item", slot: "carrying", item: "lantern" },
-    { op: "remove_item", item: "rope" },
-  );
+  const refused = narration("You trade the lantern for a rope.", { op: "add_item", slot: "carrying", item: "lantern" }, { op: "remove_item", item: "rope" });
   const { app, prompts } = play(refused, narration("Nobody trades."));
   const id = await app.createSave();
 
@@ -708,11 +705,7 @@ test.each([
 });
 
 test("a provider error partway through a Turn writes nothing at all", async () => {
-  const refused = narration(
-    "Refused.",
-    { op: "add_item", slot: "carrying", item: "lantern" },
-    { op: "remove_item", item: "rope" },
-  );
+  const refused = narration("Refused.", { op: "add_item", slot: "carrying", item: "lantern" }, { op: "remove_item", item: "rope" });
   const { app } = play(refused, new Error("network down"));
   const id = await app.createSave();
   const before = readFileSync(join(savesDir, `${id}.sqlite`));
@@ -723,8 +716,7 @@ test("a provider error partway through a Turn writes nothing at all", async () =
   expect(readFileSync(join(savesDir, `${id}.sqlite`)).equals(before)).toBe(true);
 });
 
-const requestCheck = (difficulty: unknown, action = "Leap the flooded gap") =>
-  JSON.stringify({ check: { action, difficulty } });
+const requestCheck = (difficulty: unknown, action = "Leap the flooded gap") => JSON.stringify({ check: { action, difficulty } });
 
 const playWithDice = (rolls: number[], ...replies: (string | Error)[]) => {
   const script = scriptedTextProvider(...replies);
@@ -840,10 +832,7 @@ test.each([
   ["an invalid reply", "Not JSON"],
   ["a refused operation", narration("You trade.", { op: "remove_item", item: "rope" })],
   ["a second Check request", requestCheck("Easy")],
-  [
-    "a second Check request with narration",
-    JSON.stringify({ narration: "Again.", check: { action: "Leap", difficulty: "Easy" } }),
-  ],
+  ["a second Check request with narration", JSON.stringify({ narration: "Again.", check: { action: "Leap", difficulty: "Easy" } })],
 ])("a result call retried after %s reuses the same roll", async (_, bad) => {
   // One scripted roll, so a second roll would fail the Turn.
   const { app, prompts } = playWithDice([3], requestCheck("Hard"), bad, narration("You fall."));
@@ -868,16 +857,7 @@ test("the result call gets three attempts of its own", async () => {
 });
 
 test("the result call stops at three attempts, however many the Check request took", async () => {
-  const { app, prompts } = playWithDice(
-    [12],
-    "Bad one",
-    "Bad two",
-    requestCheck("Moderate"),
-    "Bad three",
-    "Bad four",
-    "Bad five",
-    narration("Too late."),
-  );
+  const { app, prompts } = playWithDice([12], "Bad one", "Bad two", requestCheck("Moderate"), "Bad three", "Bad four", "Bad five", narration("Too late."));
   const id = await app.createSave();
 
   const response = await app.post(`/saves/${id}/turns`, { input: "I leap the gap." });
@@ -910,23 +890,13 @@ const storedChecks = (id: string) => {
 };
 
 test("the Check is stored with the Turn, and a safe Turn stores none", async () => {
-  const { app } = playWithDice(
-    [14],
-    requestCheck("Hard"),
-    narration("You land, but your pack is gone."),
-    narration("You catch your breath."),
-  );
+  const { app } = playWithDice([14], requestCheck("Hard"), narration("You land, but your pack is gone."), narration("You catch your breath."));
   const id = await app.createSave();
 
   await app.post(`/saves/${id}/turns`, { input: "I leap the gap." });
   await app.post(`/saves/${id}/turns`, { input: "I rest." });
 
-  expect(storedChecks(id)).toEqual([
-    null,
-    { action: "Leap the flooded gap", difficulty: "Hard", roll: 14, outcome: "success", degree: "mixed" },
-    null,
-    null,
-  ]);
+  expect(storedChecks(id)).toEqual([null, { action: "Leap the flooded gap", difficulty: "Hard", roll: 14, outcome: "success", degree: "mixed" }, null, null]);
 });
 
 test("Revert deletes the Check of a Turn it removes", async () => {
@@ -1157,10 +1127,7 @@ test("always-on Lore Entries spend the token budget first, and keyword-activated
   const { app, prompts } = play(narration("Rain."), narration("Rain."));
   const id = await app.createSave();
   const huge = "x".repeat(100_000);
-  const keyworded = [
-    keywordEntry("Too big", ["vault"], `too-big-content ${huge}`),
-    keywordEntry("Small", ["vault"], "small-content"),
-  ];
+  const keyworded = [keywordEntry("Too big", ["vault"], `too-big-content ${huge}`), keywordEntry("Small", ["vault"], "small-content")];
   seed(id, { worldBible: keyworded });
 
   await app.post(`/saves/${id}/turns`, { input: "I open the vault." });
@@ -1205,11 +1172,7 @@ test("world_rules come after the story so far, with the instruction to fail viol
 });
 
 test("the Check result call keeps the whole prompt, including world_rules and the rule against mentioning Checks", async () => {
-  const { app, prompts } = playWithDice(
-    [10],
-    JSON.stringify({ check: { action: "leap", difficulty: "Easy" } }),
-    narration("You land."),
-  );
+  const { app, prompts } = playWithDice([10], JSON.stringify({ check: { action: "leap", difficulty: "Easy" } }), narration("You land."));
   const id = await app.createSave();
   seed(id, { worldRules: ["no-magic-rule"] });
 
@@ -1324,8 +1287,16 @@ test("a merged NPC is gone from the Journal and the next prompt, and a Revert br
 
 test("a Lore Entry and a Plot Thread the Narrator corrects go forward corrected, and a Revert undoes it", async () => {
   const { app, prompts } = play(
-    narration("A horn.", { op: "add_lore_entry", title: "Ferrymen", keywords: ["ferry"], content: "old-lore" }, { op: "add_plot_thread", thread: "old-thread" }),
-    narration("It stops.", { op: "update_lore_entry", title: "Ferrymen", keywords: ["ferry"], content: "new-lore" }, { op: "update_plot_thread", thread: "old-thread", replacement: "new-thread" }),
+    narration(
+      "A horn.",
+      { op: "add_lore_entry", title: "Ferrymen", keywords: ["ferry"], content: "old-lore" },
+      { op: "add_plot_thread", thread: "old-thread" },
+    ),
+    narration(
+      "It stops.",
+      { op: "update_lore_entry", title: "Ferrymen", keywords: ["ferry"], content: "new-lore" },
+      { op: "update_plot_thread", thread: "old-thread", replacement: "new-thread" },
+    ),
     narration("Silence."),
     narration("A horn again."),
   );
@@ -1376,7 +1347,15 @@ test("a Save reports its World Brief and PC, and an unknown Save is not found", 
   const found = await app.get(`/saves/${id}`);
   const missing = await app.get(`/saves/${crypto.randomUUID()}`);
 
-  expect(await found.json()).toEqual({ title: "", worldBrief: "A drowned city", pc: { name: "Ash" }, artStyle: "", startingHook: "", hasCover: false, coverRedraws: 0 });
+  expect(await found.json()).toEqual({
+    title: "",
+    worldBrief: "A drowned city",
+    pc: { name: "Ash" },
+    artStyle: "",
+    startingHook: "",
+    hasCover: false,
+    coverRedraws: 0,
+  });
   expect(missing.status).toBe(404);
 });
 
@@ -1390,15 +1369,14 @@ test("the root serves the SPA page", async () => {
   expect(await response.text()).toContain('<div id="root">');
 });
 
-const journalOf = (app: ReturnType<typeof startApp>, id: string) =>
-  app.get(`/saves/${id}/journal`).then((r) => r.json());
+const journalOf = (app: ReturnType<typeof startApp>, id: string) => app.get(`/saves/${id}/journal`).then((r) => r.json());
 
 const UNHURT = { health: "unhurt", injuries: [], conditions: [] };
 
 test("the Journal holds the summary, what the PC knows, known NPCs and the Full Log", async () => {
   const { app } = play(
     narration(
-      "Mara waves.\n\n  \"Come in,\" she says.",
+      'Mara waves.\n\n  "Come in," she says.',
       { op: "add_npc", name: "Mara", appearance: "grey coat" },
       { op: "add_known_npc", name: "Mara" },
       { op: "add_known_fact", fact: "The ferry stopped running." },
@@ -1415,14 +1393,15 @@ test("the Journal holds the summary, what the PC knows, known NPCs and the Full 
     summary: "Ash reached the docks.",
     recentSummary: "",
     facts: ["The ferry stopped running."],
-    looseEnds: [], sceneMemories: [],
+    looseEnds: [],
+    sceneMemories: [],
     npcs: ["Mara"],
     npcSummaries: {},
     recentNpcs: [],
     portraits: [],
     fullLog: [
       { id: 1, role: "player", text: "I wave back." },
-      { id: 2, role: "narrator", text: "Mara waves.\n\n  \"Come in,\" she says." },
+      { id: 2, role: "narrator", text: 'Mara waves.\n\n  "Come in," she says.' },
     ],
     chapters: [{ title: "", lastMessage: null }],
   });
@@ -1493,7 +1472,21 @@ test("the Journal of a new Save is empty, and a missing Save has none", async ()
   const { app } = play();
   const id = await app.createSave();
 
-  expect(await journalOf(app, id)).toEqual({ status: UNHURT, storyTime: null, summary: "", recentSummary: "", facts: [], looseEnds: [], sceneMemories: [], npcs: [], npcSummaries: {}, recentNpcs: [], portraits: [], fullLog: [], chapters: [{ title: "", lastMessage: null }] });
+  expect(await journalOf(app, id)).toEqual({
+    status: UNHURT,
+    storyTime: null,
+    summary: "",
+    recentSummary: "",
+    facts: [],
+    looseEnds: [],
+    sceneMemories: [],
+    npcs: [],
+    npcSummaries: {},
+    recentNpcs: [],
+    portraits: [],
+    fullLog: [],
+    chapters: [{ title: "", lastMessage: null }],
+  });
   expect((await app.get(`/saves/${crypto.randomUUID()}/journal`)).status).toBe(404);
 });
 
@@ -1556,7 +1549,8 @@ test("after a Revert, the Journal matches the restored Snapshot", async () => {
     summary: "first-summary",
     recentSummary: "",
     ...pcKnown,
-    looseEnds: [], sceneMemories: [],
+    looseEnds: [],
+    sceneMemories: [],
     npcSummaries: {},
     recentNpcs: [],
     portraits: [],
@@ -1580,11 +1574,9 @@ test("the Narrator is told the player reads the summary and known facts, and how
   expect(system).toContain("through add_known_npc, using add_npc first only for an NPC not yet in the state");
 });
 
-const inventoryOf = (app: ReturnType<typeof startApp>, id: string) =>
-  app.get(`/saves/${id}/inventory`).then((r) => r.json());
+const inventoryOf = (app: ReturnType<typeof startApp>, id: string) => app.get(`/saves/${id}/inventory`).then((r) => r.json());
 
-const statusOf = (app: ReturnType<typeof startApp>, id: string) =>
-  app.get(`/saves/${id}/status`).then((r) => r.json());
+const statusOf = (app: ReturnType<typeof startApp>, id: string) => app.get(`/saves/${id}/status`).then((r) => r.json());
 
 test("a new Save has empty inventory and an unhurt PC, and a missing Save has neither", async () => {
   const { app } = play();
@@ -1606,11 +1598,15 @@ test("an action with an item is a normal Turn, and inventory and status follow i
       { op: "add_status", kind: "injuries", text: "sore ankle" },
       { op: "add_status", kind: "conditions", text: "soaked" },
     ),
-    narration("Ashley takes the hat, and you feel better.", { op: "remove_item", item: "hat" }, {
-      op: "remove_status",
-      kind: "conditions",
-      text: "soaked",
-    }),
+    narration(
+      "Ashley takes the hat, and you feel better.",
+      { op: "remove_item", item: "hat" },
+      {
+        op: "remove_status",
+        kind: "conditions",
+        text: "soaked",
+      },
+    ),
   );
   const id = await app.createSave();
   await app.post(`/saves/${id}/turns`, { input: "I search the steps." });
@@ -1627,11 +1623,7 @@ test("an action with an item is a normal Turn, and inventory and status follow i
 
 test("after a Revert, inventory and status match the restored Snapshot", async () => {
   const { app } = play(
-    narration(
-      "You take the lantern.",
-      { op: "add_item", slot: "carrying", item: "lantern" },
-      { op: "add_status", kind: "conditions", text: "soaked" },
-    ),
+    narration("You take the lantern.", { op: "add_item", slot: "carrying", item: "lantern" }, { op: "add_status", kind: "conditions", text: "soaked" }),
     narration(
       "You drop it and fall.",
       { op: "remove_item", item: "lantern" },
@@ -1674,15 +1666,9 @@ test("inventory and status never reveal secrets or Checks", async () => {
 
   await app.post(`/saves/${id}/turns`, { input: "I leap the gap." });
 
-  const bodies = [
-    await app.get(`/saves/${id}/inventory`).then((r) => r.text()),
-    await app.get(`/saves/${id}/status`).then((r) => r.text()),
-  ];
+  const bodies = [await app.get(`/saves/${id}/inventory`).then((r) => r.text()), await app.get(`/saves/${id}/status`).then((r) => r.text())];
   expect(storedChecks(id)[3]).toMatchObject({ action, roll: 17 });
-  expect(bodies).toEqual([
-    JSON.stringify({ wearing: [], carrying: ["lantern"] }),
-    JSON.stringify({ health: "winded", injuries: [], conditions: [] }),
-  ]);
+  expect(bodies).toEqual([JSON.stringify({ wearing: [], carrying: ["lantern"] }), JSON.stringify({ health: "winded", injuries: [], conditions: [] })]);
 });
 
 test("the Narrator is told to keep inventory realistic and to change it and status only in ways the server accepts", async () => {
@@ -1698,8 +1684,7 @@ test("the Narrator is told to keep inventory realistic and to change it and stat
   expect(system).toContain("remove_status only for an entry the state lists under that kind, and never add_status one it already lists");
 });
 
-const regenerate = (app: ReturnType<typeof startApp>, id: string, messageId: number) =>
-  app.post(`/saves/${id}/messages/${messageId}/regenerate`, {});
+const regenerate = (app: ReturnType<typeof startApp>, id: string, messageId: number) => app.post(`/saves/${id}/messages/${messageId}/regenerate`, {});
 
 const rewrite = (app: ReturnType<typeof startApp>, id: string, messageId: number, feedback: string) =>
   app.post(`/saves/${id}/messages/${messageId}/rewrite`, { feedback });
@@ -1707,8 +1692,7 @@ const rewrite = (app: ReturnType<typeof startApp>, id: string, messageId: number
 const journal = (app: ReturnType<typeof startApp>, id: string) =>
   app.get(`/saves/${id}/journal`).then((r) => r.json()) as Promise<{ summary: string; facts: string[] }>;
 
-const inventory = (app: ReturnType<typeof startApp>, id: string) =>
-  app.get(`/saves/${id}/inventory`).then((r) => r.json());
+const inventory = (app: ReturnType<typeof startApp>, id: string) => app.get(`/saves/${id}/inventory`).then((r) => r.json());
 
 test("a Rewrite's direction holds for the next responses, survives a Regenerate, then drops", async () => {
   const { app, prompts } = play(...Array.from({ length: 9 }, (_, n) => narration(`Reply ${n}.`)));
@@ -1726,7 +1710,12 @@ test("a Rewrite's direction holds for the next responses, survives a Regenerate,
 
 test("Regenerate replaces the latest Narrator response and its state, leaving nothing stale", async () => {
   const { app, prompts } = play(
-    narration("You find a lantern.", { op: "add_item", slot: "carrying", item: "lantern" }, { op: "set_summary", summary: "Found a lantern." }, { op: "add_known_fact", fact: "Lanterns float." }),
+    narration(
+      "You find a lantern.",
+      { op: "add_item", slot: "carrying", item: "lantern" },
+      { op: "set_summary", summary: "Found a lantern." },
+      { op: "add_known_fact", fact: "Lanterns float." },
+    ),
     narration("You find a rope.", { op: "add_item", slot: "carrying", item: "rope" }, { op: "set_summary", summary: "Found a rope." }),
     narration("You climb."),
   );
@@ -1786,14 +1775,17 @@ test("Rewrite needs feedback, and writes nothing without it", async () => {
   expect(await messageTexts(app, id)).toEqual(["I wait.", "The tide rises."]);
 });
 
-const editTo = (app: ReturnType<typeof startApp>, id: string, messageId: number, text: string) =>
-  app.post(`/saves/${id}/messages/${messageId}/edit`, { text });
+const editTo = (app: ReturnType<typeof startApp>, id: string, messageId: number, text: string) => app.post(`/saves/${id}/messages/${messageId}/edit`, { text });
 
 test("Edit keeps the player's words and the Message, and brings the state in line from before the response", async () => {
   const edited = "[Ashley]: “Get out.”\nAshley throws the lantern at you.";
   const { app, prompts } = play(
     narration("Ashley smiles.", { op: "add_known_fact", fact: "Ashley is pleased." }, { op: "add_item", slot: "carrying", item: "lantern" }),
-    JSON.stringify({ narration: "Something else entirely.", state_operations: [{ op: "add_known_fact", fact: "Ashley is angry." }], people: [{ name: "Ashley", appearance: "a tall woman in overalls" }] }),
+    JSON.stringify({
+      narration: "Something else entirely.",
+      state_operations: [{ op: "add_known_fact", fact: "Ashley is angry." }],
+      people: [{ name: "Ashley", appearance: "a tall woman in overalls" }],
+    }),
   );
   const id = await app.createSave();
   await app.post(`/saves/${id}/turns`, { input: "I hand over the spanners." });
@@ -1864,13 +1856,7 @@ test("a replacement starts over from the state before the Turn", async () => {
 });
 
 test("a response can be replaced again and again, and the Messages stay in order", async () => {
-  const { app } = play(
-    narration("First."),
-    narration("Second."),
-    narration("Third."),
-    narration("Fourth."),
-    narration("Fifth."),
-  );
+  const { app } = play(narration("First."), narration("Second."), narration("Third."), narration("Fourth."), narration("Fifth."));
   const id = await app.createSave();
   await app.post(`/saves/${id}/turns`, { input: "I wait." });
   await regenerate(app, id, 2);
@@ -1927,12 +1913,7 @@ test("a replacement reuses the stored Check through the result call, and never r
 });
 
 test("a repeated Check request on a Turn with a stored Check is invalid and rolls nothing", async () => {
-  const { app, prompts } = playWithDice(
-    [14],
-    requestCheck("Hard"),
-    narration("You land."),
-    ...Array(3).fill(requestCheck("Easy")),
-  );
+  const { app, prompts } = playWithDice([14], requestCheck("Hard"), narration("You land."), ...Array(3).fill(requestCheck("Easy")));
   const id = await app.createSave();
   await app.post(`/saves/${id}/turns`, { input: "I leap the gap." });
 
@@ -2008,10 +1989,7 @@ test("a refused operation fails after the retries, keeping the response and its 
 });
 
 test("a replacement that fails partway through its commit changes nothing", async () => {
-  const { app } = play(
-    narration("Rain.", { op: "set_summary", summary: "It rained." }),
-    narration("Snow.", { op: "set_summary", summary: "It snowed." }),
-  );
+  const { app } = play(narration("Rain.", { op: "set_summary", summary: "It rained." }), narration("Snow.", { op: "set_summary", summary: "It snowed." }));
   const id = await app.createSave();
   await app.post(`/saves/${id}/turns`, { input: "I wait." });
   {
@@ -2164,14 +2142,11 @@ test("a stream of a replacement ends in an error event when it fails", async () 
   ]);
 });
 
-const notes = (app: ReturnType<typeof startApp>, id: string) =>
-  app.get(`/saves/${id}/notes`).then((r) => r.json()) as Promise<{ notes: string[] }>;
+const notes = (app: ReturnType<typeof startApp>, id: string) => app.get(`/saves/${id}/notes`).then((r) => r.json()) as Promise<{ notes: string[] }>;
 
-const addNote = (app: ReturnType<typeof startApp>, id: string, text: string) =>
-  app.post(`/saves/${id}/notes`, { text });
+const addNote = (app: ReturnType<typeof startApp>, id: string, text: string) => app.post(`/saves/${id}/notes`, { text });
 
-const editNote = (app: ReturnType<typeof startApp>, id: string, index: number, text: string) =>
-  app.patch(`/saves/${id}/notes/${index}`, { text });
+const editNote = (app: ReturnType<typeof startApp>, id: string, index: number, text: string) => app.patch(`/saves/${id}/notes/${index}`, { text });
 
 test("a player can add, edit and remove Director's Notes", async () => {
   const { app } = play();
@@ -2414,7 +2389,12 @@ test("the app refuses a request for another site's name, so a rebound domain can
 test("a Turn already saved is still a success when image work after it throws, so the player doesn't send it twice", async () => {
   const saves = saveStore(savesDir);
   const id = saves.create({ worldBrief: "A drowned city", pc: { name: "Ash" } });
-  const images = { ready: () => false, sceneChanged: () => { throw new Error("database is locked"); } } as unknown as ImagePipeline;
+  const images = {
+    ready: () => false,
+    sceneChanged: () => {
+      throw new Error("database is locked");
+    },
+  } as unknown as ImagePipeline;
   const settings = settingsStore(join(folder.path, "settings.json"));
   const { textProvider } = scriptedTextProvider(narration("The tide rises around you."));
 

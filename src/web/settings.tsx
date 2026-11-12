@@ -63,7 +63,11 @@ function useSubmit(save: () => Promise<string>) {
   const feedback = (
     <>
       <p role="status">{notice}</p>
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
     </>
   );
   return { busy, submit, feedback };
@@ -78,10 +82,18 @@ function ArtStyle({ id }: { id: string }) {
   });
 
   useEffect(() => {
-    getSave(id).then((save) => setArtStyle(readArtStyle(save.artStyle)), (failure: Error) => setLoadError(failure.message));
+    getSave(id).then(
+      (save) => setArtStyle(readArtStyle(save.artStyle)),
+      (failure: Error) => setLoadError(failure.message),
+    );
   }, [id]);
 
-  if (loadError) return <p role="alert" className="error">{loadError}</p>;
+  if (loadError)
+    return (
+      <p role="alert" className="error">
+        {loadError}
+      </p>
+    );
   if (artStyle === undefined) return null;
   return (
     <form className="fields" onSubmit={submit}>
@@ -93,24 +105,14 @@ function ArtStyle({ id }: { id: string }) {
       />
       <p className="muted">This Save only. Changing it affects new images, not existing ones.</p>
       {feedback}
-      <button className="action" aria-disabled={busy}>
+      <button type="submit" className="action" aria-disabled={busy}>
         Save Art Style
       </button>
     </form>
   );
 }
 
-function ModelSelect({
-  label,
-  value,
-  list,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  list: string[];
-  onChange: (value: string) => void;
-}) {
+function ModelSelect({ label, value, list, onChange }: { label: string; value: string; list: string[]; onChange: (value: string) => void }) {
   return (
     <Picker
       label={label}
@@ -204,7 +206,12 @@ function Picker<T extends string>({
         aria-labelledby={`${id}-label ${id}-value`}
         onClick={() => {
           setSearch("");
-          setActive(Math.max(choices.findIndex((choice) => choice.value === value), 0));
+          setActive(
+            Math.max(
+              choices.findIndex((choice) => choice.value === value),
+              0,
+            ),
+          );
           setOpen(!open);
         }}
       >
@@ -233,6 +240,7 @@ function Picker<T extends string>({
           {/* With no search box, the list itself takes focus and the arrow keys. */}
           <ul
             id={`${id}-list`}
+            // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: the ARIA listbox pattern, moved through by aria-activedescendant.
             role="listbox"
             aria-labelledby={`${id}-label`}
             ref={list}
@@ -243,9 +251,12 @@ function Picker<T extends string>({
             })}
           >
             {found.map((choice, at) => (
+              // biome-ignore lint/a11y/useFocusableInteractive: an option of the listbox above, reached by its arrow keys, not by focus of its own.
+              // biome-ignore lint/a11y/useKeyWithClickEvents: as above, the keys are handled on the search box or the list.
               <li
                 key={choice.value}
                 id={`${id}-${at}`}
+                // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: an option of the ARIA listbox above.
                 role="option"
                 aria-selected={choice.value === value}
                 data-active={at === active || undefined}
@@ -267,9 +278,8 @@ function WorkflowGuide() {
     <details className="workflow-guide">
       <summary>Placeholders and an example</summary>
       <p>
-        Build the workflow in ComfyUI, use Export (API), and paste that file here. Then put these in its input values. A
-        placeholder can be a whole value or sit inside longer text. Any you leave out are simply not used, but{" "}
-        <code>{"{{prompt}}"}</code> is required.
+        Build the workflow in ComfyUI, use Export (API), and paste that file here. Then put these in its input values. A placeholder can be a whole value or sit
+        inside longer text. Any you leave out are simply not used, but <code>{"{{prompt}}"}</code> is required.
       </p>
       <dl>
         <dt>
@@ -287,10 +297,7 @@ function WorkflowGuide() {
         <dt>
           <code>{"{{aspect_ratio}}"}</code>, <code>{"{{width}}"}</code>, <code>{"{{height}}"}</code>
         </dt>
-        <dd>
-          The shape, such as 16:9, and a size of about one megapixel in multiples of 16. For SD 1.5, type your own size
-          instead.
-        </dd>
+        <dd>The shape, such as 16:9, and a size of about one megapixel in multiples of 16. For SD 1.5, type your own size instead.</dd>
         <dt>
           <code>{"{{seed}}"}</code>
         </dt>
@@ -299,8 +306,8 @@ function WorkflowGuide() {
           <code>{"{{npc_1}}"}</code>, <code>{"{{npc_2}}"}</code> and on
         </dt>
         <dd>
-          Portraits of visible NPCs, for a <code>LoadImage</code> node. Number 1 is the first visible NPC who has a portrait,
-          not a set person, and the slot changes as the cast does.
+          Portraits of visible NPCs, for a <code>LoadImage</code> node. Number 1 is the first visible NPC who has a portrait, not a set person, and the slot
+          changes as the cast does.
         </dd>
         <dt>
           <code>{"{{pc}}"}</code>
@@ -311,24 +318,20 @@ function WorkflowGuide() {
         </dt>
         <dd>Every reference in order of priority: the PC, then NPCs.</dd>
         <dt>
-          <code>{"{{has_npc_1}}"}</code>, <code>{"{{has_reference_1}}"}</code> and so
-          on
+          <code>{"{{has_npc_1}}"}</code>, <code>{"{{has_reference_1}}"}</code> and so on
         </dt>
         <dd>1 if that reference exists for this image, otherwise 0. Use one as an IPAdapter weight to turn its slot off.</dd>
       </dl>
       <p>
-        Portraits and first Scenes have no references, so a slot with no image gets a small grey one and the workflow still
-        runs. Give each slot a <code>has_</code> switch, or the grey will show. An img2img workflow can't turn off that way,
-        so it starts those images from grey. References beyond your slots aren't sent.
+        Portraits and first Scenes have no references, so a slot with no image gets a small grey one and the workflow still runs. Give each slot a{" "}
+        <code>has_</code> switch, or the grey will show. An img2img workflow can't turn off that way, so it starts those images from grey. References beyond
+        your slots aren't sent.
       </p>
       <p>
-        NovelForge keeps one image: a <code>SaveImage</code> if there is one, otherwise a <code>PreviewImage</code>, from
-        the highest numbered node of that kind. An id like 12:3 from a subgraph counts as higher than any plain number.{" "}
-        <code>SaveImage</code> also leaves a copy in ComfyUI's output folder.
+        NovelForge keeps one image: a <code>SaveImage</code> if there is one, otherwise a <code>PreviewImage</code>, from the highest numbered node of that
+        kind. An id like 12:3 from a subgraph counts as higher than any plain number. <code>SaveImage</code> also leaves a copy in ComfyUI's output folder.
       </p>
-      <p>
-        Your workflow brings its own models and LoRAs, so the LoRA list and trigger words here aren't used.
-      </p>
+      <p>Your workflow brings its own models and LoRAs, so the LoRA list and trigger words here aren't used.</p>
       <pre>{WORKFLOW_EXAMPLE}</pre>
     </details>
   );
@@ -359,7 +362,8 @@ function TestBox<T>({
 
   async function start() {
     if (busy || !prompt.trim()) return;
-    const { signal } = (job.current = new AbortController());
+    job.current = new AbortController();
+    const { signal } = job.current;
     setBusy(true);
     setError("");
     setResult(undefined);
@@ -394,11 +398,7 @@ function ComfyResult({ drawn, alt }: { drawn: Awaited<ReturnType<typeof drawComf
 
   return (
     <>
-      <img
-        src={drawn.url}
-        alt={alt}
-        onLoad={({ currentTarget: { naturalWidth, naturalHeight } }) => setSize(`${naturalWidth} × ${naturalHeight}, `)}
-      />
+      <img src={drawn.url} alt={alt} onLoad={({ currentTarget: { naturalWidth, naturalHeight } }) => setSize(`${naturalWidth} × ${naturalHeight}, `)} />
       <dl className="test-stats">
         <dt>Time</dt>
         <dd>{drawn.seconds.toFixed(1)}s</dd>
@@ -448,15 +448,7 @@ function TextResult({ reply, seconds, firstSeconds, tokens, model }: TextTest) {
   );
 }
 
-function ComfySettings({
-  draft,
-  saved,
-  set,
-}: {
-  draft: Settings;
-  saved: Settings;
-  set: (change: Partial<Settings>) => void;
-}) {
+function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings; set: (change: Partial<Settings>) => void }) {
   const [models, setModels] = useState<ComfyModels>();
   const [refreshes, setRefreshes] = useState(0);
   const addLora = useRef<HTMLButtonElement>(null);
@@ -471,7 +463,18 @@ function ComfySettings({
   useEffect(() => {
     setModels(undefined);
     let current = true;
-    const none = { reachable: false, hasFlux2: false, hasQwen21: false, checkpoints: [], diffusionModels: [], textEncoders: [], vaes: [], loras: [], samplers: [], schedulers: [] };
+    const none = {
+      reachable: false,
+      hasFlux2: false,
+      hasQwen21: false,
+      checkpoints: [],
+      diffusionModels: [],
+      textEncoders: [],
+      vaes: [],
+      loras: [],
+      samplers: [],
+      schedulers: [],
+    };
     getComfyModels().then(
       (list) => current && setModels(list),
       () => current && setModels(none),
@@ -497,13 +500,7 @@ function ComfySettings({
     <>
       <label>
         ComfyUI address
-        <input
-          type="url"
-          required
-          placeholder="http://127.0.0.1:8188"
-          value={draft.comfyUrl}
-          onChange={(e) => set({ comfyUrl: e.target.value })}
-        />
+        <input type="url" required placeholder="http://127.0.0.1:8188" value={draft.comfyUrl} onChange={(e) => set({ comfyUrl: e.target.value })} />
       </label>
       <Picker
         label="ComfyUI mode"
@@ -518,13 +515,7 @@ function ComfySettings({
         <>
           <label>
             Workflow JSON (API format)
-            <textarea
-              className="workflow"
-              rows={12}
-              spellCheck={false}
-              value={draft.comfyWorkflow}
-              onChange={(e) => set({ comfyWorkflow: e.target.value })}
-            />
+            <textarea className="workflow" rows={12} spellCheck={false} value={draft.comfyWorkflow} onChange={(e) => set({ comfyWorkflow: e.target.value })} />
           </label>
           {saved.workflowProblem && <p className="notice">The last image failed. {saved.workflowProblem}</p>}
           <WorkflowGuide />
@@ -555,12 +546,7 @@ function ComfySettings({
                 list={models?.textEncoders ?? []}
                 onChange={(comfyTextEncoder) => set({ comfyTextEncoder })}
               />
-              <ModelSelect
-                label="VAE"
-                value={draft.comfyVae}
-                list={models?.vaes ?? []}
-                onChange={(comfyVae) => set({ comfyVae })}
-              />
+              <ModelSelect label="VAE" value={draft.comfyVae} list={models?.vaes ?? []} onChange={(comfyVae) => set({ comfyVae })} />
             </>
           ) : (
             <>
@@ -581,8 +567,8 @@ function ComfySettings({
               />
               {tooBig && <p className="notice">{tooBig}</p>}
               <p className="muted">
-                SD 1.5 and SDXL draw from words alone. They can't use portraits or edit an image, so faces change from
-                picture to picture, and Update draws a new face. FLUX.2 and Qwen Image 2.1 keep faces the same.
+                SD 1.5 and SDXL draw from words alone. They can't use portraits or edit an image, so faces change from picture to picture, and Update draws a
+                new face. FLUX.2 and Qwen Image 2.1 keep faces the same.
               </p>
             </>
           )}
@@ -626,12 +612,7 @@ function ComfySettings({
                   />
                 </label>
               )}
-              <ModelSelect
-                label="Sampler"
-                value={draft.comfySampler}
-                list={models?.samplers ?? []}
-                onChange={(comfySampler) => set({ comfySampler })}
-              />
+              <ModelSelect label="Sampler" value={draft.comfySampler} list={models?.samplers ?? []} onChange={(comfySampler) => set({ comfySampler })} />
               <Picker
                 label="Scheduler"
                 value={draft.comfyScheduler}
@@ -652,17 +633,14 @@ function ComfySettings({
           <fieldset>
             <legend>LoRAs</legend>
             {draft.comfyLoras.map((lora, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: LoRA rows have no id of their own, and the same file may be listed twice.
               <div className="lora" key={index}>
-                <ModelSelect
-                  label={`LoRA ${index + 1}`}
-                  value={lora.name}
-                  list={loras}
-                  onChange={(name) => setLora(index, { name })}
-                />
+                <ModelSelect label={`LoRA ${index + 1}`} value={lora.name} list={loras} onChange={(name) => setLora(index, { name })} />
                 <label>
                   Strength
                   {/* Uncontrolled, so the box can be empty while the player types. The key shows the right value after a removal. */}
                   <input
+                    // biome-ignore lint/suspicious/noArrayIndexKey: as for the row, with the name so a changed file resets the box.
                     key={`${index} ${lora.name}`}
                     aria-label={`LoRA ${index + 1} strength`}
                     type="number"
@@ -748,15 +726,10 @@ function ComfySettings({
           : qwen21
             ? "Uses the PC's and pictured NPCs' portraits as references, up to 10."
             : flux2
-            ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev and Klein 9B, so other Klein models may need an Advanced workflow."
-            : "Uses the previous Scene Image as a reference. NPC references need FLUX.2 or an Advanced workflow."}
+              ? "Uses visible NPCs' portraits, the previous Scene Image and the PC's portrait as references, up to 10. Set up for FLUX.2 Dev and Klein 9B, so other Klein models may need an Advanced workflow."
+              : "Uses the previous Scene Image as a reference. NPC references need FLUX.2 or an Advanced workflow."}
       </p>
-      <TestBox
-        title="Test image"
-        hint="Uses your saved Settings. The image isn't kept."
-        working="Drawing…"
-        run={drawComfyTest}
-      >
+      <TestBox title="Test image" hint="Uses your saved Settings. The image isn't kept." working="Drawing…" run={drawComfyTest}>
         {(drawn, prompt) => <ComfyResult drawn={drawn} alt={`Test image: ${prompt}`} />}
       </TestBox>
     </>
@@ -803,7 +776,10 @@ function InstallSettings({
     setHosts([]);
     if (!hostsListed) return;
     let current = true;
-    getTextHosts(draft.textModel).then((list) => current && setHosts(list), () => {});
+    getTextHosts(draft.textModel).then(
+      (list) => current && setHosts(list),
+      () => {},
+    );
     return () => {
       current = false;
     };
@@ -828,9 +804,7 @@ function InstallSettings({
     setTextKey("");
     setImageKey("");
     applyLook(next);
-    return saved.hasTextApiKey && !next.hasTextApiKey
-      ? "Saved. The text API key was cleared because the server changed."
-      : "Saved.";
+    return saved.hasTextApiKey && !next.hasTextApiKey ? "Saved. The text API key was cleared because the server changed." : "Saved.";
   });
 
   return frame(
@@ -846,306 +820,292 @@ function InstallSettings({
       }}
     >
       <div data-section="Text" className="fields" hidden={section !== "Text"}>
-      <h2>Text</h2>
-      <Picker
-        label="Text provider"
-        value={local ? "local" : "openrouter"}
-        choices={[
-          { value: "openrouter", label: "OpenRouter" },
-          { value: "local", label: "Local" },
-        ]}
-        onChange={(provider) => set({ textBaseUrl: provider === "local" ? "" : OPENROUTER_URL })}
-      />
-      {local && (
-        <label>
-          Local server address
-          <input
-            type="url"
-            required
-            placeholder="http://localhost:1234/v1"
-            value={draft.textBaseUrl}
-            onChange={(e) => set({ textBaseUrl: e.target.value })}
-          />
-        </label>
-      )}
-      {addressSaved && models?.length ? (
+        <h2>Text</h2>
         <Picker
-          label="Text model"
-          empty="Choose a model"
-          value={draft.textModel}
-          choices={models.map((model) => ({ value: model, label: model }))}
-          onChange={chooseModel}
+          label="Text provider"
+          value={local ? "local" : "openrouter"}
+          choices={[
+            { value: "openrouter", label: "OpenRouter" },
+            { value: "local", label: "Local" },
+          ]}
+          onChange={(provider) => set({ textBaseUrl: provider === "local" ? "" : OPENROUTER_URL })}
         />
-      ) : (
-        <label>
-          Text model
-          <input value={draft.textModel} onChange={(e) => chooseModel(e.target.value)} />
-        </label>
-      )}
-      {local && !addressSaved && <p className="muted">Save the address to choose from this server's models.</p>}
-      {addressSaved && models?.length === 0 && (
-        <p className="muted">No models listed. Make sure the server is running, or type the model's name.</p>
-      )}
-      {!local && (
-        <>
-          <Picker
-            label="Provider"
-            value={draft.textHost}
-            choices={[
-              { value: "", label: "Any, using the routing below" },
-              // A saved one stays as it is while its model's hosts load, or if they no longer include it.
-              ...(draft.textHost && !hosts.some(({ slug }) => slug === draft.textHost) ? [{ value: draft.textHost, label: draft.textHost }] : []),
-              ...hosts.map(({ slug, name }) => ({ value: slug, label: name })),
-            ]}
-            onChange={(textHost) => set({ textHost })}
-          />
-          {draft.textHost ? (
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={draft.textHostFallback}
-                onChange={(e) => set({ textHostFallback: e.target.checked })}
-              />
-              If this provider is down, let OpenRouter use another
-            </label>
-          ) : (
-            <Picker
-              label="Routing"
-              value={draft.textRouting}
-              choices={[
-                { value: "price", label: "Cheapest" },
-                { value: "throughput", label: "Fastest writing" },
-                { value: "latency", label: "Quickest to start" },
-                { value: "default", label: "OpenRouter's choice" },
-              ]}
-              onChange={(textRouting) => set({ textRouting })}
+        {local && (
+          <label>
+            Local server address
+            <input
+              type="url"
+              required
+              placeholder="http://localhost:1234/v1"
+              value={draft.textBaseUrl}
+              onChange={(e) => set({ textBaseUrl: e.target.value })}
             />
-          )}
-          <p className="muted">Staying on one provider keeps its prompt cache, which can cut the cost of a Turn.</p>
-        </>
-      )}
-      <label>
-        {local ? "Text API key (most local servers need none)" : "Text API key"}
-        <input
-          type="password"
-          autoComplete="new-password"
-          placeholder={keyHint(saved.hasTextApiKey)}
-          value={textKey}
-          onChange={(e) => setTextKey(e.target.value)}
-        />
-      </label>
-      {losesKey && (
-        <p className="notice">
-          A key only goes to the server it was entered for, so saving this new server clears the text API key. Enter
-          a key above to use one with the new server.
+          </label>
+        )}
+        {addressSaved && models?.length ? (
+          <Picker
+            label="Text model"
+            empty="Choose a model"
+            value={draft.textModel}
+            choices={models.map((model) => ({ value: model, label: model }))}
+            onChange={chooseModel}
+          />
+        ) : (
+          <label>
+            Text model
+            <input value={draft.textModel} onChange={(e) => chooseModel(e.target.value)} />
+          </label>
+        )}
+        {local && !addressSaved && <p className="muted">Save the address to choose from this server's models.</p>}
+        {addressSaved && models?.length === 0 && <p className="muted">No models listed. Make sure the server is running, or type the model's name.</p>}
+        {!local && (
+          <>
+            <Picker
+              label="Provider"
+              value={draft.textHost}
+              choices={[
+                { value: "", label: "Any, using the routing below" },
+                // A saved one stays as it is while its model's hosts load, or if they no longer include it.
+                ...(draft.textHost && !hosts.some(({ slug }) => slug === draft.textHost) ? [{ value: draft.textHost, label: draft.textHost }] : []),
+                ...hosts.map(({ slug, name }) => ({ value: slug, label: name })),
+              ]}
+              onChange={(textHost) => set({ textHost })}
+            />
+            {draft.textHost ? (
+              <label className="toggle">
+                <input type="checkbox" checked={draft.textHostFallback} onChange={(e) => set({ textHostFallback: e.target.checked })} />
+                If this provider is down, let OpenRouter use another
+              </label>
+            ) : (
+              <Picker
+                label="Routing"
+                value={draft.textRouting}
+                choices={[
+                  { value: "price", label: "Cheapest" },
+                  { value: "throughput", label: "Fastest writing" },
+                  { value: "latency", label: "Quickest to start" },
+                  { value: "default", label: "OpenRouter's choice" },
+                ]}
+                onChange={(textRouting) => set({ textRouting })}
+              />
+            )}
+            <p className="muted">Staying on one provider keeps its prompt cache, which can cut the cost of a Turn.</p>
+          </>
+        )}
+        <label>
+          {local ? "Text API key (most local servers need none)" : "Text API key"}
+          <input
+            type="password"
+            autoComplete="new-password"
+            placeholder={keyHint(saved.hasTextApiKey)}
+            value={textKey}
+            onChange={(e) => setTextKey(e.target.value)}
+          />
+        </label>
+        {losesKey && (
+          <p className="notice">
+            A key only goes to the server it was entered for, so saving this new server clears the text API key. Enter a key above to use one with the new
+            server.
+          </p>
+        )}
+        <label>
+          Extra Narrator Instructions
+          <textarea rows={5} value={draft.modelInstructions} onChange={(e) => set({ modelInstructions: e.target.value })} />
+        </label>
+        <p className="muted">Your own guidance to the Narrator, for every Save.</p>
+        <label>
+          Longest reply, in tokens
+          <input
+            type="number"
+            required
+            min={1000}
+            max={200000}
+            step={1000}
+            value={draft.textMaxTokens}
+            onChange={(e) => set({ textMaxTokens: e.target.valueAsNumber })}
+          />
+        </label>
+        <label>
+          Longest reply, in minutes
+          <input type="number" required min={1} max={60} value={draft.textReplyMinutes} onChange={(e) => set({ textReplyMinutes: e.target.valueAsNumber })} />
+        </label>
+        <p className="muted">
+          A reply that runs past either limit is stopped and nothing is saved, so a stuck model can't run up your bill. Reasoning counts toward the tokens, and
+          the minutes start once the reply begins.
         </p>
-      )}
-      <label>
-        Extra Narrator Instructions
-        <textarea
-          rows={5}
-          value={draft.modelInstructions}
-          onChange={(e) => set({ modelInstructions: e.target.value })}
-        />
-      </label>
-      <p className="muted">Your own guidance to the Narrator, for every Save.</p>
-      <label>
-        Longest reply, in tokens
-        <input
-          type="number"
-          required
-          min={1000}
-          max={200000}
-          step={1000}
-          value={draft.textMaxTokens}
-          onChange={(e) => set({ textMaxTokens: e.target.valueAsNumber })}
-        />
-      </label>
-      <label>
-        Longest reply, in minutes
-        <input
-          type="number"
-          required
-          min={1}
-          max={60}
-          value={draft.textReplyMinutes}
-          onChange={(e) => set({ textReplyMinutes: e.target.valueAsNumber })}
-        />
-      </label>
-      <p className="muted">A reply that runs past either limit is stopped and nothing is saved, so a stuck model can't run up your bill. Reasoning counts toward the tokens, and the minutes start once the reply begins.</p>
-      <label>
-        Recent Messages sent to the Narrator
-        <input
-          type="number"
-          required
-          min={40}
-          max={400}
-          step={10}
-          value={draft.textRecentMessages}
-          onChange={(e) => set({ textRecentMessages: e.target.valueAsNumber })}
-        />
-      </label>
-      <p className="muted">Sent in full on every Turn. Older Messages reach the Narrator as Old Memories. More remembers detail better but makes each Turn cost more, and fewer saves money. A lower number catches up one Old Memory a Turn.</p>
-      <label>
-        Longest Question answer, in words
-        <input
-          type="number"
-          required
-          min={80}
-          max={1000}
-          step={10}
-          value={draft.answerRejectWords}
-          onChange={(e) => set({ answerRejectWords: e.target.valueAsNumber })}
-        />
-      </label>
-      <p className="muted">The Narrator is asked for about 60 words and at most 80. An answer over this limit is thrown out and asked for again, up to three tries.</p>
-      <TestBox
-        title="Test text"
-        hint="Sends this prompt to your saved model, with the saved Extra Narrator Instructions above. OpenRouter may charge for each test."
-        working="Asking…"
-        run={askTextTest}
-      >
-        {(result) => <TextResult {...result} />}
-      </TestBox>
+        <label>
+          Recent Messages sent to the Narrator
+          <input
+            type="number"
+            required
+            min={40}
+            max={400}
+            step={10}
+            value={draft.textRecentMessages}
+            onChange={(e) => set({ textRecentMessages: e.target.valueAsNumber })}
+          />
+        </label>
+        <p className="muted">
+          Sent in full on every Turn. Older Messages reach the Narrator as Old Memories. More remembers detail better but makes each Turn cost more, and fewer
+          saves money. A lower number catches up one Old Memory a Turn.
+        </p>
+        <label>
+          Longest Question answer, in words
+          <input
+            type="number"
+            required
+            min={80}
+            max={1000}
+            step={10}
+            value={draft.answerRejectWords}
+            onChange={(e) => set({ answerRejectWords: e.target.valueAsNumber })}
+          />
+        </label>
+        <p className="muted">
+          The Narrator is asked for about 60 words and at most 80. An answer over this limit is thrown out and asked for again, up to three tries.
+        </p>
+        <TestBox
+          title="Test text"
+          hint="Sends this prompt to your saved model, with the saved Extra Narrator Instructions above. OpenRouter may charge for each test."
+          working="Asking…"
+          run={askTextTest}
+        >
+          {(result) => <TextResult {...result} />}
+        </TestBox>
       </div>
 
       <div data-section="Images" className="fields" hidden={section !== "Images"}>
-      <h2>Images</h2>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={draft.imagesEnabled}
-          onChange={(e) => set({ imagesEnabled: e.target.checked })}
+        <h2>Images</h2>
+        <label className="toggle">
+          <input type="checkbox" checked={draft.imagesEnabled} onChange={(e) => set({ imagesEnabled: e.target.checked })} />
+          Create new images
+        </label>
+        <p className="muted">Images you already have stay on show either way.</p>
+        <label className="toggle">
+          <input type="checkbox" checked={draft.openNewImages} onChange={(e) => set({ openNewImages: e.target.checked })} />
+          Open new pictures in the story
+        </label>
+        <p className="muted">Pictures that arrive while you play open by themselves. After a load or refresh, every picture starts folded.</p>
+        <label className="toggle">
+          <input type="checkbox" checked={draft.drawScenes} onChange={(e) => set({ drawScenes: e.target.checked })} />
+          Draw scene pictures
+        </label>
+        <p className="muted">A picture of the scene as the story moves. Off, only the pictures you ask for and portraits are drawn.</p>
+        <label className="toggle">
+          <input type="checkbox" checked={draft.updatePortraits} onChange={(e) => set({ updatePortraits: e.target.checked })} />
+          Update portraits as the story goes
+        </label>
+        <p className="muted">
+          When the story changes how someone looks, or what your character wears, their portrait is drawn again, keeping their face. Each one is a new picture,
+          which may cost money, and it replaces a portrait you uploaded.
+        </p>
+        <label>
+          Extra Image Instructions
+          <textarea
+            rows={4}
+            placeholder="Keep faces in soft light; favour wide shots."
+            value={draft.imageInstructions}
+            onChange={(e) => set({ imageInstructions: e.target.value })}
+          />
+        </label>
+        <p className="muted">Your own guidance for every picture's prompt, for every Save. Extra Narrator Instructions don't reach pictures.</p>
+        <Picker
+          label="Image provider"
+          value={draft.imageProvider}
+          choices={[
+            { value: "openrouter", label: "OpenRouter" },
+            { value: "local", label: "Local (ComfyUI)" },
+          ]}
+          onChange={(imageProvider) => set({ imageProvider })}
         />
-        Create new images
-      </label>
-      <p className="muted">Images you already have stay on show either way.</p>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={draft.openNewImages}
-          onChange={(e) => set({ openNewImages: e.target.checked })}
+        <Picker
+          label="Resolution"
+          value={draft.imageResolution}
+          choices={RESOLUTIONS.map(([value, label]) => ({ value, label }))}
+          onChange={(imageResolution) => set({ imageResolution })}
         />
-        Open new pictures in the story
-      </label>
-      <p className="muted">Pictures that arrive while you play open by themselves. After a load or refresh, every picture starts folded.</p>
-      <label className="toggle">
-        <input type="checkbox" checked={draft.drawScenes} onChange={(e) => set({ drawScenes: e.target.checked })} />
-        Draw scene pictures
-      </label>
-      <p className="muted">A picture of the scene as the story moves. Off, only the pictures you ask for and portraits are drawn.</p>
-      <label className="toggle">
-        <input type="checkbox" checked={draft.updatePortraits} onChange={(e) => set({ updatePortraits: e.target.checked })} />
-        Update portraits as the story goes
-      </label>
-      <p className="muted">When the story changes how someone looks, or what your character wears, their portrait is drawn again, keeping their face. Each one is a new picture, which may cost money, and it replaces a portrait you uploaded.</p>
-      <label>
-        Extra Image Instructions
-        <textarea
-          rows={4}
-          placeholder="Keep faces in soft light; favour wide shots."
-          value={draft.imageInstructions}
-          onChange={(e) => set({ imageInstructions: e.target.value })}
-        />
-      </label>
-      <p className="muted">Your own guidance for every picture's prompt, for every Save. Extra Narrator Instructions don't reach pictures.</p>
-      <Picker
-        label="Image provider"
-        value={draft.imageProvider}
-        choices={[
-          { value: "openrouter", label: "OpenRouter" },
-          { value: "local", label: "Local (ComfyUI)" },
-        ]}
-        onChange={(imageProvider) => set({ imageProvider })}
-      />
-      <Picker
-        label="Resolution"
-        value={draft.imageResolution}
-        choices={RESOLUTIONS.map(([value, label]) => ({ value, label }))}
-        onChange={(imageResolution) => set({ imageResolution })}
-      />
-      {draft.imageProvider === "openrouter" ? (
-        <>
-          <p className="muted">
-            OpenRouter uses the nearest size your model offers, so the image may not match exactly. Larger sizes can cost
-            more, and some models have no size choice, so this changes nothing for them.
-          </p>
-          <label>
-            Image model
-            <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />
-          </label>
-          <label>
-            Image API key
-            <input
-              type="password"
-              autoComplete="new-password"
-              placeholder={keyHint(saved.hasImageApiKey)}
-              value={imageKey}
-              onChange={(e) => setImageKey(e.target.value)}
-            />
-          </label>
-        </>
-      ) : (
-        <ComfySettings draft={draft} saved={saved} set={set} />
-      )}
+        {draft.imageProvider === "openrouter" ? (
+          <>
+            <p className="muted">
+              OpenRouter uses the nearest size your model offers, so the image may not match exactly. Larger sizes can cost more, and some models have no size
+              choice, so this changes nothing for them.
+            </p>
+            <label>
+              Image model
+              <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />
+            </label>
+            <label>
+              Image API key
+              <input
+                type="password"
+                autoComplete="new-password"
+                placeholder={keyHint(saved.hasImageApiKey)}
+                value={imageKey}
+                onChange={(e) => setImageKey(e.target.value)}
+              />
+            </label>
+          </>
+        ) : (
+          <ComfySettings draft={draft} saved={saved} set={set} />
+        )}
       </div>
 
       <div data-section="Reading" className="fields" hidden={section !== "Reading"}>
-      <h2>Reading</h2>
-      <Picker
-        label="Theme"
-        value={draft.theme}
-        choices={[
-          { value: "system", label: "Match this device" },
-          { value: "light", label: "Light" },
-          { value: "dark", label: "Dark" },
-        ]}
-        onChange={(theme) => set({ theme })}
-      />
-      <Picker
-        label="Chat style"
-        value={draft.chatStyle}
-        choices={[
-          { value: "script", label: "Script" },
-          { value: "prose", label: "Prose" },
-          { value: "bubbles", label: "Bubbles" },
-        ]}
-        onChange={(chatStyle) => set({ chatStyle })}
-      />
-      <Picker
-        label="Font size"
-        value={draft.fontSize}
-        choices={[
-          { value: "small", label: "Small" },
-          { value: "medium", label: "Medium" },
-          { value: "large", label: "Large" },
-        ]}
-        onChange={(fontSize) => set({ fontSize })}
-      />
+        <h2>Reading</h2>
+        <Picker
+          label="Theme"
+          value={draft.theme}
+          choices={[
+            { value: "system", label: "Match this device" },
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" },
+          ]}
+          onChange={(theme) => set({ theme })}
+        />
+        <Picker
+          label="Chat style"
+          value={draft.chatStyle}
+          choices={[
+            { value: "script", label: "Script" },
+            { value: "prose", label: "Prose" },
+            { value: "bubbles", label: "Bubbles" },
+          ]}
+          onChange={(chatStyle) => set({ chatStyle })}
+        />
+        <Picker
+          label="Font size"
+          value={draft.fontSize}
+          choices={[
+            { value: "small", label: "Small" },
+            { value: "medium", label: "Medium" },
+            { value: "large", label: "Large" },
+          ]}
+          onChange={(fontSize) => set({ fontSize })}
+        />
       </div>
 
       <div data-section="Advanced" className="fields" hidden={section !== "Advanced"}>
-      <h2>Advanced</h2>
-      <Picker
-        label="Log Level"
-        value={draft.logLevel ?? ""}
-        choices={[
-          { value: "", label: `Default (${LOG_LEVELS.find(([value]) => value === draft.defaultLogLevel)?.[1]})` },
-          ...LOG_LEVELS.map(([value, label]) => ({ value, label })),
-        ]}
-        onChange={(level) => set({ logLevel: level || null })}
-      />
-      <p className="muted">
-        How much the app writes to its Server Log, from Error, only what failed, to Verbose, every step. It changes as soon as
-        you save, and the log never holds story text.
-      </p>
+        <h2>Advanced</h2>
+        <Picker
+          label="Log Level"
+          value={draft.logLevel ?? ""}
+          choices={[
+            { value: "", label: `Default (${LOG_LEVELS.find(([value]) => value === draft.defaultLogLevel)?.[1]})` },
+            ...LOG_LEVELS.map(([value, label]) => ({ value, label })),
+          ]}
+          onChange={(level) => set({ logLevel: level || null })}
+        />
+        <p className="muted">
+          How much the app writes to its Server Log, from Error, only what failed, to Verbose, every step. It changes as soon as you save, and the log never
+          holds story text.
+        </p>
       </div>
     </form>,
     section !== THIS_STORY && (
       <>
         {feedback}
         <div className="row">
-          <button form="settings-form" className="action" aria-disabled={busy}>
+          <button type="submit" form="settings-form" className="action" aria-disabled={busy}>
             Save settings
           </button>
         </div>
@@ -1182,7 +1142,11 @@ export function SettingsScreen({ id }: { id?: string }) {
         </>
       }
     >
-      {loadError && <p role="alert" className="error">{loadError}</p>}
+      {loadError && (
+        <p role="alert" className="error">
+          {loadError}
+        </p>
+      )}
       {/* Stays mounted, so an unsaved edit survives a look at another section. */}
       {id && (
         <div hidden={section !== THIS_STORY}>

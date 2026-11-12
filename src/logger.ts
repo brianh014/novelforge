@@ -112,8 +112,8 @@ export const log = {
  * shortcut: `--production` shortens class names, so a compiled build shows less of the type, add keepNames if a prod log needs it.
  */
 export function errorType(error: unknown) {
-  const { code, status, constructor } = (error ?? {}) as { code?: unknown; status?: unknown; constructor?: { name?: string } };
-  return { type: typeof code === "string" ? code : constructor?.name, ...(typeof status === "number" && { status }) };
+  const { code, status, constructor: madeBy } = (error ?? {}) as { code?: unknown; status?: unknown; constructor?: { name?: string } };
+  return { type: typeof code === "string" ? code : madeBy?.name, ...(typeof status === "number" && { status }) };
 }
 
 /** Never `cause`, which can repeat the prompt, nor the parser's message, which quotes the reply. */

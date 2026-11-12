@@ -37,8 +37,6 @@ export function activateLore(entries: LoreEntry[], recentText: string, tokenBudg
     .filter(withinBudget);
   // Always-on content is not scanned, or its keywords would be active forever.
   const activatedText = mentioned.map(textOf).join("\n");
-  const recursed = keyworded
-    .filter((entry) => !mentioned.includes(entry) && mentions(activatedText, entry))
-    .filter(withinBudget);
+  const recursed = keyworded.filter((entry) => !mentioned.includes(entry) && mentions(activatedText, entry)).filter(withinBudget);
   return [...alwaysOn, ...mentioned, ...recursed];
 }

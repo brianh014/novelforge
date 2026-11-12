@@ -3,7 +3,13 @@ import { activateLore } from "../src/lore-activation";
 import { assemblePrompt } from "../src/prompt-assembler";
 import { applyOperations, openingState, type LoreEntry, type State, type StateOperation } from "../src/state-applier";
 
-const entry = (title: string, keywords: string[], extra: Partial<LoreEntry> = {}): LoreEntry => ({ title, keywords, content: `${title} text`, alwaysOn: false, ...extra });
+const entry = (title: string, keywords: string[], extra: Partial<LoreEntry> = {}): LoreEntry => ({
+  title,
+  keywords,
+  content: `${title} text`,
+  alwaysOn: false,
+  ...extra,
+});
 const withState = (sections: Partial<State>) => ({ ...structuredClone(openingState), ...sections });
 const run = (state: State, ...operations: StateOperation[]) => {
   const { next, refused } = applyOperations(state, operations);
@@ -91,7 +97,10 @@ test("a known fact can be removed, and removing one that isn't there changes not
 
 const twoPeople = () =>
   withState({
-    npcs: [{ name: "Woman with notebook", appearance: "old looks" }, { name: "Nadia", appearance: "kept looks" }],
+    npcs: [
+      { name: "Woman with notebook", appearance: "old looks" },
+      { name: "Nadia", appearance: "kept looks" },
+    ],
     scene: { location: "A room", visibleCast: ["Woman with notebook"] },
     pcKnown: { facts: [], npcs: ["Woman with notebook", "Nadia"], summaries: { "Woman with notebook": "old summary", Nadia: "kept summary" } },
   });
@@ -146,7 +155,8 @@ test("the Narrator is told to keep its records true to play", () => {
   const prompt = promptFor();
 
   expect(prompt).toContain("what has happened in play beats any Lore Entry or Plot Thread");
-  for (const op of ["update_lore_entry", "remove_lore_entry", "update_plot_thread", "update_known_fact", "remove_known_fact", "merge_npc"]) expect(prompt).toContain(op);
+  for (const op of ["update_lore_entry", "remove_lore_entry", "update_plot_thread", "update_known_fact", "remove_known_fact", "merge_npc"])
+    expect(prompt).toContain(op);
 });
 
 test("the summary has room to keep what still matters, most of it for the recent story", () => {

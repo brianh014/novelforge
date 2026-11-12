@@ -50,7 +50,9 @@ export function LoadStory() {
     <Sheet
       rail={
         <>
-          <h1 className="big" ref={heading} tabIndex={-1}>Load Story</h1>
+          <h1 className="big" ref={heading} tabIndex={-1}>
+            Load Story
+          </h1>
           <p className="muted so-far">Pick up a story, branch it, or carry it to another machine.</p>
         </>
       }
@@ -58,9 +60,13 @@ export function LoadStory() {
       foot={
         <>
           <div role="status">{notice && <p className="notice">{notice}</p>}</div>
-          {error && <p role="alert" className="error">{error}</p>}
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
           <div className="row">
-            <button className="action" aria-disabled={busy} onClick={() => busy || fileInput.current!.click()}>
+            <button type="button" className="action" aria-disabled={busy} onClick={() => busy || fileInput.current!.click()}>
               Import a Save
             </button>
             <input ref={fileInput} type="file" accept=".sqlite" hidden onChange={importChosen} />
@@ -94,6 +100,7 @@ export function LoadStory() {
                       Open
                     </a>
                     <button
+                      type="button"
                       className="icon"
                       title="Duplicate"
                       aria-label={`Duplicate ${name}`}
@@ -107,13 +114,7 @@ export function LoadStory() {
                     </a>
                   </>
                 )}
-                <button
-                  className="icon"
-                  title="Delete"
-                  aria-label={`Delete ${name}`}
-                  aria-haspopup="dialog"
-                  onClick={() => setDeleting(save)}
-                >
+                <button type="button" className="icon" title="Delete" aria-label={`Delete ${name}`} aria-haspopup="dialog" onClick={() => setDeleting(save)}>
                   {DeleteIcon}
                 </button>
               </div>

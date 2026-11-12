@@ -39,8 +39,7 @@ const ask = (url: string, path: string, signal: AbortSignal, init?: RequestInit)
 const baseUrl = (settings: SettingsStore) => settings.read().comfyUrl.replace(/\/$/, "");
 
 // A queue entry is [number, prompt_id, ...].
-const listed = (entries: unknown[] | undefined, job: string) =>
-  entries?.some((entry) => Array.isArray(entry) && entry[1] === job) ?? false;
+const listed = (entries: unknown[] | undefined, job: string) => entries?.some((entry) => Array.isArray(entry) && entry[1] === job) ?? false;
 
 /** A combo input's choices, from either form /object_info uses: [[...options], {}] or ["COMBO", { options }]. */
 function options(input: unknown) {
@@ -92,8 +91,7 @@ async function upload(url: string, { bytes, mediaType }: { bytes: Uint8Array; me
 /** Best effort, as the job's result is ignored either way. */
 async function cancel(url: string, job: string) {
   const limited = AbortSignal.timeout(CANCEL_MS);
-  const post = (path: string, body: object) =>
-    ask(url, path, limited, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
+  const post = (path: string, body: object) => ask(url, path, limited, { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) });
   await post("/queue", { delete: [job] });
   const { queue_running } = (await (await ask(url, "/queue", limited)).json()) as Queue;
   // Only if it's ours, as an older ComfyUI ignores prompt_id and would stop the player's own job.
@@ -127,11 +125,7 @@ function jobFailure({ messages, status_str }: NonNullable<HistoryEntry["status"]
  * The ComfyUI Image Adapter, using the Settings at the time of each call. It never sends a key. `report` tells of each
  * Advanced job, with "" for a good one. Every message here is safe to show the player or log, and ComfyUI's own words go no further.
  */
-export function comfyImages(
-  settings: SettingsStore,
-  { pollMs, silenceMs } = LIMITS,
-  report: (problem: string) => void = () => {},
-): ImageAdapter {
+export function comfyImages(settings: SettingsStore, { pollMs, silenceMs } = LIMITS, report: (problem: string) => void = () => {}): ImageAdapter {
   async function finished(url: string, job: string, signal: AbortSignal) {
     let heard = Date.now();
     const answer = async <T>(path: string) => {

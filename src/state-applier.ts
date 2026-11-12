@@ -71,9 +71,7 @@ export const StateSections = {
   pcKnown: z.object({ facts: stringList, npcs: stringList, summaries: z.record(z.string(), z.string()).optional() }),
   looseEnds: stringList,
   sceneMemories: z.array(z.object({ firstMessage: z.number().int(), lastMessage: z.number().int(), text: z.string() })),
-  worldBible: z.array(
-    z.object({ title: z.string(), keywords: stringList, content: z.string(), alwaysOn: z.boolean() }),
-  ),
+  worldBible: z.array(z.object({ title: z.string(), keywords: stringList, content: z.string(), alwaysOn: z.boolean() })),
   worldRules: stringList,
   plotThreads: stringList,
   summary: z.string(),
@@ -396,7 +394,10 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, pcKnown: { ...state.pcKnown, summaries: { ...state.pcKnown.summaries, [edit.name]: edit.text } } };
     // A replaced response can take the memory away, and with it what this names, so a miss changes nothing.
     case "sceneMemory":
-      return { ...state, sceneMemories: state.sceneMemories.map((memory) => (memory.firstMessage === edit.firstMessage ? { ...memory, text: edit.text } : memory)) };
+      return {
+        ...state,
+        sceneMemories: state.sceneMemories.map((memory) => (memory.firstMessage === edit.firstMessage ? { ...memory, text: edit.text } : memory)),
+      };
     case "world":
       return { ...state, ...mergeWorldUpdate(state, edit.update) };
     case "inventory":
@@ -413,7 +414,9 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       return { ...state, chapters: state.chapters.map((chapter, index) => (index === edit.index ? { ...chapter, title: edit.title } : chapter)) };
     // A second close before any new Message would make an empty Chapter.
     case "closeChapter":
-      return state.chapters.at(-1)?.lastMessage === null ? state : { ...state, chapters: [...state.chapters, { lastMessage: null, title: edit.title }], chapterReady: false };
+      return state.chapters.at(-1)?.lastMessage === null
+        ? state
+        : { ...state, chapters: [...state.chapters, { lastMessage: null, title: edit.title }], chapterReady: false };
   }
 }
 

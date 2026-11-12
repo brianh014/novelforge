@@ -56,7 +56,8 @@ const newSave = async () => {
 
 const galleryOf = async (id: string) => (await app.get(`/saves/${id}/gallery`).then((r) => r.json())) as Gallery;
 const requestedOf = async (id: string) => (await app.get(`/saves/${id}/requested-images`).then((r) => r.json())) as Listing;
-const failureOf = async (id: string) => (await app.get(`/saves/${id}/requested-images/failure`).then((r) => r.json())) as { failure?: { error: string; words: string } };
+const failureOf = async (id: string) =>
+  (await app.get(`/saves/${id}/requested-images/failure`).then((r) => r.json())) as { failure?: { error: string; words: string } };
 
 async function settled(id: string) {
   for (let tries = 0; tries < 200; tries++) {
@@ -81,7 +82,11 @@ const asked = async (id: string, words: string) => {
 
 const bytesOf = async (path: string) => new Uint8Array(await (await app.get(path)).arrayBuffer());
 
-const callText = () => written.prompts.at(-1)!.map(({ content }) => content).join("\n");
+const callText = () =>
+  written.prompts
+    .at(-1)!
+    .map(({ content }) => content)
+    .join("\n");
 
 test("a request draws from the text call's prompt, joins the latest Message and leaves its Scene Image alone", async () => {
   await play([turn("A wet street", scene("The ferry")), written_("A woman on a bench")], png(1), png(2), png(3));
@@ -91,7 +96,11 @@ test("a request draws from the text call's prompt, joins the latest Message and 
   const gallery = await asked(id, "the woman in the corner");
 
   expect(await requestedOf(id)).toEqual({ images: [{ ref: 1, messageId: 2, caption: "the woman in the corner", redraws: 0 }], drawing: 0 });
-  expect(drawn.payloads.at(-1)).toMatchObject({ prompt: expect.stringMatching(/^A woman on a bench/), aspect_ratio: "16:9", negative_prompt: expect.stringContaining("dice") });
+  expect(drawn.payloads.at(-1)).toMatchObject({
+    prompt: expect.stringMatching(/^A woman on a bench/),
+    aspect_ratio: "16:9",
+    negative_prompt: expect.stringContaining("dice"),
+  });
   expect(await bytesOf(`/saves/${id}/requested-images/1/image`)).toEqual(png(3));
   expect(await bytesOf(`/saves/${id}/messages/2/image`)).toEqual(png(2));
   expect(gallery.images.map(({ kind, label, prompt }) => [kind, label, prompt?.slice(0, 20)])).toEqual([
@@ -102,7 +111,12 @@ test("a request draws from the text call's prompt, joins the latest Message and 
 });
 
 test.each(["", "   "])("a blank request (%p) draws the scene the latest Message leaves, captioned with the Narrator's title", async (words) => {
-  await play([turn("A wet street", scene("The ferry")), JSON.stringify({ text: "The ferry deck in rain", title: "Rain on the ferry deck" })], png(1), png(2), png(3));
+  await play(
+    [turn("A wet street", scene("The ferry")), JSON.stringify({ text: "The ferry deck in rain", title: "Rain on the ferry deck" })],
+    png(1),
+    png(2),
+    png(3),
+  );
   const id = await newSave();
   await playTurn(id);
 
@@ -173,7 +187,14 @@ test("the text call gets the recent story and the Scene's people with their look
     ...Array.from({ length: 12 }, (_, index) => png(index)),
   );
   const world = (await (
-    await app.post("/worlds", { title: "Salt", theme: "Western", worldBrief: "A drowned city", startingHook: "", pc: { name: "Ash", physicalTraits: "cropped hair" }, inventory: "A tin badge." })
+    await app.post("/worlds", {
+      title: "Salt",
+      theme: "Western",
+      worldBrief: "A drowned city",
+      startingHook: "",
+      pc: { name: "Ash", physicalTraits: "cropped hair" },
+      inventory: "A tin badge.",
+    })
   ).json()) as { id: string };
   const { id } = (await (await app.post(`/worlds/${world.id}/begin`, { artStyle: "" })).json()) as { id: string };
   await playTurn(id);
@@ -195,7 +216,10 @@ test("the text call gets the recent story and the Scene's people with their look
       { name: "Rook", looks: "a thin man in a black hat" },
     ],
   });
-  expect(data.recent_story).toMatchObject([{ role: "player", text: "I wait." }, { role: "narrator", text: "The tide rises." }]);
+  expect(data.recent_story).toMatchObject([
+    { role: "player", text: "I wait." },
+    { role: "narrator", text: "The tide rises." },
+  ]);
 });
 
 test("a mark for someone outside the Scene gets no portrait", async () => {
@@ -266,7 +290,9 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
   const gallery = await asked(id, "Hesper and me");
 
   const payload = drawn.payloads.at(-1)!;
-  expect(payload.prompt).toStartWith("the person from image 2, a tall woman in oilskins, on a bench, by the person from image 1, a short person in a wool coat, and a boy with a kite");
+  expect(payload.prompt).toStartWith(
+    "the person from image 2, a tall woman in oilskins, on a bench, by the person from image 1, a short person in a wool coat, and a boy with a kite",
+  );
   expect(payload.reference_images.map(({ role, bytes }) => [role, bytes])).toEqual([
     ["pc", png(1)],
     ["npc", png(2)],
@@ -286,7 +312,13 @@ test("a marked person with a portrait uses it as a reference, as a Scene Image d
 
 test("the keyword Prompt Style gets short phrases and no marks", async () => {
   await play([turn("A wet street", scene("The ferry")), written_("woman, bench, rain")], png(1), png(2));
-  await app.patch("/settings", { imageProvider: "local", comfyUrl: "http://127.0.0.1:1", comfyFamily: "sd", comfyMode: "simple", comfyCheckpoint: "sd.safetensors" });
+  await app.patch("/settings", {
+    imageProvider: "local",
+    comfyUrl: "http://127.0.0.1:1",
+    comfyFamily: "sd",
+    comfyMode: "simple",
+    comfyCheckpoint: "sd.safetensors",
+  });
   const id = await newSave();
   await playTurn(id);
 
@@ -310,7 +342,10 @@ test("a failed text call says so once, hands back the words, draws nothing and l
     return (await failureOf(id)).failure;
   };
 
-  expect(await shown("the woman")).toEqual({ error: "The picture wasn't drawn. The Text Provider returned an error, so look over its address.", words: "the woman" });
+  expect(await shown("the woman")).toEqual({
+    error: "The picture wasn't drawn. The Text Provider returned an error, so look over its address.",
+    words: "the woman",
+  });
   expect(await failureOf(id)).toEqual({});
   expect(await shown("the boy")).toEqual({ error: "The picture wasn't drawn. The Narrator refused this picture. Reword it and try again.", words: "the boy" });
   expect(await shown("the dog")).toEqual({ error: "The picture wasn't drawn. The Narrator gave no usable response.", words: "the dog" });
@@ -467,13 +502,7 @@ test("a Revert past its Message removes it and counts it, one to its Message kee
 });
 
 test("replacing the latest Message takes its requested images with it, and stops one on the way", async () => {
-  await play(
-    [turn("A wet street", scene("The ferry")), written_("One"), written_("Two"), quiet],
-    png(1),
-    png(2),
-    png(3),
-    new Promise<Uint8Array>(() => {}),
-  );
+  await play([turn("A wet street", scene("The ferry")), written_("One"), written_("Two"), quiet], png(1), png(2), png(3), new Promise<Uint8Array>(() => {}));
   const id = await newSave();
   await playTurn(id);
   await asked(id, "gone");
@@ -552,7 +581,9 @@ test("Image Instructions reach a Scene Image's and a request's prompt, and Model
   await playTurn(id);
 
   const narrator = written.prompts[0]!.map(({ content }) => content).join("\n");
-  expect(narrator).toContain("Image Instructions, which are the player's guidance for the picture, to follow wherever they don't break the rules above: image-words");
+  expect(narrator).toContain(
+    "Image Instructions, which are the player's guidance for the picture, to follow wherever they don't break the rules above: image-words",
+  );
   expect(narrator).toContain("The Model Instructions below guide the story only, never visual_description.");
   expect(narrator).toContain("model-words");
 

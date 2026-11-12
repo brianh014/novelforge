@@ -51,7 +51,14 @@ for (const index of wanted) {
     const style = `${name}: ${description}`;
     // A real Image Prompt opens with the Art Style, as the text model writes it in.
     const payload = family
-      ? { prompt: `${artStyleFor(style, family)}\n${SUBJECT}`, negative_prompt: AVOID, aspect_ratio: "16:9", reference_images: [], style_preset: "", seed: SEED }
+      ? {
+          prompt: `${artStyleFor(style, family)}\n${SUBJECT}`,
+          negative_prompt: AVOID,
+          aspect_ratio: "16:9",
+          reference_images: [],
+          style_preset: "",
+          seed: SEED,
+        }
       : { prompt: SUBJECT, negative_prompt: AVOID, aspect_ratio: "16:9", reference_images: [], style_preset: style };
     writeFileSync(path, await draw(payload, AbortSignal.timeout(5 * 60 * 1000)));
   } catch (error) {

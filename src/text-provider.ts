@@ -35,8 +35,7 @@ type Chunk = {
 };
 
 // `reasons` marks a moderation error.
-const isRefusal = (error?: ProviderError) =>
-  ["refusal", "content_policy_violation"].includes(error?.metadata?.error_type ?? "") || !!error?.metadata?.reasons;
+const isRefusal = (error?: ProviderError) => ["refusal", "content_policy_violation"].includes(error?.metadata?.error_type ?? "") || !!error?.metadata?.reasons;
 
 async function* eventData(body: ReadableStream, onRead: () => void) {
   let pending = "";

@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { z } from "zod";
 import { type Check, StoredCheck } from "./check-resolver";
 import { errorFields, log } from "./logger";
-import { applyEdit, openingState, type SceneMemory, type State, StateSections, WorldEdit } from "./state-applier";
+import { applyEdit, openingState, type State, StateSections, WorldEdit } from "./state-applier";
 
 /**
  * The PC as the player wrote them, apart from the name. Each field is optional, as Saves from before these fields have
@@ -93,18 +93,13 @@ const sectionsAt = (db: Database, messageId: number) =>
     .all(messageId);
 
 const latestSections = (db: Database) =>
-  sectionsAt(
-    db,
-    db.query<{ id: number }, []>("SELECT coalesce(max(message_id), 0) AS id FROM snapshot_sections").get()!.id,
-  );
+  sectionsAt(db, db.query<{ id: number }, []>("SELECT coalesce(max(message_id), 0) AS id FROM snapshot_sections").get()!.id);
 
-const toState = (sections: SectionRow[]) =>
-  Object.fromEntries(sections.map(({ name, content }) => [name, JSON.parse(content)])) as State;
+const toState = (sections: SectionRow[]) => Object.fromEntries(sections.map(({ name, content }) => [name, JSON.parse(content)])) as State;
 
 const parseEdits = (edits: string | null) => (edits ? (JSON.parse(edits) as WorldEdit[]) : []);
 
-const pendingEdits = (db: Database) =>
-  parseEdits(db.query<{ pending_edits: string | null }, []>("SELECT pending_edits FROM save").get()!.pending_edits);
+const pendingEdits = (db: Database) => parseEdits(db.query<{ pending_edits: string | null }, []>("SELECT pending_edits FROM save").get()!.pending_edits);
 
 /** The latest Snapshot with any pending Director's Notes and edits applied, which is the state the next Message starts from. */
 function currentState(db: Database) {
@@ -128,19 +123,12 @@ function writeSnapshot(db: Database, messageId: number, state: State) {
   for (const [name, value] of Object.entries(state)) {
     const content = JSON.stringify(value);
     const unchanged = latest.find((section) => section.name === name && section.content === content);
-    const sectionId =
-      unchanged?.id ??
-      db.query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id").get(content)!.id;
-    db.run("INSERT INTO snapshot_sections (message_id, name, section_id) VALUES (?, ?, ?)", [
-      messageId,
-      name,
-      sectionId,
-    ]);
+    const sectionId = unchanged?.id ?? db.query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id").get(content)!.id;
+    db.run("INSERT INTO snapshot_sections (message_id, name, section_id) VALUES (?, ?, ?)", [messageId, name, sectionId]);
   }
 }
 
-const latestMessage = (db: Database) =>
-  db.query<{ id: number }, []>("SELECT coalesce(max(id), 0) AS id FROM messages").get()!.id;
+const latestMessage = (db: Database) => db.query<{ id: number }, []>("SELECT coalesce(max(id), 0) AS id FROM messages").get()!.id;
 
 function requireMessage(db: Database, messageId: number) {
   const found = db.query<{ id: number }, [number]>("SELECT id FROM messages WHERE id = ?").get(messageId);
@@ -149,24 +137,19 @@ function requireMessage(db: Database, messageId: number) {
 
 function countAfter(db: Database, messageId: number) {
   requireMessage(db, messageId);
-  const { messages } = db
-    .query<{ messages: number }, [number]>("SELECT count(*) AS messages FROM messages WHERE id > ?")
-    .get(messageId)!;
+  const { messages } = db.query<{ messages: number }, [number]>("SELECT count(*) AS messages FROM messages WHERE id > ?").get(messageId)!;
   const { images } = db
     .query<{ images: number }, [number]>(
       `SELECT (SELECT count(*) FROM scene_images WHERE message_id > ?1)
        + (SELECT count(*) FROM requested_images WHERE message_id > ?1) AS images`,
     )
     .get(messageId)!;
-  const { portraits } = db
-    .query<{ portraits: number }, [number]>("SELECT count(*) AS portraits FROM portraits WHERE message_id > ?")
-    .get(messageId)!;
+  const { portraits } = db.query<{ portraits: number }, [number]>("SELECT count(*) AS portraits FROM portraits WHERE message_id > ?").get(messageId)!;
   return { messages, images, portraits };
 }
 
 // Sweeping by what is still linked keeps every section a remaining Message shares.
-const sweepSections = (db: Database) =>
-  db.run("DELETE FROM sections WHERE id NOT IN (SELECT section_id FROM snapshot_sections)");
+const sweepSections = (db: Database) => db.run("DELETE FROM sections WHERE id NOT IN (SELECT section_id FROM snapshot_sections)");
 
 function deleteAfter(db: Database, messageId: number) {
   db.run("DELETE FROM messages WHERE id > ?", [messageId]);
@@ -179,16 +162,13 @@ function deleteAfter(db: Database, messageId: number) {
   clearPending(db);
 }
 
-const hasColumn = (db: Database, table: string, column: string) =>
-  db.query("SELECT 1 FROM pragma_table_info(?) WHERE name = ?").get(table, column) !== null;
+const hasColumn = (db: Database, table: string, column: string) => db.query("SELECT 1 FROM pragma_table_info(?) WHERE name = ?").get(table, column) !== null;
 
 // The only kind of change ever made to a stored Snapshot: it gets the sections it lacks, at the values they would have held
 // anyway, because nothing could write to them yet. All of them share one row per section.
 function addMissingSections(db: Database) {
   for (const [name, value] of Object.entries(openingState)) {
-    const { id } = db
-      .query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id")
-      .get(JSON.stringify(value))!;
+    const { id } = db.query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id").get(JSON.stringify(value))!;
     db.run(
       `INSERT OR IGNORE INTO snapshot_sections (message_id, name, section_id)
        SELECT ${OPENING_SNAPSHOT}, ?1, ?2 UNION ALL SELECT id, ?1, ?2 FROM messages`,
@@ -217,9 +197,7 @@ const toVersion4 = (db: Database) => db.run("ALTER TABLE save ADD COLUMN pc_deta
 
 /** Images are kept apart from Snapshots, which hold no bytes, and keyed by their Message because Message ids are never reused. */
 function toVersion5(db: Database) {
-  db.run(
-    "CREATE TABLE IF NOT EXISTS scene_images (message_id INTEGER PRIMARY KEY, caption TEXT NOT NULL, bytes BLOB NOT NULL)",
-  );
+  db.run("CREATE TABLE IF NOT EXISTS scene_images (message_id INTEGER PRIMARY KEY, caption TEXT NOT NULL, bytes BLOB NOT NULL)");
   addMissingSections(db);
 }
 
@@ -229,13 +207,10 @@ function toVersion5(db: Database) {
  * so that a browser can't show a Reverted portrait for a new one.
  */
 const toVersion6 = (db: Database) =>
-  db.run(
-    "CREATE TABLE IF NOT EXISTS portraits (id INTEGER PRIMARY KEY AUTOINCREMENT, npc TEXT UNIQUE, message_id INTEGER NOT NULL, bytes BLOB NOT NULL)",
-  );
+  db.run("CREATE TABLE IF NOT EXISTS portraits (id INTEGER PRIMARY KEY AUTOINCREMENT, npc TEXT UNIQUE, message_id INTEGER NOT NULL, bytes BLOB NOT NULL)");
 
 /** Its own table because it holds bytes, and no Message owns it, so no Revert reaches it. */
-const toVersion7 = (db: Database) =>
-  db.run("CREATE TABLE IF NOT EXISTS cover (id INTEGER PRIMARY KEY CHECK (id = 1), bytes BLOB NOT NULL)");
+const toVersion7 = (db: Database) => db.run("CREATE TABLE IF NOT EXISTS cover (id INTEGER PRIMARY KEY CHECK (id = 1), bytes BLOB NOT NULL)");
 
 /** Empty for a Save from before titles, whose list row shows its PC. */
 const toVersion8 = (db: Database) => {
@@ -337,7 +312,30 @@ const toVersion21 = (db: Database) =>
 const toVersion22 = addMissingSections;
 
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
-const MIGRATIONS = [toVersion1, toVersion2, toVersion3, toVersion4, toVersion5, toVersion6, toVersion7, toVersion8, toVersion9, toVersion10, toVersion11, toVersion12, toVersion13, toVersion14, toVersion15, toVersion16, toVersion17, toVersion18, toVersion19, toVersion20, toVersion21, toVersion22];
+const MIGRATIONS = [
+  toVersion1,
+  toVersion2,
+  toVersion3,
+  toVersion4,
+  toVersion5,
+  toVersion6,
+  toVersion7,
+  toVersion8,
+  toVersion9,
+  toVersion10,
+  toVersion11,
+  toVersion12,
+  toVersion13,
+  toVersion14,
+  toVersion15,
+  toVersion16,
+  toVersion17,
+  toVersion18,
+  toVersion19,
+  toVersion20,
+  toVersion21,
+  toVersion22,
+];
 
 function schemaVersion(db: Database) {
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
@@ -387,7 +385,11 @@ function assertSafeToMigrate(db: Database) {
   if (version < 0 || integrity_check !== "ok" || stranger) throw new InvalidSave(NOT_A_SAVE);
 }
 
-const jsonText = <T>(schema: z.ZodType<T>) => z.string().transform((text) => JSON.parse(text) as unknown).pipe(schema);
+const jsonText = <T>(schema: z.ZodType<T>) =>
+  z
+    .string()
+    .transform((text) => JSON.parse(text) as unknown)
+    .pipe(schema);
 
 const rowId = z.number().int().nonnegative();
 
@@ -396,8 +398,7 @@ const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 /** How many responses a Rewrite's direction lasts, counting the one it made. */
 export const RESPONSES_KEEPING_DIRECTIONS = 5;
 
-const startsWith = (bytes: Uint8Array, signature: number[], offset = 0) =>
-  signature.every((byte, index) => bytes[offset + index] === byte);
+const startsWith = (bytes: Uint8Array, signature: number[], offset = 0) => signature.every((byte, index) => bytes[offset + index] === byte);
 
 /** The type of an image the app can show, read from the bytes themselves. Everything else, SVG and HTML above all, is undefined. */
 export function imageType(bytes: Uint8Array) {
@@ -443,9 +444,7 @@ function assertValidSave(db: Database) {
     direction: z.string().nullable(),
     created_at: z.iso.datetime().nullable(),
   });
-  const content = new Map(
-    rowsOf(db, "sections", { id: rowId, content: z.string() }).map((section) => [section.id, section.content]),
-  );
+  const content = new Map(rowsOf(db, "sections", { id: rowId, content: z.string() }).map((section) => [section.id, section.content]));
   const links = rowsOf(db, "snapshot_sections", { message_id: rowId, name: z.string(), section_id: rowId });
   const images = rowsOf(db, "scene_images", {
     message_id: rowId,
@@ -552,88 +551,6 @@ function connect(path: string) {
     throw error;
   }
 }
-
-/**
- * What a backfill needs from a Save copy at any path. Opening upgrades it, as it does any Save, and that stays even if
- * the backfill then fails. Checked read-only first, as `connect` would turn any other file into a new Save.
- */
-export function readSaveCopy(path: string) {
-  try {
-    using file = new Database(path, { readonly: true, strict: true });
-    assertSafeToMigrate(file);
-    if (schemaVersion(file) === 0) throw new InvalidSave(NOT_A_SAVE);
-  } catch (error) {
-    throw error instanceof InvalidSave ? error : new InvalidSave(NOT_A_SAVE);
-  }
-  using db = connect(path);
-  return {
-    messages: db.query<Message, []>("SELECT id, role, text FROM messages ORDER BY id").all(),
-    sceneMemories: currentState(db).sceneMemories,
-    memoryStart: db.query<{ memory_start: number }, []>("SELECT memory_start FROM save").get()!.memory_start,
-  };
-}
-
-/**
- * Each Narrator reply of a Save copy, with the state its Turn started from. The copy is read once into memory, where an
- * older Save upgrades, so nothing can write to the file. A replacement's `edits` came after its player Message's Snapshot.
- */
-export function readReplies(path: string) {
-  try {
-    using db = Database.deserialize(readFileSync(path));
-    assertSafeToMigrate(db);
-    if (schemaVersion(db) === 0) throw new InvalidSave(NOT_A_SAVE);
-    migrate(db);
-    const save = db
-      .query<{ pc_name: string; pc_details: string; starting_hook: string; memory_start: number }, []>(
-        "SELECT pc_name, pc_details, starting_hook, memory_start FROM save",
-      )
-      .get()!;
-    const rows = db.query<Message & { hidden_check: string | null; edits: string | null }, []>("SELECT id, role, text, hidden_check, edits FROM messages ORDER BY id").all();
-    return {
-      pc: { ...(JSON.parse(save.pc_details) as PcDetails), name: save.pc_name },
-      startingHook: save.starting_hook,
-      memoryStart: save.memory_start,
-      messages: rows.map(({ id, role, text }): Message => ({ id, role, text })),
-      replies: rows.flatMap(({ id, role, text, hidden_check, edits }, index) => {
-        const player = rows[index - 1];
-        if (role !== "narrator" || player?.role !== "player") return [];
-        return {
-          id,
-          text,
-          input: { id: player.id, text: player.text },
-          check: hidden_check ? (JSON.parse(hidden_check) as Check) : undefined,
-          state: parseEdits(edits).reduce(applyEdit, toState(sectionsAt(db, player.id))),
-        };
-      }),
-    };
-  } catch (error) {
-    throw error instanceof InvalidSave ? error : new InvalidSave(NOT_A_SAVE);
-  }
-}
-
-/**
- * Changes the latest Snapshot and the one before it, which a Regenerate of the latest Turn starts from. Sections are
- * shared between Snapshots, so changed ones get new rows and older Snapshots keep theirs. A throw changes nothing.
- */
-export function changeLatestStates(path: string, change: (state: State) => State) {
-  using db = connect(path);
-  db.transaction(() => {
-    for (const { id } of db.query<{ id: number }, []>("SELECT id FROM messages ORDER BY id DESC LIMIT 2").all()) {
-      const sections = sectionsAt(db, id);
-      for (const [name, value] of Object.entries(change(toState(sections)))) {
-        const content = JSON.stringify(value);
-        if (sections.find((row) => row.name === name)?.content === content) continue;
-        const section = db.query<{ id: number }, [string]>("INSERT INTO sections (content) VALUES (?) RETURNING id").get(content)!;
-        db.run("UPDATE snapshot_sections SET section_id = ? WHERE message_id = ? AND name = ?", [section.id, id, name]);
-      }
-    }
-    sweepSections(db);
-  })();
-}
-
-/** Puts memories of older Messages first. */
-export const addOlderMemories = (path: string, older: SceneMemory[]) =>
-  changeLatestStates(path, (state) => ({ ...state, sceneMemories: [...older, ...state.sceneMemories] }));
 
 export function saveStore(savesDir: string) {
   mkdirSync(savesDir, { recursive: true });
@@ -818,7 +735,8 @@ export function saveStore(savesDir: string) {
       const [table, key] = REDRAWABLE[kind];
       using db = open(id);
       // Whatever replaces a portrait, its first image stays as the original.
-      if (kind === "portrait") db.run("INSERT OR IGNORE INTO portrait_originals (id, bytes, prompt) SELECT id, bytes, prompt FROM portraits WHERE id = ?", [ref]);
+      if (kind === "portrait")
+        db.run("INSERT OR IGNORE INTO portrait_originals (id, bytes, prompt) SELECT id, bytes, prompt FROM portraits WHERE id = ?", [ref]);
       db.run(`UPDATE ${table} SET bytes = ?, prompt = ?, redraws = redraws + 1 WHERE ${key} = ?`, [bytes, prompt, ref]);
     },
 
@@ -831,9 +749,7 @@ export function saveStore(savesDir: string) {
 
     sceneImage(id: string, messageId: number) {
       using db = open(id);
-      const image = db
-        .query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM scene_images WHERE message_id = ?")
-        .get(messageId);
+      const image = db.query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM scene_images WHERE message_id = ?").get(messageId);
       if (!image) throw new MessageNotFound();
       return image.bytes;
     },
@@ -891,9 +807,7 @@ export function saveStore(savesDir: string) {
 
     portrait(id: string, portraitId: number) {
       using db = open(id);
-      const portrait = db
-        .query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM portraits WHERE id = ?")
-        .get(portraitId);
+      const portrait = db.query<{ bytes: Uint8Array<ArrayBuffer> }, [number]>("SELECT bytes FROM portraits WHERE id = ?").get(portraitId);
       if (!portrait) throw new PortraitNotFound();
       return portrait.bytes;
     },
@@ -907,11 +821,13 @@ export function saveStore(savesDir: string) {
     /** The prompt of the image `original` returns, or of the portrait while it has none. */
     originalPrompt(id: string, portraitId: number) {
       using db = open(id);
-      return db
-        .query<{ prompt: string | null }, [number]>(
-          "SELECT CASE WHEN o.id IS NULL THEN p.prompt ELSE o.prompt END AS prompt FROM portraits p LEFT JOIN portrait_originals o ON o.id = p.id WHERE p.id = ?",
-        )
-        .get(portraitId)?.prompt ?? undefined;
+      return (
+        db
+          .query<{ prompt: string | null }, [number]>(
+            "SELECT CASE WHEN o.id IS NULL THEN p.prompt ELSE o.prompt END AS prompt FROM portraits p LEFT JOIN portrait_originals o ON o.id = p.id WHERE p.id = ?",
+          )
+          .get(portraitId)?.prompt ?? undefined
+      );
     },
 
     /** Goes by exact name, as the state does. A null `npc` is the PC. */
@@ -1055,14 +971,7 @@ export function saveStore(savesDir: string) {
     },
 
     /** `advance` runs inside the transaction, so it always sees the latest state. */
-    commitTurn(
-      id: string,
-      basedOn: number,
-      input: string,
-      narration: string,
-      check: Check | undefined,
-      advance: (state: State) => State,
-    ) {
+    commitTurn(id: string, basedOn: number, input: string, narration: string, check: Check | undefined, advance: (state: State) => State) {
       using db = open(id);
       const insert = db.query<Message, [Message["role"], string, string | null]>(
         `INSERT INTO messages (role, text, hidden_check, created_at) VALUES (?, ?, ?, ${NOW}) RETURNING id, role, text`,
@@ -1123,7 +1032,9 @@ export function saveStore(savesDir: string) {
         if (oldFirst !== name && oldFirst !== newFirst && !others.some((other) => first(other) === oldFirst)) pairs.push([oldFirst, newFirst]);
         // JSON-escaped, as most columns hold JSON, and a plain name reads the same either way.
         const patterns = pairs.map(([from, to]) => {
-          const escaped = JSON.stringify(from).slice(1, -1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const escaped = JSON.stringify(from)
+            .slice(1, -1)
+            .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
           return [new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "gu"), JSON.stringify(to).slice(1, -1)] as const;
         });
         const renamed = (text: string) => patterns.reduce((result, [pattern, to]) => result.replace(pattern, () => to), text);

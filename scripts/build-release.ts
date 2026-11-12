@@ -15,7 +15,10 @@ mkdirSync(work, { recursive: true });
 async function compile(target: string, outfile: string, server: boolean, ...extra: string[]) {
   // A define, so the download needs no flag to start as a server. src/main.ts reads it.
   const mode = server ? ["--define", 'process.env.NOVELFORGE_MODE="server"'] : [];
-  const build = Bun.spawn([process.execPath, "build", "src/main.ts", "--compile", "--production", `--target=${target}`, ...mode, ...extra, "--outfile", outfile], { cwd: root });
+  const build = Bun.spawn(
+    [process.execPath, "build", "src/main.ts", "--compile", "--production", `--target=${target}`, ...mode, ...extra, "--outfile", outfile],
+    { cwd: root },
+  );
   if ((await build.exited) !== 0) throw new Error(`The ${target} build failed`);
   return new Uint8Array(await Bun.file(outfile).arrayBuffer());
 }
@@ -38,7 +41,13 @@ function tarGz(entries: Entry[]) {
     put(data ? "0" : "5", 156);
     put("ustar\u000000", 257);
     put("        ", 148); // the checksum counts its own field as spaces
-    put(`${octal(header.reduce((sum, byte) => sum + byte, 0), 7)}\u0000 `, 148);
+    put(
+      `${octal(
+        header.reduce((sum, byte) => sum + byte, 0),
+        7,
+      )}\u0000 `,
+      148,
+    );
     blocks.push(header);
     if (data) blocks.push(data, new Uint8Array((512 - (data.length % 512)) % 512));
   }
@@ -67,7 +76,10 @@ for (const server of [false, true]) {
   // The app hides its console. The Server keeps it, as its window holds the log and closing it stops the server.
   await compile("bun-windows-x64", join(out, `${name}-Windows.exe`), server, `--windows-icon=${ico}`, ...(server ? [] : ["--windows-hide-console"]));
 
-  for (const [arch, label] of [["arm64", "AppleSilicon"], ["x64", "Intel"]] as const) {
+  for (const [arch, label] of [
+    ["arm64", "AppleSilicon"],
+    ["x64", "Intel"],
+  ] as const) {
     const program = await compile(`bun-darwin-${arch}`, join(work, `${name}-darwin-${arch}`), server);
     const app = `${appName}.app/Contents`;
     const plist = `<?xml version="1.0" encoding="UTF-8"?>
@@ -88,16 +100,19 @@ for (const server of [false, true]) {
 here="$(cd "$(dirname "$0")" && pwd)"
 exec osascript -e 'on run argv' -e 'tell application "Terminal"' -e 'do script quoted form of item 1 of argv' -e 'activate' -e 'end tell' -e 'end run' "$here/NovelForge"
 `;
-    await Bun.write(join(out, `${name}-Mac-${label}.tar.gz`), tarGz([
-      { name: `${appName}.app/`, mode: 0o755 },
-      { name: `${app}/`, mode: 0o755 },
-      { name: `${app}/Info.plist`, data: text(plist), mode: 0o644 },
-      { name: `${app}/MacOS/`, mode: 0o755 },
-      { name: `${app}/MacOS/NovelForge`, data: program, mode: 0o755 },
-      ...(server ? [{ name: `${app}/MacOS/open-in-terminal`, data: text(opener), mode: 0o755 }] : []),
-      { name: `${app}/Resources/`, mode: 0o755 },
-      { name: `${app}/Resources/icon.icns`, data: icns(png), mode: 0o644 },
-    ]));
+    await Bun.write(
+      join(out, `${name}-Mac-${label}.tar.gz`),
+      tarGz([
+        { name: `${appName}.app/`, mode: 0o755 },
+        { name: `${app}/`, mode: 0o755 },
+        { name: `${app}/Info.plist`, data: text(plist), mode: 0o644 },
+        { name: `${app}/MacOS/`, mode: 0o755 },
+        { name: `${app}/MacOS/NovelForge`, data: program, mode: 0o755 },
+        ...(server ? [{ name: `${app}/MacOS/open-in-terminal`, data: text(opener), mode: 0o755 }] : []),
+        { name: `${app}/Resources/`, mode: 0o755 },
+        { name: `${app}/Resources/icon.icns`, data: icns(png), mode: 0o644 },
+      ]),
+    );
   }
 
   const linux = await compile("bun-linux-x64", join(work, `${name}-linux`), server);

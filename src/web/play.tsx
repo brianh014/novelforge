@@ -39,9 +39,34 @@ import {
   storyName,
   takeImageFailure,
 } from "./api";
-import { type Beat, BeatLine, type ChatStyle, chapterOpenings, messageBeats, openingBeat, readable, type StageBeat, stageBeats, type TurnInProgress } from "./chat-style";
+import {
+  type Beat,
+  BeatLine,
+  type ChatStyle,
+  chapterOpenings,
+  messageBeats,
+  openingBeat,
+  readable,
+  type StageBeat,
+  stageBeats,
+  type TurnInProgress,
+} from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, StopIcon, ChapterIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, DuplicateIcon, EditIcon, RegenerateIcon, RevertIcon, RewriteIcon, SendIcon } from "./icons";
+import {
+  AskIcon,
+  StopIcon,
+  ChapterIcon,
+  ContinueIcon,
+  DecideIcon,
+  DownIcon,
+  DrawIcon,
+  DuplicateIcon,
+  EditIcon,
+  RegenerateIcon,
+  RevertIcon,
+  RewriteIcon,
+  SendIcon,
+} from "./icons";
 import { TellTheNarrator } from "./journal";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
@@ -242,32 +267,34 @@ export function Play({ id }: { id: string }) {
     // Without Settings the story still reads, in Prose.
     const reading = getSettings().catch(() => undefined);
     const live: Promise<TurnStatus> = inProgress ? Promise.resolve({}) : getTurn(id).catch(() => ({}));
-    Promise.all([getSave(id), getMessages(id), reading, live]).then(([save, messages, settings, { running, failed }]) => {
-      if (settings) {
-        setSetupNotice(setupProblem(settings));
-        setChatStyle(settings.chatStyle);
-        setImagesReady(settings.imagesReady);
-        setOpenNewImages(settings.openNewImages);
-      }
-      setSave(save);
-      setMessages(messages);
-      const failure = missed ?? (failed && { ...failed, error: failureMessage(failed) });
-      if (failure) {
-        setError(failure.error);
-        giveBack(failure.input, failure.replaces);
-      }
-      const replaces = messages.find((message) => message.id === running?.replaces);
-      const resumed =
-        running && startTurn(id, { input: running.input, narration: running.narration, replaces }, (show) => resumeTurn(id, running, show));
-      const move = firstMove({
-        running: !!(inProgress || resumed),
-        failure: !!failure,
-        // Without a working Narrator this would only fail, and the page already says what to fix.
-        unopened: messages.length === 0 && !!settings && !setupProblem(settings),
-      });
-      if (move === "follow") follow(inProgress ?? resumed!);
-      else if (move === "open") openStory();
-    }, (failure: Error) => setLoadError(failure.message));
+    Promise.all([getSave(id), getMessages(id), reading, live]).then(
+      ([save, messages, settings, { running, failed }]) => {
+        if (settings) {
+          setSetupNotice(setupProblem(settings));
+          setChatStyle(settings.chatStyle);
+          setImagesReady(settings.imagesReady);
+          setOpenNewImages(settings.openNewImages);
+        }
+        setSave(save);
+        setMessages(messages);
+        const failure = missed ?? (failed && { ...failed, error: failureMessage(failed) });
+        if (failure) {
+          setError(failure.error);
+          giveBack(failure.input, failure.replaces);
+        }
+        const replaces = messages.find((message) => message.id === running?.replaces);
+        const resumed = running && startTurn(id, { input: running.input, narration: running.narration, replaces }, (show) => resumeTurn(id, running, show));
+        const move = firstMove({
+          running: !!(inProgress || resumed),
+          failure: !!failure,
+          // Without a working Narrator this would only fail, and the page already says what to fix.
+          unopened: messages.length === 0 && !!settings && !setupProblem(settings),
+        });
+        if (move === "follow") follow(inProgress ?? resumed!);
+        else if (move === "open") openStory();
+      },
+      (failure: Error) => setLoadError(failure.message),
+    );
     checkImages();
     checkChapter();
     return () => {
@@ -282,16 +309,21 @@ export function Play({ id }: { id: string }) {
     const before = lastJournal.current;
     lastJournal.current = next;
     const messageId = latestId.current;
-    const redrawn = next.portraits.filter((portrait) => (before?.portraits.find(({ id }) => id === portrait.id)?.redraws ?? portrait.redraws) < portrait.redraws);
+    const redrawn = next.portraits.filter(
+      (portrait) => (before?.portraits.find(({ id }) => id === portrait.id)?.redraws ?? portrait.redraws) < portrait.redraws,
+    );
     if (messageId !== undefined && redrawn.length > 0) setUpdated((shown) => [...shown, ...redrawn.map((portrait) => ({ portrait, messageId }))]);
     setJournal(next);
   }
 
   function checkChapter() {
-    getChapters(id).then(({ chapters, offer }) => {
-      setChapters(chapters);
-      setChapterOffer(offer);
-    }, () => {});
+    getChapters(id).then(
+      ({ chapters, offer }) => {
+        setChapters(chapters);
+        setChapterOffer(offer);
+      },
+      () => {},
+    );
   }
 
   async function endChapter() {
@@ -312,25 +344,31 @@ export function Play({ id }: { id: string }) {
   // Images draw in the background, so the page looks for them apart from the Turn, for as long as any are on the way.
   function checkImages() {
     clearTimeout(imageCheck.current);
-    Promise.all([getImages(id), getRequestedImages(id)]).then(([next, asked]) => {
-      loaded.current.scene ??= new Set(next.images.map(({ messageId }) => messageId));
-      loaded.current.requested ??= new Set(asked.images.map(({ ref }) => ref));
-      setImages(next);
-      setRequested(asked);
-      if (next.pending && !leaving.current.signal.aborted) imageCheck.current = setTimeout(checkImages, IMAGE_CHECK_MS);
-      else {
-        // Once, when drawing stops, as this holds the whole Full Log.
-        getJournal(id).then(takeJournal, () => {});
-        // Not on the way out, as nothing would be left to tell the player.
-        if (leaving.current.signal.aborted) return;
-        takeImageFailure(id).then((failure) => {
-          if (!failure) return;
-          setError(failure.error);
-          setWords((typed) => typed || failure.words);
-          setAsking(true);
-        }, () => {});
-      }
-    }, () => {});
+    Promise.all([getImages(id), getRequestedImages(id)]).then(
+      ([next, asked]) => {
+        loaded.current.scene ??= new Set(next.images.map(({ messageId }) => messageId));
+        loaded.current.requested ??= new Set(asked.images.map(({ ref }) => ref));
+        setImages(next);
+        setRequested(asked);
+        if (next.pending && !leaving.current.signal.aborted) imageCheck.current = setTimeout(checkImages, IMAGE_CHECK_MS);
+        else {
+          // Once, when drawing stops, as this holds the whole Full Log.
+          getJournal(id).then(takeJournal, () => {});
+          // Not on the way out, as nothing would be left to tell the player.
+          if (leaving.current.signal.aborted) return;
+          takeImageFailure(id).then(
+            (failure) => {
+              if (!failure) return;
+              setError(failure.error);
+              setWords((typed) => typed || failure.words);
+              setAsking(true);
+            },
+            () => {},
+          );
+        }
+      },
+      () => {},
+    );
   }
 
   function send(event: FormEvent) {
@@ -377,7 +415,9 @@ export function Play({ id }: { id: string }) {
     if (!editing) return replace(feedback);
     story.current!.focus();
     // The edited words show while the Narrator catches the state up with them.
-    run({ input: feedback, narration: feedback, replaces, edit: true }, messages.slice(0, -1), (_show, signal) => editResponse(id, replaces.id, feedback, signal));
+    run({ input: feedback, narration: feedback, replaces, edit: true }, messages.slice(0, -1), (_show, signal) =>
+      editResponse(id, replaces.id, feedback, signal),
+    );
   }
 
   function startRewrite(message: Message) {
@@ -533,8 +573,12 @@ export function Play({ id }: { id: string }) {
   if (loadError) {
     return (
       <Book left={<h1 className="big">NovelForge</h1>}>
-        <p role="alert" className="error">{loadError}</p>
-        <a className="quiet" href="#/">Main Menu</a>
+        <p role="alert" className="error">
+          {loadError}
+        </p>
+        <a className="quiet" href="#/">
+          Main Menu
+        </a>
       </Book>
     );
   }
@@ -607,6 +651,7 @@ export function Play({ id }: { id: string }) {
       <div className="row actions">
         {message.role === "player" && before(message) && (
           <button
+            type="button"
             className="icon"
             title="Edit and replay from here"
             aria-label={`Edit and replay from your words: ${message.text.slice(0, 40)}`}
@@ -620,6 +665,7 @@ export function Play({ id }: { id: string }) {
         )}
         {message !== latest && (
           <button
+            type="button"
             className="icon revert"
             title="Revert to here"
             aria-label={`Revert to this Message: ${message.text.slice(0, 40)}`}
@@ -629,6 +675,7 @@ export function Play({ id }: { id: string }) {
           </button>
         )}
         <button
+          type="button"
           className="icon revert"
           title="Duplicate from here"
           aria-label={`Duplicate from this Message: ${message.text.slice(0, 40)}`}
@@ -637,13 +684,21 @@ export function Play({ id }: { id: string }) {
           {DuplicateIcon}
         </button>
         {message === latest && (
-          <button className="icon" title="End the chapter here" aria-label="End the chapter here" aria-expanded={endingChapter} onClick={() => setEndingChapter(!endingChapter)}>
+          <button
+            type="button"
+            className="icon"
+            title="End the chapter here"
+            aria-label="End the chapter here"
+            aria-expanded={endingChapter}
+            onClick={() => setEndingChapter(!endingChapter)}
+          >
             {ChapterIcon}
           </button>
         )}
         {message === replaceable && (
           <>
             <button
+              type="button"
               ref={rewriteButton}
               className="icon"
               title="Rewrite"
@@ -653,10 +708,17 @@ export function Play({ id }: { id: string }) {
             >
               {RewriteIcon}
             </button>
-            <button className="icon" title="Edit" aria-label="Edit" aria-expanded={rewriting === message.id && editing} onClick={() => startEdit(message)}>
+            <button
+              type="button"
+              className="icon"
+              title="Edit"
+              aria-label="Edit"
+              aria-expanded={rewriting === message.id && editing}
+              onClick={() => startEdit(message)}
+            >
               {EditIcon}
             </button>
-            <button className="icon" title="Regenerate" aria-label="Regenerate" onClick={() => replace("")}>
+            <button type="button" className="icon" title="Regenerate" aria-label="Regenerate" onClick={() => replace("")}>
               {RegenerateIcon}
             </button>
           </>
@@ -687,7 +749,11 @@ export function Play({ id }: { id: string }) {
             {/* A Save from before titles has only its PC. */}
             <div className="story-title">
               <h1 className="title">{storyName(save)}</h1>
-              {journal?.storyTime && <p className="muted" data-testid="story-time">{journal.storyTime.date}, {journal.storyTime.timeOfDay}</p>}
+              {journal?.storyTime && (
+                <p className="muted" data-testid="story-time">
+                  {journal.storyTime.date}, {journal.storyTime.timeOfDay}
+                </p>
+              )}
             </div>
             {journal?.recentSummary && (
               <div className="story-recap">
@@ -699,9 +765,12 @@ export function Play({ id }: { id: string }) {
               <div className="story-recap">
                 <h2>Loose Ends</h2>
                 <ul>
-                  {journal.looseEnds.toReversed().slice(0, RECENT_LOOSE_ENDS).map((looseEnd) => (
-                    <li key={looseEnd}>{looseEnd}</li>
-                  ))}
+                  {journal.looseEnds
+                    .toReversed()
+                    .slice(0, RECENT_LOOSE_ENDS)
+                    .map((looseEnd) => (
+                      <li key={looseEnd}>{looseEnd}</li>
+                    ))}
                 </ul>
                 {journal.looseEnds.length > RECENT_LOOSE_ENDS && (
                   <a className="quiet" href={`#/journal/${id}`}>
@@ -744,9 +813,11 @@ export function Play({ id }: { id: string }) {
         </StageBox>
       ) : (
         <div className="story-view">
+          {/* biome-ignore lint/a11y/useSemanticElements: a named div region is a section to assistive tech, and the styles target divs. */}
           <div
             ref={story}
             className={`story chat-${chatStyle}`}
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must take focus, or a keyboard can't scroll it.
             tabIndex={0}
             role="region"
             aria-label="Story"
@@ -756,7 +827,7 @@ export function Play({ id }: { id: string }) {
               {messages.length === 0 && !turn && (
                 <>
                   <p className="muted">{save.startingHook || "The page is blank."}</p>
-                  <button className="quiet" onClick={openStory}>
+                  <button type="button" className="quiet" onClick={openStory}>
                     Have the Narrator open the story
                   </button>
                 </>
@@ -779,9 +850,7 @@ export function Play({ id }: { id: string }) {
                   </Fragment>
                 );
               })}
-              {turn?.input && !turn.replaces && (
-                <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>
-              )}
+              {turn?.input && !turn.replaces && <div className="message player">{messageBeats({ role: "player", text: turn.input }).map(line)}</div>}
               {/* Mounted before any text arrives, or screen readers would not announce it. */}
               <div aria-live="polite" className="message narrator">
                 {turn?.retry && <p className="notice">{turn.retry}</p>}
@@ -799,11 +868,7 @@ export function Play({ id }: { id: string }) {
         </div>
       )}
       <div className="visually-hidden" aria-live="polite">
-        {staged && turn ? (
-          turn.narration ? messageBeats({ role: "narrator", text: turn.narration }).map(line) : WRITING
-        ) : (
-          <p>{announcement}</p>
-        )}
+        {staged && turn ? turn.narration ? messageBeats({ role: "narrator", text: turn.narration }).map(line) : WRITING : <p>{announcement}</p>}
       </div>
       {setupNotice && (
         <p className="notice">
@@ -813,11 +878,15 @@ export function Play({ id }: { id: string }) {
       {error && (
         <div role="alert" className="error dismissable">
           <p>{error}</p>
-          <button type="button" className="quiet" aria-label="Dismiss this error" onClick={() => setError("")}>×</button>
+          <button type="button" className="quiet" aria-label="Dismiss this error" onClick={() => setError("")}>
+            ×
+          </button>
         </div>
       )}
       {closingChapter ? (
-        <p role="status" className="waiting">Ending the chapter…</p>
+        <p role="status" className="waiting">
+          Ending the chapter…
+        </p>
       ) : (
         !turn &&
         (endingChapter ? (
@@ -839,13 +908,19 @@ export function Play({ id }: { id: string }) {
               <button type="button" className="quiet chapter-end" onClick={endChapter}>
                 End the chapter
               </button>
-              <button type="button" className="quiet" aria-label="Keep the chapter going" onClick={() => setChapterOffer(false)}>×</button>
+              <button type="button" className="quiet" aria-label="Keep the chapter going" onClick={() => setChapterOffer(false)}>
+                ×
+              </button>
             </div>
           )
         ))
       )}
       {/* An Edit shows its words at once, so this is all that says the Narrator is still at work. */}
-      {turn?.edit && <p role="status" className="waiting">The Narrator is updating the story…</p>}
+      {turn?.edit && (
+        <p role="status" className="waiting">
+          The Narrator is updating the story…
+        </p>
+      )}
       {/* Pending covers every picture on the way, Scene Images and portraits too, and only requested ones are counted. */}
       {(images.pending || requested.drawing > 0) && (
         <p role="status" className="waiting">
@@ -870,7 +945,7 @@ export function Play({ id }: { id: string }) {
             <button type="button" className="quiet" onClick={cancelRewrite}>
               Cancel
             </button>
-            <button className="action" aria-disabled={!feedback.trim()}>
+            <button type="submit" className="action" aria-disabled={!feedback.trim()}>
               {editing ? "Save the edit" : "Rewrite the response"}
             </button>
           </div>
@@ -894,7 +969,7 @@ export function Play({ id }: { id: string }) {
             <button type="button" className="quiet" onClick={cancelAsking}>
               Cancel
             </button>
-            <button className="action">
+            <button type="submit" className="action">
               Draw
             </button>
           </div>
@@ -915,12 +990,16 @@ export function Play({ id }: { id: string }) {
               onKeyDown={sendOnEnter}
             />
           </label>
-          {(wondering || answer) && <p role="status" className="answer">{wondering ? "The Narrator is thinking…" : answer}</p>}
+          {(wondering || answer) && (
+            <p role="status" className="answer">
+              {wondering ? "The Narrator is thinking…" : answer}
+            </p>
+          )}
           <div className="row">
             <button type="button" className="quiet" onClick={closeQuestion}>
               {answer ? "Close" : "Cancel"}
             </button>
-            <button className="action" aria-disabled={wondering || !question.trim()}>
+            <button type="submit" className="action" aria-disabled={wondering || !question.trim()}>
               Ask
             </button>
           </div>
@@ -965,7 +1044,14 @@ export function Play({ id }: { id: string }) {
           >
             {AskIcon}
           </button>
-          <button type="button" className="icon" title="Tell Narrator what to change" aria-label="Tell Narrator what to change" aria-haspopup="dialog" onClick={() => setTelling(true)}>
+          <button
+            type="button"
+            className="icon"
+            title="Tell Narrator what to change"
+            aria-label="Tell Narrator what to change"
+            aria-haspopup="dialog"
+            onClick={() => setTelling(true)}
+          >
             {RewriteIcon}
           </button>
           <button
@@ -1002,12 +1088,18 @@ export function Play({ id }: { id: string }) {
           )}
           {/* Not for the Opening, as a page with no Messages has nothing to start it again. */}
           {turn && messages.length > 0 ? (
-            <button type="button" className="icon send" title="Stop the Narrator" aria-label="Stop" onClick={() => stopTurn(id).catch((failure: Error) => setError(failure.message))}>
+            <button
+              type="button"
+              className="icon send"
+              title="Stop the Narrator"
+              aria-label="Stop"
+              onClick={() => stopTurn(id).catch((failure: Error) => setError(failure.message))}
+            >
               {StopIcon}
             </button>
           ) : (
             // aria-disabled, because a disabled button would drop keyboard focus at every Send.
-            <button className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !draft.trim()}>
+            <button type="submit" className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !draft.trim()}>
               {SendIcon}
             </button>
           )}
@@ -1059,17 +1151,21 @@ function StageBox(props: {
   const at = Math.min(chosen ?? openingBeat(beats), last);
   const current = beats[at]!;
   return (
+    // biome-ignore lint/a11y/useSemanticElements: a named div region is a section to assistive tech, and the styles target divs.
     <div ref={props.story} className="stage" tabIndex={-1} role="region" aria-label="Story">
       {props.children(current.message)}
       <div className="stage-box">
         {beats.map(({ beat, message }, index) =>
           index === at ? (
-            // Focusable, because a long beat has to scroll by keyboard.
+            // Focusable, because a long beat has to scroll by keyboard. Beats have no ids, and stay in place, so their position is their key.
+            // biome-ignore lint/suspicious/noArrayIndexKey: see above
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: see above
             <div key={index} className={beat.player ? "beat player" : "beat"} tabIndex={0}>
               {props.line(beat, index)}
             </div>
           ) : (
             // A Turn in progress is read out by the live region, so it mustn't be reached twice.
+            // biome-ignore lint/suspicious/noArrayIndexKey: beats have no ids, and stay in place, so their position is their key.
             <div key={index} className="visually-hidden" aria-hidden={!message}>
               {props.line(beat, index)}
             </div>
@@ -1082,10 +1178,10 @@ function StageBox(props: {
           <span className="muted">
             Beat {current.number} of {current.of}
           </span>
-          <button className="quiet" aria-disabled={at === 0} onClick={() => at > 0 && onChoose(at - 1)}>
+          <button type="button" className="quiet" aria-disabled={at === 0} onClick={() => at > 0 && onChoose(at - 1)}>
             Back
           </button>
-          <button className="action" aria-disabled={at === last} onClick={() => at < last && onChoose(at + 1)}>
+          <button type="button" className="action" aria-disabled={at === last} onClick={() => at < last && onChoose(at + 1)}>
             Next
           </button>
         </div>
@@ -1109,13 +1205,7 @@ const DRAWING: Record<string, string> = {
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** With `replay`, the Revert goes to `message`, just before the player's words, and sends them again as edited. */
-function RevertDialog(props: {
-  id: string;
-  message: Message;
-  replay?: string;
-  onClose: () => void;
-  onReverted: (input?: string) => void;
-}) {
+function RevertDialog(props: { id: string; message: Message; replay?: string; onClose: () => void; onReverted: (input?: string) => void }) {
   const { id, message, replay } = props;
   const [input, setInput] = useState(replay ?? "");
   const dialog = useRef<HTMLDialogElement>(null);
@@ -1167,8 +1257,7 @@ function RevertDialog(props: {
       )}
       {preview && replay !== undefined && (
         <p>
-          Sending permanently deletes{" "}
-          {preview.messages === 1 ? "this Message" : `this Message and the ${plural(preview.messages - 1, "Message")} after it`}
+          Sending permanently deletes {preview.messages === 1 ? "this Message" : `this Message and the ${plural(preview.messages - 1, "Message")} after it`}
           {preview.images > 0 && ` and ${plural(preview.images, "image")}`}
           {preview.portraits > 0 && ` and ${plural(preview.portraits, "portrait")}`}, then the Narrator answers your new words.
         </p>
@@ -1181,18 +1270,22 @@ function RevertDialog(props: {
         </p>
       )}
       {replay === undefined && <p className="muted">“Duplicate from here” keeps this story and carries on in a new Save instead.</p>}
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
       {/* Cancel comes first because a modal focuses its first control, and that must not be the deleting one. */}
       <div className="row">
-        <button className="quiet" onClick={() => dialog.current!.close()}>
+        <button type="button" className="quiet" onClick={() => dialog.current!.close()}>
           Cancel
         </button>
         {replay === undefined && (
-          <button className="quiet" disabled={busy || !preview} onClick={duplicate}>
+          <button type="button" className="quiet" disabled={busy || !preview} onClick={duplicate}>
             Duplicate from here
           </button>
         )}
-        <button className="action" disabled={busy || !preview || (replay !== undefined && !input.trim())} onClick={confirmRevert}>
+        <button type="button" className="action" disabled={busy || !preview || (replay !== undefined && !input.trim())} onClick={confirmRevert}>
           {replay === undefined ? "Revert" : "Send"}
         </button>
       </div>

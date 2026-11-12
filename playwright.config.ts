@@ -5,7 +5,11 @@ import { delimiter, join } from "node:path";
 // Its own port: 4600 is the player's server, 4610 and 4620 are the dev servers.
 const PORT = 4630;
 // Playwright runs under Node, and Windows' cmd can miss npm's `bun` shim by name, so find the file on PATH.
-const bun = process.env.PATH!.split(delimiter).flatMap((dir) => ["bun.exe", "bun.cmd"].map((file) => join(dir, file))).find(existsSync) ?? "bun";
+const bun =
+  process.env
+    .PATH!.split(delimiter)
+    .flatMap((dir) => ["bun.exe", "bun.cmd"].map((file) => join(dir, file)))
+    .find(existsSync) ?? "bun";
 
 export default defineConfig({
   testDir: "e2e",

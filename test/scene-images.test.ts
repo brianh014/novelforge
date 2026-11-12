@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ImageAdapter } from "../src/image-adapter";
 import { PNG, png, scriptedImages, scriptedTextProvider, startApp, tempFolder } from "./support";
 
-type Images = { images: { messageId: number; caption: string, redraws: 0 }[]; pending: boolean; session: number; drawing?: string; more?: number };
+type Images = { images: { messageId: number; caption: string; redraws: 0 }[]; pending: boolean; session: number; drawing?: string; more?: number };
 
 let folder: ReturnType<typeof tempFolder>;
 let app: ReturnType<typeof startApp>;
@@ -51,8 +51,7 @@ async function settled(id: string) {
 
 const playTurn = (id: string) => app.post(`/saves/${id}/turns`, { input: "I wade forward." });
 
-const imageBytes = async (id: string, messageId: number) =>
-  (await app.get(`/saves/${id}/messages/${messageId}/image`)).bytes();
+const imageBytes = async (id: string, messageId: number) => (await app.get(`/saves/${id}/messages/${messageId}/image`)).bytes();
 
 const messageIds = async (id: string) => {
   const { messages } = (await app.get(`/saves/${id}/messages`).then((r) => r.json())) as { messages: { id: number }[] };
@@ -156,7 +155,10 @@ test("a new description alone asks for no image, and neither does reordering the
 });
 
 test("a visible cast name the state lacks is left out, and the Turn stands on its first try", async () => {
-  const script = scriptedTextProvider(stay({ state_operations: moveTo("The ferry", ["Nobody"]) }), stay({ state_operations: moveTo("The ferry", ["Nobody", "Still nobody"]) }));
+  const script = scriptedTextProvider(
+    stay({ state_operations: moveTo("The ferry", ["Nobody"]) }),
+    stay({ state_operations: moveTo("The ferry", ["Nobody", "Still nobody"]) }),
+  );
   images = scriptedImages(png(1));
   app = startApp(join(folder.path, "Saves"), script.textProvider, undefined, undefined, images.imageAdapter);
   await enableImages();
@@ -273,12 +275,7 @@ test("a Scene Image in the same place, and its Redraw, go without the earlier on
 });
 
 test("a new location has no previous Scene Image as a reference, and returning to one doesn't either", async () => {
-  play(
-    [newScene("A train", "The subway"), newScene("Desks", "The office"), newScene("A train", "The subway")],
-    png(1),
-    png(2),
-    png(3),
-  );
+  play([newScene("A train", "The subway"), newScene("Desks", "The office"), newScene("A train", "The subway")], png(1), png(2), png(3));
   await enableImages();
   const id = await app.createSave();
 

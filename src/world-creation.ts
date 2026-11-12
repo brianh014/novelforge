@@ -7,11 +7,29 @@ import { activateLore } from "./lore-activation";
 import { IN_ITS_WORLD_AND_STYLE, imageGuidance, LOOKS, LORE_TOKEN_BUDGET, type Prompt, REQUESTED_IMAGE_PROMPT } from "./prompt-assembler";
 import type { SettingsStore } from "./settings-store";
 import type { Message, Save } from "./save-store";
-import { applyOperations, hasNumber, ListChange, LoreEntryReply, openingState, type State, type StateOperation, type World, WorldUpdate } from "./state-applier";
+import {
+  applyOperations,
+  hasNumber,
+  ListChange,
+  LoreEntryReply,
+  openingState,
+  type State,
+  type StateOperation,
+  type World,
+  WorldUpdate,
+} from "./state-applier";
 import { askForJson, jsonSchemaOf, type TextProvider } from "./turn-engine";
 
 /** `artStyle` and `pcOnCover` only paint the cover, so they never reach the Narrator. */
-export type WorldChoices = { title: string; theme: string; worldBrief: string; startingHook: string; characters?: Character[]; artStyle?: string; pcOnCover?: boolean };
+export type WorldChoices = {
+  title: string;
+  theme: string;
+  worldBrief: string;
+  startingHook: string;
+  characters?: Character[];
+  artStyle?: string;
+  pcOnCover?: boolean;
+};
 /** One of the Important Characters, whom the player wants in the story besides the PC. */
 /** `ref` is what the form holds their portrait under, and `onCover` whether the player put them on the Cover. Neither reaches the Narrator. */
 export type Character = { name: string; description: string; ref?: string; onCover?: boolean };
@@ -117,7 +135,15 @@ calendar says in two or three sentences how people in this world count days, mon
 world_overview is the only part the player ever reads. In a few short paragraphs, cover only what the PC would plausibly know from living in this world. It must be spoiler-free: never reveal or hint at a plot thread, and leave out every secret in the lore entries.
 ${modelInstructions(context)}`,
   },
-  playerChoices({ title, theme, world_brief: worldBrief, starting_hook: startingHook, important_characters: characters.map(({ name, description }) => ({ name, description })), pc, inventory }),
+  playerChoices({
+    title,
+    theme,
+    world_brief: worldBrief,
+    starting_hook: startingHook,
+    important_characters: characters.map(({ name, description }) => ({ name, description })),
+    pc,
+    inventory,
+  }),
 ];
 
 const ABOUT: Record<EnhanceField, string> = {
@@ -129,9 +155,12 @@ const ABOUT: Record<EnhanceField, string> = {
   characterName: "the name of one Important Character, a person the player wants in the story besides the PC, whom character describes so far",
   characterDescription: "who one Important Character is, a person the player wants in the story besides the PC, whom character names: a sentence or two",
   name: "the PC's name",
-  background: "the PC's background: where they come from, what they have done, what they are good at, and anything else about them such as their age, habits or fears, as free text with no numbers",
-  physicalTraits: "the PC's physical traits: only how their body and face look, such as build, skin, hair, eyes and marks, never clothing, gear, temperament or history",
-  inventory: "what the PC is wearing and carrying: only the items, each in a few words, as a list such as \"oilskin coat, canvas trousers, folding knife, coil of rope\", never prose, history or anything about the PC",
+  background:
+    "the PC's background: where they come from, what they have done, what they are good at, and anything else about them such as their age, habits or fears, as free text with no numbers",
+  physicalTraits:
+    "the PC's physical traits: only how their body and face look, such as build, skin, hair, eyes and marks, never clothing, gear, temperament or history",
+  inventory:
+    'what the PC is wearing and carrying: only the items, each in a few words, as a list such as "oilskin coat, canvas trousers, folding knife, coil of rope", never prose, history or anything about the PC',
 };
 
 /**
@@ -144,7 +173,14 @@ export async function pickForMe(
   signal: AbortSignal,
 ) {
   const empty = [...WORLD_FIELDS.filter((field) => world[field] === ""), ...PC_FIELDS.filter((field) => pc?.[field] === "")];
-  const reply = z.object(Object.fromEntries(empty.map((field) => [field, field === "title" ? title : field === "name" ? name : WORD_LIMITS[field] ? fits(limited(field, WORD_LIMITS[field])) : fits(text)])));
+  const reply = z.object(
+    Object.fromEntries(
+      empty.map((field) => [
+        field,
+        field === "title" ? title : field === "name" ? name : WORD_LIMITS[field] ? fits(limited(field, WORD_LIMITS[field])) : fits(text),
+      ]),
+    ),
+  );
   const prompt: Prompt = [
     {
       role: "system",
@@ -161,7 +197,21 @@ ${modelInstructions(context)}`,
 /** Rewrites one box from what the player wrote, or writes it if it's empty. Like `pickForMe`, it knows only the player's choices. */
 export async function enhance(
   context: Context,
-  { field, text: idea, ...choices }: { field: EnhanceField; text: string; theme: string; title: string; worldBrief: string; startingHook: string; characters: Character[]; character?: Character; pc?: PcDraft },
+  {
+    field,
+    text: idea,
+    ...choices
+  }: {
+    field: EnhanceField;
+    text: string;
+    theme: string;
+    title: string;
+    worldBrief: string;
+    startingHook: string;
+    characters: Character[];
+    character?: Character;
+    pc?: PcDraft;
+  },
   signal: AbortSignal,
 ) {
   const isName = NAME_FIELDS.includes(field);
@@ -219,7 +269,15 @@ export async function decideForPc(
 ${task} Use only what the PC knows. Don't narrate the result. Reply only with JSON matching this schema: ${JSON.stringify(jsonSchemaOf(PickReply))}
 ${modelInstructions(context)}`,
     },
-    playerChoices({ ...(draft && { draft }), world_brief: save.worldBrief, pc: save.pc, inventory, status, known_facts: pcKnown.facts, recent_story: messages.slice(-RECENT_STORY) }),
+    playerChoices({
+      ...(draft && { draft }),
+      world_brief: save.worldBrief,
+      pc: save.pc,
+      inventory,
+      status,
+      known_facts: pcKnown.facts,
+      recent_story: messages.slice(-RECENT_STORY),
+    }),
   ];
   return (await askForJson(context.textProvider, prompt, PickReply, REFUSAL, signal)).text;
 }
@@ -310,7 +368,8 @@ export type PictureSetting = { theme: string; world: string; artStyle: string; n
 /** What a Cover or portrait shows, all of it text the player can read, with nobody named. */
 /** A portrait's `was` is the prompt of the portrait an Update edits, so the new prompt says only what changes. */
 /** `was` is the prompt of a portrait being edited, and `face` says a portrait goes with it for its face alone. */
-export type PictureAsk = PictureSetting & ({ kind: "cover"; title: string; people: string[] } | { kind: "portrait"; looks: string; was?: string; face?: boolean });
+export type PictureAsk = PictureSetting &
+  ({ kind: "cover"; title: string; people: string[] } | { kind: "portrait"; looks: string; was?: string; face?: boolean });
 
 // Plain numbers, checked in code, as with every other length here. They make room for the Art Style.
 // A cover's are the most it may run to, and it's asked for about two thirds of that, as one asked for "at most 160" ran past it on every try.
@@ -336,7 +395,8 @@ const pictureRules = (kind: PictureAsk["kind"], style: PromptStyle, words: numbe
 const EDIT_RULE =
   "The image model is given the portrait that was describes, and edits it. looks is how this person looks now. keep and changes make the editing instruction, in plain short sentences. Describe how they look now from the chest up: their clothing, hair and any marks on the skin below the face. Never describe their face's features, such as its makeup, eyes, skin tone or build, which the image model takes from the portrait, as any description of them pulls the face away from the person. Only when nudge asks for an expression, start changes with it as a mild one of at most four words, such as \"She has a faint smile.\", and never with strong words such as wide, screaming, crying, snarling, clenched, tears or contorted. Leave out whatever that frame can't show, such as hands, legs, feet and anything they hold.";
 // For a portrait drawn from an old one's face with no prompt of it to edit, as the model otherwise copies its clothing.
-const FACE_ONLY = " The image model is also given an older portrait of this person, so end the prompt with a sentence saying that portrait shows only their face and hair, and that their clothing and expression are as written here.";
+const FACE_ONLY =
+  " The image model is also given an older portrait of this person, so end the prompt with a sentence saying that portrait shows only their face and hair, and that their clothing and expression are as written here.";
 const KEEP_WORDS = 12;
 // Stated in the field, as a limit the text model wasn't told failed every try of an Update with many changes.
 const CHANGE_WORDS = 80;
@@ -418,30 +478,44 @@ const WorldChange = WorldUpdate.extend({
   npc_summaries: z.array(z.object({ name: words, summary: words })).default([]),
   npc_looks: z.array(z.object({ name: words, appearance: words })).default([]),
   pc_looks: words.nullable().default(null),
-  inventory: z.object({ wearing: z.array(words), carrying: z.array(words) }).nullable().default(null),
-  status: z.object({ health: words, injuries: z.array(words), conditions: z.array(words) }).nullable().default(null),
+  inventory: z
+    .object({ wearing: z.array(words), carrying: z.array(words) })
+    .nullable()
+    .default(null),
+  status: z
+    .object({ health: words, injuries: z.array(words), conditions: z.array(words) })
+    .nullable()
+    .default(null),
 });
 
 // A misquoted entry can't be matched, and a reply with no change would tell the player it was done when it wasn't.
 const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown, npcs }: State) =>
-  WorldChange.refine(({ lore_entries, removed_lore, world_rules, plot_threads, world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status }) => {
-    const quotes = (list: string[], changes: typeof world_rules) => changes.every(({ old }) => old === null || list.includes(old));
-    const changed = [lore_entries, removed_lore, world_rules, plot_threads, facts, npc_summaries, npc_looks].some((list) => list.length > 0) || [world_brief, summary, pc_looks, inventory, status].some((part) => part !== null);
-    // The same rule as a Turn's status.
-    const statusInWords = status === null || ![status.health, ...status.injuries, ...status.conditions].some(hasNumber);
-    return (
-      changed &&
-      statusInWords &&
-      removed_lore.every((title) => worldBible.some((entry) => entry.title === title)) &&
-      quotes(worldRules, world_rules) &&
-      quotes(plotThreads, plot_threads) &&
-      quotes(pcKnown.facts, facts) &&
-      npc_summaries.every(({ name }) => pcKnown.npcs.includes(name)) &&
-      npc_looks.every(({ name }) => npcs.some((npc) => npc.name === name))
-    );
-  });
+  WorldChange.refine(
+    ({ lore_entries, removed_lore, world_rules, plot_threads, world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status }) => {
+      const quotes = (list: string[], changes: typeof world_rules) => changes.every(({ old }) => old === null || list.includes(old));
+      const changed =
+        [lore_entries, removed_lore, world_rules, plot_threads, facts, npc_summaries, npc_looks].some((list) => list.length > 0) ||
+        [world_brief, summary, pc_looks, inventory, status].some((part) => part !== null);
+      // The same rule as a Turn's status.
+      const statusInWords = status === null || ![status.health, ...status.injuries, ...status.conditions].some(hasNumber);
+      return (
+        changed &&
+        statusInWords &&
+        removed_lore.every((title) => worldBible.some((entry) => entry.title === title)) &&
+        quotes(worldRules, world_rules) &&
+        quotes(plotThreads, plot_threads) &&
+        quotes(pcKnown.facts, facts) &&
+        npc_summaries.every(({ name }) => pcKnown.npcs.includes(name)) &&
+        npc_looks.every(({ name }) => npcs.some((npc) => npc.name === name))
+      );
+    },
+  );
 
-const worldChangePrompt = (context: Context, { worldBrief, worldBible, worldRules, plotThreads, summary, pcKnown, inventory, status, npcs, pcAppearance }: State, change: string): Prompt => [
+const worldChangePrompt = (
+  context: Context,
+  { worldBrief, worldBible, worldRules, plotThreads, summary, pcKnown, inventory, status, npcs, pcAppearance }: State,
+  change: string,
+): Prompt => [
   {
     role: "system",
     // The world comes last, as a provider's error can echo the start of this and the server log keeps that.
@@ -479,7 +553,13 @@ The world as it stands, as JSON: ${JSON.stringify({
  * shortcut: the Journal's part is Narrator free text the player reads, kept clean only by its prompt, screen it if models leak.
  */
 export const changeWorld = (context: Context, state: State, change: string, signal: AbortSignal) =>
-  askForJson(context.textProvider, worldChangePrompt(context, state, change), fitsWorld(state), "The Narrator refused this change. Reword it and try again.", signal);
+  askForJson(
+    context.textProvider,
+    worldChangePrompt(context, state, change),
+    fitsWorld(state),
+    "The Narrator refused this change. Reword it and try again.",
+    signal,
+  );
 
 /** Only `overview` may reach the player. */
 export async function generateWorld(context: Context, choices: WorldChoices, pc: WorldPc, signal: AbortSignal) {

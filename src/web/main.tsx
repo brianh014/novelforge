@@ -27,14 +27,17 @@ function App() {
 }
 
 // If this fails the app still works, at the default size and the system's theme.
-getSettings().then((settings) => {
-  applyLook(settings);
-  // The app quits a while after its last page closes, so each open page says it's still here.
-  if (settings.canQuit) {
-    stillHere();
-    setInterval(stillHere, 30_000);
-  }
-}, () => {});
+getSettings().then(
+  (settings) => {
+    applyLook(settings);
+    // The app quits a while after its last page closes, so each open page says it's still here.
+    if (settings.canQuit) {
+      stillHere();
+      setInterval(stillHere, 30_000);
+    }
+  },
+  () => {},
+);
 
 // Where only, as the message can quote what the page holds.
 window.addEventListener("error", ({ lineno, colno }) => reportEvent("page-error", { line: lineno, column: colno }));

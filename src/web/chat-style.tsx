@@ -1,7 +1,21 @@
 import { CONTINUE_INPUT, OPENING_INPUT } from "../prompt-assembler";
 import type { Chapter, Message, Settings } from "./api";
 
-const NUMERALS: [number, string][] = [[1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"], [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"]];
+const NUMERALS: [number, string][] = [
+  [1000, "M"],
+  [900, "CM"],
+  [500, "D"],
+  [400, "CD"],
+  [100, "C"],
+  [90, "XC"],
+  [50, "L"],
+  [40, "XL"],
+  [10, "X"],
+  [9, "IX"],
+  [5, "V"],
+  [4, "IV"],
+  [1, "I"],
+];
 
 export const roman = (n: number) =>
   NUMERALS.reduce((text, [value, numeral]) => {

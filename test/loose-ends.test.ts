@@ -112,7 +112,13 @@ test("the prompt carries the list and its rules, and forbids secrets in it", () 
   const prompt = promptWith({ looseEnds: [MISSING] });
 
   expect(prompt).toContain(`"looseEnds":${JSON.stringify([MISSING])}`);
-  for (const words of ["add_loose_end", "resolve_loose_end", "copying the item exactly", "never to make room", "write them as the PC would, with no Lore Entry or Plot Thread secrets"]) {
+  for (const words of [
+    "add_loose_end",
+    "resolve_loose_end",
+    "copying the item exactly",
+    "never to make room",
+    "write them as the PC would, with no Lore Entry or Plot Thread secrets",
+  ]) {
     expect(prompt).toContain(words);
   }
 });

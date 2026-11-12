@@ -40,7 +40,8 @@ test("each finished Turn's summary becomes the story's, over any set_summary", a
 });
 
 test("each finished Turn's recent_summary becomes the Journal's recent summary, and a blank one keeps the last", async () => {
-  const recent = (text: string | null) => JSON.stringify({ check: null, narration: "Rain.", state_operations: [], summary: "All of it.", recent_summary: text });
+  const recent = (text: string | null) =>
+    JSON.stringify({ check: null, narration: "Rain.", state_operations: [], summary: "All of it.", recent_summary: text });
   play(recent("Ash reached the docks."), recent(null));
   const id = await app.createSave();
   const journal = async () => (await app.get(`/saves/${id}/journal`).then((r) => r.json())) as { summary: string; recentSummary: string };
@@ -90,7 +91,10 @@ test("the last word before the player's action keeps the PC's choices theirs and
 });
 
 test("every eighth response brings the next Plot Thread forward, by turns", async () => {
-  const threads = [{ op: "add_plot_thread", thread: "THREAD-ONE" }, { op: "add_plot_thread", thread: "THREAD-TWO" }];
+  const threads = [
+    { op: "add_plot_thread", thread: "THREAD-ONE" },
+    { op: "add_plot_thread", thread: "THREAD-TWO" },
+  ];
   play(narration("Rain.", ...threads), ...Array(16).fill(narration("Rain.")));
   const id = await app.createSave();
 
@@ -188,6 +192,16 @@ test("no one echoes the PC, re-argues a case the PC turned down, or ends most re
   expect(lastSystem()).toContain("once the PC has said there's time, no one asks how long is left or counts it down");
   expect(lastSystem()).toContain("they don't all argue for the same view");
   expect(lastSystem()).toContain("few replies should end on a choice between two things");
-  expect(prompts.at(-1)!.map(({ content }) => content).join("\n")).toContain("[Voice in the light] for someone not yet named");
-  expect(prompts.at(-1)!.map(({ content }) => content).join("\n")).toContain("with its colours and materials, and name each garment by its period form");
+  expect(
+    prompts
+      .at(-1)!
+      .map(({ content }) => content)
+      .join("\n"),
+  ).toContain("[Voice in the light] for someone not yet named");
+  expect(
+    prompts
+      .at(-1)!
+      .map(({ content }) => content)
+      .join("\n"),
+  ).toContain("with its colours and materials, and name each garment by its period form");
 });

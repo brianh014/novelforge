@@ -46,7 +46,13 @@ function openBrowser(url: string) {
 }
 
 // Opened again while it runs: show the one running. It asks, as Windows lets a second copy listen on the same port.
-if (app && (await fetch(`http://127.0.0.1:${port}/settings`, { signal: AbortSignal.timeout(1000) }).then((r) => r.ok, () => false))) {
+if (
+  app &&
+  (await fetch(`http://127.0.0.1:${port}/settings`, { signal: AbortSignal.timeout(1000) }).then(
+    (r) => r.ok,
+    () => false,
+  ))
+) {
   openBrowser(`http://127.0.0.1:${port}/`);
   process.exit(0);
 }
@@ -57,7 +63,11 @@ const server = startServer({
   textProvider: fake ? fakeTextProvider : textProvider(settings),
   imageAdapter: fake ? fakeImages : openRouterImages(settings, "https://openrouter.ai/api/v1"),
   dice: () => randomInt(1, 21),
-  nearMissMargin: z.coerce.number().int().min(0).parse(process.env.NEAR_MISS_MARGIN ?? 2),
+  nearMissMargin: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .parse(process.env.NEAR_MISS_MARGIN ?? 2),
   port,
   // shortcut: anyone on the network can play, change Settings and spend the saved keys, add accounts if the server leaves a trusted LAN.
   hostname: process.env.HOST ?? (app ? "127.0.0.1" : "0.0.0.0"),

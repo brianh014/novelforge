@@ -1,5 +1,12 @@
 {
   "name": "novelforge",
+  "version": "0.1.0",
+  "description": "A choose-your-own visual novel, written as you play, by a text model you connect.",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://git.holtops.net/brianh014/novelforge"
+  },
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +16,10 @@
     "build": "bun build src/main.ts --compile --production --outfile dist/novelforge",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "lint": "biome lint",
+    "format": "biome format --write",
+    "check": "biome ci && tsc --noEmit && bun test"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -17,6 +27,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.6.7",
     "@playwright/test": "^1.65.0",
     "@types/bun": "^1.4.4",
     "@types/react": "^19.3.0",

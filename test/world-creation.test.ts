@@ -34,9 +34,7 @@ const generated = (mark = "", changes = {}) =>
     calendar: "Days run in weeks of seven under the Tide Reckoning.",
     start_date: "3rd of Lowtide",
     start_time_of_day: "dusk",
-    lore_entries: [
-      { title: `${mark}The Tide Court`, keywords: ["Tide Court", "the court", "magistrates"], content: `${mark}Its judges drown the guilty.` },
-    ],
+    lore_entries: [{ title: `${mark}The Tide Court`, keywords: ["Tide Court", "the court", "magistrates"], content: `${mark}Its judges drown the guilty.` }],
     world_rules: [`${mark}Magic does not exist.`],
     plot_threads: [`${mark}The mayor is a drowned ghost.`],
     ...changes,
@@ -114,7 +112,14 @@ test("the player's choices reach the Narrator as delimited data, with Model Inst
   play(sheet, generated());
   await app.patch("/settings", { modelInstructions: "Write darkly." });
 
-  await generate({ title: "Chrome Debts", theme: "Cyberpunk", worldBrief: "Rain and chrome", startingHook: "A debt falls due", characters: [{ name: " Mara ", description: "The PC's sister " }], pc });
+  await generate({
+    title: "Chrome Debts",
+    theme: "Cyberpunk",
+    worldBrief: "Rain and chrome",
+    startingHook: "A debt falls due",
+    characters: [{ name: " Mara ", description: "The PC's sister " }],
+    pc,
+  });
 
   const [system, user] = prompts[1]!;
   expect(JSON.parse(user!.content)).toEqual({
@@ -281,7 +286,10 @@ test("Enhance reads the PC boxes for a PC field, and works without a theme", asy
 
 test("Enhance writes an Important Character's description from their row and the rest of the form", async () => {
   play(JSON.stringify({ text: "Ash's sister, a smuggler with debts." }));
-  const characters = [{ name: "Mara", description: "" }, { name: "", description: "" }];
+  const characters = [
+    { name: "Mara", description: "" },
+    { name: "", description: "" },
+  ];
 
   const response = await app.post("/enhance", { ...setup, characters, character: characters[0], field: "characterDescription", text: "" });
 
@@ -334,7 +342,11 @@ test.each(["name", "characterName"])("Enhance on a %s box writes only a name, re
 });
 
 test("Enhance on the looks box keeps to thirty words, or the player's own length if longer, retrying a longer reply", async () => {
-  play(JSON.stringify({ text: "tall ".repeat(31) }), JSON.stringify({ text: "Tall and lean, with a scar on one cheek." }), JSON.stringify({ text: "word ".repeat(40) }));
+  play(
+    JSON.stringify({ text: "tall ".repeat(31) }),
+    JSON.stringify({ text: "Tall and lean, with a scar on one cheek." }),
+    JSON.stringify({ text: "word ".repeat(40) }),
+  );
 
   const short = await app.post("/enhance", { ...setup, field: "physicalTraits", text: "tall, scar" });
   const long = await app.post("/enhance", { ...setup, field: "physicalTraits", text: "word ".repeat(40) });
@@ -347,7 +359,11 @@ test("Enhance on the looks box keeps to thirty words, or the player's own length
 });
 
 test("Enhance on the wearing and carrying box details only the player's items, as a list of at most forty words, retrying prose", async () => {
-  play(JSON.stringify({ text: "item ".repeat(41) }), JSON.stringify({ text: "Rain falls. Your coat hangs heavy." }), JSON.stringify({ text: "oilskin coat, narrow single-edged knife" }));
+  play(
+    JSON.stringify({ text: "item ".repeat(41) }),
+    JSON.stringify({ text: "Rain falls. Your coat hangs heavy." }),
+    JSON.stringify({ text: "oilskin coat, narrow single-edged knife" }),
+  );
 
   const response = await app.post("/enhance", { ...setup, field: "inventory", text: "a coat and a knife" });
 

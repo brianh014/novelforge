@@ -17,7 +17,10 @@ let asks: PictureAsk[];
 const play = (replies: string[], ...imageReplies: Parameters<typeof scriptedImages>) => {
   drawn = scriptedImages(...imageReplies);
   asks = [];
-  app = startApp(savesDir, scriptedTextProvider(...replies).textProvider, scriptedDice(), 2, drawn.imageAdapter, async (ask, _style, template) => (asks.push(ask), template));
+  app = startApp(savesDir, scriptedTextProvider(...replies).textProvider, scriptedDice(), 2, drawn.imageAdapter, async (ask, _style, template) => {
+    asks.push(ask);
+    return template;
+  });
   return app.patch("/settings", { imageModel: "fake/image", imageApiKey: "image-key" });
 };
 
@@ -90,7 +93,10 @@ test("the Gallery lists the PC, known NPCs and Scene Images with their prompts, 
 
 test("redrawing a Scene Image replaces only it, with its shape and references, drawing its prompt as written", async () => {
   await play(
-    [turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("[Hesper] and [Ash] on a dry street", scene("The ferry", "Hesper"))],
+    [
+      turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")),
+      turn("[Hesper] and [Ash] on a dry street", scene("The ferry", "Hesper")),
+    ],
     png(1),
     png(2),
     png(3),
@@ -125,7 +131,10 @@ test("redrawing a Scene Image replaces only it, with its shape and references, d
 
 test("a redrawn portrait is what later Scene Images use, while the NPC's stored looks stay", async () => {
   await play(
-    [turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), turn("[Hesper: Tall, in oilskins] on a pier", scene("The pier", "Hesper"))],
+    [
+      turn("A wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")),
+      turn("[Hesper: Tall, in oilskins] on a pier", scene("The pier", "Hesper")),
+    ],
     png(1),
     png(2),
     png(3),
@@ -168,7 +177,9 @@ test("a Redraw is refused for a hidden NPC, an empty prompt, a second request, o
   const id = await newSave();
   const gallery = await playTurn(id);
   const item = find(gallery, "scene");
-  const hidden = saveStore(savesDir).portraits(id).find(({ npc }) => npc === "Stranger")!;
+  const hidden = saveStore(savesDir)
+    .portraits(id)
+    .find(({ npc }) => npc === "Stranger")!;
 
   expect((await redraw(id, { ...item, kind: "portrait", ref: hidden.id }, "Spy")).status).toBe(404);
   expect((await redraw(id, item, "   ")).status).toBe(400);
@@ -202,13 +213,7 @@ test("a newer Scene Image never drops a queued Redraw", async () => {
 });
 
 test("a Revert past a Scene Image stops its Redraw, and a replaced Turn loses it", async () => {
-  await play(
-    [turn("A wet street", scene("The ferry")), turn("A pier", scene("The pier"))],
-    png(1),
-    png(2),
-    png(3),
-    new Promise<Uint8Array>(() => {}),
-  );
+  await play([turn("A wet street", scene("The ferry")), turn("A pier", scene("The pier"))], png(1), png(2), png(3), new Promise<Uint8Array>(() => {}));
   const id = await newSave();
   const first = find(await playTurn(id), "scene");
   const second = find(await playTurn(id), "scene");
@@ -253,9 +258,9 @@ test("older images have no prompt, can be given one, and import still checks the
 
 const generated = JSON.stringify({
   world_overview: "Rain never stops in Saltmere.",
-    calendar: "Days run in weeks of seven under the Tide Reckoning.",
-    start_date: "3rd of Lowtide",
-    start_time_of_day: "dusk",
+  calendar: "Days run in weeks of seven under the Tide Reckoning.",
+  start_date: "3rd of Lowtide",
+  start_time_of_day: "dusk",
   lore_entries: [{ title: "Magic", keywords: ["magic", "spell", "sorcery"], content: "Magic is real." }],
   world_rules: ["A rule."],
   plot_threads: ["A thread."],
@@ -457,10 +462,22 @@ test("regenerating a world keeps a cover's edited prompt", async () => {
 });
 
 const looksAgain = (name: string) =>
-  JSON.stringify({ check: null, narration: "The tide rises.", state_operations: [{ op: "update_npc", name, appearance: "Tall, soaked, a fresh scar across one cheek" }], scene_changed: false, visual_description: "" });
+  JSON.stringify({
+    check: null,
+    narration: "The tide rises.",
+    state_operations: [{ op: "update_npc", name, appearance: "Tall, soaked, a fresh scar across one cheek" }],
+    scene_changed: false,
+    visual_description: "",
+  });
 
 test("with Update portraits on, a Turn that changes someone's looks draws their portrait again, keeping the face", async () => {
-  await play([turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), looksAgain("Hesper")], png(1), png(2), png(3), png(4));
+  await play(
+    [turn("[Hesper] on a wet street", meet("Hesper"), know("Hesper"), scene("The ferry", "Hesper")), looksAgain("Hesper")],
+    png(1),
+    png(2),
+    png(3),
+    png(4),
+  );
   await app.patch("/settings", { updatePortraits: true });
   const id = await newSave();
   const before = (await playTurn(id)).images.find(({ label }) => label === "Hesper")!;
@@ -535,7 +552,17 @@ test("a failed portrait update is tried again when the Scene next moves", async 
 });
 
 test("with Update portraits on, a World Change to the PC's looks draws their portrait again", async () => {
-  const worldChange = JSON.stringify({ lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [], world_brief: null, summary: null, facts: [], npc_summaries: [], pc_looks: "Short, with a tattooed neck" });
+  const worldChange = JSON.stringify({
+    lore_entries: [],
+    removed_lore: [],
+    world_rules: [],
+    plot_threads: [],
+    world_brief: null,
+    summary: null,
+    facts: [],
+    npc_summaries: [],
+    pc_looks: "Short, with a tattooed neck",
+  });
   await play([turn("A wet street", scene("The ferry")), worldChange], png(1), png(2), png(3));
   await app.patch("/settings", { updatePortraits: true });
   const id = await newSave();

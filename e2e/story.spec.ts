@@ -164,7 +164,9 @@ test("a story makes and shows everything: pictures, characters, Turns, a Questio
   await page.getByRole("link", { name: "Gallery" }).click();
   await expect(page.getByRole("img", { name: "Cover" })).toBeVisible();
   const gallery = (heading: string) => page.getByRole("heading", { name: heading }).locator("+ ul");
-  const galleryNames = await gallery("Characters").getByRole("img").evaluateAll((images) => images.map((image) => image.getAttribute("alt")));
+  const galleryNames = await gallery("Characters")
+    .getByRole("img")
+    .evaluateAll((images) => images.map((image) => image.getAttribute("alt")));
   expect(galleryNames.toSorted()).toEqual([pc, ...names].toSorted());
   await expect(gallery("Scenes").getByRole("img")).toHaveCount(storyPictures);
   await expectRealImages(page, page.locator("main"));
@@ -177,10 +179,16 @@ test("Load Story opens a story, and a Duplicate is a second one", async ({ page 
   const listed = page.getByRole("listitem").filter({ has: page.getByRole("link", { name: `Open ${title}` }) });
   await expect(listed.first()).toBeVisible();
   const before = await listed.count();
-  await page.getByRole("button", { name: `Duplicate ${title}` }).first().click();
+  await page
+    .getByRole("button", { name: `Duplicate ${title}` })
+    .first()
+    .click();
   await expect(listed).toHaveCount(before + 1);
 
-  await page.getByRole("link", { name: `Open ${title}` }).first().click();
+  await page
+    .getByRole("link", { name: `Open ${title}` })
+    .first()
+    .click();
   await expect(page).toHaveURL(/#\/play\//);
   await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
 });

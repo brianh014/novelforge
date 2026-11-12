@@ -73,10 +73,7 @@ test("a request carries the image key, the model and one prompt with the Art Sty
   const bytes = await adapter(payload(), never);
 
   expect(bytes).toEqual(new Uint8Array(PNG));
-  expect(provider.requests.map(({ authorization }) => authorization)).toEqual([
-    "Bearer image-key-value",
-    "Bearer image-key-value",
-  ]);
+  expect(provider.requests.map(({ authorization }) => authorization)).toEqual(["Bearer image-key-value", "Bearer image-key-value"]);
   expect(sent().body).toEqual({
     model: "fake/image",
     prompt: "A flooded street\nWoodcut\nAvoid: text.",
@@ -163,9 +160,7 @@ test("a listing is asked for once per model", async () => {
 });
 
 test("an API error throws with the key removed", async () => {
-  const adapter = adapterFor(listing(["text"], {}), () =>
-    Response.json({ error: { message: "Bad key image-key-value", code: 401 } }, { status: 401 }),
-  );
+  const adapter = adapterFor(listing(["text"], {}), () => Response.json({ error: { message: "Bad key image-key-value", code: 401 } }, { status: 401 }));
 
   const failure = (await adapter(payload(), never).catch((error) => error)) as Error;
 

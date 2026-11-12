@@ -23,9 +23,9 @@ afterEach(async () => {
 const SECRET = "ZQX-SECRET";
 const generated = JSON.stringify({
   world_overview: "Rain never stops in Saltmere.",
-    calendar: "Days run in weeks of seven under the Tide Reckoning.",
-    start_date: "3rd of Lowtide",
-    start_time_of_day: "dusk",
+  calendar: "Days run in weeks of seven under the Tide Reckoning.",
+  start_date: "3rd of Lowtide",
+  start_time_of_day: "dusk",
   lore_entries: [{ title: "Magic", keywords: ["magic", "spell", "sorcery"], content: `${SECRET} magic is real.` }],
   world_rules: [`${SECRET} rule.`],
   plot_threads: [`${SECRET} the mayor is a ghost.`],
@@ -201,7 +201,13 @@ test("Decide for me with words in the box Enhances them, keeping the player's dr
 
 test("Ask the Narrator answers from what the PC knows and the Lore it activates, never Plot Threads, and changes nothing", async () => {
   const answer = "Everyone here knows magic is real.";
-  const script = scriptedTextProvider(sheet, generated, narration("A boat drifts near."), JSON.stringify({ text: "x ".repeat(121) }), JSON.stringify({ text: answer }));
+  const script = scriptedTextProvider(
+    sheet,
+    generated,
+    narration("A boat drifts near."),
+    JSON.stringify({ text: "x ".repeat(121) }),
+    JSON.stringify({ text: answer }),
+  );
   app = startApp(savesDir, script.textProvider);
   const world = await newWorld();
   const id = await begin(world);

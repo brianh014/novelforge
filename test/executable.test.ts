@@ -17,10 +17,7 @@ async function launch(...args: string[]) {
 }
 
 beforeAll(async () => {
-  await Bun.write(
-    join(folder.path, "settings.json"),
-    JSON.stringify({ textBaseUrl: provider.baseUrl, textModel: "fake/model" }),
-  );
+  await Bun.write(join(folder.path, "settings.json"), JSON.stringify({ textBaseUrl: provider.baseUrl, textModel: "fake/model" }));
   const build = Bun.spawn([process.execPath, "build", "src/main.ts", "--compile", "--production", "--outfile", executable], {
     stdout: "ignore",
   });
@@ -88,7 +85,10 @@ test("the compiled app runs as a server with --server, which has no Quit", async
 
 test("a Server build starts as a server with no flag", async () => {
   const serverBuild = join(folder.path, process.platform === "win32" ? "novelforge-server.exe" : "novelforge-server");
-  const build = Bun.spawn([process.execPath, "build", "src/main.ts", "--compile", "--production", "--define", 'process.env.NOVELFORGE_MODE="server"', "--outfile", serverBuild], { stdout: "ignore" });
+  const build = Bun.spawn(
+    [process.execPath, "build", "src/main.ts", "--compile", "--production", "--define", 'process.env.NOVELFORGE_MODE="server"', "--outfile", serverBuild],
+    { stdout: "ignore" },
+  );
   expect(await build.exited).toBe(0);
   const app = Bun.spawn([serverBuild], { cwd: folder.path, env: { ...process.env, PORT: "0", HOST: "127.0.0.1", NO_BROWSER: "1" }, stdout: "pipe" });
   const { value } = await app.stdout.getReader().read();

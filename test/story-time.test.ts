@@ -31,14 +31,23 @@ test("a Save from before Story Time starts counting from day 1", () => {
 });
 
 test("the player's edit changes the date and time of day, never the day count", () => {
-  expect(applyEdit(at(DUSK), { edit: "storyTime", date: "9th of Lowtide", timeOfDay: "noon" }).storyTime).toEqual({ day: 3, date: "9th of Lowtide", timeOfDay: "noon" });
+  expect(applyEdit(at(DUSK), { edit: "storyTime", date: "9th of Lowtide", timeOfDay: "noon" }).storyTime).toEqual({
+    day: 3,
+    date: "9th of Lowtide",
+    timeOfDay: "noon",
+  });
 });
 
 const prompt = (storyTime: State["storyTime"], played: boolean) =>
   assemblePrompt({
     save: { worldBrief: "A drowned city", pc: { name: "Ash" }, startingHook: "" },
     state: at(storyTime),
-    messages: played ? [{ id: 1, role: "player", text: "I wait." }, { id: 2, role: "narrator", text: "Rain." }] : [],
+    messages: played
+      ? [
+          { id: 1, role: "player", text: "I wait." },
+          { id: 2, role: "narrator", text: "Rain." },
+        ]
+      : [],
     modelInstructions: "",
     input: "I wait.",
     responseSchema: "{}",

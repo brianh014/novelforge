@@ -1,5 +1,18 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { editJournal, getImages, renameNpc, getJournal, getRequestedImages, getSave, type Journal as JournalContent, type RequestedImage, type Save, type SceneImageInfo, statusWords, tellNarrator } from "./api";
+import {
+  editJournal,
+  getImages,
+  renameNpc,
+  getJournal,
+  getRequestedImages,
+  getSave,
+  type Journal as JournalContent,
+  type RequestedImage,
+  type Save,
+  type SceneImageInfo,
+  statusWords,
+  tellNarrator,
+} from "./api";
 import { ContinueRule, isContinue, readable } from "./chat-style";
 import { EditIcon, RenameIcon, RewriteIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
@@ -17,7 +30,7 @@ function NewestFirst<T>({ items, className, children }: { items: T[]; className?
     <>
       <ul className={className}>{newest.slice(0, shown).map(children)}</ul>
       {newest.length > shown && (
-        <button className="quiet show-more" onClick={() => setShown(shown + MORE_SHOWN)}>
+        <button type="button" className="quiet show-more" onClick={() => setShown(shown + MORE_SHOWN)}>
           Show more ({newest.length - shown} older)
         </button>
       )}
@@ -42,9 +55,11 @@ function Clamped({ text }: { text: string }) {
   }, [text, open]);
   return (
     <div>
-      <p ref={shown} className={open ? undefined : "brief clamp-3"}>{text}</p>
+      <p ref={shown} className={open ? undefined : "brief clamp-3"}>
+        {text}
+      </p>
       {(cut || open) && (
-        <button className="quiet show-more" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <button type="button" className="quiet show-more" aria-expanded={open} onClick={() => setOpen(!open)}>
           {open ? "Less" : "More"}
         </button>
       )}
@@ -59,7 +74,7 @@ function PagePick({ shown, onPick }: { shown: PhonePage; onPick: (page: PhonePag
   return (
     <div className="page-pick" data-shown={shown}>
       {(["journal", "chapters"] as const).map((page) => (
-        <button key={page} className="quiet" aria-pressed={shown === page} onClick={() => onPick(page)}>
+        <button type="button" key={page} className="quiet" aria-pressed={shown === page} onClick={() => onPick(page)}>
           {page === "journal" ? "Journal" : "Summary & Chapters"}
         </button>
       ))}
@@ -69,7 +84,15 @@ function PagePick({ shown, onPick }: { shown: PhonePage; onPick: (page: PhonePag
 
 /** Text the player can change where it stands. A failure keeps what they typed, and the server's refusal during a Turn shows here. */
 /** `opener` names the button, shown as its text unless an `icon` draws it. */
-function Editable(props: { label: string; text: string; opener?: string; icon?: ReactNode; onSave: (text: string) => Promise<unknown>; onRemove?: () => Promise<unknown>; children?: ReactNode }) {
+function Editable(props: {
+  label: string;
+  text: string;
+  opener?: string;
+  icon?: ReactNode;
+  onSave: (text: string) => Promise<unknown>;
+  onRemove?: () => Promise<unknown>;
+  children?: ReactNode;
+}) {
   const { label, text, opener, icon, onSave, onRemove, children } = props;
   const [draft, setDraft] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -92,7 +115,13 @@ function Editable(props: { label: string; text: string; opener?: string; icon?: 
     return (
       <div className="editable">
         {children}
-        <button className={opener && !icon ? "quiet" : "icon"} aria-label={`${opener ?? "Edit"}: ${label}`} title={opener ?? "Edit"} onClick={() => setDraft(text)}>
+        <button
+          type="button"
+          className={opener && !icon ? "quiet" : "icon"}
+          aria-label={`${opener ?? "Edit"}: ${label}`}
+          title={opener ?? "Edit"}
+          onClick={() => setDraft(text)}
+        >
           {icon ?? opener ?? EditIcon}
         </button>
       </div>
@@ -110,7 +139,11 @@ function Editable(props: { label: string; text: string; opener?: string; icon?: 
         {label}
         <textarea rows={4} value={draft} autoFocus onChange={(event) => setDraft(event.target.value)} />
       </label>
-      {error && <p role="alert" className="error">{error}</p>}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
       <div className="row">
         <button type="submit" className="action" disabled={busy || !draft.trim()}>
           Save
@@ -165,12 +198,27 @@ export function TellTheNarrator({ id, onDone, onClose }: { id: string; onDone: (
       >
         <h2 id="tell-title">Tell Narrator what to change</h2>
         <label>
-          <span className="muted">Nudge the story or correct a mistake, such as “the mayor is secretly a smuggler”. This can change anything in the world, and secrets stay hidden from you.</span>
+          <span className="muted">
+            Nudge the story or correct a mistake, such as “the mayor is secretly a smuggler”. This can change anything in the world, and secrets stay hidden
+            from you.
+          </span>
           <textarea rows={4} value={text} autoFocus disabled={busy} onChange={(event) => setText(event.target.value)} />
         </label>
-        {busy && <p role="status" className="waiting">The Narrator is changing the world…</p>}
-        {done && <p role="status" className="muted">Done. The next Turn uses it.</p>}
-        {error && <p role="alert" className="error">{error}</p>}
+        {busy && (
+          <p role="status" className="waiting">
+            The Narrator is changing the world…
+          </p>
+        )}
+        {done && (
+          <p role="status" className="muted">
+            Done. The next Turn uses it.
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="error">
+            {error}
+          </p>
+        )}
         <div className="row">
           <button type="submit" className="action" disabled={busy || !text.trim()}>
             Tell Narrator
@@ -200,17 +248,20 @@ export function Journal({ id }: { id: string }) {
     let leaving = false;
     let loaded = false;
     const load = () =>
-      Promise.all([getSave(id), getJournal(id), getImages(id), getRequestedImages(id)]).then(([save, journal, { images, pending }, asked]) => {
-        setSave(save);
-        setJournal(journal);
-        setImages(images);
-        setRequested(asked.images);
-        loaded = true;
-        if (pending && !leaving) timer = setTimeout(load, IMAGE_CHECK_MS);
-      }, (failure: Error) => {
-        // A failed look for a portrait mustn't take away a Journal already on the page.
-        if (!loaded) setLoadError(failure.message);
-      });
+      Promise.all([getSave(id), getJournal(id), getImages(id), getRequestedImages(id)]).then(
+        ([save, journal, { images, pending }, asked]) => {
+          setSave(save);
+          setJournal(journal);
+          setImages(images);
+          setRequested(asked.images);
+          loaded = true;
+          if (pending && !leaving) timer = setTimeout(load, IMAGE_CHECK_MS);
+        },
+        (failure: Error) => {
+          // A failed look for a portrait mustn't take away a Journal already on the page.
+          if (!loaded) setLoadError(failure.message);
+        },
+      );
     load();
     return () => {
       leaving = true;
@@ -221,8 +272,12 @@ export function Journal({ id }: { id: string }) {
   if (loadError) {
     return (
       <Book left={<h1 className="big">Journal</h1>}>
-        <p role="alert" className="error">{loadError}</p>
-        <a className="quiet" href="#/">Main Menu</a>
+        <p role="alert" className="error">
+          {loadError}
+        </p>
+        <a className="quiet" href="#/">
+          Main Menu
+        </a>
       </Book>
     );
   }
@@ -253,7 +308,14 @@ export function Journal({ id }: { id: string }) {
           {pick}
           <div className="journal-head">
             <h1 className="big">Journal</h1>
-            <button type="button" className="icon" title="Tell Narrator what to change" aria-label="Tell Narrator what to change" aria-haspopup="dialog" onClick={() => setTelling(true)}>
+            <button
+              type="button"
+              className="icon"
+              title="Tell Narrator what to change"
+              aria-label="Tell Narrator what to change"
+              aria-haspopup="dialog"
+              onClick={() => setTelling(true)}
+            >
               {RewriteIcon}
             </button>
           </div>
@@ -265,10 +327,18 @@ export function Journal({ id }: { id: string }) {
             {journal.storyTime && (
               <>
                 <h2>Story Time</h2>
-                <Editable label="Date" text={journal.storyTime.date} onSave={(date) => edit({ edit: "storyTime", date, timeOfDay: journal.storyTime!.timeOfDay })}>
+                <Editable
+                  label="Date"
+                  text={journal.storyTime.date}
+                  onSave={(date) => edit({ edit: "storyTime", date, timeOfDay: journal.storyTime!.timeOfDay })}
+                >
                   <p>{journal.storyTime.date}</p>
                 </Editable>
-                <Editable label="Time of day" text={journal.storyTime.timeOfDay} onSave={(timeOfDay) => edit({ edit: "storyTime", date: journal.storyTime!.date, timeOfDay })}>
+                <Editable
+                  label="Time of day"
+                  text={journal.storyTime.timeOfDay}
+                  onSave={(timeOfDay) => edit({ edit: "storyTime", date: journal.storyTime!.date, timeOfDay })}
+                >
                   <p>{journal.storyTime.timeOfDay}</p>
                 </Editable>
               </>
@@ -352,7 +422,7 @@ export function Journal({ id }: { id: string }) {
               <NewestFirst items={journal.sceneMemories}>
                 {({ firstMessage, text }) => (
                   <li key={firstMessage}>
-                    <Editable label="Old Memory"text={text} onSave={(next) => edit({ edit: "sceneMemory", firstMessage, text: next })}>
+                    <Editable label="Old Memory" text={text} onSave={(next) => edit({ edit: "sceneMemory", firstMessage, text: next })}>
                       <Clamped text={text} />
                     </Editable>
                   </li>
@@ -380,7 +450,7 @@ export function Journal({ id }: { id: string }) {
               .toReversed()
               .map(({ chapter, index }) => (
                 <li key={index}>
-                  <button className="chapter" onClick={() => setReading(index)}>
+                  <button type="button" className="chapter" onClick={() => setReading(index)}>
                     {chapterName(index)}
                     {chapter.lastMessage === null && <span className="muted"> · in progress</span>}
                   </button>
@@ -390,11 +460,13 @@ export function Journal({ id }: { id: string }) {
         </>
       ) : (
         <>
-          <button className="quiet back" onClick={() => setReading(undefined)}>
+          <button type="button" className="quiet back" onClick={() => setReading(undefined)}>
             Back to chapters
           </button>
           {chapters[reading]?.lastMessage === null ? (
-            <h2>{chapterName(reading)} <span className="muted">· in progress</span></h2>
+            <h2>
+              {chapterName(reading)} <span className="muted">· in progress</span>
+            </h2>
           ) : (
             <Editable label="Chapter title" text={chapters[reading]?.title ?? ""} onSave={(title) => edit({ edit: "chapterTitle", index: reading, title })}>
               <h2>{chapterName(reading)}</h2>
@@ -407,8 +479,20 @@ export function Journal({ id }: { id: string }) {
   );
 }
 
-function ChapterText({ id, messages, images, requested }: { id: string; messages: ReturnType<typeof readable>; images: SceneImageInfo[]; requested: RequestedImage[] }) {
+function ChapterText({
+  id,
+  messages,
+  images,
+  requested,
+}: {
+  id: string;
+  messages: ReturnType<typeof readable>;
+  images: SceneImageInfo[];
+  requested: RequestedImage[];
+}) {
   return (
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrolling region must take focus, or a keyboard can't scroll it.
+    // biome-ignore lint/a11y/useSemanticElements: a named div region is a section to assistive tech, and the styles target divs.
     <div className="full-log" tabIndex={0} role="region" aria-label="Chapter">
       {messages.length === 0 && <p className="muted">The page is blank.</p>}
       {messages.map((message) => {
