@@ -342,9 +342,10 @@ export function worldRoutes({ options, saves, images }: ServerContext) {
         const { artStyle } = await parseBody(req, ArtStyleRequest);
         const world = worlds.get(req.params.id);
         if (!world) throw new WorldNotFound();
-        const { title, theme, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, storyTime, sheet, characters = [] } = world;
+        const { title, theme, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, storyTime, sheet, characters = [], pcOnCover = true } = world;
         const opening = { worldBible, worldRules, plotThreads, storyTime, ...sheet };
-        const id = saves.create({ title, theme, worldBrief, startingHook, pc, artStyle, opening });
+        const importantCharacters = characters.map(({ name, description, onCover = true }) => ({ name, description, onCover }));
+        const id = saves.create({ title, theme, worldBrief, startingHook, pc, artStyle, importantCharacters, pcOnCover, opening });
         worlds.delete(req.params.id);
         const taken = (image: string) => heldOf(req.params.id, image)?.drawn;
         images.saveCreated(id, taken("portrait"));

@@ -89,7 +89,7 @@ The optional opening situation chosen during story creation.
 _Avoid_: Hook (alone)
 
 **Important Characters**:
-People besides the PC that the player wants in the story, added on the New Story form, each with a name and a description, up to ten. They are canon, and the world is built around them. Pick for me never writes them; only Enhance does, when the player presses it.
+People besides the PC that the player wants in the story, added on the New Story form, each with a name and a description, up to ten. They are canon, and the world is built around them. Pick for me never writes them; only Enhance does, when the player presses it. A Save keeps them as Begin had them, with who was on the Cover, so a Cover Update pictures the same people.
 _Avoid_: Cast, NPCs (those are whoever the story meets)
 
 **Plot Thread**:

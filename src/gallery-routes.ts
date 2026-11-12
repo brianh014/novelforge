@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { IMAGES_OFF, imageResponse, Nudge, parseBody, PromptRequest, routes, type ServerContext, uploaded } from "./http";
-import { pcLooks, pcNow, visibleNpcs } from "./image-pipeline";
+import { coverPeople, pcLooks, pcNow, visibleNpcs } from "./image-pipeline";
 import { log } from "./logger";
 import { PortraitNotFound, type SaveStore } from "./save-store";
 import { withArtStyleFor } from "./web/art-styles";
@@ -106,17 +106,24 @@ export function galleryRoutes({ options, saves, turns, images }: ServerContext) 
         const image = visibleImages(id).find((candidate) => candidate.kind === kind && candidate.ref === ref);
         if (!image) return Response.json({ error: "Image not found" }, { status: 404 });
         if (!images.ready()) return Response.json({ error: IMAGES_OFF }, { status: 409 });
-        const { pc, title, theme, artStyle } = saves.read(id);
+        const { pc, title, theme, artStyle, importantCharacters, pcOnCover } = saves.read(id);
         const state = saves.latestState(id);
         const { inventory, npcs, scene, worldBrief, pcKnown } = state;
         const looksOf = (name: string) => npcs.find((npc) => npc.name === name)?.appearance.trim() ?? "";
         const pcLooksNow = pcLooks(pcNow(pc, state), inventory.wearing);
-        // shortcut: the Important Characters aren't kept in a Save, so a Cover shows the PC and those met lately, keep them if covers miss them.
-        const met = [...new Set([...scene.visibleCast, ...saves.recentCast(id)])].filter((name) => pcKnown.npcs.includes(name)).slice(0, COVER_NPCS);
+        // Those the player put on the Cover, as the story shows them now if met. A Save from before kept no list, so it shows the PC and those met lately.
+        const coverCast = () => {
+          if (importantCharacters) {
+            const now = importantCharacters.map((character) => ({ ...character, description: looksOf(character.name) || character.description }));
+            return coverPeople(pcNow(pc, state), inventory.wearing, now, "", pcOnCover).map(({ looks }) => looks);
+          }
+          const met = [...new Set([...scene.visibleCast, ...saves.recentCast(id)])].filter((name) => pcKnown.npcs.includes(name)).slice(0, COVER_NPCS);
+          return [pcLooksNow, ...met.map(looksOf)].filter(Boolean);
+        };
         const setting = { theme, world: worldBrief, artStyle, ...(nudge && { nudge }) };
         const ask: PictureAsk =
           kind === "cover"
-            ? { kind, title, ...setting, people: [pcLooksNow, ...met.map(looksOf)].filter(Boolean) }
+            ? { kind, title, ...setting, people: coverCast() }
             : { kind: "portrait", ...setting, looks: image.npc === null ? pcLooksNow : looksOf(image.npc) };
         if (ask.kind === "portrait" && !ask.looks) return Response.json({ error: "There are no looks to draw this from." }, { status: 409 });
         if (!images.redraw(id, { kind, ref }, image.messageId, ask)) {
