@@ -163,6 +163,12 @@ a {
   text-wrap: balance;
 }
 
+/* Both menu pages centre their content above an equal bottom margin: high, where a book's title goes, and still level with each other. */
+.page:has(> .brand),
+.page:has(> .menu) {
+  padding-bottom: 20vh;
+}
+
 .brand {
   margin-block: auto;
   display: grid;
@@ -414,7 +420,8 @@ dialog h2 {
 }
 
 .sheet-foot .action,
-.sheet-foot .secondary {
+.sheet-foot .secondary,
+.sheet-foot .row:has(> .action) > button.quiet:not(.leave, .back) {
   min-height: 40px;
 }
 
@@ -633,14 +640,53 @@ button {
   cursor: default;
 }
 
+/* A text button. Only a way somewhere (a link, or a Back) is underlined; an action is not, so it doesn't read as a link. */
 .quiet {
   padding: 0;
   border: 0;
   background: none;
   color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.quiet,
+.quiet.leave,
+.quiet.back {
   text-decoration: underline;
   text-underline-offset: 3px;
-  cursor: pointer;
+}
+
+/* Inline-block keeps the underline off the arrow. */
+.quiet.leave::before,
+.quiet.back::before {
+  content: "←";
+  display: inline-block;
+  margin-right: 6px;
+}
+
+/* An action: a small outlined button, so it plainly can be clicked. */
+button.quiet:not(.leave, .back) {
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  font: 400 14px var(--label);
+}
+
+button.quiet:not(.leave, .back):hover:not(:disabled, [aria-disabled="true"]) {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+
+/* Beside an Action it takes the Action's size, as a Secondary does, so the pair matches. */
+.row:has(> .action) > button.quiet:not(.leave, .back) {
+  min-height: 36px;
+  padding: 5px 14px;
+  border-color: var(--accent);
+  font-size: 15px;
+}
+
+.row:has(> .action) > button.quiet:disabled {
+  border-color: var(--line);
 }
 
 .quiet:disabled,
@@ -1004,7 +1050,7 @@ input {
 }
 
 .chips.art {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px 16px;
 }
 
@@ -1163,6 +1209,15 @@ a.action {
   min-width: 0;
 }
 
+/* A picture's tools sit right, under the review's spread-out heading rows too, with the Cover choice on the left. */
+.drawn-pair .row {
+  justify-content: flex-end;
+}
+
+.drawn-pair .row > .toggle {
+  margin-right: auto;
+}
+
 .full-log .plate {
   margin-block: 6px 10px;
 }
@@ -1223,6 +1278,15 @@ a.action {
   aspect-ratio: 1;
   border: 1px solid var(--line);
   object-fit: cover;
+}
+
+/* Scenes, in their own wide shape, so each needs a wider column. */
+.gallery.wide {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.gallery.wide img:not(dialog img) {
+  aspect-ratio: 16 / 9;
 }
 
 .gallery span {
@@ -1520,8 +1584,8 @@ a.action {
 }
 
 .person.pc .portrait {
-  width: 72px;
-  height: 72px;
+  width: 88px;
+  height: 88px;
 }
 
 .person.pc > span:last-child {
@@ -1632,8 +1696,8 @@ a.action {
 
 .portrait {
   flex: none;
-  width: 52px;
-  height: 52px;
+  width: 64px;
+  height: 64px;
   border: 1px solid var(--line);
   background: var(--soft);
   object-fit: cover;
@@ -1801,6 +1865,23 @@ a.action {
   stroke-linejoin: round;
 }
 
+/* Pick for me: a ringed sparkle, so it reads as a button beside Next. */
+.icon.pick {
+  width: 40px;
+  height: 40px;
+  margin-right: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.icon.pick svg {
+  width: 22px;
+  height: 22px;
+  /* The small star sits in the corner of the drawing, so the pair is off-centre in its own box. */
+  translate: -6.25% -2%;
+}
+
 .full-log {
   flex: 1;
   min-height: 0;
@@ -1901,8 +1982,13 @@ a.action {
 
 .dismissable .chapter-end {
   margin-left: auto;
-  font-size: inherit;
-  text-decoration: underline;
+}
+
+/* The dismissing ×, which needs no frame. */
+.dismissable button.quiet:not(.chapter-end) {
+  padding: 0;
+  border: 0;
+  font-size: 20px;
 }
 
 .error {
@@ -2236,13 +2322,10 @@ dialog blockquote {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .chips.art {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   /* The main menu fits one phone screen. */
   .page:has(> .brand) {
     padding-top: 48px;
+    padding-bottom: 16px;
     border-bottom: 0;
   }
 
@@ -2269,16 +2352,32 @@ dialog blockquote {
     flex: none;
   }
 
+  .page:has(> .menu) {
+    padding-bottom: 16px;
+  }
+
+  /* About as wide as the name above it and centred under it, with the entries still aligned left. */
   .menu {
-    margin-block: 0;
+    width: min(260px, 100%);
+    margin: 0 auto;
     gap: 12px;
   }
 
   .menu a {
     align-items: center;
     min-height: 52px;
-    padding: 8px;
+    padding: 8px 24px 8px 8px;
     font-size: 24px;
+  }
+
+  /* One picture to a row, as two side by side are too small to judge. */
+  .drawn-pair > div {
+    flex-basis: 100%;
+  }
+
+  /* The full width in its own shape, not boxed to a height with bars at the sides. */
+  .drawn-pair .plate img {
+    max-height: none;
   }
 
   .review dl {
@@ -2310,6 +2409,11 @@ dialog blockquote {
     height: 0;
     margin-right: 10px;
     right: auto;
+  }
+
+  /* A sheet scrolls as a whole, so its scrollbar runs down this edge. */
+  .book.sheet > .tabs {
+    margin-right: 24px;
   }
 
   .tabs a {

@@ -16,10 +16,9 @@ export const ExportIcon = icon("M12 4v11M7 10l5 5 5-5M4 15v5h16v-5");
 /** A name tag. */
 export const RenameIcon = icon("M3 12V4h8l10 10-8 8zM7.5 7.5h.01");
 export const EditIcon =icon("M4 20l1-5L16 4l4 4L9 19zM14 6l4 4");
+/** A quill, for rewriting a passage or nudging a picture. */
 export const RewriteIcon = icon("M20 3c-7 1-12 6-14 14M20 3c0 6-3 10-9 11M4 21l2-4");
 export const RegenerateIcon = icon("M20 12a8 8 0 1 1-2.4-5.7M20 3v5h-5");
-// Sliders, for adjusting a picture.
-export const NudgeIcon = icon("M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4");
 export const UploadIcon = icon("M12 15V4M7 9l5-5 5 5M4 15v5h16v-5");
 export const StopIcon = icon("M7 7h10v10H7z");
 export const SendIcon = icon("M12 20V4M5 11l7-7 7 7");

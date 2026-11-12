@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { galleryUrl, type GalleryImage, type Portrait, portraitUrl, updateImage, redrawImage, uploadGalleryImage } from "./api";
-import { DeleteIcon, EditIcon, NudgeIcon, RegenerateIcon, UploadIcon } from "./icons";
+import { DeleteIcon, EditIcon, RegenerateIcon, RewriteIcon, UploadIcon } from "./icons";
 
 /** Someone's picture and name, with who they are when that's known. */
 export function Person({ id, name, portrait, who }: { id: string; name: string; portrait?: Portrait; who?: string }) {
@@ -82,7 +82,7 @@ export function NudgeButton({ label, disabled, initial = "", onNudge }: { label:
           dialog.current!.showModal();
         }}
       >
-        {NudgeIcon}
+        {RewriteIcon}
       </button>
       <dialog ref={dialog} aria-labelledby={title}>
         <form

@@ -5,10 +5,11 @@ import { IMAGE_CHECK_MS } from "./play";
 import { RedrawableImage } from "./zoom";
 
 /** The server sends each kind in its order, with the PC first, so a section only keeps it. */
-const SECTIONS: { name: string; kinds: GalleryImage["kind"][]; deletable?: boolean }[] = [
+/** `wide` shows the section in the 16:9 its pictures are drawn in, rather than cropped square. */
+const SECTIONS: { name: string; kinds: GalleryImage["kind"][]; deletable?: boolean; wide?: boolean }[] = [
   { name: "Cover", kinds: ["cover"] },
   { name: "Characters", kinds: ["portrait"] },
-  { name: "Scenes", kinds: ["scene", "requested"], deletable: true },
+  { name: "Scenes", kinds: ["scene", "requested"], deletable: true, wide: true },
 ];
 
 export function Gallery({ id }: { id: string }) {
@@ -52,12 +53,12 @@ export function Gallery({ id }: { id: string }) {
     >
       {loadError && <p role="alert" className="error">{loadError}</p>}
       {gallery && gallery.images.length === 0 && <p className="muted">No pictures yet.</p>}
-      {SECTIONS.map(({ name, kinds, deletable }) => {
+      {SECTIONS.map(({ name, kinds, deletable, wide }) => {
         const images = gallery?.images.filter(({ kind }) => kinds.includes(kind)) ?? [];
         return images.length > 0 && (
           <section key={name} className="gallery-section">
             <h2>{name}</h2>
-            <ul className="gallery">
+            <ul className={wide ? "gallery wide" : "gallery"}>
               {images.map((image) => (
                 <li key={`${image.kind}${image.ref}`}>
                   <RedrawableImage

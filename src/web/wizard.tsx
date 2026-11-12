@@ -24,7 +24,7 @@ import {
 } from "./api";
 import { LONG_TEXT } from "../limits";
 import { DecideIcon, EditIcon, RegenerateIcon } from "./icons";
-import { Sheet } from "./menu";
+import { MenuRibbon, Sheet } from "./menu";
 import { NudgeButton, PromptBox, RedrawPanel, UploadButton, Zoomable } from "./zoom";
 
 /** Each description is shown to the player and sent to the Narrator with the theme's name. */
@@ -222,6 +222,32 @@ function LeaveWorld({ to, onClose }: { to: string; onClose: () => void }) {
 }
 
 /** Steps live in the hash like screens, so the browser's back button walks them. `step` is the part after `#/new/`: none, "art" or "overview". */
+/** Says what Pick for me will do before it writes anything. */
+function PickForMe({ onPick, onClose }: { onPick: () => void; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => dialog.current!.showModal(), []);
+  return (
+    <dialog ref={dialog} onClose={onClose} aria-labelledby="pick-title">
+      <h2 id="pick-title">Pick for me?</h2>
+      <p>The Narrator writes every empty box on this page for you. Boxes you've already filled stay as they are, and Important Characters are left alone.</p>
+      <div className="row">
+        <button className="quiet" onClick={() => dialog.current!.close()}>
+          Cancel
+        </button>
+        <button
+          className="action"
+          onClick={() => {
+            onPick();
+            dialog.current!.close();
+          }}
+        >
+          Pick for me
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 export function NewStory({ step }: { step?: string }) {
   const [draft, setDraft] = useState(stored);
   const [busy, setBusy] = useState("");
@@ -232,6 +258,7 @@ export function NewStory({ step }: { step?: string }) {
   const [asking, setAsking] = useState(false);
   /** Where the player asked to go back to from the world, while they confirm it. */
   const [leaving, setLeaving] = useState<string>();
+  const [picking, setPicking] = useState(false);
   /** What each box held before Enhance, as replacing a box's value leaves nothing for the browser's own undo. */
   // Keyed by field, and by row as well for an Important Character's.
   const [enhanced, setEnhanced] = useState<Record<string, { was: string; now: string }>>({});
@@ -364,6 +391,8 @@ export function NewStory({ step }: { step?: string }) {
     <Sheet
       view={here}
       lockRail={!!busy}
+      // The first step's way back to the main menu, as the ribbon the other screens outside a story have.
+      tabs={here === 0 && !busy && <MenuRibbon />}
       rail={
         <nav aria-label="Steps" className="wizard-steps">
           {STEPS.map(({ name, hash }, index) => {
@@ -396,6 +425,7 @@ export function NewStory({ step }: { step?: string }) {
     >
       {busy ? <Working message={busy} onCancel={() => running.current?.abort()} /> : content}
       {leaving && <LeaveWorld to={leaving} onClose={() => setLeaving(undefined)} />}
+      {picking && <PickForMe onPick={fillForm} onClose={() => setPicking(false)} />}
     </Sheet>
   );
 
@@ -458,12 +488,6 @@ export function NewStory({ step }: { step?: string }) {
       <div key={picture}>
         <fieldset>
           <legend>{legend}</legend>
-          {onCover && (
-            <label className="toggle">
-              <input type="checkbox" checked={onCover.on} onChange={(e) => onCover.set(e.target.checked)} />
-              On the Cover
-            </label>
-          )}
           {held && (
             <HeldArt
               id={draft.id!}
@@ -485,7 +509,14 @@ export function NewStory({ step }: { step?: string }) {
           ) : (
             (missing || !held) && <p className="muted">{missing || "Draw it now to see it, or leave it and it's drawn when the world is written."}</p>
           )}
+          {/* The Cover choice sits with the tools, not above the picture, so every picture in a row starts level. */}
           <div className="row">
+            {onCover && (
+              <label className="toggle">
+                <input type="checkbox" checked={onCover.on} onChange={(e) => onCover.set(e.target.checked)} />
+                On the Cover
+              </label>
+            )}
             {imagesReady !== false && (
               // Redo is an icon beside Nudge and Upload, as the Gallery's Update is. A first Draw stays in words, as nothing is there yet.
               held ? (
@@ -791,10 +822,10 @@ export function NewStory({ step }: { step?: string }) {
         )}
       </div>
     </div>,
-    backTo("/", "Main Menu"),
+    null,
     <>
-      <button type="button" className="secondary" title="Fills only the empty boxes" aria-description="Fills only the empty boxes." disabled={!theme || [...worldBoxes, ...Object.values(draft.pc)].every((text) => text.trim())} onClick={fillForm}>
-        Pick for me
+      <button type="button" className="icon pick" title="Pick for me" aria-label="Pick for me" aria-haspopup="dialog" disabled={!theme || [...worldBoxes, ...Object.values(draft.pc)].every((text) => text.trim())} onClick={() => setPicking(true)}>
+        {DecideIcon}
       </button>
       <button type="button" className="action" onClick={next}>
         Next
