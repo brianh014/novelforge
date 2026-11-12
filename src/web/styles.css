@@ -2107,6 +2107,33 @@ span.drawing {
   }
 }
 
+.quilling .ink {
+  stroke: var(--muted);
+}
+
+.quilling .pen {
+  stroke: var(--ink);
+  offset-anchor: 0 0;
+  offset-rotate: 0deg;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .quilling .pen {
+    animation: scribble 0.45s ease-in-out infinite alternate;
+  }
+}
+
+/* Back and forth over the one small squiggle, so the quill stays where it is. */
+@keyframes scribble {
+  from {
+    offset-distance: 0%;
+  }
+
+  to {
+    offset-distance: 100%;
+  }
+}
+
 @keyframes hills {
   from {
     stroke-dashoffset: 1;
