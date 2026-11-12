@@ -16,6 +16,18 @@ Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/ag
 
 Create an HTML report of UI options only when the user asks for one, for a large visual change. Otherwise build UI changes directly.
 
+Follow the conventions in `CONTRIBUTING.md`: Glossary terms, `shortcut:` comments, Zod at every route, allowlisted responses, and no key or story text in a log.
+
+### Code layout
+
+- The server's routes are split by area, one module each: `settings-routes`, `world-routes`, `save-routes`, `turn-routes` and `gallery-routes` (ADR 0004). A new route goes in its area's module. State only one area uses stays private to that module. `src/http.ts` holds what they share, and `rest-api.ts` only puts them together.
+- `src/web/play.tsx` (`Play`, ~870 lines) and `src/web/wizard.tsx` (`NewStory`) are still one big component each. Split them by job if a change makes them harder to follow.
+
+### CI and releases
+
+- `.github/workflows/ci.yml` runs `bun run check` and `bun run e2e` on pushes and pull requests. The repo is on Gitea for now and will move to GitHub later. Gitea runs this same file, so keep steps that only work on GitHub behind `github.server_url == 'https://github.com'`.
+- Releases are manual: `bun run release` builds the 10 downloads into `dist/release`, and the user uploads them. The user has put automated releases on hold, so don't add a release workflow unless they ask.
+
 ### Testing the app
 
 - To try the app in a browser, start `novelforge-dev` from `.claude/launch.json` (port 4610). It runs with `--fake`: a stand-in Narrator and image model (`src/fake-services.ts`), no key or network, and its own Saves, Settings and logs under `fake/`.
