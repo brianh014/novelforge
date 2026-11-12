@@ -152,7 +152,7 @@ type Narrated = {
   committed: (messageId: number, scene: Scene) => void;
 };
 
-/** The prompt for a Turn's reply, and the Scene Memory due alongside it. The Art Style reaches it only when `promptStyle` asks for a picture. */
+/** The prompt for a Turn's reply, and the Scene Memory due alongside it. Settings are read once, so the whole prompt comes from one copy. */
 function turnPrompt(
   saves: SaveStore,
   settings: SettingsStore,
@@ -164,8 +164,8 @@ function turnPrompt(
     messages,
     input,
     directions,
-    promptStyle,
-  }: Pick<Parameters<typeof assemblePrompt>[0], "state" | "messages" | "input" | "directions" | "promptStyle">,
+    picture,
+  }: Pick<Parameters<typeof assemblePrompt>[0], "state" | "messages" | "input" | "directions"> & { picture: boolean },
 ) {
   const current = settings.read();
   const memoryStart = saves.memoryStart(id);
@@ -181,7 +181,7 @@ function turnPrompt(
       directions,
       input,
       responseSchema: JSON.stringify(responseSchema),
-      promptStyle,
+      promptStyle: picture ? promptStyle(current) : null,
     }),
     memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, current.textRecentMessages, signal),
   };
@@ -210,7 +210,7 @@ export async function playTurn(
     messages,
     input,
     directions: saves.directions(id, basedOn),
-    promptStyle: images.ready() ? promptStyle(settings.read()) : null,
+    picture: images.ready(),
   });
   return narrate(textProvider, signal, emit, {
     kind: input === OPENING_INPUT ? "opening" : "turn",
@@ -251,7 +251,7 @@ export async function replaceResponse(
     input,
     // The response being replaced keeps its own, which a Regenerate carries over.
     directions: saves.directions(id, messageId),
-    promptStyle: images.ready() ? promptStyle(settings.read()) : null,
+    picture: images.ready(),
   });
   const kind = feedback === undefined ? "regenerate" : "rewrite";
   return narrate(textProvider, signal, emit, {
@@ -290,7 +290,7 @@ export async function editResponse(
     messages,
     input,
     // No picture is drawn, so the Narrator needn't write a prompt for one.
-    promptStyle: null,
+    picture: false,
   });
   return narrate(textProvider, signal, emit, {
     kind: "edit",

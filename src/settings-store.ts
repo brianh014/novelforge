@@ -144,16 +144,17 @@ export function settingsStore(path: string) {
     const fields = z.record(z.string(), z.unknown()).parse(raw);
     const kept: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(fields)) {
-      const schema = SettingsUpdate.shape[key as keyof typeof SettingsUpdate.shape];
-      // A field this build doesn't know, from an older one, is dropped quietly, as before.
-      if (!schema) continue;
-      const result = schema.safeParse(value);
+      // A field this build doesn't know, from an older one, is dropped quietly, as before. Own keys only, or "constructor" would match.
+      if (!Object.hasOwn(SettingsUpdate.shape, key)) continue;
+      const result = SettingsUpdate.shape[key as keyof typeof SettingsUpdate.shape].safeParse(value);
       if (result.success) kept[key] = result.data;
       else if (!warned.has(key)) {
         warned.add(key);
         log.warning("settings", "A setting won't read, so its default is used", { field: key });
       }
     }
+    // A key must only ever reach the server it was entered for, and that server is no longer known.
+    if ("textBaseUrl" in fields && !("textBaseUrl" in kept)) delete kept.textApiKey;
     return kept as SettingsChange;
   };
 

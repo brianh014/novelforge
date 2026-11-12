@@ -158,8 +158,8 @@ function Picker<T extends string>({
   useEffect(() => {
     if (!open) return;
     const away = ({ target }: PointerEvent) => !picker.current?.contains(target as Node) && setOpen(false);
-    // Tabbing away closes it too.
-    const left = ({ relatedTarget }: FocusEvent) => !picker.current?.contains(relatedTarget as Node | null) && setOpen(false);
+    // Tabbing away closes it too. A press on an option of a searchable list moves focus nowhere, and must not close it before the click.
+    const left = ({ relatedTarget }: FocusEvent) => relatedTarget && !picker.current?.contains(relatedTarget as Node) && setOpen(false);
     const at = picker.current;
     document.addEventListener("pointerdown", away);
     at?.addEventListener("focusout", left);

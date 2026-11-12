@@ -188,6 +188,7 @@ export function Play({ id }: { id: string }) {
   const leaving = useRef(new AbortController());
   const unwatchTurn = useRef(() => {});
   const duplicating = useRef(false);
+  const drawing = useRef(false);
 
   useEffect(() => {
     // Taken now, as it may finish while the page loads, and its Messages must not be missed.
@@ -363,8 +364,6 @@ export function Play({ id }: { id: string }) {
 
   // `before` is passed in because the load effect runs this before `messages` is set.
   function playInput(input: string, before: Message[], replaces?: Message) {
-    // A Turn sent closes the question, and its answer with it.
-    setQuestioning(false);
     return run({ input, narration: "", replaces }, before, (show, signal) =>
       replaces ? replaceResponse(id, replaces.id, input, show, signal) : playTurn(id, input, before.at(-1)?.id ?? 0, show, signal),
     );
@@ -374,6 +373,8 @@ export function Play({ id }: { id: string }) {
     setError("");
     setAnnouncement("");
     setRewriting(undefined);
+    // Any Turn closes the question, and its answer with it, as both were about the story before it.
+    setQuestioning(false);
     setChosenBeat(undefined);
     follow(startTurn(id, started, play), before);
   }
@@ -614,6 +615,7 @@ export function Play({ id }: { id: string }) {
       {asking && drawable && (
         <PictureForm
           id={id}
+          drawing={drawing}
           words={words}
           onWords={setWords}
           onDrawn={() => {

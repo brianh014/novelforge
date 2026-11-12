@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, type RefObject, useState } from "react";
 import { askNarrator, closeChapter, requestImage } from "./api";
 
 export function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -41,7 +41,10 @@ export function FeedbackForm(props: {
   );
 }
 
-/** Asks for a picture of the moment. `words` stay with the page, as a failed picture puts its words back. */
+/**
+ * Asks for a picture of the moment. `words` stay with the page, as a failed picture puts its words back, and so does
+ * `drawing`, which a Cancel and reopen while the first is sent must not reset.
+ */
 export function PictureForm(props: {
   id: string;
   words: string;
@@ -49,8 +52,9 @@ export function PictureForm(props: {
   onDrawn: () => void;
   onCancel: () => void;
   onError: (error: string) => void;
+  drawing: RefObject<boolean>;
 }) {
-  const drawing = useRef(false);
+  const { drawing } = props;
 
   async function draw(event: FormEvent) {
     event.preventDefault();

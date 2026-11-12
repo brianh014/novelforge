@@ -318,3 +318,11 @@ test("one bad setting falls back to its default and keeps the rest", () => {
   expect(read.fontSize).toBe("medium");
   expect(read.textMaxTokens).toBe(16_000);
 });
+
+test("a text server that won't read takes its key with it, and a stray built-in name is ignored", () => {
+  const path = join(folder.path, "bad-url.json");
+  writeFileSync(path, JSON.stringify({ textBaseUrl: "ftp://my-box/v1", textApiKey: "for-my-box", constructor: 1, toString: "x" }));
+  const read = settingsStore(path).read();
+  expect(read.textBaseUrl).toBe("https://openrouter.ai/api/v1");
+  expect(read.textApiKey).toBe("");
+});
