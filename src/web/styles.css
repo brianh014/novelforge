@@ -1595,7 +1595,8 @@ a.action {
 }
 
 /* Only a phone shows the Journal's pages one at a time. */
-.page-pick {
+.page-pick,
+.page.right .stale {
   display: none;
 }
 
@@ -2533,6 +2534,10 @@ dialog blockquote {
   /* Alone, the right page is the top one, so it makes room for the ribbons as the left page does. */
   .book:has(.page-pick[data-shown="chapters"]) .page.right {
     padding-top: 48px;
+  }
+
+  .page.right .stale {
+    display: block;
   }
 
   /* Two tabs over the Journal's pages, underlined where you are. */
