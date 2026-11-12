@@ -24,12 +24,12 @@ export const StopIcon = icon("M7 7h10v10H7z");
 export const SendIcon = icon("M12 20V4M5 11l7-7 7 7");
 export const RevertIcon = icon("M4 12a8 8 0 1 0 2.4-5.7M4 3v5h5");
 
-const SCRIBBLE = "M7 18q1.5-2 3 0t3 0";
-/** A quill scribbling on the spot, for beside the words of a Narrator at work. Its moves are in styles.css. */
+const SQUIGGLE = "M4 18q2-3 4 0t4 0 4 0";
+/** A quill writing a squiggle in place, for beside the words while the Narrator updates the story. Its moves are the brush's. */
 export const Quilling = (
-  <svg className="painting quilling" viewBox="0 0 32 24" aria-hidden="true">
-    <path className="ink" d={SCRIBBLE} />
-    <g className="pen" style={{ offsetPath: `path("${SCRIBBLE}")` }}>
+  <svg className="painting" viewBox="0 0 32 24" aria-hidden="true">
+    <path className="hills" d={SQUIGGLE} pathLength={1} />
+    <g className="brush" style={{ offsetPath: `path("${SQUIGGLE}")` }}>
       <path d="M20 3c-7 1-12 6-14 14M20 3c0 6-3 10-9 11M4 21l2-4" transform="scale(.8) translate(-4 -21)" />
     </g>
   </svg>
