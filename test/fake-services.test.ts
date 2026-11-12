@@ -35,8 +35,25 @@ test("the fake Narrator answers world creation, the Opening and a Turn with repl
   const { messages } = (await turn.json()) as { messages: { id: number; role: string; text: string }[] };
   expect(messages.at(-1)).toEqual({ id: expect.any(Number), role: "narrator", text: expect.stringContaining(" ") });
   // One of everyone a reply lists, so the Journal has someone in it.
-  expect(saveStore(join(folder.path, "Saves")).latestState(id).npcs.length).toBeGreaterThan(0);
-});
+  const met = () => saveStore(join(folder.path, "Saves")).latestState(id).npcs.length;
+  expect(met()).toBeGreaterThan(0);
+  // And each Turn meets someone new, so the list grows as a real story's would.
+  for (const input of ["I look around.", "I wait.", "I go inside."]) {
+    const before = met();
+    expect((await app.post(`/saves/${id}/turns`, { input })).status).toBe(201);
+    expect(met()).toBeGreaterThan(before);
+  }
+  const state = saveStore(join(folder.path, "Saves")).latestState(id);
+  // In the scene too, which is what puts them under Recent Characters.
+  expect(state.scene.visibleCast).toHaveLength(3);
+  // And everything else the player can read is filled, and grows, so every panel has something to show.
+  expect(state.pcKnown.facts.length).toBeGreaterThan(1);
+  expect(state.looseEnds.length).toBeGreaterThan(1);
+  expect(Object.keys(state.pcKnown.summaries ?? {})).toEqual(expect.arrayContaining(state.scene.visibleCast));
+  expect(state.status.injuries.length + state.status.conditions.length).toBeGreaterThan(2);
+  expect(state.storyTime?.date).toBeTruthy();
+  // The fake streams each reply slowly, like a real model.
+}, 20_000);
 
 test("the fake image model draws a real PNG in the shape asked for", async () => {
   const bytes = await fakeImages({ prompt: "", aspect_ratio: "16:9", reference_images: [], style_preset: "" }, new AbortController().signal);

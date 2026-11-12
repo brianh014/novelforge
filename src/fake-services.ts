@@ -30,6 +30,12 @@ const LINES = [
 let count = 0;
 const next = <T>(list: T[]) => list[count++ % list.length]!;
 
+// Someone a Turn meets gets a name not used before, so the people list grows as a story goes on.
+const FIRST = ["Wren", "Bram", "Isolde", "Tobin", "Maren", "Ezra", "Liesl", "Pell"];
+const LAST = ["Garrow", "Thorne", "Quill", "Marsh", "Hollis", "Vane"];
+let met = 0;
+const newcomer = () => `${FIRST[met % FIRST.length]} ${LAST[Math.floor(met++ / FIRST.length) % LAST.length]}`;
+
 /** Plain words for a field, picked by its name. No digits, as Status refuses numbers. */
 function words(key: string) {
   if (/name|into/.test(key)) return next(NAMES);
@@ -57,7 +63,9 @@ export function sample(schema: Schema, key = "", root: Schema = schema): unknown
   switch (type) {
     case "object":
       // In the schema's own order, as a Turn's narration only streams once "check" has come first.
-      return Object.fromEntries(Object.entries(schema.properties ?? {}).map(([name, value]) => [name, name === "check" ? null : sample(value, name, root)]));
+      return Object.fromEntries(
+        Object.entries(schema.properties ?? {}).map(([name, value]) => [name, name === "check" ? null : key === "people" && name === "name" ? newcomer() : sample(value, name, root)]),
+      );
     case "array":
       return schema.items ? [0, 1, 2].map(() => sample(schema.items!, key, root)) : [];
     case "string":
@@ -72,6 +80,36 @@ export function sample(schema: Schema, key = "", root: Schema = schema): unknown
     default:
       return words(key);
   }
+}
+
+const FACTS = ["The harbourmaster takes bribes", "The lighthouse has been dark for a week", "Smugglers use the old sea wall", "The bell tolls at the wrong hours", "No ship has left port since the storm", "The chapel keeps a locked crypt"];
+const LOOSE_ENDS = ["Who was the stranger in the grey coat?", "What is hidden under the sea wall?", "Why did the lighthouse go dark?", "Where did the missing fishermen go?", "Who rings the bell at night?", "What does the harbourmaster owe?"];
+const WHO = ["A dockhand who owes the harbourmaster money", "A widow who keeps the lamp shop by the quay", "A sailor stranded since the storm", "A clerk at the customs house", "A priest who rarely leaves the chapel", "A smuggler posing as a net mender"];
+const CONDITIONS = ["Soaked to the skin", "Tired from the long walk", "Uneasy", "Hungry"];
+const INJURIES = ["A grazed hand", "A bruised shoulder", "A twisted ankle"];
+const HEALTH = ["unhurt", "lightly hurt", "hurt"];
+const TIMES = ["dawn", "morning", "midday", "afternoon", "dusk", "night"];
+let turn = 0;
+
+/**
+ * A Turn's changes to the story, one of each kind the player can see, so every Journal and story panel has something
+ * in it. Each Turn takes the next of each list, so the lists grow. Only adds and sets, as a remove or update of
+ * something the state lacks would be refused and fail the Turn.
+ */
+function storyChanges(people: string[]) {
+  const at = turn++;
+  const pick = (list: string[]) => list[at % list.length]!;
+  return [
+    // Everyone a reply meets is in the scene, as a real Narrator's set_scene would say, so they show under Recent Characters.
+    { op: "set_scene", location: "The old sea wall", visible_cast: people },
+    ...people.map((name, index) => ({ op: "set_known_npc_summary", name, summary: WHO[(at * people.length + index) % WHO.length] })),
+    { op: "add_known_fact", fact: pick(FACTS) },
+    { op: "add_loose_end", loose_end: pick(LOOSE_ENDS) },
+    { op: "set_health", health: pick(HEALTH) },
+    { op: "add_status", kind: "conditions", text: pick(CONDITIONS) },
+    { op: "add_status", kind: "injuries", text: pick(INJURIES) },
+    { op: "set_story_time", days_passed: at % TIMES.length === TIMES.length - 1 ? 1 : 0, date: "The first of Thaw", time_of_day: pick(TIMES) },
+  ];
 }
 
 const pause = (ms: number, signal: AbortSignal) =>
@@ -95,6 +133,7 @@ export const fakeTextProvider: TextProvider = async (prompt, { schema, onText, s
   const sampled = schema && (sample(schema as Schema) as Record<string, unknown>);
   const title = titleIn(prompt);
   if (sampled && title && typeof sampled.text === "string") sampled.text = `A book cover with large bold title text reading "${title}" across the top. Rain on a harbour at dusk.`;
+  if (sampled && Array.isArray(sampled.people) && Array.isArray(sampled.state_operations)) sampled.state_operations = storyChanges(sampled.people.map(({ name }: { name: string }) => name));
   const reply = sampled ? JSON.stringify(sampled) : "The fake Narrator is answering. Start without --fake to test a real model.";
   for (let at = 0; at < reply.length; at += 40) {
     await pause(30, signal);
