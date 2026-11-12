@@ -36,7 +36,7 @@ import {
   type TurnInProgress,
 } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, Painting, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, Painting, Quilling, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
 import { type MessageActions, MessageControls } from "./message-controls";
 import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
@@ -46,22 +46,12 @@ import { StoryRecap } from "./story-recap";
 import { firstMove, type RunningTurn, runningTurn, startTurn, takeMissedFailure } from "./turns";
 
 const WRITING = "The Narrator is writing…";
-const SQUIGGLE = "M4 15q5-4 10 0t10 0 10 0 10 0 10 0 10 0 10 0";
 
-/**
- * A quill writing a squiggle, left to right, then sliding straight back, while the Narrator writes. The words stay for
- * screen readers. The pen's path adds the line back, so the squiggle ends 52.3% along it (in styles.css): measure
- * again if the squiggle changes.
- */
+/** A quill writing in place, beside its words, as pictures have a brush. */
 const Writing = () => (
-  <p className="quill-writing">
-    <svg viewBox="0 0 80 24" aria-hidden="true">
-      <path className="ink" d={SQUIGGLE} pathLength={1} />
-      <g className="pen" style={{ offsetPath: `path("${SQUIGGLE}L4 15")` }}>
-        <path d="M20 3c-7 1-12 6-14 14M20 3c0 6-3 10-9 11M4 21l2-4" transform="translate(-4 -21)" />
-      </g>
-    </svg>
-    <span className="visually-hidden">{WRITING}</span>
+  <p className="waiting drawing">
+    {Quilling}
+    {WRITING}
   </p>
 );
 
