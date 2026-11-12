@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { z } from "zod";
-import { LOG_LEVELS } from "./logger";
+import { LOG_LEVELS, log } from "./logger";
 
 const Lora = z.object({ name: z.string().min(1), strength: z.number().min(-100).max(100), triggerWords: z.string() });
 const Family = z.enum(["sd", "flux2", "qwen21"]);
@@ -137,8 +137,28 @@ export type SettingsStore = ReturnType<typeof settingsStore>;
 
 /** Per-install settings, including API keys. They live in one file outside the Saves folder, so no Save can carry them. */
 export function settingsStore(path: string) {
+  const warned = new Set<string>();
+  // Field by field, so one bad value falls back to its default instead of breaking every request. A file that isn't
+  // JSON still throws, as reading it as empty would let the next save wipe the keys.
+  const parse = (raw: unknown) => {
+    const fields = z.record(z.string(), z.unknown()).parse(raw);
+    const kept: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(fields)) {
+      const schema = SettingsUpdate.shape[key as keyof typeof SettingsUpdate.shape];
+      // A field this build doesn't know, from an older one, is dropped quietly, as before.
+      if (!schema) continue;
+      const result = schema.safeParse(value);
+      if (result.success) kept[key] = result.data;
+      else if (!warned.has(key)) {
+        warned.add(key);
+        log.warning("settings", "A setting won't read, so its default is used", { field: key });
+      }
+    }
+    return kept as SettingsChange;
+  };
+
   const read = () => {
-    const stored = SettingsUpdate.parse(existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {});
+    const stored = parse(existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : {});
     // Settings from before the toggle keep a number the player typed by starting with the toggle off.
     const typed = stored.comfySteps != null || stored.comfyCfg != null;
     // The Stage box is no longer offered (its code is kept), so a stored pick of it reads as Prose.
