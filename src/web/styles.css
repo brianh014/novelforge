@@ -1972,6 +1972,11 @@ a.action {
   }
 }
 
+/* The pen stands above the svg's box, so this clears it off the Message above. */
+.quill-writing {
+  margin-top: 1.5rem;
+}
+
 .quill-writing svg {
   display: block;
   width: 5rem;
