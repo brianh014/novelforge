@@ -21,9 +21,9 @@ It runs on your own computer and talks to models you choose. Bring an OpenAI-com
 Download your system's file from the [Releases](https://git.holtops.net/brianh014/novelforge/releases) page. Each system has two:
 
 - **NovelForge** is the app: it opens in your browser, for this computer only, and you end it with Quit in the Menu.
-- **NovelForge Server** serves the whole network from a terminal window, which shows its log. Closing the window stops it.
+- **NovelForge Server** serves the whole network and opens no browser, so it runs headless too. Its log goes to the terminal, and stopping it (closing the window, or Ctrl+C) stops the server. Browse to it from any device at `http://<its address>:4600/`; it lists its addresses as it starts.
 
-Either one opens on port 4600. Open **Settings** first to enter your text model's address, model and key (see [Recommended settings](#recommended-settings)). The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
+Both use port 4600. Open **Settings** first to enter your text model's address, model and key (see [Recommended settings](#recommended-settings)). The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
 
 ### Windows
 
@@ -48,7 +48,7 @@ Either one opens on port 4600. Open **Settings** first to enter your text model'
    ```
 
 2. Your Saves, Settings and logs are kept in that folder, beside the program.
-3. Run `~/NovelForge/NovelForge` (or `NovelForge-Server`). The app opens your browser with `xdg-open`; if none opens, go to `http://127.0.0.1:4600/`.
+3. Run `~/NovelForge/NovelForge`, which opens your browser with `xdg-open` (if none opens, go to `http://127.0.0.1:4600/`). For the Server, run `~/NovelForge/NovelForge-Server` and browse to one of the addresses it prints.
 
 ## Running from source
 
