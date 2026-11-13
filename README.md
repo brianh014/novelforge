@@ -42,7 +42,7 @@ Download your system's file from the [Releases](https://github.com/brianh014/nov
 - **NovelForge** is the app: it opens in your browser, for this computer only, and you end it with Quit in the Menu.
 - **NovelForge Server** serves the whole network and opens no browser, so it runs headless too. Its log goes to the terminal, and stopping it (closing the window, or Ctrl+C) stops the server. Browse to it from any device at `http://<its address>:4600/`; it lists its addresses as it starts.
 
-Both use port 4600. Open **Settings** first to enter your text model's address, model and key (see [Recommended settings](#recommended-settings)), then the **Reader's Guide** on the Menu for how to play. The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
+Both use port 4600. Once it's open, [connect an AI](#connecting-an-ai) in **Settings**, then read the **Reader's Guide** on the Menu for how to play. The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
 
 ### Windows
 
@@ -99,6 +99,15 @@ sudo systemctl enable --now novelforge
 | Restart it | `sudo systemctl restart novelforge` |
 | Stop it, and keep it from starting at boot | `sudo systemctl disable --now novelforge` |
 
+### Connecting an AI
+
+NovelForge has no AI of its own, so it needs a key from an AI service before it can write. The easiest is [OpenRouter](https://openrouter.ai), which is already chosen in Settings. You pay it for what you use, a few cents a Turn.
+
+1. Sign up at [openrouter.ai](https://openrouter.ai), open [Credits](https://openrouter.ai/settings/credits) and add a few dollars.
+2. Open [Keys](https://openrouter.ai/settings/keys), choose **Create Key**, give it any name, and copy the key it shows. It's shown only once, so paste it somewhere safe too.
+3. In NovelForge, open **Settings → Text**. Paste the key into **Text API key**, choose a **Text model** and press **Test text**. A good balance of cost and writing right now is [MiMo V2.6 Pro](https://openrouter.ai/xiaomi/mimo-v2.6-pro) (`xiaomi/mimo-v2.6-pro`).
+4. For pictures, open **Settings → Images**, choose **OpenRouter**, paste the same key into **Image API key**, choose an image model and press **Test image**. Try Seedream 5.5, or Nano Banana 2.1 for a little better quality. If you have a graphics card, your own ComfyUI draws for free (see [Recommended settings](#images-your-own-comfyui)). Pictures are optional: without them the story is text only.
+
 ### Updating
 
 When a new version is out, a notice at the top of the screen says so, and **Settings → Updates** can check at any time. Choose **Install**, and NovelForge downloads it, restarts and comes back to the same page, on every system and for the Server too. Your Saves and Settings stay as they are, and if the new version fails to start, the old one comes back. To check, NovelForge asks GitHub for the newest release every few hours; nothing else is sent.
@@ -118,7 +127,7 @@ bun install
 bun start
 ```
 
-`bun start` serves NovelForge on port 4600 and opens it in your browser. Open **Settings** to enter your text model's address, model and key, and optionally an image model. To update, run `git pull` and `bun install`. Your Saves, Settings and logs stay in the project folder, which git ignores.
+`bun start` serves NovelForge on port 4600 and opens it in your browser. Then [connect an AI](#connecting-an-ai) in **Settings**. To update, run `git pull` and `bun install`. Your Saves, Settings and logs stay in the project folder, which git ignores.
 
 To try it with no model and no key, run it with stand-ins:
 
@@ -143,7 +152,7 @@ bun src/main.ts --fake --open
 
 ### Text: a hosted API
 
-Use a hosted text API, such as OpenRouter or any other OpenAI-compatible provider. Every Turn sends the Narrator the newest Messages in full, plus the world, the Journal and the Old Memories, so a long story's prompt grows past 30,000 tokens. Large hosted models take all of it, keep the story straight and return the Narrator's JSON first time, for pennies a Turn. Staying on one provider keeps its prompt cache, which makes each Turn cheaper.
+Use a hosted text API, such as OpenRouter (see [Connecting an AI](#connecting-an-ai)) or any other OpenAI-compatible provider. Every Turn sends the Narrator the newest Messages in full, plus the world, the Journal and the Old Memories, so a long story's prompt grows past 30,000 tokens. Large hosted models take all of it, keep the story straight and return the Narrator's JSON first time, for pennies a Turn. Staying on one provider keeps its prompt cache, which makes each Turn cheaper.
 
 A local model works too: choose **Local / OpenAI server** and give the address of Ollama (`http://localhost:11434/v1`), LM Studio (`http://localhost:1234/v1`) or another OpenAI-compatible server. It suits short stories, play with nothing leaving your computer, and trying things out. A 10 GB GPU fits a model of about 12B at Q4 with a 16,000-token context, so the Narrator sees much less of a long story, and a Turn can take a minute. To get the most from it:
 
@@ -155,7 +164,7 @@ A local model works too: choose **Local / OpenAI server** and give the address o
 
 Use **Local (ComfyUI)** if you have a GPU for it. NovelForge draws a lot: the Cover, a portrait for each person, a Scene Image whenever the scene changes, pictures on request, and every redraw. On a paid image API each one costs money, and on your own ComfyUI they are free. Choose FLUX.2 or Qwen Image 2.1 in Simple Mode to keep faces the same from picture to picture, as SD 1.5 and SDXL can't use portraits.
 
-ComfyUI keeps its model on the GPU between pictures. If a local text model or anything else needs the GPU too, turn on **Free GPU memory after each picture**. Use OpenRouter for pictures only if you have no GPU for ComfyUI.
+ComfyUI keeps its model on the GPU between pictures. If a local text model or anything else needs the GPU too, turn on **Free GPU memory after each picture**. Use OpenRouter for pictures only if you have no GPU for ComfyUI: try Seedream 5.5, or Nano Banana 2.1 for a little better quality.
 
 ## Development
 
