@@ -195,8 +195,12 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </ul>
         <h3>Luck and risk</h3>
         <p>
-          When your PC tries something that could fail, the Narrator sets how hard it is and a hidden die is rolled. You never see the roll, only how things
-          turn out, so a bold plan can go wrong, and a well-chosen one goes better.
+          An AI tends to be agreeable: left to itself, it lets nearly everything your PC tries work, and a story where nothing can fail soon goes flat. So
+          NovelForge brings in real chance. When your PC tries something that could fail, the Narrator sets how hard it is before anyone knows the outcome, then
+          a hidden die is rolled, and the Narrator writes what the roll decides.
+        </p>
+        <p>
+          You never see the roll, only how things turn out. A bold plan can go wrong, a long shot can come off, and a well-chosen move gives you better odds.
         </p>
         <h3>Chapters</h3>
         <p>
