@@ -175,8 +175,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         <h3>Free Text and Choices</h3>
         <p>
           The {tool(ChoicesIcon, "Choices")} button switches how you play. In <b>Free Text</b> you type your move. In <b>Choices</b>, every reply ends with
-          three things your PC might do; pick one to send it, or type your own in the box under them. Switch whenever you like. Continue, Decide for me and
-          Enhance are only in Free Text.
+          three things your PC might do; pick one to send it, or type your own in the box under them. Switch whenever you like. Decide for me and Enhance are
+          only in Free Text.
         </p>
         <h3>The tools by the box</h3>
         <ul>
