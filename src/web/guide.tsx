@@ -1,7 +1,34 @@
 import type { ReactNode } from "react";
+import {
+  AskIcon,
+  ChapterIcon,
+  ChoicesIcon,
+  ContinueIcon,
+  DecideIcon,
+  DeleteIcon,
+  DrawIcon,
+  DuplicateIcon,
+  EditIcon,
+  ExportIcon,
+  RegenerateIcon,
+  RenameIcon,
+  RevertIcon,
+  RewriteIcon,
+  SendIcon,
+  StopIcon,
+  UploadIcon,
+} from "./icons";
 import { MenuRibbon, Sheet } from "./menu";
 
 /** The Reader's Guide: what NovelForge is and how to use every part of it, one section at a time, kept in the URL hash. */
+
+/** A tool as it looks on screen: its icon, then its name. */
+const tool = (icon: ReactNode, name: string) => (
+  <b className="guide-tool">
+    {icon}
+    {name}
+  </b>
+);
 
 const link = (slug: string, text: string) => <a href={`#/guide/${slug}`}>{text}</a>;
 
@@ -27,8 +54,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             Optionally, open <b>Settings → Images</b> and set up an image AI, then press <b>Test image</b>. Without one, the story is text only.
           </li>
           <li>
-            Back on the Menu, choose <b>New Story</b>. Write as much or as little as you like, or press <b>Pick for me</b> and let the Narrator fill it in. See{" "}
-            {link("new", "Making a story")}.
+            Back on the Menu, choose <b>New Story</b>. Write as much or as little as you like, or press {tool(DecideIcon, "Pick for me")} and let the Narrator
+            fill it in. See {link("new", "Making a story")}.
           </li>
           <li>Read the Opening, then type what your PC does or says and send it. See {link("play", "Playing")}.</li>
         </ol>
@@ -110,8 +137,9 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           </li>
         </ul>
         <p>
-          Each box has <b>Write</b> when it's empty and <b>Enhance</b> when it isn't: the Narrator writes it or builds on your words, and <b>Undo</b> puts yours
-          back. <b>Pick for me</b> fills every empty box at once and leaves the ones you wrote, and never touches Important Characters.
+          Each box has {tool(DecideIcon, "Write")} when it's empty and {tool(DecideIcon, "Enhance")} when it isn't: the Narrator writes it or builds on your
+          words, and <b>Undo</b> puts yours back. {tool(DecideIcon, "Pick for me")} fills every empty box at once and leaves the ones you wrote, and never
+          touches Important Characters.
         </p>
         <h3>2. Art</h3>
         <p>
@@ -120,17 +148,11 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </p>
         <ul>
           <li>
-            <b>Draw</b> or <b>Redraw</b>: draw it from its prompt.
+            <b>Draw</b> or {tool(EditIcon, "Redraw")}: draw it from its prompt.
           </li>
-          <li>
-            <b>Redo</b>: write a new prompt from your choices as they are now, and draw it.
-          </li>
-          <li>
-            <b>Nudge</b>: draw it again with a few words of your own, such as "smiling".
-          </li>
-          <li>
-            <b>Upload</b>: use a picture of your own (PNG, JPEG or WebP, up to 10 MB).
-          </li>
+          <li>{tool(RegenerateIcon, "Redo")}: write a new prompt from your choices as they are now, and draw it.</li>
+          <li>{tool(RewriteIcon, "Nudge")}: draw it again with a few words of your own, such as "smiling".</li>
+          <li>{tool(UploadIcon, "Upload")}: use a picture of your own (PNG, JPEG or WebP, up to 10 MB).</li>
         </ul>
         <h3>3. Your World</h3>
         <p>
@@ -152,28 +174,24 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </p>
         <h3>Free Text and Choices</h3>
         <p>
-          The <b>Choices</b> button switches how you play. In <b>Free Text</b> you type your move. In <b>Choices</b>, every reply ends with three things your PC
-          might do; pick one to send it, or type your own in the box under them. Switch whenever you like.
+          The {tool(ChoicesIcon, "Choices")} button switches how you play. In <b>Free Text</b> you type your move. In <b>Choices</b>, every reply ends with
+          three things your PC might do; pick one to send it, or type your own in the box under them. Switch whenever you like.
         </p>
         <h3>The tools by the box</h3>
         <ul>
           <li>
-            <b>Send</b>: send your move. <b>Stop</b> halts a reply while it's being written.
+            {tool(SendIcon, "Send")}: send your move. {tool(StopIcon, "Stop")} halts a reply while it's being written.
+          </li>
+          <li>{tool(ContinueIcon, "Continue")}: send nothing and let the Narrator move the story on by itself.</li>
+          <li>
+            {tool(DecideIcon, "Decide for me")} (with the box empty): the Narrator suggests a move for your PC, for you to send or change. With words in the box
+            it becomes {tool(DecideIcon, "Enhance")}, which polishes what you wrote; <b>Undo</b> puts your words back.
           </li>
           <li>
-            <b>Continue</b>: send nothing and let the Narrator move the story on by itself.
+            {tool(AskIcon, "Ask the Narrator")}: an out-of-character question, like asking a game master, such as "Would my character know this lord?" It is
+            answered only from what your PC would know, changes nothing, and is forgotten.
           </li>
-          <li>
-            <b>Decide for me</b> (with the box empty): the Narrator suggests a move for your PC, for you to send or change. With words in the box it becomes{" "}
-            <b>Enhance</b>, which polishes what you wrote; <b>Undo</b> puts your words back.
-          </li>
-          <li>
-            <b>Ask the Narrator</b>: an out-of-character question, like asking a game master, such as "Would my character know this lord?" It is answered only
-            from what your PC would know, changes nothing, and is forgotten.
-          </li>
-          <li>
-            <b>Draw a picture</b>: describe a picture and it's drawn from your words and the recent story.
-          </li>
+          <li>{tool(DrawIcon, "Draw a picture")}: describe a picture and it's drawn from your words and the recent story.</li>
         </ul>
         <h3>Luck and risk</h3>
         <p>
@@ -182,8 +200,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </p>
         <h3>Chapters</h3>
         <p>
-          The story is divided into <b>Chapters</b>, which you read as a whole in the Journal. Only you end one: use <b>End the chapter here</b> under the
-          latest Message, or accept when the Narrator suggests a good place to stop. The next Chapter begins at once.
+          The story is divided into <b>Chapters</b>, which you read as a whole in the Journal. Only you end one: use {tool(ChapterIcon, "End the chapter here")}{" "}
+          under the latest Message, or accept when the Narrator suggests a good place to stop. The next Chapter begins at once.
         </p>
         <h3>Leaving</h3>
         <p>
@@ -201,33 +219,29 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         <p>Nothing is final. The tools under a Message let you change what happened.</p>
         <h3>The latest reply</h3>
         <ul>
+          <li>{tool(RewriteIcon, "Rewrite")}: tell the Narrator what to change, such as "she wouldn't give up that easily", and it writes the reply again.</li>
+          <li>{tool(EditIcon, "Edit")}: change the words yourself. The Narrator brings the world in line with your version and writes nothing new.</li>
           <li>
-            <b>Rewrite</b>: tell the Narrator what to change, such as "she wouldn't give up that easily", and it writes the reply again.
-          </li>
-          <li>
-            <b>Edit</b>: change the words yourself. The Narrator brings the world in line with your version and writes nothing new.
-          </li>
-          <li>
-            <b>Regenerate</b>: a fresh reply to the same move, with no guidance. <b>Regenerate with Choices</b> writes it again with three Choices, for a reply
-            written before you switched to Choices.
+            {tool(RegenerateIcon, "Regenerate")}: a fresh reply to the same move, with no guidance. {tool(RegenerateIcon, "Regenerate with Choices")} writes it
+            again with three Choices, for a reply written before you switched to Choices.
           </li>
         </ul>
         <h3>Earlier Messages</h3>
         <ul>
+          <li>{tool(RevertIcon, "Revert to here")}: go back to that Message and delete everything after it, for good.</li>
           <li>
-            <b>Revert to here</b>: go back to that Message and delete everything after it, for good.
+            {tool(EditIcon, "Edit and replay from here")} (on your own Messages): change what you wrote and play the story again from there. Everything after it
+            goes.
           </li>
           <li>
-            <b>Edit and replay from here</b> (on your own Messages): change what you wrote and play the story again from there. Everything after it goes.
-          </li>
-          <li>
-            <b>Duplicate from here</b>: keep this story as it is, and carry on from that Message in a new Save. This is how you try another path.
+            {tool(DuplicateIcon, "Duplicate from here")}: keep this story as it is, and carry on from that Message in a new Save. This is how you try another
+            path.
           </li>
         </ul>
         <h3>Changing the world</h3>
         <p>
-          In the Journal, <b>Tell Narrator what to change</b> takes a change in your own words, such as "The king has a twin" or "My PC lost the sword in the
-          river". The Narrator updates the world's secrets and the Journal to match, and the story carries on from there.
+          In the Journal, {tool(RewriteIcon, "Tell Narrator what to change")} takes a change in your own words, such as "The king has a twin" or "My PC lost the
+          sword in the river". The Narrator updates the world's secrets and the Journal to match, and the story carries on from there.
         </p>
       </>
     ),
@@ -238,8 +252,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
     body: (
       <>
         <p>
-          The Journal is what your PC knows, kept up to date by the Narrator as you play. It never holds the world's secrets. You can edit its text, and your
-          edit lasts unless you Revert to before it.
+          The Journal is what your PC knows, kept up to date by the Narrator as you play. It never holds the world's secrets. You can change its text with{" "}
+          {tool(EditIcon, "Edit")}, and your edit lasts unless you Revert to before it.
         </p>
         <ul>
           <li>
@@ -258,7 +272,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <b>What your PC knows</b>: their appearance, what they carry and their condition.
           </li>
           <li>
-            <b>Characters</b>: everyone your PC has met, with what your PC knows of them.
+            <b>Characters</b>: everyone your PC has met, with what your PC knows of them. {tool(RenameIcon, "Rename")} changes a name everywhere in the story.
           </li>
           <li>
             <b>Old Memories</b>: short accounts of older parts of the story. The Narrator only sees the newest Messages in full, and these are how it remembers
@@ -294,21 +308,11 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           from, then:
         </p>
         <ul>
-          <li>
-            <b>Redraw</b>: draw it again from its prompt.
-          </li>
-          <li>
-            <b>Update</b> (the Cover and portraits): write a new prompt from the story as it stands, and draw it.
-          </li>
-          <li>
-            <b>Nudge</b>: draw it again with a few words of your own.
-          </li>
-          <li>
-            <b>Upload</b>: replace it with a picture of your own.
-          </li>
-          <li>
-            <b>Delete</b> (scene pictures only): it's gone for good, and a Revert doesn't bring it back.
-          </li>
+          <li>{tool(EditIcon, "Redraw")}: draw it again from its prompt.</li>
+          <li>{tool(RegenerateIcon, "Update")} (the Cover and portraits): write a new prompt from the story as it stands, and draw it.</li>
+          <li>{tool(RewriteIcon, "Nudge")}: draw it again with a few words of your own.</li>
+          <li>{tool(UploadIcon, "Upload")}: replace it with a picture of your own.</li>
+          <li>{tool(DeleteIcon, "Delete")} (scene pictures only): it's gone for good, and a Revert doesn't bring it back.</li>
         </ul>
         <p>Change a story's Art Style in Settings while the story is open. Pictures already drawn keep theirs until you redraw them.</p>
       </>
@@ -323,18 +327,12 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           Each story is one Save, which saves itself after every Turn and every change. <b>Load Story</b> lists them, and from there you can:
         </p>
         <ul>
-          <li>
-            <b>Duplicate</b>: copy a Save, to branch a story or keep a backup before a risky move.
-          </li>
-          <li>
-            <b>Export</b>: download a Save as one file, pictures and all, to back it up or move it to another computer.
-          </li>
+          <li>{tool(DuplicateIcon, "Duplicate")}: copy a Save, to branch a story or keep a backup before a risky move.</li>
+          <li>{tool(ExportIcon, "Export")}: download a Save as one file, pictures and all, to back it up or move it to another computer.</li>
           <li>
             <b>Import a Save</b>: bring an exported Save back in.
           </li>
-          <li>
-            <b>Delete</b>: remove a Save for good.
-          </li>
+          <li>{tool(DeleteIcon, "Delete")}: remove a Save for good.</li>
         </ul>
         <h3>Where your files are</h3>
         <p>

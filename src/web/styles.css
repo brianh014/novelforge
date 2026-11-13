@@ -2893,3 +2893,19 @@ dialog blockquote {
 .guide li {
   margin-bottom: 0.4em;
 }
+
+.guide-tool {
+  white-space: nowrap;
+}
+
+.guide-tool svg {
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.25em;
+  vertical-align: -0.2em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
