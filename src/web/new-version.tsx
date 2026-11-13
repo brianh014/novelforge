@@ -6,6 +6,8 @@ import { ConfirmDialog } from "./menu";
 
 type Latest = NonNullable<UpdateStatus["latest"]>;
 
+const DISMISSED = "novelforge-dismissed-version";
+
 const WHATS_NEW = (latest: Latest) => (
   <a href={latest.url} target="_blank" rel="noreferrer">
     What's new
@@ -27,7 +29,13 @@ function InstallButton({ latest }: { latest: Latest }) {
       for (let tries = 0; tries < 120; tries++) {
         await new Promise((done) => setTimeout(done, 1000));
         const now = await getUpdate().catch(() => undefined);
-        if (now?.version === latest.version) return location.reload();
+        if (now?.version === latest.version) {
+          // A version put off and then installed anyway mustn't keep its toast away should it be offered again.
+          try {
+            localStorage.removeItem(DISMISSED);
+          } catch {}
+          return location.reload();
+        }
       }
       setError("NovelForge hasn't come back. Open it again.");
     } catch (failure) {
@@ -77,7 +85,6 @@ function NewVersionOffer({ status, latest }: { status: UpdateStatus; latest: Lat
   );
 }
 
-const DISMISSED = "novelforge-dismissed-version";
 const ASK_EVERY_MS = 60 * 60_000;
 
 /** On every screen, as players rarely go back to the Menu. Dismissed, it stays away until the next version. */
