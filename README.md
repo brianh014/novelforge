@@ -16,7 +16,34 @@ It runs on your own computer and talks to models you choose. Bring an OpenAI-com
 - **Undo anything:** edit, rewrite or regenerate a reply, or revert to any earlier Message. Every Save is one SQLite file you can duplicate, export and import.
 - **Pictures:** Scene Images when the scene changes, pictures on request, and a Gallery to redraw, nudge or replace any of them with your own.
 
-## Running it
+## Quick Install
+
+Download your system's file from the [Releases](https://git.holtops.net/brianh014/novelforge/releases) page. Each system has two:
+
+- **NovelForge** is the app: it opens in your browser, for this computer only, and you end it with Quit in the Menu.
+- **NovelForge Server** serves the whole network from a terminal window, which shows its log. Closing the window stops it.
+
+Either one opens on port 4600. Open **Settings** first to enter your text model's address, model and key (see [Recommended settings](#recommended-settings)). The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
+
+### Windows
+
+1. Download `NovelForge-Windows.zip` (or `NovelForge-Server-Windows.zip`).
+2. Unzip it into a folder of its own, such as `Documents\NovelForge`. Your Saves, Settings and logs are kept in that folder, beside the program.
+3. Open `NovelForge.exe`. If Windows says it protected your PC, choose **More info**, then **Run anyway**.
+
+### macOS
+
+1. Download `NovelForge-Mac-AppleSilicon.tar.gz` for an M-series Mac, or `NovelForge-Mac-Intel.tar.gz` for an Intel one (the `NovelForge-Server-Mac-…` files for the Server).
+2. Open the file to unpack `NovelForge.app`, and drag it to Applications. Your Saves, Settings and logs are kept in `~/Library/Application Support/NovelForge`.
+3. Open it. The first time, macOS refuses it: open **System Settings → Privacy & Security**, choose **Open Anyway** beside NovelForge, and confirm.
+
+### Linux
+
+1. Download `NovelForge-Linux.tar.gz` (or `NovelForge-Server-Linux.tar.gz`), for x64.
+2. Unpack it into a folder of its own: `mkdir ~/NovelForge && tar -xzf NovelForge-Linux.tar.gz -C ~/NovelForge`. Your Saves, Settings and logs are kept in that folder, beside the program.
+3. Run `~/NovelForge/NovelForge` (or `NovelForge-Server`). The app opens your browser with `xdg-open`; if none opens, go to `http://127.0.0.1:4600/`.
+
+## Running from source
 
 You need [Bun](https://bun.sh) 1.4 or later.
 
