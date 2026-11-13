@@ -3,7 +3,7 @@ import { knownPortraits } from "./gallery-routes";
 import { ArtStyleRequest, imageResponse, NoFields, parseBody, routes, type ServerContext, someWords } from "./http";
 import { pcNow, restyledBy } from "./image-pipeline";
 import { log } from "./logger";
-import { NoteNotFound, StaleTurn } from "./save-store";
+import { NoteNotFound, PlayMode, StaleTurn } from "./save-store";
 import { VisibleEdit, type WorldEdit } from "./state-applier";
 import { askForChapterTitle, TurnFailed } from "./turn-engine";
 import { readable } from "./web/chat-style";
@@ -41,6 +41,8 @@ function spliceNote(notes: string[], index: string, ...replacement: string[]) {
   if (notes[position] === undefined) throw new NoteNotFound();
   return notes.toSpliced(position, 1, ...replacement);
 }
+
+const SaveChange = z.object({ artStyle: ArtStyleRequest.shape.artStyle.optional(), playMode: PlayMode.optional() });
 
 const WorldChangeRequest = z.object({ change: someWords });
 
@@ -87,14 +89,15 @@ export function saveRoutes({ options, saves, turns, images }: ServerContext) {
     "/saves/:id": {
       GET: (req) => {
         // An allowlist, so a secret added to the Save can never reach the player by default.
-        const { title, worldBrief, pc, artStyle, startingHook, hasCover, coverRedraws } = saves.read(req.params.id);
+        const { title, worldBrief, pc, artStyle, startingHook, hasCover, coverRedraws, playMode } = saves.read(req.params.id);
         log.info("saves", "Save opened");
-        return Response.json({ title, worldBrief, pc: { name: pc.name }, artStyle, startingHook, hasCover, coverRedraws });
+        return Response.json({ title, worldBrief, pc: { name: pc.name }, artStyle, startingHook, hasCover, coverRedraws, playMode });
       },
       PATCH: async (req) => {
-        const { artStyle } = await parseBody(req, ArtStyleRequest);
-        saves.setArtStyle(req.params.id, artStyle);
-        return Response.json({ artStyle });
+        const { artStyle, playMode } = await parseBody(req, SaveChange);
+        if (artStyle !== undefined) saves.setArtStyle(req.params.id, artStyle);
+        if (playMode) saves.setPlayMode(req.params.id, playMode);
+        return Response.json({ artStyle, playMode });
       },
       DELETE: (req) => {
         // A running Turn would go on paying the model for a story that is gone.
@@ -284,7 +287,8 @@ export function saveRoutes({ options, saves, turns, images }: ServerContext) {
     },
 
     "/saves/:id/messages": {
-      GET: (req) => Response.json({ messages: saves.messages(req.params.id) }),
+      // Only the latest response's Choices, as no other can be picked.
+      GET: (req) => Response.json({ messages: saves.messages(req.params.id), choices: saves.latestChoices(req.params.id) }),
     },
 
     "/saves/:id/messages/:messageId/snapshot": {

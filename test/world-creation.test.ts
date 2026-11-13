@@ -55,7 +55,7 @@ test("a generated world reaches the player only as its World Overview, and its S
   expect(status).toBe(201);
   expect(body).toEqual({ id: expect.any(String), overview: "Rain never stops in Saltmere." });
 
-  const created = await app.post(`/worlds/${body.id}/begin`, { artStyle: "Ink wash" });
+  const created = await app.post(`/worlds/${body.id}/begin`, { artStyle: "Ink wash", playMode: "choices" });
   expect(created.status).toBe(201);
   const { id } = (await created.json()) as { id: string };
 
@@ -71,6 +71,7 @@ test("a generated world reaches the player only as its World Overview, and its S
     coverRedraws: 0,
     importantCharacters: [],
     pcOnCover: true,
+    playMode: "choices",
   });
   expect(await app.get(`/saves/${id}`).then((r) => r.json())).toMatchObject({ title: "The Salt Reckoning" });
   const { worldBible, worldRules, plotThreads } = saves.latestState(id);

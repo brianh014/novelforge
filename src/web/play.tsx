@@ -13,6 +13,7 @@ import {
   type OpenSave,
   getSettings,
   type Message,
+  type PlayMode,
   playOpening,
   playTurn,
   type Chapter,
@@ -21,6 +22,7 @@ import {
   replaceResponse,
   editResponse,
   revert,
+  savePlayMode,
   setupProblem,
 } from "./api";
 import {
@@ -36,8 +38,9 @@ import {
   type TurnInProgress,
 } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, UpIcon, Painting, Quilling, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, StopIcon, ChoicesIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, UpIcon, Painting, Quilling, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
+import { ChoiceButtons } from "./play-choices";
 import { type MessageActions, MessageControls } from "./message-controls";
 import { Book, BookTabs, ConfirmDialog, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { ChapterEnd, FeedbackForm, PictureForm, QuestionForm, sendOnEnter } from "./play-asks";
@@ -205,6 +208,9 @@ export function Play({ id }: { id: string }) {
   const [reverting, setReverting] = useState<Message>();
   const [duplicatingFrom, setDuplicatingFrom] = useState<Message>();
   const [regenerating, setRegenerating] = useState(false);
+  const [playMode, setPlayMode] = useState<PlayMode>("free");
+  // Offers to write the latest response again, as one without Choices leaves nothing to pick.
+  const [offeringChoices, setOfferingChoices] = useState(false);
   /** With a Revert to the Message before one of the player's: their words, to edit and send again from there. */
   const [replaying, setReplaying] = useState<string>();
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -241,6 +247,7 @@ export function Play({ id }: { id: string }) {
           setOpenNewImages(settings.openNewImages);
         }
         setSave(save);
+        setPlayMode(save.playMode);
         setMessages(messages);
         const failure = missed ?? (failed && { ...failed, error: failureMessage(failed) });
         if (failure) {
@@ -286,8 +293,34 @@ export function Play({ id }: { id: string }) {
   }
 
   function continueStory() {
-    if (turn || deciding || hasWords) return;
+    if (turn || deciding || (hasWords && playMode === "free")) return;
     playInput(CONTINUE_INPUT, messages);
+  }
+
+  function choose(choice: string) {
+    if (turn) return;
+    // The Choices go with the Turn, and focus must not fall back to the page.
+    story.current!.focus();
+    playInput(choice, messages);
+  }
+
+  function switchPlayMode() {
+    if (turn) return;
+    if (playMode === "choices") return changePlayMode("free");
+    const latest = messages.at(-1);
+    if (latest?.role === "narrator" && !latest.choices) return setOfferingChoices(true);
+    changePlayMode("choices");
+  }
+
+  async function changePlayMode(next: PlayMode) {
+    try {
+      await savePlayMode(id, next);
+      setPlayMode(next);
+      return true;
+    } catch (failure) {
+      setError((failure as Error).message);
+      return false;
+    }
   }
 
   function openStory() {
@@ -467,6 +500,7 @@ export function Play({ id }: { id: string }) {
   const portraitOf = (name?: string | null) => portraits.find(({ npc }) => npc === name);
   const latest = messages.at(-1);
   const replaceable = !turn && latest?.role === "narrator" ? latest : undefined;
+  const choosing = playMode === "choices";
   const scene = images.images.at(-1);
   const told = readable(turn?.replaces ? messages.slice(0, -1) : messages);
   const staged = chatStyle === "stage" && (told.length > 0 || !!turn);
@@ -694,19 +728,31 @@ export function Play({ id }: { id: string }) {
       )}
       {questioning && askable && <QuestionForm id={id} pc={pc} signal={leaving.current.signal} onClose={closeQuestion} onError={setError} />}
       <form className="compose" onSubmit={send}>
-        <label>
-          <span className="visually-hidden">What does {pc} say or do?</span>
-          <textarea
-            ref={inputBox}
-            rows={1}
-            placeholder={deciding ? "The Narrator is deciding…" : `What does ${pc} say or do?`}
-            defaultValue={storedDraft(id)}
-            // While deciding, the reply would overwrite anything typed.
-            readOnly={!!turn || deciding}
-            onChange={(e) => keepDraft(e.target.value)}
-            onKeyDown={sendOnEnter}
-          />
-        </label>
+        {choosing ? (
+          // Nothing to pick while a Turn writes the next ones, or before the story opens.
+          !turn &&
+          latest && (
+            <ChoiceButtons
+              choices={latest.role === "narrator" ? latest.choices : undefined}
+              onChoose={choose}
+              onRegenerate={replaceable && (() => setOfferingChoices(true))}
+            />
+          )
+        ) : (
+          <label>
+            <span className="visually-hidden">What does {pc} say or do?</span>
+            <textarea
+              ref={inputBox}
+              rows={1}
+              placeholder={deciding ? "The Narrator is deciding…" : `What does ${pc} say or do?`}
+              defaultValue={storedDraft(id)}
+              // While deciding, the reply would overwrite anything typed.
+              readOnly={!!turn || deciding}
+              onChange={(e) => keepDraft(e.target.value)}
+              onKeyDown={sendOnEnter}
+            />
+          </label>
+        )}
         <div className="compose-actions">
           <button
             ref={drawButton}
@@ -745,25 +791,40 @@ export function Play({ id }: { id: string }) {
           <button
             type="button"
             className="icon"
-            title={hasWords ? "Enhance what you wrote" : "Decide for me"}
-            aria-label={hasWords ? "Enhance" : "Decide for me"}
-            aria-disabled={!!turn || deciding}
-            onClick={decide}
+            title={choosing ? "Choices: switch to typing your own" : "Choices: pick from three after each response"}
+            aria-label="Choices"
+            aria-pressed={choosing}
+            aria-disabled={!!turn}
+            onClick={switchPlayMode}
           >
-            {DecideIcon}
+            {ChoicesIcon}
           </button>
-          {enhanced && (
-            <button type="button" className="quiet" onClick={() => setDraft(enhanced.was)}>
-              Undo
-            </button>
+          {!choosing && (
+            <>
+              <button
+                type="button"
+                className="icon"
+                title={hasWords ? "Enhance what you wrote" : "Decide for me"}
+                aria-label={hasWords ? "Enhance" : "Decide for me"}
+                aria-disabled={!!turn || deciding}
+                onClick={decide}
+              >
+                {DecideIcon}
+              </button>
+              {enhanced && (
+                <button type="button" className="quiet" onClick={() => setDraft(enhanced.was)}>
+                  Undo
+                </button>
+              )}
+              {deciding && hasWords && (
+                <span role="status" className="waiting drawing">
+                  <Quilling />
+                  Enhancing…
+                </span>
+              )}
+            </>
           )}
-          {deciding && hasWords && (
-            <span role="status" className="waiting drawing">
-              <Quilling />
-              Enhancing…
-            </span>
-          )}
-          {!hasWords && (
+          {(!hasWords || choosing) && (
             <button
               type="button"
               className="icon continue"
@@ -787,10 +848,12 @@ export function Play({ id }: { id: string }) {
               {StopIcon}
             </button>
           ) : (
-            // aria-disabled, because a disabled button would drop keyboard focus at every Send.
-            <button type="submit" className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !hasWords}>
-              {SendIcon}
-            </button>
+            !choosing && (
+              // aria-disabled, because a disabled button would drop keyboard focus at every Send.
+              <button type="submit" className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !hasWords}>
+                {SendIcon}
+              </button>
+            )
           )}
         </div>
       </form>
@@ -813,6 +876,18 @@ export function Play({ id }: { id: string }) {
           <p className="muted">To keep it and change only part, use Rewrite or Edit instead.</p>
         </ConfirmDialog>
       )}
+      {offeringChoices && (
+        <ConfirmDialog
+          title="Write this response with Choices?"
+          confirm="Regenerate"
+          onConfirm={async () => {
+            if (await changePlayMode("choices")) replace("");
+          }}
+          onClose={() => setOfferingChoices(false)}
+        >
+          <p>This response has no Choices to pick from, so the Narrator writes it again with three. The one there now is gone for good.</p>
+        </ConfirmDialog>
+      )}
       {reverting && (
         <RevertDialog
           id={id}
@@ -830,8 +905,19 @@ export function Play({ id }: { id: string }) {
             pictures.rereadJournal();
             pictures.check();
             // The button that opened the dialog goes with the Messages, and focus must not fall back to the page.
-            inputBox.current!.focus();
+            (inputBox.current ?? story.current)?.focus();
             if (input) playInput(input, kept);
+            else {
+              // Only the latest response's Choices come with the Messages, so the one reverted to needs its own.
+              getMessages(id).then(
+                (latest) => {
+                  setMessages(latest);
+                  const last = latest.at(-1);
+                  if (playMode === "choices" && last?.role === "narrator" && !last.choices) setOfferingChoices(true);
+                },
+                () => {},
+              );
+            }
           }}
         />
       )}

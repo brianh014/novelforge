@@ -17,7 +17,7 @@ import {
   resultInstruction,
   SET_SCENE_NOTE,
 } from "./prompt-assembler";
-import { type Message, type SaveStore, StaleTurn } from "./save-store";
+import { type Message, type PlayMode, type Reply, type SaveStore, StaleTurn } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, introduce, Person, type SceneMemory, type State, StateOperation } from "./state-applier";
 import { readable } from "./web/chat-style";
@@ -59,6 +59,8 @@ const FinishedTurn = z.object({
   chapter_ends: z.boolean().nullish(),
   // Without this, narration beside an invalid difficulty would pass as a finished Turn and dodge the Check.
   check: z.null().optional(),
+  // Checked by usableChoices, as a reply with bad Choices still holds a Turn worth keeping.
+  choices: z.unknown().optional(),
 });
 const NarratorResponse = z.union([z.object({ check: CheckRequest }), FinishedTurn]);
 /** The player wrote the narration of an Edit, so the reply holds only what follows from it. */
@@ -108,9 +110,27 @@ const ResponseShape = z.object({
       "true only when a Scene has just resolved and the story is about to move to a new place, a new time, or a new stage in a Plot Thread, which suggests ending the chapter here",
     ),
 });
-const responseSchema = jsonSchemaOf(ResponseShape);
+// Last, so the narration streams first. Only sent in Choices mode, and its rule is beside it, as a rule mid-prompt gets ignored.
+const ChoicesShape = ResponseShape.extend({
+  choices: z
+    .array(z.string())
+    .describe(
+      "exactly three things the PC might say or do next, each one first-person sentence of at most 25 words, built only from what the PC knows, and each taking a clearly different approach. Never hint at risk, difficulty, dice or a Check",
+    ),
+});
 // Once a Check is rolled, or none can be, the schema itself forbids one, as the prompt's "do not request another check" was ignored three times running.
-const noCheckSchema = jsonSchemaOf(ResponseShape.extend({ check: z.null() }));
+const SCHEMAS = {
+  free: { any: jsonSchemaOf(ResponseShape), noCheck: jsonSchemaOf(ResponseShape.extend({ check: z.null() })) },
+  choices: { any: jsonSchemaOf(ChoicesShape), noCheck: jsonSchemaOf(ChoicesShape.extend({ check: z.null() })) },
+};
+
+/** Three different Choices, or none if the reply hasn't that many. */
+export function usableChoices(choices: unknown) {
+  const parsed = z.array(z.string().trim().min(1)).safeParse(choices);
+  const distinct = [...new Set(parsed.data ?? [])];
+  return distinct.length >= 3 ? distinct.slice(0, 3) : undefined;
+}
+const NO_CHOICES = "no usable choices";
 
 // shortcut: a reply in another key order or after prose shows no narration until the Turn is done, loosen this only if real models do that often.
 const NARRATION_START = /^\s*(?:```(?:json)?\s*)?\{\s*"check"\s*:\s*null\s*,\s*"narration"\s*:\s*"/;
@@ -147,7 +167,8 @@ type Narrated = {
   memory: Promise<SceneMemory | null>;
   /** Left out when no new roll is allowed, which makes a Check request an invalid reply. */
   rollCheck?: (request: z.infer<typeof CheckRequest>) => Check;
-  commit: (narration: string, check: Check | undefined, advance: (state: State) => State) => Message[];
+  playMode: PlayMode;
+  commit: (narration: string, check: Check | undefined, advance: (state: State) => State, choices: string[] | undefined) => Reply[];
   /** Runs once the Turn is committed, so image work is never part of its transaction. */
   committed: (messageId: number, scene: Scene) => void;
 };
@@ -169,9 +190,11 @@ function turnPrompt(
 ) {
   const current = settings.read();
   const memoryStart = saves.memoryStart(id);
+  const save = saves.read(id);
   return {
+    playMode: save.playMode,
     prompt: assemblePrompt({
-      save: withArtStyleFor(saves.read(id), current),
+      save: withArtStyleFor(save, current),
       state,
       messages,
       memoryStart,
@@ -180,7 +203,8 @@ function turnPrompt(
       imageInstructions: current.imageInstructions,
       directions,
       input,
-      responseSchema: JSON.stringify(responseSchema),
+      // shortcut: the schema is in the cached start of the prompt, so switching Play Mode costs one uncached Turn. Move the choices rule below the cache if players switch often.
+      responseSchema: JSON.stringify(SCHEMAS[save.playMode].any),
       promptStyle: picture ? promptStyle(current) : null,
     }),
     memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, current.textRecentMessages, signal),
@@ -205,7 +229,7 @@ export async function playTurn(
   const basedOn = saves.latestMessageId(id);
   const state = saves.latestState(id);
   const messages = saves.messages(id);
-  const { prompt, memory } = turnPrompt(saves, settings, id, signal, textProvider, {
+  const { prompt, memory, playMode } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
     input,
@@ -221,7 +245,8 @@ export async function playTurn(
     memory,
     // The PC attempts nothing in a Continue, so there is nothing to roll for.
     rollCheck: mayCheck && input !== CONTINUE_INPUT ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
-    commit: (narration, check, advance) => saves.commitTurn(id, basedOn, input, narration, check, advance),
+    playMode,
+    commit: (narration, check, advance, choices) => saves.commitTurn(id, basedOn, input, narration, check, advance, choices),
     committed: (messageId, scene) => images.sceneChanged(id, messageId, scene),
   });
 }
@@ -245,7 +270,7 @@ export async function replaceResponse(
   const { input, narration, check, state, messages, sceneImage } = saves.turnToReplace(id, messageId);
   // The old picture goes with its response, so the new one always gets its own, whatever the Narrator decides.
   const hadPicture = !!sceneImage || images.sceneDrawing(id, messageId);
-  const { prompt, memory } = turnPrompt(saves, settings, id, signal, textProvider, {
+  const { prompt, memory, playMode } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
     input,
@@ -262,7 +287,8 @@ export async function replaceResponse(
     pcName: saves.read(id).pc.name,
     check,
     memory,
-    commit: (text, _check, advance) => saves.replaceTurn(id, messageId, text, advance, feedback?.trim() || undefined),
+    playMode,
+    commit: (text, _check, advance, choices) => saves.replaceTurn(id, messageId, text, advance, feedback?.trim() || undefined, choices),
     committed: (replacement, scene) => {
       images.forget(id, messageId - 1, kind);
       // shortcut: a Narrator that writes no prompt gets the old one, which shows the old moment and draws with no portraits. Retry the reply if real models do this.
@@ -285,7 +311,7 @@ export async function editResponse(
   emit: TurnEvents = () => {},
 ) {
   const { input, state, messages } = saves.turnToReplace(id, messageId);
-  const { prompt, memory } = turnPrompt(saves, settings, id, signal, textProvider, {
+  const { prompt, memory, playMode } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
     input,
@@ -300,7 +326,8 @@ export async function editResponse(
     pcName: saves.read(id).pc.name,
     narration: text,
     memory,
-    commit: (narration, _check, advance) => saves.editTurn(id, messageId, narration, advance),
+    playMode,
+    commit: (narration, _check, advance, choices) => saves.editTurn(id, messageId, narration, advance, choices),
     // Only portraits for anyone new, as the Scene Image stays.
     committed: (edited, scene) => images.sceneChanged(id, edited, { ...scene, changed: false }),
   });
@@ -310,8 +337,9 @@ async function narrate(
   textProvider: TextProvider,
   signal: AbortSignal,
   emit: TurnEvents,
-  { kind, prompt, input, refusal, pcName, narration: edited, check: storedCheck, memory: pendingMemory, rollCheck, commit, committed }: Narrated,
+  { kind, prompt, input, refusal, pcName, narration: edited, check: storedCheck, memory: pendingMemory, rollCheck, playMode, commit, committed }: Narrated,
 ) {
+  const schemas = SCHEMAS[playMode];
   // Kept across attempts, so an invalid reply can never change the outcome.
   let check = storedCheck;
   let narrationSent = 0;
@@ -335,7 +363,7 @@ async function narrate(
       const reply = await askNarrator(
         textProvider,
         [...prompt, ...(check ? [resultInstruction(check)] : []), ...(unplacedBefore ? [SET_SCENE_NOTE] : [])],
-        { schema: check || !rollCheck ? noCheckSchema : responseSchema, onText, onGeneration: (id) => (generation = id), signal },
+        { schema: check || !rollCheck ? schemas.noCheck : schemas.any, onText, onGeneration: (id) => (generation = id), signal },
         input,
         refusal,
       );
@@ -352,11 +380,15 @@ async function narrate(
       // A picture without set_scene takes the last location as its caption and its previous image as a reference.
       const unplaced = scene_changed && !state_operations.some(({ op }) => op === "set_scene") ? "a picture without set_scene" : undefined;
       const spoken = edited === undefined ? spokenLineFault(narration) : undefined;
+      const choices = playMode === "choices" ? usableChoices(response.choices) : undefined;
+      const unchosen = playMode === "choices" && !choices ? NO_CHOICES : undefined;
       // A long speech is only logged, as rewriting it restarted too many Turns the player could see.
-      const fault = attempt < MAX_ATTEMPTS ? (unplaced ?? (spoken === LONG_SPEECH ? undefined : spoken)) : undefined;
+      const fault = attempt < MAX_ATTEMPTS ? (unplaced ?? (spoken === LONG_SPEECH ? undefined : spoken) ?? unchosen) : undefined;
       unplacedBefore = fault === unplaced && !!unplaced;
       if (fault) throw new InvalidResponse(undefined, { cause: fault });
       if (spoken === LONG_SPEECH) log.warning("turn", "Long speech kept", { attempt, generation });
+      // The player picks again from a Regenerate, or switches to Free Text.
+      if (unchosen) log.warning("turn", "Turn kept without Choices", { attempt, generation });
       const memory = await pendingMemory;
       let moved = false;
       let location = "";
@@ -366,25 +398,30 @@ async function narrate(
       let restyled: Scene["restyled"] = [];
       let repeated = 0;
       let ignored: Refusal[] = [];
-      const messages = commit(narration, check, (state) => {
-        const introduced = introduce(state, people, pcName, state_operations);
-        const { next, refused, ignored: harmless, repeats } = applyOperations(introduced.state, introduced.operations);
-        // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
-        if (refused.length > 0) throw new InvalidResponse(undefined, { cause: refused });
-        repeated = repeats;
-        ignored = harmless;
-        if (summary.trim()) next.summary = summary.trim();
-        if (recent_summary?.trim()) next.recentSummary = recent_summary.trim();
-        if (memory) next.sceneMemories.push(memory);
-        next.chapterReady = !!chapter_ends;
-        moved = movedScene(state, next);
-        location = next.scene.location;
-        npcs = next.npcs;
-        wearing = next.inventory.wearing;
-        portraits = portraitsDue(state, next);
-        restyled = restyledBy(state, next);
-        return next;
-      });
+      const messages = commit(
+        narration,
+        check,
+        (state) => {
+          const introduced = introduce(state, people, pcName, state_operations);
+          const { next, refused, ignored: harmless, repeats } = applyOperations(introduced.state, introduced.operations);
+          // Dropping one would leave narration that disagrees with the state, so the whole Turn is invalid.
+          if (refused.length > 0) throw new InvalidResponse(undefined, { cause: refused });
+          repeated = repeats;
+          ignored = harmless;
+          if (summary.trim()) next.summary = summary.trim();
+          if (recent_summary?.trim()) next.recentSummary = recent_summary.trim();
+          if (memory) next.sceneMemories.push(memory);
+          next.chapterReady = !!chapter_ends;
+          moved = movedScene(state, next);
+          location = next.scene.location;
+          npcs = next.npcs;
+          wearing = next.inventory.wearing;
+          portraits = portraitsDue(state, next);
+          restyled = restyledBy(state, next);
+          return next;
+        },
+        choices,
+      );
       // The Turn is saved by now, so image trouble must not report it failed, or the player would send it again.
       try {
         committed(messages.at(-1)!.id, {
@@ -452,6 +489,7 @@ function whyInvalid({ cause }: InvalidResponse) {
 function playerReason({ cause }: InvalidResponse) {
   if (cause === "a speaker tag without its [") return "A spoken line in the last reply was missing its speaker";
   if (cause === "a picture without set_scene") return "The last reply moved to a new scene without saying where";
+  if (cause === NO_CHOICES) return "The last reply offered no choices";
   if (Array.isArray(cause)) return "The last reply changed the story in a way that doesn't fit what's already true";
   if (cause === undefined) return "The last reply asked for a second dice roll";
   return "The last reply came back garbled";

@@ -13,13 +13,16 @@ import {
   getTextHosts,
   getTextModels,
   OPENROUTER_URL,
+  type PlayMode,
   saveArtStyle,
+  savePlayMode,
   saveSettings,
   type Settings,
   type TextHost,
   type TextTest,
 } from "./api";
 import { BookTabs, MenuRibbon, Sheet } from "./menu";
+import { PlayModePicker } from "./play-choices";
 
 const SECTIONS = ["Text", "Images", "Reading", "Advanced"];
 
@@ -107,6 +110,36 @@ function ArtStyle({ id }: { id: string }) {
       {feedback}
       <button type="submit" className="action" aria-disabled={busy}>
         Save Art Style
+      </button>
+    </form>
+  );
+}
+
+function PlayModeSetting({ id }: { id: string }) {
+  const [playMode, setPlayMode] = useState<PlayMode>();
+  const { busy, submit, feedback } = useSubmit(async () => {
+    await savePlayMode(id, playMode!);
+    return "Play Mode saved.";
+  });
+
+  useEffect(() => {
+    // ArtStyle shows a failure to load, which this shares.
+    getSave(id).then(
+      (save) => setPlayMode(save.playMode),
+      () => {},
+    );
+  }, [id]);
+
+  if (playMode === undefined) return null;
+  return (
+    <form className="fields" onSubmit={submit}>
+      <PlayModePicker value={playMode} onChange={setPlayMode} />
+      <p className="muted">
+        This Save only. A response written in Free Text has no Choices: Regenerate it, or switch with the button by the story's text box, which offers to.
+      </p>
+      {feedback}
+      <button type="submit" className="action" aria-disabled={busy}>
+        Save Play Mode
       </button>
     </form>
   );
@@ -1174,6 +1207,7 @@ export function SettingsScreen({ id }: { id?: string }) {
       {id && (
         <div hidden={section !== THIS_STORY}>
           <ArtStyle key={id} id={id} />
+          <PlayModeSetting key={`${id}-play`} id={id} />
         </div>
       )}
       {content}

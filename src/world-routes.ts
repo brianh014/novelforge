@@ -18,7 +18,7 @@ import {
 import { coverPeople, type EarlyImage, type ImageKind, pcLooks, shownFailure, unnamed } from "./image-pipeline";
 import { LONG_TEXT } from "./limits";
 import { errorType, log } from "./logger";
-import { OPENING_SNAPSHOT, PcDetails } from "./save-store";
+import { OPENING_SNAPSHOT, PcDetails, PlayMode } from "./save-store";
 import type { State, World } from "./state-applier";
 import { ENHANCE_FIELDS, enhance, generateWorld, PC_FIELDS, pcSheet, pickForMe, type PictureAsk, type WorldChoices, type WorldPc } from "./world-creation";
 
@@ -98,6 +98,9 @@ const DrawRequest = z.discriminatedUnion("kind", [
 ]);
 
 const PcBoxes = z.record(z.enum(PC_FIELDS), longText);
+
+// The Play Mode is picked on the last step, so the world holds none.
+const BeginRequest = ArtStyleRequest.extend({ playMode: PlayMode.default("free") });
 
 const PickRequest = z.object({
   theme: z.string().trim().min(1),
@@ -339,13 +342,13 @@ export function worldRoutes({ options, saves, images }: ServerContext) {
     },
     "/worlds/:id/begin": {
       POST: async (req) => {
-        const { artStyle } = await parseBody(req, ArtStyleRequest);
+        const { artStyle, playMode } = await parseBody(req, BeginRequest);
         const world = worlds.get(req.params.id);
         if (!world) throw new WorldNotFound();
         const { title, theme, worldBrief, startingHook, pc, worldBible, worldRules, plotThreads, storyTime, sheet, characters = [], pcOnCover = true } = world;
         const opening = { worldBible, worldRules, plotThreads, storyTime, ...sheet };
         const importantCharacters = characters.map(({ name, description, onCover = true }) => ({ name, description, onCover }));
-        const id = saves.create({ title, theme, worldBrief, startingHook, pc, artStyle, importantCharacters, pcOnCover, opening });
+        const id = saves.create({ title, theme, worldBrief, startingHook, pc, artStyle, importantCharacters, pcOnCover, playMode, opening });
         worlds.delete(req.params.id);
         const taken = (image: string) => heldOf(req.params.id, image)?.drawn;
         images.saveCreated(id, taken("portrait"));

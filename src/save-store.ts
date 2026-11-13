@@ -320,6 +320,15 @@ const toVersion23 = (db: Database) => {
   if (!hasColumn(db, "save", "pc_on_cover")) db.run("ALTER TABLE save ADD COLUMN pc_on_cover INTEGER NOT NULL DEFAULT 1");
 };
 
+/**
+ * The Play Mode, a column like the Art Style, as a Revert must not undo a choice about how the player goes on, and each
+ * Narrator Message's Choices, NULL for one written in Free Text.
+ */
+const toVersion24 = (db: Database) => {
+  if (!hasColumn(db, "save", "play_mode")) db.run("ALTER TABLE save ADD COLUMN play_mode TEXT NOT NULL DEFAULT 'free'");
+  if (!hasColumn(db, "messages", "choices")) db.run("ALTER TABLE messages ADD COLUMN choices TEXT");
+};
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
 const MIGRATIONS = [
   toVersion1,
@@ -345,6 +354,7 @@ const MIGRATIONS = [
   toVersion21,
   toVersion22,
   toVersion23,
+  toVersion24,
 ];
 
 function schemaVersion(db: Database) {
@@ -370,7 +380,7 @@ const NOT_A_SAVE = "This file isn't a valid Save.";
 /** Every column that can hold a name, which a rename rewrites. The PC's name is left alone, as only NPCs are renamed. */
 const RENAMED: [string, string[]][] = [
   ["save", ["world_brief", "starting_hook", "title", "pc_details", "pending_notes", "pending_edits", "important_characters"]],
-  ["messages", ["text", "edits", "direction"]],
+  ["messages", ["text", "edits", "direction", "choices"]],
   ["sections", ["content"]],
   ["scene_images", ["caption", "prompt", "pictured"]],
   ["requested_images", ["caption", "prompt", "pictured"]],
@@ -446,6 +456,7 @@ function assertValidSave(db: Database) {
     memory_start: rowId,
     important_characters: jsonText(z.array(z.object({ name: z.string(), description: z.string(), onCover: z.boolean() })).max(10)).nullable(),
     pc_on_cover: z.union([z.literal(0), z.literal(1)]),
+    play_mode: PlayMode,
   });
   const messages = rowsOf(db, "messages", {
     id: rowId.positive(),
@@ -455,6 +466,7 @@ function assertValidSave(db: Database) {
     edits: jsonText(z.array(WorldEdit)).nullable(),
     direction: z.string().nullable(),
     created_at: z.iso.datetime().nullable(),
+    choices: jsonText(Choices).nullable(),
   });
   const content = new Map(rowsOf(db, "sections", { id: rowId, content: z.string() }).map((section) => [section.id, section.content]));
   const links = rowsOf(db, "snapshot_sections", { message_id: rowId, name: z.string(), section_id: rowId });
@@ -529,6 +541,14 @@ function copyRows(from: Database, to: Database) {
 
 export type SaveStore = ReturnType<typeof saveStore>;
 export type Message = { id: number; role: "player" | "narrator"; text: string };
+export const PlayMode = z.enum(["free", "choices"]);
+export type PlayMode = z.infer<typeof PlayMode>;
+export const Choices = z.array(z.string()).length(3);
+/** A Message as a Turn returns it, with the Choices a response offers in Choices mode. */
+export type Reply = Message & { choices?: string[] };
+type ChoicesRow = Message & { choices: string | null };
+const withChoices = ({ choices, ...message }: ChoicesRow): Reply => ({ ...message, ...(choices !== null && { choices: JSON.parse(choices) as string[] }) });
+const choicesText = (choices?: string[]) => (choices ? JSON.stringify(choices) : null);
 
 /** The latest Turn, if its Narrator Message is still `messageId`, so a page behind the story can't replace what it never showed. */
 function latestTurn(db: Database, messageId: number) {
@@ -588,6 +608,7 @@ export function saveStore(savesDir: string) {
       theme = "",
       importantCharacters,
       pcOnCover = true,
+      playMode = "free",
       opening,
     }: Save & {
       artStyle?: string;
@@ -596,6 +617,7 @@ export function saveStore(savesDir: string) {
       theme?: string;
       importantCharacters?: ImportantCharacter[];
       pcOnCover?: boolean;
+      playMode?: PlayMode;
       opening?: Partial<State>;
     }) {
       const id = crypto.randomUUID();
@@ -604,7 +626,7 @@ export function saveStore(savesDir: string) {
         using db = connect(unfinishedPath);
         const { name, ...details } = pc;
         db.run(
-          "INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details, title, theme, important_characters, pc_on_cover) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO save (id, world_brief, pc_name, art_style, starting_hook, pc_details, title, theme, important_characters, pc_on_cover, play_mode) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             worldBrief,
             name,
@@ -615,6 +637,7 @@ export function saveStore(savesDir: string) {
             theme,
             importantCharacters ? JSON.stringify(importantCharacters) : null,
             pcOnCover ? 1 : 0,
+            playMode,
           ],
         );
         // No Message has this Snapshot yet, and the file isn't a Save until the rename below.
@@ -663,6 +686,7 @@ export function saveStore(savesDir: string) {
       coverRedraws: number;
       importantCharacters?: ImportantCharacter[];
       pcOnCover: boolean;
+      playMode: PlayMode;
     } {
       using db = open(id);
       const save = db
@@ -676,9 +700,10 @@ export function saveStore(savesDir: string) {
             theme: string;
             important_characters: string | null;
             pc_on_cover: number;
+            play_mode: PlayMode;
           },
           []
-        >("SELECT pc_name, art_style, starting_hook, pc_details, title, theme, important_characters, pc_on_cover FROM save")
+        >("SELECT pc_name, art_style, starting_hook, pc_details, title, theme, important_characters, pc_on_cover, play_mode FROM save")
         .get()!;
       return {
         worldBrief: currentState(db).worldBrief,
@@ -689,6 +714,7 @@ export function saveStore(savesDir: string) {
         theme: save.theme,
         ...(save.important_characters !== null && { importantCharacters: JSON.parse(save.important_characters) as ImportantCharacter[] }),
         pcOnCover: save.pc_on_cover === 1,
+        playMode: save.play_mode,
         hasCover: db.query("SELECT 1 FROM cover").get() !== null,
         coverRedraws: db.query<{ redraws: number }, []>("SELECT redraws FROM cover").get()?.redraws ?? 0,
       };
@@ -713,6 +739,18 @@ export function saveStore(savesDir: string) {
     setArtStyle(id: string, artStyle: string) {
       using db = open(id);
       db.run("UPDATE save SET art_style = ?", [artStyle]);
+    },
+
+    setPlayMode(id: string, playMode: PlayMode) {
+      using db = open(id);
+      db.run("UPDATE save SET play_mode = ?", [playMode]);
+    },
+
+    /** The latest Message's Choices, if it is a response that has some. */
+    latestChoices(id: string) {
+      using db = open(id);
+      const latest = db.query<ChoicesRow, []>("SELECT id, role, text, choices FROM messages ORDER BY id DESC LIMIT 1").get();
+      return latest ? withChoices(latest).choices : undefined;
     },
 
     messages(id: string) {
@@ -1019,19 +1057,27 @@ export function saveStore(savesDir: string) {
     },
 
     /** `advance` runs inside the transaction, so it always sees the latest state. */
-    commitTurn(id: string, basedOn: number, input: string, narration: string, check: Check | undefined, advance: (state: State) => State) {
+    commitTurn(
+      id: string,
+      basedOn: number,
+      input: string,
+      narration: string,
+      check: Check | undefined,
+      advance: (state: State) => State,
+      choices?: string[],
+    ): Reply[] {
       using db = open(id);
-      const insert = db.query<Message, [Message["role"], string, string | null]>(
-        `INSERT INTO messages (role, text, hidden_check, created_at) VALUES (?, ?, ?, ${NOW}) RETURNING id, role, text`,
+      const insert = db.query<ChoicesRow, [Message["role"], string, string | null, string | null]>(
+        `INSERT INTO messages (role, text, hidden_check, choices, created_at) VALUES (?, ?, ?, ?, ${NOW}) RETURNING id, role, text, choices`,
       );
       return db.transaction(() => {
         // Message ids are never reused, so any Revert or other Turn since `basedOn` is caught here.
         if (latestMessage(db) !== basedOn) throw new StaleTurn();
         const state = sealChapter(currentState(db), basedOn);
-        const player = insert.get("player", input, null)!;
+        const player = withChoices(insert.get("player", input, null, null)!);
         writeSnapshot(db, player.id, state);
         clearPending(db);
-        const narrator = insert.get("narrator", narration, check ? JSON.stringify(check) : null)!;
+        const narrator = withChoices(insert.get("narrator", narration, check ? JSON.stringify(check) : null, choicesText(choices))!);
         writeSnapshot(db, narrator.id, advance(state));
         return [player, narrator];
       })();
@@ -1118,34 +1164,36 @@ export function saveStore(savesDir: string) {
      * Turn or replacement in flight from the old response is caught as stale.
      */
     /** In place, so the Message keeps its id and with it its Scene Image, Requested Images and portraits. */
-    editTurn(id: string, messageId: number, narration: string, advance: (state: State) => State) {
+    editTurn(id: string, messageId: number, narration: string, advance: (state: State) => State, choices?: string[]): Reply[] {
       using db = open(id);
       return db.transaction(() => {
         const { state, edits } = latestTurn(db, messageId);
         const edited = db
-          .query<Message, [string, string | null, number]>("UPDATE messages SET text = ?, edits = ? WHERE id = ? RETURNING id, role, text")
-          .get(narration, edits.length > 0 ? JSON.stringify(edits) : null, messageId)!;
+          .query<ChoicesRow, [string, string | null, string | null, number]>(
+            "UPDATE messages SET text = ?, edits = ?, choices = ? WHERE id = ? RETURNING id, role, text, choices",
+          )
+          .get(narration, edits.length > 0 ? JSON.stringify(edits) : null, choicesText(choices), messageId)!;
         db.run("DELETE FROM snapshot_sections WHERE message_id = ?", [messageId]);
         writeSnapshot(db, messageId, advance(state));
         sweepSections(db);
         clearPending(db);
-        return [edited];
+        return [withChoices(edited)];
       })();
     },
 
     /** A Rewrite's `direction` replaces the old response's, and a Regenerate keeps it. */
-    replaceTurn(id: string, messageId: number, narration: string, advance: (state: State) => State, direction?: string) {
+    replaceTurn(id: string, messageId: number, narration: string, advance: (state: State) => State, direction?: string, choices?: string[]): Reply[] {
       using db = open(id);
       return db.transaction(() => {
         const { narrator, player, state, edits } = latestTurn(db, messageId);
         deleteAfter(db, player.id);
         const replacement = db
-          .query<Message, [string, string | null, string | null, string | null]>(
-            `INSERT INTO messages (role, text, hidden_check, edits, direction, created_at) VALUES ('narrator', ?, ?, ?, ?, ${NOW}) RETURNING id, role, text`,
+          .query<ChoicesRow, [string, string | null, string | null, string | null, string | null]>(
+            `INSERT INTO messages (role, text, hidden_check, edits, direction, choices, created_at) VALUES ('narrator', ?, ?, ?, ?, ?, ${NOW}) RETURNING id, role, text, choices`,
           )
-          .get(narration, narrator.hidden_check, edits.length > 0 ? JSON.stringify(edits) : null, direction ?? narrator.direction)!;
+          .get(narration, narrator.hidden_check, edits.length > 0 ? JSON.stringify(edits) : null, direction ?? narrator.direction, choicesText(choices))!;
         writeSnapshot(db, replacement.id, advance(state));
-        return [replacement];
+        return [withChoices(replacement)];
       })();
     },
   };
