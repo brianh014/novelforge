@@ -1,6 +1,6 @@
 {
   "name": "novelforge",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "A choose-your-own visual novel, written as you play, by a text model you connect.",
   "license": "AGPL-3.0-only",
   "repository": {
@@ -13,6 +13,7 @@
     "start": "bun scripts/launch.ts",
     "install-launcher": "bun scripts/install-launcher.ts",
     "release": "bun scripts/build-release.ts",
+    "publish-release": "bun scripts/publish-release.ts",
     "build": "bun build src/main.ts --compile --production --outfile dist/novelforge",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

@@ -42,7 +42,7 @@ bun src/main.ts --fake --open
 | `PORT` | The port to listen on (default `4600`). |
 | `HOST` | The address to listen on (default `0.0.0.0` for a server, `127.0.0.1` for the app). |
 
-`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. Pushing a tag such as `v0.1.0-alpha.1`, matching `package.json`'s version, builds them on Gitea and publishes a release; a tag with a hyphen is a pre-release.
+`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a Gitea release, using a Gitea access token in `GITEA_TOKEN`; a version with a hyphen, such as `0.1.0-alpha.2`, is a pre-release.
 
 > **A server on the network has no accounts.** Anyone who can reach it can play, change Settings and spend your saved keys. Keep it on a network you trust, or set `HOST=127.0.0.1`.
 
