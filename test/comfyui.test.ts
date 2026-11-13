@@ -183,6 +183,28 @@ test("the image key never reaches ComfyUI", async () => {
   expect(comfy.requests.every(({ authorization }) => authorization === null)).toBe(true);
 });
 
+test("with Free GPU memory on, ComfyUI is asked to unload its models after a picture", async () => {
+  const running = play(newScene());
+  await running.patch("/settings", { ...sdSetup(), comfyFreeMemory: true });
+  const id = await running.createSave();
+
+  await playTurn(id);
+  await settled(id);
+
+  await until(() => comfy.requests.some(({ path }) => path === "/free"));
+});
+
+test("with Free GPU memory off, ComfyUI keeps its models", async () => {
+  const running = play(newScene());
+  await running.patch("/settings", sdSetup());
+  const id = await running.createSave();
+
+  await playTurn(id);
+  await settled(id);
+
+  expect(comfy.requests.map(({ path }) => path)).not.toContain("/free");
+});
+
 test("the next SD scene in the same place draws afresh, uploading no earlier picture", async () => {
   const running = play(newScene("One"), newScene("Two"));
   await running.patch("/settings", sdSetup());
