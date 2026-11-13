@@ -1,6 +1,6 @@
 // Tries the Menu's Install on this computer, with no GitHub: builds this code as an "old" 0.0.1 copy and as the new
 // version, serves a stand-in release of the new one, and starts the old one with --fake on port 4660. Choose Install
-// on its Menu, and it should come back as the new version. Ctrl+C stops both.
+// in its notice, and it should come back as the new version. Ctrl+C stops both.
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { downloadName } from "../src/updater";

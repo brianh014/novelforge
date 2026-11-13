@@ -6,6 +6,7 @@ import { Journal } from "./journal";
 import { LoadStory } from "./load";
 import { getSettings, reportEvent, stillHere } from "./api";
 import { Menu } from "./menu";
+import { NewVersionToast } from "./new-version";
 import { Play } from "./play";
 import { applyLook, SettingsScreen } from "./settings";
 import { NewStory } from "./wizard";
@@ -45,4 +46,9 @@ getSettings().then(
 window.addEventListener("error", ({ lineno, colno }) => reportEvent("page-error", { line: lineno, column: colno }));
 window.addEventListener("unhandledrejection", () => reportEvent("page-error"));
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <>
+    <App />
+    <NewVersionToast />
+  </>,
+);

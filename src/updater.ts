@@ -112,8 +112,9 @@ export function removeReplacedPrograms() {
 export function updater(latestRelease = LATEST_RELEASE) {
   let checked: { at: number; release?: Release; failed?: boolean } | undefined;
 
-  async function latest() {
-    if (checked && Date.now() - checked.at < (checked.failed ? RETRY_FAILED_CHECK_MS : CHECK_EVERY_MS)) return checked.release;
+  /** `fresh` skips the wait between checks, for a player who asks. */
+  async function latest(fresh = false) {
+    if (!fresh && checked && Date.now() - checked.at < (checked.failed ? RETRY_FAILED_CHECK_MS : CHECK_EVERY_MS)) return checked.release;
     try {
       const response = await fetch(latestRelease, { headers: HEADERS, signal: AbortSignal.timeout(10_000) });
       // 404 is a repository with no release yet.
@@ -126,18 +127,19 @@ export function updater(latestRelease = LATEST_RELEASE) {
     return checked.release;
   }
 
-  async function newer() {
-    const release = await latest();
+  async function newer(fresh = false) {
+    const release = await latest(fresh);
     return release && isNewer(release.tag_name.slice(1), VERSION) ? release : undefined;
   }
 
   const download = (release: Release) => isCompiled && release.assets.find(({ name }) => name === downloadName());
 
   return {
-    async status() {
-      const release = await newer();
+    async status(fresh = false) {
+      const release = await newer(fresh);
       return {
         version: VERSION,
+        failed: !!checked?.failed,
         latest: release && { version: release.tag_name.slice(1), url: release.html_url, notes: (release.body ?? "").slice(0, 4000) },
         installable: !!release && !!download(release),
       };

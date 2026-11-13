@@ -153,7 +153,7 @@ How the Story shows Messages: Script, Prose, Bubbles or Stage box. It never chan
 One line of a Message, spoken or not, and what a Stage box shows at a time.
 
 **New Version**:
-A newer full release of NovelForge on GitHub, which the Menu offers and Install puts in place of the running program, which then restarts. Pre-releases are never offered.
+A newer full release of NovelForge on GitHub, which a toast on every screen and Settings → Updates offer, and Install puts in place of the running program, which then restarts. Pre-releases are never offered.
 _Avoid_: Update (that redraws a Cover or portrait)
 
 **Reader's Guide**:

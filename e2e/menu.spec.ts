@@ -11,7 +11,9 @@ test("the Reader's Guide opens from the Menu, and each section keeps its place i
   await expect(page.getByRole("heading", { name: "Changing the story" })).toBeVisible();
 });
 
-test("a new version is offered on the Menu, and Install reloads the page once the server answers as it", async ({ page }) => {
+const NEW = { version: "9.0.0", url: "https://github.com/brianh014/novelforge/releases/tag/v9.0.0", notes: "" };
+
+test("a new version's toast shows on any screen, and Install reloads the page once the server answers as it", async ({ page }) => {
   let installed = false;
   await page.route("**/update", (route) => {
     if (route.request().method() === "POST") {
@@ -19,18 +21,45 @@ test("a new version is offered on the Menu, and Install reloads the page once th
       return route.fulfill({ status: 202, json: { version: "9.0.0" } });
     }
     return route.fulfill({
-      json: installed
-        ? { version: "9.0.0", installable: false }
-        : { version: "0.1.0", latest: { version: "9.0.0", url: "https://github.com/brianh014/novelforge/releases/tag/v9.0.0", notes: "" }, installable: true },
+      json: installed ? { version: "9.0.0", failed: false, installable: false } : { version: "0.1.0", failed: false, latest: NEW, installable: true },
     });
   });
-  await page.goto("/");
-  await expect(page.getByText("NovelForge 9.0.0 is out.")).toBeVisible();
-  await expect(page.getByText("Version 0.1.0")).toBeVisible();
+  await page.goto("/#/load");
+  const toast = page.getByRole("complementary", { name: "New version" });
+  await expect(toast).toContainText("NovelForge 9.0.0 is out.");
 
-  await page.getByRole("button", { name: "Install" }).click();
+  await toast.getByRole("button", { name: "Install" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Install" }).click();
 
-  await expect(page.getByText("Version 9.0.0")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("is out.")).toHaveCount(0);
+  await expect(toast).toHaveCount(0, { timeout: 10_000 });
+  await page.goto("/");
+  await expect(page.getByText("Version 9.0.0")).toBeVisible();
+});
+
+test("a dismissed toast stays away for that version", async ({ page }) => {
+  await page.route("**/update", (route) => route.fulfill({ json: { version: "0.1.0", failed: false, latest: NEW, installable: true } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Dismiss the new version" }).click();
+  await page.reload();
+  await expect(page.getByText("Version 0.1.0")).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "New version" })).toHaveCount(0);
+});
+
+test("Settings → Updates checks GitHub on request and offers what it finds", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("novelforge-dismissed-version", "9.0.0"));
+  let fresh = false;
+  await page.route("**/update*", (route) => {
+    fresh ||= new URL(route.request().url()).searchParams.get("fresh") === "1";
+    return route.fulfill({
+      json: fresh ? { version: "0.1.0", failed: false, latest: NEW, installable: true } : { version: "0.1.0", failed: false, installable: false },
+    });
+  });
+  await page.goto("/#/settings");
+  await page.getByRole("button", { name: "Updates" }).click();
+  await expect(page.getByText("It's the newest version.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save settings" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Check now" }).click();
+  await expect(page.getByText("NovelForge 9.0.0 is out.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Install" })).toBeVisible();
 });

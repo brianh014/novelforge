@@ -86,7 +86,7 @@ sudo systemctl enable --now novelforge
 
 ### Updating
 
-When a new version is out, the Menu says so. Choose **Install**, and NovelForge downloads it, restarts and comes back to the Menu, on every system and for the Server too. Your Saves and Settings stay as they are, and if the new version fails to start, the old one comes back. To check, NovelForge asks GitHub for the newest release now and then; nothing else is sent.
+When a new version is out, a notice at the top of the screen says so, and **Settings → Updates** can check at any time. Choose **Install**, and NovelForge downloads it, restarts and comes back to the same page, on every system and for the Server too. Your Saves and Settings stay as they are, and if the new version fails to start, the old one comes back. To check, NovelForge asks GitHub for the newest release every few hours; nothing else is sent.
 
 You can also update by hand: download the new version and unpack it over the old one, with NovelForge closed (on a Mac, replace `NovelForge.app` in Applications).
 
@@ -120,7 +120,7 @@ bun src/main.ts --fake --open
 | `PORT` | The port to listen on (default `4600`). |
 | `HOST` | The address to listen on (default `0.0.0.0` for a server, `127.0.0.1` for the app). |
 
-`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a GitHub release with the [GitHub CLI](https://cli.github.com) (`gh`), signed in as you; a version with a hyphen, such as `0.2.0-alpha.1`, is a pre-release, which the Menu's Install skips. `bun run try-update` tries Install before a release: it builds this code as an old 0.0.1 copy and as the new version, and starts the old one with `--fake` on port 4660 against a stand-in release, so choosing Install on its Menu brings it back as the new version.
+`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a GitHub release with the [GitHub CLI](https://cli.github.com) (`gh`), signed in as you; a version with a hyphen, such as `0.2.0-alpha.1`, is a pre-release, which the Menu's Install skips. `bun run try-update` tries Install before a release: it builds this code as an old 0.0.1 copy and as the new version, and starts the old one with `--fake` on port 4660 against a stand-in release, so choosing Install brings it back as the new version.
 
 > **A server on the network has no accounts.** Anyone who can reach it can play, change Settings and spend your saved keys. Keep it on a network you trust, or set `HOST=127.0.0.1`.
 

@@ -22,6 +22,7 @@ import {
   type TextTest,
 } from "./api";
 import { BookTabs, MenuRibbon, Sheet } from "./menu";
+import { UpdatesSection } from "./new-version";
 import { PlayModePicker } from "./play-choices";
 
 const SECTIONS = ["Text", "Images", "Reading", "Advanced"];
@@ -38,6 +39,8 @@ const RESOLUTIONS = [
   ["2mp", "2 MP (1408 × 1408 portrait, 1872 × 1056 scene)"],
 ] as const;
 const THIS_STORY = "This story";
+/** Not a setting, so outside the form and its Save. */
+const UPDATES = "Updates";
 
 export const applyLook = ({ fontSize, theme }: Settings) => {
   document.documentElement.dataset.fontSize = fontSize;
@@ -1157,7 +1160,7 @@ function InstallSettings({
         </p>
       </div>
     </form>,
-    section !== THIS_STORY && (
+    section !== THIS_STORY && section !== UPDATES && (
       <>
         {feedback}
         <div className="row">
@@ -1188,7 +1191,7 @@ export function SettingsScreen({ id }: { id?: string }) {
         <>
           <h1 className="big">Settings</h1>
           <nav aria-label="Settings sections">
-            {[...(id ? [THIS_STORY] : []), ...SECTIONS].map((name) => (
+            {[...(id ? [THIS_STORY] : []), ...SECTIONS, UPDATES].map((name) => (
               <button key={name} type="button" aria-current={name === section || undefined} onClick={() => setSection(name)}>
                 {name}
               </button>
@@ -1210,6 +1213,7 @@ export function SettingsScreen({ id }: { id?: string }) {
           <ArtStyle key={id} id={id} />
         </div>
       )}
+      {section === UPDATES && <UpdatesSection />}
       {content}
     </Sheet>
   );

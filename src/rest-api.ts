@@ -39,6 +39,9 @@ const PageEvent = z.strictObject({
 
 const MOST_PAGE_EVENT_BYTES = 1024;
 
+/** `?fresh=1` asks GitHub now, rather than within the last few hours. */
+const UpdateCheck = z.strictObject({ fresh: z.literal("1").optional() });
+
 /** Stops reading at the cap, as a Save's import needs the server's own limit to be huge. */
 async function cappedBody(req: Request) {
   let bytes = 0;
@@ -121,7 +124,7 @@ export function startServer(options: ServerOptions) {
         },
         // A new version: whether there is one, and installing it, which restarts the server once this answer is sent.
         "/update": {
-          GET: async () => Response.json(await updates.status()),
+          GET: async (req) => Response.json(await updates.status(UpdateCheck.parse(Object.fromEntries(new URL(req.url).searchParams)).fresh === "1")),
           POST: async (req) => {
             await parseBody(req, NoFields);
             if (turns.busy() || images.busy()) return Response.json({ error: "Wait for the story and its pictures to finish, then update." }, { status: 409 });

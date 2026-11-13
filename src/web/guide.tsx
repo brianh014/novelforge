@@ -406,7 +406,10 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           </li>
         </ul>
         <h3>This Story</h3>
-        <p>How you play this story, Free Text or Choices, and its Art Style.</p>
+        <p>How you play this story, Free Text or Choices, and its Art Style.</p> <h3>Updates</h3>
+        <p>
+          The version you have, <b>Check now</b> to look for a new one, and <b>Install</b> when there is one. See {link("updates", "Updates")}.
+        </p>
         <h3>Advanced</h3>
         <p>
           <b>Log Level</b>: how much goes in the log in the <code>logs</code> folder. Raise it to Verbose to trace a problem. The log never holds your story's
@@ -440,12 +443,13 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
     body: (
       <>
         <p>
-          When a new version is out, the Menu says so. Press <b>Install</b>: NovelForge downloads it, restarts and comes back to the Menu. Your stories and
-          Settings stay as they are. If the new version won't start, the old one comes back.
+          When a new version is out, a notice says so at the top of whatever screen you're on. Press <b>Install</b>: NovelForge downloads it, restarts and comes
+          back to the same page. Your stories and Settings stay as they are. If the new version won't start, the old one comes back. Press × to put it off, and
+          the notice stays away until the next version.
         </p>
         <p>
-          To check, NovelForge asks GitHub for the newest release now and then. That is the only thing it sends anywhere besides your AI. The Menu shows the
-          version you have at the bottom.
+          To check, NovelForge asks GitHub for the newest release every few hours. That is the only thing it sends anywhere besides your AI.{" "}
+          <b>Settings → Updates</b> shows the version you have, checks at once with <b>Check now</b>, and offers Install too.
         </p>
         <p>
           If you run NovelForge from its source code, update with <code>git pull</code> and <code>bun install</code> instead.

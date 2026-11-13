@@ -2866,16 +2866,6 @@ dialog blockquote {
   margin-top: 12px;
 }
 
-.new-version {
-  display: grid;
-  gap: 8px;
-  justify-items: start;
-}
-
-.new-version p {
-  margin: 0;
-}
-
 .menu .version {
   margin: 0;
   font-size: 13px;
@@ -2908,4 +2898,31 @@ dialog blockquote {
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* A New Version, over any screen: top left, narrow enough to clear the ribbon tabs on most screens. */
+.toast {
+  position: fixed;
+  top: 12px;
+  left: 16px;
+  z-index: 20;
+  width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+}
+
+.toast-body {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.toast p,
+.updates p {
+  margin: 0;
+}
+
+.updates {
+  justify-items: start;
 }
