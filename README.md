@@ -50,6 +50,36 @@ Both use port 4600. Open **Settings** first to enter your text model's address, 
 2. Your Saves, Settings and logs are kept in that folder, beside the program.
 3. Run `~/NovelForge/NovelForge`, which opens your browser with `xdg-open` (if none opens, go to `http://127.0.0.1:4600/`). For the Server, run `~/NovelForge/NovelForge-Server` and browse to one of the addresses it prints.
 
+#### Running the Server in the background
+
+To keep the Server running after you log out, and start it again when the machine restarts, make it a systemd service. Run this as the user who unpacked it, from any folder:
+
+```bash
+sudo tee /etc/systemd/system/novelforge.service >/dev/null <<EOF
+[Unit]
+Description=NovelForge Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=$HOME/NovelForge/NovelForge-Server
+User=$(id -un)
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload
+sudo systemctl enable --now novelforge
+```
+
+| To | Run |
+| --- | --- |
+| See whether it's running, and its addresses | `systemctl status novelforge` |
+| Follow its log | `journalctl -u novelforge -f` (also kept in `~/NovelForge/logs`) |
+| Restart it, after replacing it with a new download | `sudo systemctl restart novelforge` |
+| Stop it, and keep it from starting at boot | `sudo systemctl disable --now novelforge` |
+
 ## Running from source
 
 You need [Bun](https://bun.sh) 1.4 or later.
