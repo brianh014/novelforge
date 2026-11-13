@@ -523,6 +523,11 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
         ]}
         onChange={(comfyMode) => set({ comfyMode })}
       />
+      <label className="toggle">
+        <input type="checkbox" checked={draft.comfyFreeMemory} onChange={(e) => set({ comfyFreeMemory: e.target.checked })} />
+        Free GPU memory after each picture
+      </label>
+      <p className="muted">For a local text model on the same GPU. ComfyUI then loads its model again for each picture, which takes a few seconds more.</p>
       {advanced ? (
         <>
           <label>

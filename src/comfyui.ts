@@ -121,6 +121,14 @@ function jobFailure({ messages, status_str }: NonNullable<HistoryEntry["status"]
     : "The job finished without an image, so make sure the workflow ends in a SaveImage or PreviewImage node";
 }
 
+/** Asks ComfyUI to unload its models and empty the GPU once it's idle. Not awaited by callers, as a picture doesn't wait on it. */
+const free = (url: string) =>
+  ask(url, "/free", AbortSignal.timeout(CANCEL_MS), {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ unload_models: true, free_memory: true }),
+  });
+
 /**
  * The ComfyUI Image Adapter, using the Settings at the time of each call. It never sends a key. `report` tells of each
  * Advanced job, with "" for a good one. Every message here is safe to show the player or log, and ComfyUI's own words go no further.
@@ -209,6 +217,9 @@ export function comfyImages(settings: SettingsStore, { pollMs, silenceMs } = LIM
       // Every message here is safe, and it's the why that the failed image's own line must leave out.
       if (!signal.aborted) log.warning("images", "ComfyUI failed", errorFields(error));
       throw error;
+    } finally {
+      // shortcut: frees after every picture, so a Turn with several reloads the model for each; skip it while more are queued if that's slow.
+      if (choices.comfyFreeMemory) void free(url).catch(() => {});
     }
   };
 }

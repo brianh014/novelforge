@@ -79,6 +79,8 @@ export const SettingsUpdate = z
     comfyMode: z.enum(["simple", "advanced"]),
     // Kept as the player's text and checked when saved, because a bad one here must not stop every read of Settings.
     comfyWorkflow: z.string(),
+    // Unloads ComfyUI's models after each picture, so a local text model on the same GPU keeps its memory.
+    comfyFreeMemory: z.boolean(),
     chatStyle: z.enum(["script", "prose", "bubbles", "stage"]),
     fontSize: z.enum(["small", "medium", "large"]),
     theme: z.enum(["system", "light", "dark"]),
@@ -128,6 +130,7 @@ const defaults = {
   comfyFamilyPicks: {} as z.infer<typeof PicksByFamily>,
   comfyMode: "simple",
   comfyWorkflow: "",
+  comfyFreeMemory: false,
   chatStyle: "prose",
   fontSize: "medium",
   theme: "system",

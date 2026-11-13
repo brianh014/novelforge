@@ -60,6 +60,7 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     comfyFamilyPicks: {},
     comfyMode: "simple",
     comfyWorkflow: "",
+    comfyFreeMemory: false,
     workflowProblem: "",
     chatStyle: "prose",
     fontSize: "medium",
@@ -103,6 +104,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     },
     comfyMode: "advanced",
     comfyWorkflow: JSON.stringify({ "1": { class_type: "CLIPTextEncode", inputs: { text: "{{prompt}}" } } }),
+    comfyFreeMemory: true,
   };
   const response = await change({
     textBaseUrl: "http://localhost:1234/v1",
