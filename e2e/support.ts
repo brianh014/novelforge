@@ -14,7 +14,7 @@ export async function sendTurn(page: Page, words: string) {
 }
 
 /** Makes a story through the New Story wizard with the fake Narrator's picks, and leaves the page on its Opening. */
-export async function newStory(page: Page) {
+export async function newStory(page: Page, playMode?: "Choices") {
   await page.goto("/");
   await page.getByRole("link", { name: "New Story" }).click();
   await page.getByRole("button", { name: "Pick for me" }).click();
@@ -22,6 +22,7 @@ export async function newStory(page: Page) {
   await expect(page.getByLabel("What is your story called?")).not.toHaveValue("");
   await page.getByRole("button", { name: "Next" }).click();
   await page.getByRole("button", { name: "Generate the world" }).click();
+  if (playMode) await page.getByText(playMode, { exact: true }).click();
   await page.getByRole("button", { name: "Begin" }).click();
   await expect(page).toHaveURL(/#\/play\//);
   await expect(page.getByTestId("message-narrator")).toHaveCount(1);

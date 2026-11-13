@@ -150,6 +150,7 @@ test("an exported Save imports as a new Save with the same story", async () => {
     startingHook: "",
     hasCover: false,
     coverRedraws: 0,
+    playMode: "free",
   });
 });
 
@@ -598,7 +599,7 @@ const TABLE_TRICKS: [string, (db: Database) => void][] = [
     (db) => {
       db.run("DROP TABLE messages");
       db.run(
-        "CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, CHECK (id < 1))",
+        "CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, choices TEXT, CHECK (id < 1))",
       );
     },
   ],
@@ -606,14 +607,16 @@ const TABLE_TRICKS: [string, (db: Database) => void][] = [
     "Message ids with no primary key",
     (db) => {
       db.run("DROP TABLE messages");
-      db.run("CREATE TABLE messages (id INTEGER, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT)");
+      db.run("CREATE TABLE messages (id INTEGER, role TEXT, text TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, choices TEXT)");
     },
   ],
   [
     "a generated column",
     (db) => {
       db.run("DROP TABLE messages");
-      db.run("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, text TEXT AS ('x'))");
+      db.run(
+        "CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, hidden_check TEXT, edits TEXT, direction TEXT, created_at TEXT, choices TEXT, text TEXT AS ('x'))",
+      );
     },
   ],
   [

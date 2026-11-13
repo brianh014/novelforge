@@ -1,5 +1,5 @@
 import { ART_STYLES } from "./art-styles";
-import type { Character, HeldPicture, PcDraft } from "./api";
+import type { Character, HeldPicture, PcDraft, PlayMode } from "./api";
 
 /** Each description is shown to the player and sent to the Narrator with the theme's name. */
 export const THEMES: Record<string, string> = {
@@ -42,6 +42,7 @@ export const blank = {
   pc: { name: "", background: "", physicalTraits: "", inventory: "" } as PcDraft,
   /** Whether the Cover shows the PC, as the Important Characters each say for themselves. */
   pcOnCover: true,
+  playMode: "free" as PlayMode,
   /** What the server holds this form's images and world under, once it holds any. */
   id: undefined as string | undefined,
   /** The player's own few words for each picture's next prompt, such as "smiling". */

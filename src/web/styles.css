@@ -1905,7 +1905,8 @@ a.action {
 }
 
 .icon:hover,
-.icon[aria-expanded="true"] {
+.icon[aria-expanded="true"],
+.icon[aria-pressed="true"] {
   color: var(--accent);
 }
 
@@ -2318,8 +2319,14 @@ span.drawing {
 }
 
 /* On the compose box's own shade, a hovered tool needs the page to stand out. */
-.compose .icon:hover {
+.compose .icon:hover,
+.compose .icon[aria-pressed="true"] {
   background: var(--page);
+}
+
+/* A Play Mode switched on shows it, as its colour alone is faint on the dark page. */
+.compose .icon[aria-pressed="true"] {
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 /* The whole box shows focus, so the text box itself has no line of its own. */
@@ -2338,6 +2345,8 @@ span.drawing {
   display: flex;
   align-items: center;
   gap: 6px;
+  /* Send's height, so the tools sit at the same height in Choices mode, which has no Send. */
+  min-height: 36px;
 }
 
 .compose .send,
@@ -2785,4 +2794,42 @@ dialog blockquote {
   .book:has(.tabs) .page.right {
     padding-top: 16px;
   }
+}
+
+/* Without a text box to inset, Choices mode keeps the box's sides even, so its Choices and tools sit centred. */
+.compose:has(.choices, .no-choices) {
+  padding-left: 10px;
+}
+
+/* In Choices mode, the latest response's Choices stand in the text box's place, one under another. */
+.compose .choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.compose .choice {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--page);
+  text-align: left;
+  cursor: pointer;
+}
+
+.compose .choice:hover,
+.compose .choice:focus-visible {
+  border-color: var(--accent);
+}
+
+.compose .no-choices {
+  align-items: center;
+  gap: 6px;
+}
+
+.compose .no-choices p {
+  margin: 0;
 }

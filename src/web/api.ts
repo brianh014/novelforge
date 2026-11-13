@@ -3,12 +3,13 @@ import type { textHosts } from "../text-provider";
 import type { ImageKind } from "../image-pipeline";
 import type { FailedTurn, LiveTurn } from "../live-turns";
 import type { LogLevel } from "../logger";
-import type { ImageTarget, Message, Save, SaveStore } from "../save-store";
+// A Message as the story screen has it: the latest response carries its Choices, if it has any.
+import type { ImageTarget, PlayMode, Reply as Message, Save, SaveStore } from "../save-store";
 import type { SettingsChange } from "../settings-store";
 import type { State, VisibleEdit } from "../state-applier";
 import type { Character, EnhanceField, PcDraft, WorldChoices, WorldField, WorldPc } from "../world-creation";
 
-export type { Character, EnhanceField, ImageKind, Message, PcDraft, Save, WorldChoices, WorldField };
+export type { Character, EnhanceField, ImageKind, Message, PcDraft, PlayMode, Save, WorldChoices, WorldField };
 export type ListedSave = ReturnType<SaveStore["list"]>[number];
 export type OpenSave = ReturnType<SaveStore["read"]>;
 export type Status = State["status"];
@@ -88,6 +89,8 @@ export const getSave = (id: string) => request<OpenSave>(`/saves/${id}`);
 
 export const saveArtStyle = (id: string, artStyle: string) => request<{ artStyle: string }>(`/saves/${id}`, { ...jsonBody({ artStyle }), method: "PATCH" });
 
+export const savePlayMode = (id: string, playMode: PlayMode) => request<object>(`/saves/${id}`, { ...jsonBody({ playMode }), method: "PATCH" });
+
 export async function deleteSave(id: string) {
   const response = await fetch(`/saves/${id}`, { method: "DELETE" });
   if (!response.ok) throw new Error(await errorMessage(response));
@@ -147,7 +150,10 @@ export function setupProblem({ textBaseUrl, textModel, hasTextApiKey }: Pick<Set
   if (!hasTextApiKey && textBaseUrl.includes("openrouter.ai")) return "No API key is set.";
 }
 
-export const getMessages = (id: string) => request<{ messages: Message[] }>(`/saves/${id}/messages`).then(({ messages }) => messages);
+export const getMessages = (id: string) =>
+  request<{ messages: Message[]; choices?: string[] }>(`/saves/${id}/messages`).then(({ messages, choices }) =>
+    choices ? messages.with(-1, { ...messages.at(-1)!, choices }) : messages,
+  );
 
 export const getJournal = (id: string) => request<Journal>(`/saves/${id}/journal`);
 
@@ -243,8 +249,8 @@ export const generateWorld = (world: WorldChoices & WorldPc & { id?: string }, s
   request<{ id: string; overview: string }>("/worlds", { ...jsonBody(world), signal });
 
 /** Makes the Save from the world held under `id`, with its images. */
-export const beginStory = (id: string, artStyle: string, signal?: AbortSignal) =>
-  request<{ id: string }>(`/worlds/${id}/begin`, { ...jsonBody({ artStyle }), signal });
+export const beginStory = (id: string, artStyle: string, playMode: PlayMode, signal?: AbortSignal) =>
+  request<{ id: string }>(`/worlds/${id}/begin`, { ...jsonBody({ artStyle, playMode }), signal });
 
 export const regenerateWorld = (id: string, choices: WorldChoices, signal?: AbortSignal) =>
   request<{ overview: string }>(`/worlds/${id}/regenerate`, { ...jsonBody(choices), signal });

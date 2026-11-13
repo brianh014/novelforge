@@ -27,6 +27,9 @@ const LINES = [
   "Wind worries at the shutters. Far off, a bell tolls the hour no one is keeping.",
 ];
 
+// Three, so a reply's three Choices are always different.
+const CHOICES = ["I ask the stranger what they want.", "I slip away down the stair.", "I wait by the sea wall and watch."];
+
 let count = 0;
 const next = <T>(list: T[]) => list[count++ % list.length]!;
 
@@ -40,6 +43,7 @@ const newcomer = () => `${FIRST[met % FIRST.length]} ${LAST[Math.floor(met++ / F
 function words(key: string) {
   if (/name|into/.test(key)) return next(NAMES);
   if (/title/.test(key)) return "The Salt Road";
+  if (key === "choices") return next(CHOICES);
   if (/appearance|looks/.test(key)) return "Tall and weathered, in a salt-stained grey coat";
   if (/narration|opening|answer|text|memory|summary|brief|description|overview/.test(key)) return `${next(LINES)} ${next(LINES)}`;
   return next(["A quiet harbour town", "Salt and tar", "The old sea wall", "A lamp in the rain"]);

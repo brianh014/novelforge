@@ -357,7 +357,7 @@ test("the wizard's calls carry a world from Pick for me to a Save", async () => 
   const enhanced = await enhance("worldBrief", worldBrief!, choices);
   const { id: world, overview } = await generateWorld({ ...choices, pc: { name: "Ash" }, inventory: "a coat" });
   const regenerated = await regenerateWorld(world, choices);
-  const { id } = await beginStory(world, "Ink");
+  const { id } = await beginStory(world, "Ink", "free");
 
   expect(worldBrief).toBe("A city on a whale.");
   expect(enhanced).toBe("A vast city on a sleeping whale.");
