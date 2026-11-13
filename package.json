@@ -1,6 +1,6 @@
 {
   "name": "novelforge",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "A choose-your-own visual novel, written as you play, by a text model you connect.",
   "license": "AGPL-3.0-only",
   "repository": {
