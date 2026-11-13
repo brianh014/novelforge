@@ -1,8 +1,8 @@
 import { deflateRawSync } from "node:zlib";
 
 /**
- * A .zip holding one file, which Windows opens with no extra tools. The Windows downloads go in one, as compressed
- * they fit under the 100 MB a Cloudflare-fronted Gitea takes per upload.
+ * A .zip holding one file, which Windows opens with no extra tools. The Windows downloads go in one, which also
+ * makes them much smaller.
  */
 export function zip(name: string, data: Uint8Array, date = new Date()) {
   const packed = deflateRawSync(data, { level: 9 });
@@ -36,4 +36,36 @@ export function zip(name: string, data: Uint8Array, date = new Date()) {
   end.writeUInt32LE(central.length + fileName.length, 12);
   end.writeUInt32LE(centralStart, 16);
   return Buffer.concat([local, shared, fileName, packed, central, fileName, end]);
+}
+
+export type Entry = { name: string; data?: Uint8Array; mode: number };
+
+/** A .tar.gz, as it keeps the run permission a Mac or Linux program needs, which a download alone loses. */
+export function tarGz(entries: Entry[]) {
+  const blocks: Uint8Array[] = [];
+  for (const { name, data, mode } of entries) {
+    const header = new Uint8Array(512);
+    const put = (text: string, at: number) => header.set(new TextEncoder().encode(text), at);
+    const octal = (n: number, width: number) => n.toString(8).padStart(width - 1, "0");
+    put(name, 0);
+    put(octal(mode, 8), 100);
+    put(octal(0, 8), 108);
+    put(octal(0, 8), 116);
+    put(octal(data?.length ?? 0, 12), 124);
+    put(octal(Math.floor(Date.now() / 1000), 12), 136);
+    put(data ? "0" : "5", 156);
+    put("ustar\u000000", 257);
+    put("        ", 148); // the checksum counts its own field as spaces
+    put(
+      `${octal(
+        header.reduce((sum, byte) => sum + byte, 0),
+        7,
+      )}\u0000 `,
+      148,
+    );
+    blocks.push(header);
+    if (data) blocks.push(data, new Uint8Array((512 - (data.length % 512)) % 512));
+  }
+  blocks.push(new Uint8Array(1024));
+  return Bun.gzipSync(Buffer.concat(blocks));
 }

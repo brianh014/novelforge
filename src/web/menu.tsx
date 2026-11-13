@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { getSettings, quitApp } from "./api";
+import { getSettings, getUpdate, quitApp, type UpdateStatus } from "./api";
 import { DownIcon } from "./icons";
 import logo from "./logo.svg";
 
@@ -209,12 +209,14 @@ export const MenuRibbon = () => (
 export function Menu() {
   const [canQuit, setCanQuit] = useState(false);
   const [closed, setClosed] = useState(false);
+  const [update, setUpdate] = useState<UpdateStatus>();
 
   useEffect(() => {
     getSettings().then(
       (settings) => setCanQuit(settings.canQuit),
       () => {},
     );
+    getUpdate().then(setUpdate, () => {});
   }, []);
 
   return (
@@ -243,6 +245,7 @@ export function Menu() {
           <nav aria-label="Main Menu">
             <a href="#/new">New Story</a>
             <a href="#/load">Load Story</a>
+            <a href="#/guide">Reader's Guide</a>
             <a href="#/settings">Settings</a>
             {/* A server gone by now still counts as closed. */}
             {canQuit && (
@@ -258,6 +261,7 @@ export function Menu() {
               </button>
             )}
           </nav>
+          {update && <p className="muted version">Version {update.version}</p>}
         </div>
       )}
     </Book>

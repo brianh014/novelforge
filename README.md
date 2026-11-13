@@ -4,26 +4,30 @@
 
 <p align="center">A choose-your-own visual novel, written as you play.</p>
 
-NovelForge is a single-player story game. You build a world and a character, then act and speak only as that character, while a text model plays the Narrator: it runs the story, voices everyone else, keeps track of the world, and rolls the dice when what you try could fail. An image model draws the Cover, portraits and scenes as the story goes.
+NovelForge is a single-player story game. You build a world and a character, then act and speak only as that character, while an AI plays the Narrator: it runs the story, voices everyone else, keeps track of the world, and rolls the dice when what you try could fail. An image AI draws the Cover, portraits and scenes as the story goes.
 
 It runs on your own computer and talks to models you choose. Bring an OpenAI-compatible text API (OpenRouter, DeepInfra, a local server) and, for pictures, OpenRouter or your own ComfyUI.
 
 ## Features
 
-- **New Story wizard:** choose a Theme, write or generate the world and your character, and draw the Cover and portraits before you start.
-- **Play:** each Turn is your move and the Narrator's reply, streamed as it's written. Ask the Narrator a question, have it decide for you, or tell it to change the world.
-- **Memory:** a Journal of what your character knows, Loose Ends, the people met and Chapters, kept by the Narrator and editable by you.
-- **Undo anything:** edit, rewrite or regenerate a reply, or revert to any earlier Message. Every Save is one SQLite file you can duplicate, export and import.
-- **Pictures:** Scene Images when the scene changes, pictures on request, and a Gallery to redraw, nudge or replace any of them with your own.
+Most AI roleplay is one long chat with a model that agrees with everything, forgets what happened an hour ago and writes your character's lines for you. NovelForge is built as a game instead, with the AI as its storyteller.
+
+- **Your character is yours.** The Narrator never speaks or acts for your PC, never moves them somewhere or skips time on its own, and stops each reply at the moment your PC would answer or choose. Type your move, or pick from three Choices.
+- **Things can go wrong.** Left to itself, an AI lets everything work. When your PC tries something risky, the Narrator sets how hard it is first, then a hidden die decides, so a bold plan can fail and a long shot can come off.
+- **The world keeps secrets.** The New Story wizard builds a full world from your Theme, ideas and characters, with its own history, places and secret Plot Threads, which you uncover by playing. Write it all yourself, or let the Narrator fill in what you leave empty.
+- **It remembers.** The story is kept as structured state, not just chat history: who your PC has met and what they know, Loose Ends still open, the time and date, and short Old Memories of everything older. You read and edit it all in the Journal, which holds only what your PC knows, and the Narrator gets what it needs each Turn, so a long story stays straight.
+- **Nothing is final.** Every Message keeps a full Snapshot of the story, so you can rewrite, edit or regenerate a reply, step back to any point at once, or branch off into a copy and try another path. Tell the Narrator to change the world in your own words, or switch AI in the middle of a story.
+- **Pictures that stay in character.** A Cover, a portrait for each person, kept up to date as their looks change, and a picture whenever the scene changes or you ask for one. Image models that take reference pictures draw scenes from the portraits, so faces stay the same, and the Gallery lets you redraw, nudge or replace any picture with your own.
+- **Yours, on your computer.** No account and no subscription. Each story is one file on your own disk that you can duplicate, export and import, and you choose the AI, from a cheap hosted one to one on your own graphics card.
 
 ## Quick Install
 
-Download your system's file from the [Releases](https://git.holtops.net/brianh014/novelforge/releases) page. Each system has two:
+Download your system's file from the [Releases](https://github.com/brianh014/novelforge/releases/latest) page. Each system has two:
 
 - **NovelForge** is the app: it opens in your browser, for this computer only, and you end it with Quit in the Menu.
 - **NovelForge Server** serves the whole network and opens no browser, so it runs headless too. Its log goes to the terminal, and stopping it (closing the window, or Ctrl+C) stops the server. Browse to it from any device at `http://<its address>:4600/`; it lists its addresses as it starts.
 
-Both use port 4600. Open **Settings** first to enter your text model's address, model and key (see [Recommended settings](#recommended-settings)). The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
+Both use port 4600. Open **Settings** first to enter your text model's address, model and key (see [Recommended settings](#recommended-settings)), then the **Reader's Guide** on the Menu for how to play. The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
 
 ### Windows
 
@@ -39,11 +43,11 @@ Both use port 4600. Open **Settings** first to enter your text model's address, 
 
 ### Linux
 
-1. Download and unpack it into a folder of its own, for x64. On a machine with no desktop, such as a server reached over SSH, use the Server. Use the version from the Releases page in place of `v0.1.0-alpha.4`, and `NovelForge-Server-Linux.tar.gz` for the Server:
+1. Download and unpack it into a folder of its own, for x64. On a machine with no desktop, such as a server reached over SSH, use the Server: `NovelForge-Server-Linux.tar.gz` in place of `NovelForge-Linux.tar.gz` below.
 
    ```bash
    mkdir -p ~/NovelForge && cd ~/NovelForge
-   curl -fL -o NovelForge-Linux.tar.gz https://git.holtops.net/brianh014/novelforge/releases/download/v0.1.0-alpha.4/NovelForge-Linux.tar.gz
+   curl -fL -o NovelForge-Linux.tar.gz https://github.com/brianh014/novelforge/releases/latest/download/NovelForge-Linux.tar.gz
    tar -xzf NovelForge-Linux.tar.gz && rm NovelForge-Linux.tar.gz
    ```
 
@@ -77,8 +81,18 @@ sudo systemctl enable --now novelforge
 | --- | --- |
 | See whether it's running, and its addresses | `systemctl status novelforge` |
 | Follow its log | `journalctl -u novelforge -f` (also kept in `~/NovelForge/logs`) |
-| Restart it, after replacing it with a new download | `sudo systemctl restart novelforge` |
+| Restart it | `sudo systemctl restart novelforge` |
 | Stop it, and keep it from starting at boot | `sudo systemctl disable --now novelforge` |
+
+### Updating
+
+When a new version is out, a notice at the top of the screen says so, and **Settings → Updates** can check at any time. Choose **Install**, and NovelForge downloads it, restarts and comes back to the same page, on every system and for the Server too. Your Saves and Settings stay as they are, and if the new version fails to start, the old one comes back. To check, NovelForge asks GitHub for the newest release every few hours; nothing else is sent.
+
+You can also update by hand: download the new version and unpack it over the old one, with NovelForge closed (on a Mac, replace `NovelForge.app` in Applications; for a systemd service, `sudo systemctl stop novelforge` first and `start` it after).
+
+## Using NovelForge
+
+The **Reader's Guide** on the Menu explains everything in the app: making a story, playing, changing what happened, the Journal, pictures, Saves, every setting, and answers to common problems.
 
 ## Running from source
 
@@ -89,7 +103,7 @@ bun install
 bun start
 ```
 
-`bun start` serves NovelForge on port 4600 and opens it in your browser. Open **Settings** to enter your text model's address, model and key, and optionally an image model. Your Saves, Settings and logs stay in the project folder, which git ignores.
+`bun start` serves NovelForge on port 4600 and opens it in your browser. Open **Settings** to enter your text model's address, model and key, and optionally an image model. To update, run `git pull` and `bun install`. Your Saves, Settings and logs stay in the project folder, which git ignores.
 
 To try it with no model and no key, run it with stand-ins:
 
@@ -106,7 +120,7 @@ bun src/main.ts --fake --open
 | `PORT` | The port to listen on (default `4600`). |
 | `HOST` | The address to listen on (default `0.0.0.0` for a server, `127.0.0.1` for the app). |
 
-`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a Gitea release, signed in with the login git pushes with (or a token in `GITEA_TOKEN`); a version with a hyphen, such as `0.1.0-alpha.2`, is a pre-release.
+`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a GitHub release with the [GitHub CLI](https://cli.github.com) (`gh`), signed in as you; a version with a hyphen, such as `0.2.0-alpha.1`, is a pre-release, which Install never offers. `bun run try-update` tries Install before a release: it builds this code as an old 0.0.1 copy and as the new version, and starts the old one with `--fake` on port 4660 against a stand-in release, so choosing Install brings it back as the new version.
 
 > **A server on the network has no accounts.** Anyone who can reach it can play, change Settings and spend your saved keys. Keep it on a network you trust, or set `HOST=127.0.0.1`.
 
@@ -130,6 +144,8 @@ ComfyUI keeps its model on the GPU between pictures. If a local text model or an
 
 ## Development
 
+Bugs and ideas go in [Issues](https://github.com/brianh014/novelforge/issues), and security problems to [a private advisory](https://github.com/brianh014/novelforge/security/advisories/new) (see [`SECURITY.md`](SECURITY.md)).
+
 ```bash
 bun run check   # lint and format check, typecheck, unit tests
 bun run e2e     # Playwright end-to-end tests, against the stand-ins
@@ -145,4 +161,4 @@ The code is TypeScript on Bun, with a React page bundled by Bun itself. Start wi
 
 ## License
 
-Copyright © 2026 BrianH. NovelForge is free software under the [GNU Affero General Public License 3.0](LICENSE). You may use, change, share and sell it. If you share a changed version, or run one as a server that other people use, you must offer them its source under the same license.
+Copyright © 2026 Brian Holt. NovelForge is free software under the [GNU Affero General Public License 3.0](LICENSE). You may use, change, share and sell it. If you share a changed version, or run one as a server that other people use, you must offer them its source under the same license.

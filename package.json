@@ -1,11 +1,12 @@
 {
   "name": "novelforge",
-  "version": "0.1.0-alpha.4",
-  "description": "A choose-your-own visual novel, written as you play, by a text model you connect.",
+  "version": "0.1.0",
+  "description": "A choose-your-own visual novel, written as you play, by an AI you connect.",
   "license": "AGPL-3.0-only",
+  "author": "Brian Holt",
   "repository": {
     "type": "git",
-    "url": "https://git.holtops.net/brianh014/novelforge"
+    "url": "https://github.com/brianh014/novelforge"
   },
   "private": true,
   "type": "module",
@@ -14,6 +15,7 @@
     "install-launcher": "bun scripts/install-launcher.ts",
     "release": "bun scripts/build-release.ts",
     "publish-release": "bun scripts/publish-release.ts",
+    "try-update": "bun scripts/try-update.ts",
     "build": "bun build src/main.ts --compile --production --outfile dist/novelforge",
     "test": "bun test",
     "typecheck": "tsc --noEmit",

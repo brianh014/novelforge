@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
@@ -28,10 +28,10 @@ jobs:
         run: bunx playwright install --with-deps chromium
       - name: End-to-end tests
         run: bun run e2e
-      # GitHub only: upload-artifact@v4 fails on Gitea, which also runs this file from .github/workflows.
+      # GitHub only, as upload-artifact fails on a Gitea runner.
       - name: Keep the Playwright traces of a failure
         if: failure() && github.server_url == 'https://github.com'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-results
           path: e2e/.results

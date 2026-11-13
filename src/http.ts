@@ -21,6 +21,7 @@ import {
 } from "./save-store";
 import type { SettingsStore } from "./settings-store";
 import { type TextProvider, TurnFailed } from "./turn-engine";
+import { UpdateFailed } from "./updater";
 
 /** What every route module shares: the request checks, the error answers, and the server's parts. */
 
@@ -41,6 +42,8 @@ export type ServerOptions = {
    * leaves nothing else to. A server can't be quit from a page.
    */
   quittable?: { idleMs: number };
+  /** Where the newest release is asked for. GitHub's by default; tests serve their own. */
+  latestRelease?: string;
 };
 
 /** The one of each a server runs on, which every area's routes share. */
@@ -111,6 +114,7 @@ export function errorResponse(error: unknown) {
   if (error instanceof WorldNotFound) {
     return Response.json({ error: "This world is no longer held. Go back to your choices and generate it again." }, { status: 404 });
   }
+  if (error instanceof UpdateFailed) return Response.json({ error: error.message }, { status: 502 });
   if (error instanceof StaleTurn) return Response.json({ error: "The story changed during this Turn" }, { status: 409 });
   if (error instanceof TurnRunning) return Response.json({ error: "A Turn is still running for this story" }, { status: 409 });
   if (error instanceof WorldChanging) return Response.json({ error: "The Narrator is still changing the world" }, { status: 409 });

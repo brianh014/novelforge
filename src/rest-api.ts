@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { comfyImages } from "./comfyui";
 import { galleryRoutes } from "./gallery-routes";
-import { errorResponse, isLoopback, logged, parseBody, type ServerContext, type ServerOptions } from "./http";
+import { errorResponse, isLoopback, logged, NoFields, parseBody, type ServerContext, type ServerOptions } from "./http";
 import { imagePipeline } from "./image-pipeline";
 import { liveTurns } from "./live-turns";
 import { errorFields, log, setLogLevel } from "./logger";
@@ -9,6 +9,7 @@ import { saveRoutes } from "./save-routes";
 import { MAX_IMPORT_BYTES, saveStore } from "./save-store";
 import { settingsRoutes } from "./settings-routes";
 import { turnRoutes } from "./turn-routes";
+import { relaunch, updater } from "./updater";
 import spa from "./web/index.html";
 import { writePicturePrompt } from "./world-creation";
 import { worldRoutes } from "./world-routes";
@@ -37,6 +38,9 @@ const PageEvent = z.strictObject({
 });
 
 const MOST_PAGE_EVENT_BYTES = 1024;
+
+/** `?fresh=1` asks GitHub now, rather than within the last few hours. */
+const UpdateCheck = z.strictObject({ fresh: z.literal("1").optional() });
 
 /** Stops reading at the cap, as a Save's import needs the server's own limit to be huge. */
 async function cappedBody(req: Request) {
@@ -73,10 +77,15 @@ export function startServer(options: ServerOptions) {
   );
 
   // Requests in flight, a Turn's save among them, finish first.
+  // Once the server hands over to a new version, this process only waits on it, so it never quits by itself.
+  let restarting = false;
   const quit = (why: string) => {
+    if (restarting) return;
     log.startup(`NovelForge is closing: ${why}`);
     void server.stop().finally(() => process.exit(0));
   };
+  const updates = updater(options.latestRelease);
+
   // Pages check in, and the app quits once none has for `idleMs`, after any Turn or picture is done.
   let pageSeen = Date.now();
   if (options.quittable) {
@@ -114,6 +123,24 @@ export function startServer(options: ServerOptions) {
             if (!options.quittable) return Response.json({ error: "Not found" }, { status: 404 });
             quit("the player quit");
             return new Response(null, { status: 204 });
+          },
+        },
+        // A new version: whether there is one, and installing it, which restarts the server once this answer is sent.
+        "/update": {
+          GET: async (req) => Response.json(await updates.status(UpdateCheck.parse(Object.fromEntries(new URL(req.url).searchParams)).fresh === "1")),
+          POST: async (req) => {
+            await parseBody(req, NoFields);
+            if (turns.busy() || images.busy()) return Response.json({ error: "Wait for the story and its pictures to finish, then update." }, { status: 409 });
+            const installed = await updates.install();
+            restarting = true;
+            void (async () => {
+              // A Turn or picture begun during the download finishes first, as stopping the server doesn't wait for them.
+              // shortcut: new work can still start while this waits; refuse it with a 503 if players hit that.
+              while (turns.busy() || images.busy()) await Bun.sleep(1000);
+              await server.stop();
+              await relaunch();
+            })();
+            return Response.json(installed, { status: 202 });
           },
         },
         "/alive": {

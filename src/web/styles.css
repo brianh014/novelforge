@@ -761,7 +761,7 @@ button.quiet:not(.leave, .back):hover:not(:disabled, [aria-disabled="true"]) {
 }
 
 /* Numbered like a book's contents. */
-.menu :is(a, button) {
+.menu nav :is(a, button) {
   display: flex;
   align-items: baseline;
   gap: 18px;
@@ -774,21 +774,21 @@ button.quiet:not(.leave, .back):hover:not(:disabled, [aria-disabled="true"]) {
 }
 
 /* Quit, which is an action rather than a place, but reads as one more entry. */
-.menu button {
+.menu nav button {
   border-width: 0 0 1px;
   background: none;
   text-align: left;
   cursor: pointer;
 }
 
-.menu :is(a, button)::before {
+.menu nav :is(a, button)::before {
   content: counter(entry, upper-roman) ".";
   width: 28px;
   color: var(--muted);
   font: 400 14px var(--label);
 }
 
-.menu :is(a, button):hover {
+.menu nav :is(a, button):hover {
   background: var(--soft);
   color: var(--accent);
 }
@@ -2273,7 +2273,8 @@ span.drawing {
   margin: 0;
 }
 
-.dismissable button {
+/* Its own buttons only, not ones inside its words, such as a toast's Install. */
+.dismissable > button {
   flex: none;
   min-width: 44px;
   min-height: 44px;
@@ -2298,7 +2299,7 @@ span.drawing {
 }
 
 /* The dismissing ×, which needs no frame. */
-.dismissable button.quiet:not(.chapter-end) {
+.dismissable > button.quiet:not(.chapter-end) {
   padding: 0;
   border: 0;
   font-size: 20px;
@@ -2704,8 +2705,11 @@ dialog blockquote {
   }
 
   /* Name and contents sit together near the top of the screen. */
+  /* Grows past the screen when a new version's notice makes the contents longer. */
   .book:has(.brand) {
     justify-content: flex-start;
+    height: auto;
+    min-height: 100%;
   }
 
   .book:has(.brand) .page {
@@ -2723,7 +2727,7 @@ dialog blockquote {
     gap: 12px;
   }
 
-  .menu :is(a, button) {
+  .menu nav :is(a, button) {
     align-items: center;
     min-height: 52px;
     padding: 8px 24px 8px 8px;
@@ -2861,4 +2865,72 @@ dialog blockquote {
 /* In the story, the Choices sit under the latest response, clear of its tools. */
 .story .choices {
   margin-top: 12px;
+}
+
+.menu .version {
+  margin: 0;
+  font-size: 13px;
+}
+
+.guide {
+  max-width: 68ch;
+  line-height: 1.55;
+}
+
+.guide h3 {
+  margin: 1.4em 0 0.4em;
+}
+
+.guide li {
+  margin-bottom: 0.4em;
+}
+
+.guide-tool {
+  white-space: nowrap;
+}
+
+.guide-tool svg {
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.25em;
+  vertical-align: -0.2em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* A New Version, over any screen: top left, narrow enough to clear the ribbon tabs on most screens. */
+.toast {
+  position: fixed;
+  top: 12px;
+  left: 16px;
+  z-index: 20;
+  width: min(320px, calc(100vw - 32px));
+  padding: 10px 12px;
+  /* Compact whatever the reading size, as it sits over the page. */
+  font-size: 15px;
+  line-height: 1.4;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+}
+
+.toast-body {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.toast p,
+.updates p {
+  margin: 0;
+}
+
+.updates {
+  justify-items: start;
+}
+
+.toast a {
+  white-space: nowrap;
 }

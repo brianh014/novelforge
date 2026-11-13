@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { Gallery } from "./gallery";
+import { Guide } from "./guide";
 import { Journal } from "./journal";
 import { LoadStory } from "./load";
 import { getSettings, reportEvent, stillHere } from "./api";
 import { Menu } from "./menu";
+import { NewVersionToast } from "./new-version";
 import { Play } from "./play";
 import { applyLook, SettingsScreen } from "./settings";
 import { NewStory } from "./wizard";
@@ -22,6 +24,7 @@ function App() {
   if (screen === "gallery" && id) return <Gallery key={id} id={id} />;
   if (screen === "new") return <NewStory step={id} />;
   if (screen === "load") return <LoadStory />;
+  if (screen === "guide") return <Guide section={id} />;
   if (screen === "settings") return <SettingsScreen id={id} />;
   return <Menu />;
 }
@@ -43,4 +46,9 @@ getSettings().then(
 window.addEventListener("error", ({ lineno, colno }) => reportEvent("page-error", { line: lineno, column: colno }));
 window.addEventListener("unhandledrejection", () => reportEvent("page-error"));
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <>
+    <App />
+    <NewVersionToast />
+  </>,
+);
