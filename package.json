@@ -15,6 +15,7 @@
     "install-launcher": "bun scripts/install-launcher.ts",
     "release": "bun scripts/build-release.ts",
     "publish-release": "bun scripts/publish-release.ts",
+    "try-update": "bun scripts/try-update.ts",
     "build": "bun build src/main.ts --compile --production --outfile dist/novelforge",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
