@@ -18,6 +18,8 @@ if (process.platform === "win32") {
 }
 
 process.argv.push("--open");
+// React's development build redraws a long story several times slower, which the player feels as lag while typing.
+process.env.NODE_ENV ??= "production";
 try {
   await import("../src/main");
 } catch (error) {

@@ -11,3 +11,5 @@ fake/
 e2e/.data/
 e2e/.report/
 e2e/.results/
+perf/.data/
+perf/.results/
