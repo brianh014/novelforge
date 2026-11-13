@@ -157,31 +157,40 @@ type FakeReply = Response | string[] | (() => AsyncIterable<string>);
  * A local OpenAI-compatible server, so the real client code path runs. Answers each chat request with the next
  * reply: a Response, whole SSE strings, or a generator that can wait between them. Records every chat request.
  */
+const OPENROUTER_PATH = "/openrouter.ai/api/v1";
+
 export function fakeOpenAi(replies: FakeReply[], initialModels: unknown = { data: [] }) {
   let models = initialModels;
   const requests: { body: any; authorization: string | null }[] = [];
   const server = Bun.serve({
     port: 0,
     idleTimeout: 0,
-    routes: {
-      "/v1/models": () => (models ? Response.json(models) : new Response("Not found", { status: 404 })),
-      "/v1/chat/completions": async (req) => {
-        requests.push({ body: await req.json(), authorization: req.headers.get("authorization") });
-        const reply = replies.shift() ?? new Response("script exhausted", { status: 500 });
-        if (reply instanceof Response) return reply;
-        const parts =
-          typeof reply === "function"
-            ? reply()
-            : (async function* () {
-                yield* reply;
-              })();
-        return new Response(parts as unknown as ReadableStream, { headers: { "Content-Type": "text/event-stream" } });
-      },
-    },
+    // Also under a path naming OpenRouter, which the Text Provider tells apart by its address.
+    routes: Object.fromEntries(
+      ["/v1", OPENROUTER_PATH].flatMap((base) => [
+        [`${base}/models`, () => (models ? Response.json(models) : new Response("Not found", { status: 404 }))],
+        [
+          `${base}/chat/completions`,
+          async (req: Request) => {
+            requests.push({ body: await req.json(), authorization: req.headers.get("authorization") });
+            const reply = replies.shift() ?? new Response("script exhausted", { status: 500 });
+            if (reply instanceof Response) return reply;
+            const parts =
+              typeof reply === "function"
+                ? reply()
+                : (async function* () {
+                    yield* reply;
+                  })();
+            return new Response(parts as unknown as ReadableStream, { headers: { "Content-Type": "text/event-stream" } });
+          },
+        ],
+      ]),
+    ),
   });
   return {
     requests,
     baseUrl: new URL("/v1", server.url).href,
+    openRouterUrl: new URL(OPENROUTER_PATH, server.url).href,
     setModels: (next: unknown) => {
       models = next;
     },

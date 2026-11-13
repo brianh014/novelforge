@@ -14,11 +14,11 @@ const narrated = (text: string, ...state_operations: unknown[]) => [
 ];
 
 /** The real client against a fake server. */
-function play(replies: Parameters<typeof fakeOpenAi>[0], models?: unknown, dice = scriptedDice()) {
+function play(replies: Parameters<typeof fakeOpenAi>[0], models?: unknown, dice = scriptedDice(), openRouter = false) {
   provider = fakeOpenAi(replies, models);
   const savesDir = join(folder.path, "Saves");
   const settings = settingsStore(join(folder.path, "settings.json"));
-  settings.update({ textBaseUrl: provider.baseUrl, textApiKey: "test-key", textModel: "fake/model" });
+  settings.update({ textBaseUrl: openRouter ? provider.openRouterUrl : provider.baseUrl, textApiKey: "test-key", textModel: "fake/model" });
   app = startApp(savesDir, textProvider(settings), dice);
   return app;
 }
@@ -262,7 +262,7 @@ test("a provider error mid-stream fails the Turn as retryable, and its detail st
 const schemaModel = { data: [{ id: "fake/model", supported_parameters: ["structured_outputs", "response_format"] }] };
 
 test("schema mode is used on a model that supports it", async () => {
-  play([narrated("Rain.")], schemaModel);
+  play([narrated("Rain.")], schemaModel, scriptedDice(), true);
   const id = await app.createSave();
 
   await app.post(`/saves/${id}/turns`, { input: "I wait." });
@@ -281,13 +281,23 @@ test.each([
   ["a named host, which wins over the routing", { textHost: "xiaomi" }, { require_parameters: true, order: ["xiaomi"], allow_fallbacks: true }],
   ["a host with no fallback", { textHost: "xiaomi", textHostFallback: false }, { require_parameters: true, order: ["xiaomi"], allow_fallbacks: false }],
 ] as const)("%s reaches the request", async (_, change, expected) => {
-  play([narrated("Rain.")], schemaModel);
+  play([narrated("Rain.")], schemaModel, scriptedDice(), true);
   settingsStore(join(folder.path, "settings.json")).update(change);
   const id = await app.createSave();
 
   await app.post(`/saves/${id}/turns`, { input: "I wait." });
 
   expect(provider.requests[0]!.body.provider).toEqual(expected);
+});
+
+test("a server that isn't OpenRouter gets schema mode but no routing, which a strict one refuses", async () => {
+  play([narrated("Rain.")], schemaModel);
+  const id = await app.createSave();
+
+  await app.post(`/saves/${id}/turns`, { input: "I wait." });
+
+  expect(provider.requests[0]!.body.provider).toBeUndefined();
+  expect(provider.requests[0]!.body.response_format).toMatchObject({ type: "json_schema" });
 });
 
 test("a server with no schema mode isn't sent routing it may not know", async () => {

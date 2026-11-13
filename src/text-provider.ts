@@ -173,8 +173,8 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
           stream: true,
           max_tokens: textMaxTokens,
           ...(useSchema && { response_format: { type: "json_schema", json_schema: { name: "narrator_response", strict: true, schema } } }),
-          // A strict local server can refuse a field it doesn't know, so not sent to one without a schema.
-          ...((useSchema || openRouter) && { provider: { ...(useSchema && { require_parameters: true }), ...routing(chosen) } }),
+          // OpenRouter only: a strict server such as OpenAI refuses a field it does not know.
+          ...(openRouter && { provider: { ...(useSchema && { require_parameters: true }), ...routing(chosen) } }),
         }),
       });
       heardFrom();
