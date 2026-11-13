@@ -8,6 +8,8 @@ NovelForge is a single-player story game. You build a world and a character, the
 
 It runs on your own computer and talks to models you choose. Bring an OpenAI-compatible text API (OpenRouter, DeepInfra, a local server) and, for pictures, OpenRouter or your own ComfyUI.
 
+<p align="center"><img src="docs/screenshots/menu.png" alt="NovelForge's Menu: New Story, Load Story, Reader's Guide and Settings beside the logo" width="800"></p>
+
 ## Features
 
 Most AI roleplay is one long chat with a model that agrees with everything, forgets what happened an hour ago and writes your character's lines for you. NovelForge is built as a game instead, with the AI as its storyteller.
@@ -19,6 +21,19 @@ Most AI roleplay is one long chat with a model that agrees with everything, forg
 - **Nothing is final.** Every Message keeps a full Snapshot of the story, so you can rewrite, edit or regenerate a reply, step back to any point at once, or branch off into a copy and try another path. Tell the Narrator to change the world in your own words, or switch AI in the middle of a story.
 - **Pictures that stay in character.** A Cover, a portrait for each person, kept up to date as their looks change, and a picture whenever the scene changes or you ask for one. Image models that take reference pictures draw scenes from the portraits, so faces stay the same, and the Gallery lets you redraw, nudge or replace any picture with your own.
 - **Yours, on your computer.** No account and no subscription. Each story is one file on your own disk that you can duplicate, export and import, and you choose the AI, from a cheap hosted one to one on your own graphics card.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/new-story.png" alt="The New Story wizard: choose a Theme, then describe your world and characters"><br><sub>New Story: pick a Theme and describe as much or as little as you like.</sub></td>
+    <td width="50%"><img src="docs/screenshots/journal.png" alt="The Journal: Story Time, Loose Ends, what the PC knows and the Chapters"><br><sub>The Journal: what your character knows, Loose Ends and Chapters, all editable.</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/guide.png" alt="The Reader's Guide, open at Playing, with each tool's icon beside its name"><br><sub>The Reader's Guide explains every part of the app.</sub></td>
+    <td width="50%" align="center"><img src="docs/screenshots/phone.png" alt="A story on a phone, with three Choices and a box to write your own" width="260"><br><sub>Playing on a phone, in Choices mode.</sub></td>
+  </tr>
+</table>
 
 ## Quick Install
 
