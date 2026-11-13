@@ -4,9 +4,21 @@
 
 <p align="center">A choose-your-own visual novel, written as you play.</p>
 
-NovelForge is a single-player story game. You build a world and a character, then act and speak only as that character, while a text model plays the Narrator: it runs the story, voices everyone else, keeps track of the world, and rolls the dice when what you try could fail. An image model draws the Cover, portraits and scenes as the story goes.
+NovelForge is a single-player story game. You build a world and a character, then act and speak only as that character, while an AI plays the Narrator: it runs the story, voices everyone else, keeps track of the world, and rolls the dice when what you try could fail. An image AI draws the Cover, portraits and scenes as the story goes.
 
 It runs on your own computer and talks to models you choose. Bring an OpenAI-compatible text API (OpenRouter, DeepInfra, a local server) and, for pictures, OpenRouter or your own ComfyUI.
+
+## What makes it different
+
+Most AI roleplay is one long chat with a model that agrees with everything, forgets what happened an hour ago and writes your character's lines for you. NovelForge is built as a game instead, with the AI as its storyteller.
+
+- **Your character is yours.** The Narrator never speaks or acts for your PC, never moves them somewhere or skips time on its own, and stops each reply at the moment your PC would answer or choose.
+- **Things can go wrong.** Left to itself, an AI lets everything work. When your PC tries something risky, the Narrator sets how hard it is first, then a hidden die decides, so a bold plan can fail and a long shot can come off.
+- **The world keeps secrets.** Each story starts from a full world with its own history, places and secret Plot Threads, which you uncover by playing. Your Journal holds only what your PC knows.
+- **It remembers.** The story is kept as structured state, not just chat history: who your PC has met and what they know, Loose Ends still open, the time and date, and short Old Memories of everything older. Each Turn the Narrator gets what it needs, so a long story stays straight.
+- **Nothing is final.** Every Message keeps a full Snapshot of the story, so you can Rewrite a reply, edit it, step back to any point at once, or branch off into a copy and try another path. You can even switch AI in the middle of a story.
+- **Pictures that stay in character.** Each person gets a portrait, kept up to date as their looks change, and image models that take reference pictures draw scenes from them, so faces stay the same as the story goes on.
+- **Yours, on your computer.** No account and no subscription. Your stories are files on your own disk, and you choose the AI, from a cheap hosted one to one on your own graphics card.
 
 ## Features
 
