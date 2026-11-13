@@ -2273,7 +2273,8 @@ span.drawing {
   margin: 0;
 }
 
-.dismissable button {
+/* Its own buttons only, not ones inside its words, such as a toast's Install. */
+.dismissable > button {
   flex: none;
   min-width: 44px;
   min-height: 44px;
@@ -2298,7 +2299,7 @@ span.drawing {
 }
 
 /* The dismissing ×, which needs no frame. */
-.dismissable button.quiet:not(.chapter-end) {
+.dismissable > button.quiet:not(.chapter-end) {
   padding: 0;
   border: 0;
   font-size: 20px;
@@ -2908,6 +2909,9 @@ dialog blockquote {
   z-index: 20;
   width: min(320px, calc(100vw - 32px));
   padding: 10px 12px;
+  /* Compact whatever the reading size, as it sits over the page. */
+  font-size: 15px;
+  line-height: 1.4;
   box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
 }
 
@@ -2925,4 +2929,8 @@ dialog blockquote {
 
 .updates {
   justify-items: start;
+}
+
+.toast a {
+  white-space: nowrap;
 }
