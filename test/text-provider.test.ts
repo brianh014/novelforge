@@ -344,8 +344,8 @@ test.each([
   ["does not list structured outputs", { data: [{ id: "fake/model", supported_parameters: ["temperature"] }] }],
   ["is unknown to the server", { data: [] }],
   ["cannot be looked up", null],
-])("a model that %s falls back to JSON validation and retries", async (_, models) => {
-  play([[delta("not json")], narrated("Rain.")], models);
+])("on OpenRouter, a model that %s falls back to JSON validation and retries", async (_, models) => {
+  play([[delta("not json")], narrated("Rain.")], models, scriptedDice(), true);
   const id = await app.createSave();
 
   const response = await app.post(`/saves/${id}/turns`, { input: "I wait." });
@@ -367,8 +367,8 @@ test("a model whose listing claims schema support but rejects the schema still p
   expect(provider.requests.map(({ body }) => !!body.response_format)).toEqual([true, false, false]);
 });
 
-test("an answer without a model list is not remembered, so schema mode is tried again", async () => {
-  play([narrated("Rain."), narrated("Wind.")], {});
+test("an answer without OpenRouter's model list is not remembered, so schema mode is tried again", async () => {
+  play([narrated("Rain."), narrated("Wind.")], {}, scriptedDice(), true);
   const id = await app.createSave();
   await app.post(`/saves/${id}/turns`, { input: "I wait." });
 

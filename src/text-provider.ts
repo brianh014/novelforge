@@ -116,6 +116,8 @@ export function textProvider(settings: SettingsStore, { silenceMs, listMs } = LI
   async function supportsSchema(url: string, model: string, headers: Record<string, string>, signal: AbortSignal) {
     const known = schemaSupport.get(`${url} ${model}`);
     if (known !== undefined) return known;
+    // Only OpenRouter's listing says which models take a schema, so any other server is tried, and a refusal turns it off as below.
+    if (!url.includes("openrouter.ai")) return true;
     const models = await listModels(url, headers, signal, listMs);
     // Without an answer, JSON validation and retries still work, so ask again on the next call.
     if (!models) return false;

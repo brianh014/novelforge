@@ -18,6 +18,13 @@ Create an HTML report of UI options only when the user asks for one, for a large
 
 Follow the conventions in `CONTRIBUTING.md`: Glossary terms, `shortcut:` comments, Zod at every route, allowlisted responses, and no key or story text in a log.
 
+### Recommended setup
+
+`README.md` → Recommended settings is the player-facing version. When advising on providers or changing defaults and Settings hints, keep to it:
+
+- Text: a hosted API is recommended. A long story's prompt runs past 30,000 tokens, which a 10 GB GPU can't hold. Local text (Local / OpenAI server) is supported for short stories, privacy and trying things out, not the main path.
+- Images: local ComfyUI is preferred, as NovelForge draws many pictures and each costs money on a paid API. OpenRouter is for players with no GPU for ComfyUI.
+
 ### Code layout
 
 - The server's routes are split by area, one module each: `settings-routes`, `world-routes`, `save-routes`, `turn-routes` and `gallery-routes` (ADR 0004). A new route goes in its area's module. State only one area uses stays private to that module. `src/http.ts` holds what they share, and `rest-api.ts` only puts them together.
