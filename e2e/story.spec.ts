@@ -104,6 +104,21 @@ test("a story makes and shows everything: pictures, characters, Turns, a Questio
   const decided = await input.inputValue();
   await playTurn(page, () => page.getByRole("button", { name: "Send" }).click(), decided);
 
+  // Words in the box: Enhance rewrites them, Undo puts them back, and they wait while the player is elsewhere.
+  const continueButton = page.getByRole("button", { name: "Continue" });
+  await input.fill("I look around.");
+  await expect(continueButton).toBeHidden();
+  await page.getByRole("button", { name: "Enhance" }).click();
+  await expect(input).not.toHaveValue("I look around.");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(input).toHaveValue("I look around.");
+  await expect(page.getByRole("button", { name: "Undo" })).toBeHidden();
+  await page.getByRole("link", { name: "Journal" }).click();
+  await page.getByRole("link", { name: "Story" }).click();
+  await expect(input).toHaveValue("I look around.");
+  await input.fill("");
+  await expect(continueButton).toBeVisible();
+
   // A Question is answered and changes nothing in the story.
   await page.getByRole("button", { name: "Ask the Narrator" }).click();
   await page.getByPlaceholder(/know about this place/).fill("Who keeps the lighthouse?");
