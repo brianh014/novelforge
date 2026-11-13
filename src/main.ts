@@ -42,7 +42,12 @@ function openBrowser(url: string) {
   // Tests run the app many times over.
   if (process.env.NO_BROWSER) return;
   const opener = process.platform === "win32" ? "explorer" : process.platform === "darwin" ? "open" : "xdg-open";
-  Bun.spawn([opener, url], { stdio: ["ignore", "ignore", "ignore"] });
+  try {
+    Bun.spawn([opener, url], { stdio: ["ignore", "ignore", "ignore"] });
+  } catch {
+    // A Linux machine with no desktop has no xdg-open, and the server must run on without a browser.
+    log.startup(`Couldn't open a browser here, so open ${url} in one yourself`);
+  }
 }
 
 // Opened again while it runs: show the one running. It asks, as Windows lets a second copy listen on the same port.
