@@ -120,7 +120,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         <h3>1. World and Characters</h3>
         <ul>
           <li>
-            <b>Theme</b>: the kind of story, such as fantasy or mystery, or your own.
+            <b>Theme</b>: the kind of story, such as High Fantasy, Cyberpunk or Horror, or your own.
           </li>
           <li>
             <b>World Brief</b>: your description of the world. A line is enough; more gives you more say. You can change it later in the Journal.
@@ -175,12 +175,13 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         <h3>Free Text and Choices</h3>
         <p>
           The {tool(ChoicesIcon, "Choices")} button switches how you play. In <b>Free Text</b> you type your move. In <b>Choices</b>, every reply ends with
-          three things your PC might do; pick one to send it, or type your own in the box under them. Switch whenever you like.
+          three things your PC might do; pick one to send it, or type your own in the box under them. Switch whenever you like. Continue, Decide for me and
+          Enhance are only in Free Text.
         </p>
         <h3>The tools by the box</h3>
         <ul>
           <li>
-            {tool(SendIcon, "Send")}: send your move. {tool(StopIcon, "Stop")} halts a reply while it's being written.
+            {tool(SendIcon, "Send")}, or Enter: send your move. Shift+Enter starts a new line. {tool(StopIcon, "Stop")} halts a reply while it's being written.
           </li>
           <li>{tool(ContinueIcon, "Continue")}: send nothing and let the Narrator move the story on by itself.</li>
           <li>
@@ -192,6 +193,9 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             answered only from what your PC would know, changes nothing, and is forgotten.
           </li>
           <li>{tool(DrawIcon, "Draw a picture")}: describe a picture and it's drawn from your words and the recent story.</li>
+          <li>
+            {tool(RewriteIcon, "Tell Narrator what to change")}: change the world in your own words. See {link("fix", "Changing the story")}.
+          </li>
         </ul>
         <h3>Luck and risk</h3>
         <p>
@@ -209,8 +213,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </p>
         <h3>Leaving</h3>
         <p>
-          You can go to the Menu, close the tab or open the story on another device at any time. A reply that's being written carries on and is there when you
-          come back.
+          You can go to the Menu, close the tab, or with the Server open the story on another device, at any time. A reply that's being written carries on and
+          is there when you come back.
         </p>
       </>
     ),
@@ -227,7 +231,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           <li>{tool(EditIcon, "Edit")}: change the words yourself. The Narrator brings the world in line with your version and writes nothing new.</li>
           <li>
             {tool(RegenerateIcon, "Regenerate")}: a fresh reply to the same move, with no guidance. {tool(RegenerateIcon, "Regenerate with Choices")} writes it
-            again with three Choices, for a reply written before you switched to Choices.
+            again with three Choices, when a reply came without them.
           </li>
         </ul>
         <h3>Earlier Messages</h3>
@@ -244,8 +248,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </ul>
         <h3>Changing the world</h3>
         <p>
-          In the Journal, {tool(RewriteIcon, "Tell Narrator what to change")} takes a change in your own words, such as "The king has a twin" or "My PC lost the
-          sword in the river". The Narrator updates the world's secrets and the Journal to match, and the story carries on from there.
+          By the box, or in the Journal, {tool(RewriteIcon, "Tell Narrator what to change")} takes a change in your own words, such as "The king has a twin" or
+          "My PC lost the sword in the river". The Narrator updates the world's secrets and the Journal to match, and the story carries on from there.
         </p>
       </>
     ),
@@ -273,7 +277,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <b>Loose Ends</b>: what your PC knows is still unsettled, such as promises, plans and open questions. Add, change or remove them.
           </li>
           <li>
-            <b>What your PC knows</b>: their appearance, what they carry and their condition.
+            <b>What your PC knows</b>: the facts your PC has learned so far. Add, change or remove them.
           </li>
           <li>
             <b>Characters</b>: everyone your PC has met, with what your PC knows of them. {tool(RenameIcon, "Rename")} changes a name everywhere in the story.
@@ -314,8 +318,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         <ul>
           <li>{tool(EditIcon, "Redraw")}: draw it again from its prompt.</li>
           <li>{tool(RegenerateIcon, "Update")} (the Cover and portraits): write a new prompt from the story as it stands, and draw it.</li>
-          <li>{tool(RewriteIcon, "Nudge")}: draw it again with a few words of your own.</li>
-          <li>{tool(UploadIcon, "Upload")}: replace it with a picture of your own.</li>
+          <li>{tool(RewriteIcon, "Nudge")} (the Cover and portraits): draw it again with a few words of your own.</li>
+          <li>{tool(UploadIcon, "Upload")} (the Cover and portraits): replace it with a picture of your own.</li>
           <li>{tool(DeleteIcon, "Delete")} (scene pictures only): it's gone for good, and a Revert doesn't bring it back.</li>
         </ul>
         <p>Change a story's Art Style in Settings while the story is open. Pictures already drawn keep theirs until you redraw them.</p>
@@ -356,7 +360,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         <h3>Text</h3>
         <ul>
           <li>
-            <b>Text provider, Server address, Text model, Text API key</b>: where your Narrator is. See {link("models", "Choosing your AI")}.
+            <b>Text provider, Server address, Text model, Text API key</b>: where your Narrator is. With OpenRouter, <b>Provider</b> and <b>Routing</b> choose
+            who serves the model. See {link("models", "Choosing your AI")}.
           </li>
           <li>
             <b>Extra Narrator Instructions</b>: your own guidance for the Narrator in every story, such as "Keep replies short" or "No romance".
@@ -390,7 +395,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <b>Extra Image Instructions</b>: your own guidance for every picture.
           </li>
           <li>
-            <b>Image provider</b> and its models, and <b>Test image</b>.
+            <b>Image provider</b>, its models and <b>Resolution</b>, and <b>Test image</b>. With ComfyUI, <b>Free GPU memory after each picture</b> lets other
+            programs use the graphics card.
           </li>
         </ul>
         <h3>Reading</h3>
@@ -399,7 +405,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <b>Theme</b>: light, dark, or matching this device.
           </li>
           <li>
-            <b>Chat style</b>: how the story looks: Script, Prose, Bubbles or a Stage box that shows one line at a time.
+            <b>Chat style</b>: how the story looks: Script, Prose or Bubbles.
           </li>
           <li>
             <b>Font size</b>: small, medium or large.

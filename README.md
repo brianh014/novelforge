@@ -27,7 +27,7 @@ Download your system's file from the [Releases](https://github.com/brianh014/nov
 - **NovelForge** is the app: it opens in your browser, for this computer only, and you end it with Quit in the Menu.
 - **NovelForge Server** serves the whole network and opens no browser, so it runs headless too. Its log goes to the terminal, and stopping it (closing the window, or Ctrl+C) stops the server. Browse to it from any device at `http://<its address>:4600/`; it lists its addresses as it starts.
 
-Both use port 4600. Open **Settings** first to enter your text model's address, model and key (see [Recommended settings](#recommended-settings)). The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
+Both use port 4600. Open **Settings** first to enter your text model's address, model and key (see [Recommended settings](#recommended-settings)), then the **Reader's Guide** on the Menu for how to play. The downloads aren't signed yet, so Windows and macOS warn the first time you open one.
 
 ### Windows
 
@@ -43,7 +43,7 @@ Both use port 4600. Open **Settings** first to enter your text model's address, 
 
 ### Linux
 
-1. Download and unpack it into a folder of its own, for x64. On a machine with no desktop, such as a server reached over SSH, use the Server. Use `NovelForge-Server-Linux.tar.gz` for the Server:
+1. Download and unpack it into a folder of its own, for x64. On a machine with no desktop, such as a server reached over SSH, use the Server: `NovelForge-Server-Linux.tar.gz` in place of `NovelForge-Linux.tar.gz` below.
 
    ```bash
    mkdir -p ~/NovelForge && cd ~/NovelForge
@@ -88,7 +88,7 @@ sudo systemctl enable --now novelforge
 
 When a new version is out, a notice at the top of the screen says so, and **Settings → Updates** can check at any time. Choose **Install**, and NovelForge downloads it, restarts and comes back to the same page, on every system and for the Server too. Your Saves and Settings stay as they are, and if the new version fails to start, the old one comes back. To check, NovelForge asks GitHub for the newest release every few hours; nothing else is sent.
 
-You can also update by hand: download the new version and unpack it over the old one, with NovelForge closed (on a Mac, replace `NovelForge.app` in Applications).
+You can also update by hand: download the new version and unpack it over the old one, with NovelForge closed (on a Mac, replace `NovelForge.app` in Applications; for a systemd service, `sudo systemctl stop novelforge` first and `start` it after).
 
 ## Using NovelForge
 
@@ -120,7 +120,7 @@ bun src/main.ts --fake --open
 | `PORT` | The port to listen on (default `4600`). |
 | `HOST` | The address to listen on (default `0.0.0.0` for a server, `127.0.0.1` for the app). |
 
-`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a GitHub release with the [GitHub CLI](https://cli.github.com) (`gh`), signed in as you; a version with a hyphen, such as `0.2.0-alpha.1`, is a pre-release, which the Menu's Install skips. `bun run try-update` tries Install before a release: it builds this code as an old 0.0.1 copy and as the new version, and starts the old one with `--fake` on port 4660 against a stand-in release, so choosing Install brings it back as the new version.
+`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a GitHub release with the [GitHub CLI](https://cli.github.com) (`gh`), signed in as you; a version with a hyphen, such as `0.2.0-alpha.1`, is a pre-release, which Install never offers. `bun run try-update` tries Install before a release: it builds this code as an old 0.0.1 copy and as the new version, and starts the old one with `--fake` on port 4660 against a stand-in release, so choosing Install brings it back as the new version.
 
 > **A server on the network has no accounts.** Anyone who can reach it can play, change Settings and spend your saved keys. Keep it on a network you trust, or set `HOST=127.0.0.1`.
 

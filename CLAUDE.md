@@ -31,10 +31,14 @@ Follow the conventions in `CONTRIBUTING.md`: Glossary terms, `shortcut:` comment
 - `Play` (`src/web/play.tsx`) keeps the Turn and the state its parts share. The parts are in their own files: `story-pictures.tsx` (the `useStoryPictures` hook and the pictures inline in the story), `story-recap.tsx` (the left page), `message-controls.tsx` (the tools under a Message) and `play-asks.tsx` (the forms over the compose box). A new piece of the story screen goes in the file for its job.
 - `NewStory` (`src/web/wizard.tsx`) keeps the form's state, the Narrator calls and the Art and Your World steps. The parts are in their own files: `wizard-draft.ts` (the draft, its themes and keeping it in the tab), `wizard-form.tsx` (the first step's boxes), `wizard-pictures.tsx` (a picture with its Draw, Redo, Nudge and Upload) and `wizard-frame.tsx` (the heading, the Working screen and the dialogs). A new piece of the New Story screen goes in the file for its job.
 
+### Reader's Guide
+
+`src/web/guide.tsx` is the player's help, on the Menu. When a change adds, removes or renames something a player sees (a tool, a setting, a screen), update its section in the Guide too, with the tool's icon beside its name as the other tools have. It says "AI", not "text model" or "image model".
+
 ### CI and releases
 
 - The repo, Issues and releases are on GitHub (`origin`, https://github.com/brianh014/novelforge). The `gitea` remote is only the user's private backup; push there only when asked. `.github/workflows/ci.yml` runs `bun run check` and `bun run e2e` on pushes and pull requests.
-- Releases are published from the user's PC: `bun run publish-release` tags the commit `v<version>` from `package.json`, builds the downloads with `bun run release` and uploads them as a GitHub release with `gh`. A version with a hyphen (`-alpha.2`) is a pre-release, which the Menu's New Version notice (`src/updater.ts`) skips: it offers only GitHub's latest full release, and swaps the program file for the one in that release's download. Keep the download names in `scripts/build-release.ts` and `downloadName` in step. The user runs it; don't add a release workflow unless they ask.
+- Releases are published from the user's PC: `bun run publish-release` tags the commit `v<version>` from `package.json`, builds the downloads with `bun run release` and uploads them as a GitHub release with `gh`. A version with a hyphen (`-alpha.2`) is a pre-release, which the New Version toast and Settings → Updates (`src/web/new-version.tsx`, `src/updater.ts`) never offer: it offers only GitHub's latest full release, and swaps the program file for the one in that release's download. Keep the download names in `scripts/build-release.ts` and `downloadName` in step. The user runs it; don't add a release workflow unless they ask.
 
 ### Testing the app
 
