@@ -2846,12 +2846,7 @@ dialog blockquote {
   max-width: 100%;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-@media (max-width: 760px) {
-  .story-time {
-    font-size: 14px;
-  }
+  font-size: 14px;
 }
 
 .own-choice textarea {
