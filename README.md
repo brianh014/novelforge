@@ -8,25 +8,17 @@ NovelForge is a single-player story game. You build a world and a character, the
 
 It runs on your own computer and talks to models you choose. Bring an OpenAI-compatible text API (OpenRouter, DeepInfra, a local server) and, for pictures, OpenRouter or your own ComfyUI.
 
-## What makes it different
+## Features
 
 Most AI roleplay is one long chat with a model that agrees with everything, forgets what happened an hour ago and writes your character's lines for you. NovelForge is built as a game instead, with the AI as its storyteller.
 
-- **Your character is yours.** The Narrator never speaks or acts for your PC, never moves them somewhere or skips time on its own, and stops each reply at the moment your PC would answer or choose.
+- **Your character is yours.** The Narrator never speaks or acts for your PC, never moves them somewhere or skips time on its own, and stops each reply at the moment your PC would answer or choose. Type your move, or pick from three Choices.
 - **Things can go wrong.** Left to itself, an AI lets everything work. When your PC tries something risky, the Narrator sets how hard it is first, then a hidden die decides, so a bold plan can fail and a long shot can come off.
-- **The world keeps secrets.** Each story starts from a full world with its own history, places and secret Plot Threads, which you uncover by playing. Your Journal holds only what your PC knows.
-- **It remembers.** The story is kept as structured state, not just chat history: who your PC has met and what they know, Loose Ends still open, the time and date, and short Old Memories of everything older. Each Turn the Narrator gets what it needs, so a long story stays straight.
-- **Nothing is final.** Every Message keeps a full Snapshot of the story, so you can Rewrite a reply, edit it, step back to any point at once, or branch off into a copy and try another path. You can even switch AI in the middle of a story.
-- **Pictures that stay in character.** Each person gets a portrait, kept up to date as their looks change, and image models that take reference pictures draw scenes from them, so faces stay the same as the story goes on.
-- **Yours, on your computer.** No account and no subscription. Your stories are files on your own disk, and you choose the AI, from a cheap hosted one to one on your own graphics card.
-
-## Features
-
-- **New Story wizard:** choose a Theme, write or generate the world and your character, and draw the Cover and portraits before you start.
-- **Play:** each Turn is your move and the Narrator's reply, streamed as it's written. Ask the Narrator a question, have it decide for you, or tell it to change the world.
-- **Memory:** a Journal of what your character knows, Loose Ends, the people met and Chapters, kept by the Narrator and editable by you.
-- **Undo anything:** edit, rewrite or regenerate a reply, or revert to any earlier Message. Every Save is one SQLite file you can duplicate, export and import.
-- **Pictures:** Scene Images when the scene changes, pictures on request, and a Gallery to redraw, nudge or replace any of them with your own.
+- **The world keeps secrets.** The New Story wizard builds a full world from your Theme, ideas and characters, with its own history, places and secret Plot Threads, which you uncover by playing. Write it all yourself, or let the Narrator fill in what you leave empty.
+- **It remembers.** The story is kept as structured state, not just chat history: who your PC has met and what they know, Loose Ends still open, the time and date, and short Old Memories of everything older. You read and edit it all in the Journal, which holds only what your PC knows, and the Narrator gets what it needs each Turn, so a long story stays straight.
+- **Nothing is final.** Every Message keeps a full Snapshot of the story, so you can rewrite, edit or regenerate a reply, step back to any point at once, or branch off into a copy and try another path. Tell the Narrator to change the world in your own words, or switch AI in the middle of a story.
+- **Pictures that stay in character.** A Cover, a portrait for each person, kept up to date as their looks change, and a picture whenever the scene changes or you ask for one. Image models that take reference pictures draw scenes from the portraits, so faces stay the same, and the Gallery lets you redraw, nudge or replace any picture with your own.
+- **Yours, on your computer.** No account and no subscription. Each story is one file on your own disk that you can duplicate, export and import, and you choose the AI, from a cheap hosted one to one on your own graphics card.
 
 ## Quick Install
 
