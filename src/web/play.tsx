@@ -36,7 +36,7 @@ import {
   type TurnInProgress,
 } from "./chat-style";
 import { CONTINUE_INPUT } from "../prompt-assembler";
-import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, Painting, Quilling, RewriteIcon, SendIcon } from "./icons";
+import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, UpIcon, Painting, Quilling, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
 import { type MessageActions, MessageControls } from "./message-controls";
 import { Book, BookTabs, ConfirmDialog, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
@@ -140,6 +140,10 @@ function useTurnScroll(story: RefObject<HTMLDivElement | null>, turn: unknown, l
   return { more, room, onScroll, refit };
 }
 
+// A long story draws only its newest Messages, as drawing them all slowed opening it. The up arrow adds more at a time.
+const STORY_WINDOW = 200;
+const EARLIER = 50;
+
 const draftKey = (id: string) => `novelforge-draft-${id}`;
 
 /** The chat bar's unsent words, kept for this tab so leaving the Story page doesn't lose them. Blocked storage only forgets them. */
@@ -170,6 +174,7 @@ export function Play({ id }: { id: string }) {
   const [openNewImages, setOpenNewImages] = useState(true);
   // Unset until the player moves, so that each new response opens on its first beat.
   const [chosenBeat, setChosenBeat] = useState<number>();
+  const [shown, setShown] = useState(STORY_WINDOW);
   // The box keeps its own words, and the page hears only whether there are any: a re-render per key lagged in a long story.
   const [hasWords, setHasWords] = useState(() => !!storedDraft(id).trim());
   const draftNow = () => inputBox.current?.value ?? "";
@@ -477,6 +482,7 @@ export function Play({ id }: { id: string }) {
   const before = (message: Message) => messages[messages.indexOf(message) - 1];
 
   const opening = chapterOpenings(chapters, told);
+  const unshown = Math.max(0, told.length - shown);
 
   const actions: MessageActions = {
     replay: (message) => {
@@ -568,7 +574,22 @@ export function Play({ id }: { id: string }) {
                   </button>
                 </>
               )}
-              {told.map((message) => {
+              {unshown > 0 && (
+                <button
+                  type="button"
+                  className="icon earlier"
+                  title={`Show ${plural(Math.min(EARLIER, unshown), "earlier message")}`}
+                  aria-label="Show earlier messages"
+                  onClick={() => {
+                    // The last batch takes the button away, and focus with it.
+                    if (unshown <= EARLIER) story.current!.focus();
+                    setShown(shown + EARLIER);
+                  }}
+                >
+                  {UpIcon}
+                </button>
+              )}
+              {told.slice(unshown).map((message) => {
                 const chapter = opening.heads.get(message.id);
                 return (
                   <Fragment key={message.id}>

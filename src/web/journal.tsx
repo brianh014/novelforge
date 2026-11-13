@@ -14,7 +14,7 @@ import {
   tellNarrator,
 } from "./api";
 import { ContinueRule, isContinue, readable } from "./chat-style";
-import { EditIcon, Quilling, RenameIcon, RewriteIcon } from "./icons";
+import { DownIcon, EditIcon, Quilling, RenameIcon, RewriteIcon, UpIcon } from "./icons";
 import { Book, BookTabs } from "./menu";
 import { IMAGE_CHECK_MS, RequestedPicture, SceneImage } from "./story-pictures";
 import { Person } from "./zoom";
@@ -38,7 +38,7 @@ function NewestFirst<T>({ items, className, children }: { items: T[]; className?
   );
 }
 
-/** Long text cut to three lines, with More to show it all. More appears only when the text runs past them. */
+/** Long text cut to three lines, with a down arrow to show it all. More appears only when the text runs past them. */
 function Clamped({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   const [cut, setCut] = useState(false);
@@ -59,8 +59,8 @@ function Clamped({ text }: { text: string }) {
         {text}
       </p>
       {(cut || open) && (
-        <button type="button" className="quiet show-more" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? "Less" : "More"}
+        <button type="button" className="icon show-more" title={open ? "Less" : "More"} aria-label="More" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? UpIcon : DownIcon}
         </button>
       )}
     </div>
