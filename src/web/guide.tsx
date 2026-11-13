@@ -13,18 +13,18 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
       <>
         <p>
           NovelForge is a choose-your-own visual novel that is written as you play. You make a world and a character, your <b>PC</b>, then act and speak only as
-          them. A text model plays the <b>Narrator</b>: it tells the story, voices everyone else, keeps track of the world and quietly decides whether what you
-          try works. An image model draws the Cover, portraits and scenes as you go.
+          them. An AI plays the <b>Narrator</b>: it tells the story, voices everyone else, keeps track of the world and quietly decides whether what you try
+          works. An image AI draws the Cover, portraits and scenes as you go.
         </p>
-        <p>NovelForge runs on your own computer. It brings no model of its own: you connect the ones you choose, and your stories stay on your computer.</p>
+        <p>NovelForge runs on your own computer. It brings no AI of its own: you connect the ones you choose, and your stories stay on your computer.</p>
         <h3>Your first story</h3>
         <ol>
           <li>
-            Open <b>Settings → Text</b> and fill in your text model: where it is, which model, and its key. {link("models", "Choosing your models")} says which
-            to pick. Press <b>Test text</b> to check it answers.
+            Open <b>Settings → Text</b> and fill in the AI that writes your story: where it is, which one, and its key. {link("models", "Choosing your AI")}{" "}
+            says which to pick. Press <b>Test text</b> to check it answers.
           </li>
           <li>
-            Optionally, open <b>Settings → Images</b> and set up an image model, then press <b>Test image</b>. Without one, the story is text only.
+            Optionally, open <b>Settings → Images</b> and set up an image AI, then press <b>Test image</b>. Without one, the story is text only.
           </li>
           <li>
             Back on the Menu, choose <b>New Story</b>. Write as much or as little as you like, or press <b>Pick for me</b> and let the Narrator fill it in. See{" "}
@@ -38,13 +38,13 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
   },
   {
     slug: "models",
-    name: "Choosing your models",
+    name: "Choosing your AI",
     body: (
       <>
-        <h3>Text: a hosted model is best</h3>
+        <h3>The story: an online AI is best</h3>
         <p>
-          The Narrator needs a capable model. Each Turn sends it the newest Messages in full, plus the world, the Journal and the Old Memories, so a long
-          story's prompt grows past 30,000 tokens. A large hosted model takes all of that, keeps the story straight and costs pennies a Turn.
+          The Narrator needs a capable AI. Each Turn sends it the newest Messages in full, plus the world, the Journal and the Old Memories, so a long story's
+          prompt grows past 30,000 tokens. A large online AI takes all of that, keeps the story straight and costs pennies a Turn.
         </p>
         <ul>
           <li>
@@ -56,14 +56,14 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <code>https://api.deepinfra.com/v1/openai</code>), save, then pick the model and enter its key.
           </li>
           <li>
-            <b>A model on your own computer</b>, with Ollama (<code>http://localhost:11434/v1</code>), LM Studio (<code>http://localhost:1234/v1</code>) or
+            <b>An AI on your own computer</b>, with Ollama (<code>http://localhost:11434/v1</code>), LM Studio (<code>http://localhost:1234/v1</code>) or
             another OpenAI-compatible server: choose <b>Local / OpenAI server</b>. It suits short stories, privacy and trying things out. A 10 GB graphics card
             holds a model of about 12B with a 16,000-token context, so the Narrator sees much less of a long story. Set <b>Longest reply, in tokens</b> to about
             3000 and <b>Recent Messages</b> to 40, and raise the context length in the server itself (Ollama's default is small and cuts the prompt without
             saying so).
           </li>
         </ul>
-        <h3>Images: your own ComfyUI is best</h3>
+        <h3>Pictures: your own ComfyUI is best</h3>
         <p>
           NovelForge draws a lot: the Cover, a portrait for each person, a scene picture whenever the scene changes, pictures you ask for and every redraw. On a
           paid image service each one costs money; on your own ComfyUI they are free.
@@ -71,11 +71,11 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         <ul>
           <li>
             <b>Local (ComfyUI)</b>: give ComfyUI's address and choose its models. In Simple Mode, FLUX.2 or Qwen Image keep faces the same from picture to
-            picture, as they can use the portraits; SD 1.5 and SDXL can't. If a local text model shares the graphics card, turn on{" "}
+            picture, as they can use the portraits; SD 1.5 and SDXL can't. If an AI on your own computer shares the graphics card, turn on{" "}
             <b>Free GPU memory after each picture</b>.
           </li>
           <li>
-            <b>OpenRouter</b>: for when you have no graphics card for ComfyUI. Paste your key and choose an image model.
+            <b>OpenRouter</b>: for when you have no graphics card for ComfyUI. Paste your key and choose an image AI.
           </li>
         </ul>
         <p>
@@ -276,7 +276,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
     name: "Pictures and the Gallery",
     body: (
       <>
-        <p>With an image model set up, pictures come by themselves:</p>
+        <p>With an image AI set up, pictures come by themselves:</p>
         <ul>
           <li>
             <b>Scene pictures</b> when the scene changes, shown in the story beside the reply.
@@ -354,7 +354,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         <h3>Text</h3>
         <ul>
           <li>
-            <b>Text provider, Server address, Text model, Text API key</b>: where your Narrator is. See {link("models", "Choosing your models")}.
+            <b>Text provider, Server address, Text model, Text API key</b>: where your Narrator is. See {link("models", "Choosing your AI")}.
           </li>
           <li>
             <b>Extra Narrator Instructions</b>: your own guidance for the Narrator in every story, such as "Keep replies short" or "No romance".
@@ -370,7 +370,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <b>Longest Question answer, in words</b>: for Ask the Narrator.
           </li>
           <li>
-            <b>Test text</b>: sends a short prompt to check the model works. A paid provider may charge for it.
+            <b>Test text</b>: sends a short prompt to check the AI works. A paid provider may charge for it.
           </li>
         </ul>
         <h3>Images</h3>
@@ -442,7 +442,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           Settings stay as they are. If the new version won't start, the old one comes back.
         </p>
         <p>
-          To check, NovelForge asks GitHub for the newest release now and then. That is the only thing it sends anywhere besides your models. The Menu shows the
+          To check, NovelForge asks GitHub for the newest release now and then. That is the only thing it sends anywhere besides your AI. The Menu shows the
           version you have at the bottom.
         </p>
         <p>
@@ -463,17 +463,18 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </p>
         <h3>Who sees my story?</h3>
         <p>
-          Your stories stay on your computer. Each Turn sends the story to the text model you chose, and picture prompts to your image model. With local models,
+          Your stories stay on your computer. Each Turn sends the story to the AI you chose, and picture prompts to your image AI. With AI on your own computer,
           nothing leaves your computer at all.
         </p>
         <h3>A Turn failed</h3>
         <p>
-          The error says why, and your move stays in the box to send again. Check your key and credit with the provider, and press Test text in Settings. A
-          model that refuses some content says so: Rewrite or change your move, or choose a different model.
+          The error says why, and your move stays in the box to send again. Check your key and credit with the provider, and press Test text in Settings. An AI
+          that refuses some content says so: Rewrite or change your move, or choose a different AI.
         </p>
         <h3>Replies are slow, or cut off</h3>
         <p>
-          A local model can take a minute a Turn. Raise <b>Longest reply, in tokens</b> if replies end early, or <b>in minutes</b> if a slow model times out.
+          An AI on your own computer can take a minute a Turn. Raise <b>Longest reply, in tokens</b> if replies end early, or <b>in minutes</b> if a slow AI
+          times out.
         </p>
         <h3>The Narrator forgot something</h3>
         <p>
