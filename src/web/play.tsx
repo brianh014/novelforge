@@ -40,7 +40,7 @@ import {
 import { CONTINUE_INPUT } from "../prompt-assembler";
 import { AskIcon, StopIcon, ChoicesIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, UpIcon, Painting, Quilling, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
-import { ChoiceButtons } from "./play-choices";
+import { ChoiceButtons, useNarrow } from "./play-choices";
 import { type MessageActions, MessageControls } from "./message-controls";
 import { Book, BookTabs, ConfirmDialog, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { ChapterEnd, FeedbackForm, PictureForm, QuestionForm, sendOnEnter } from "./play-asks";
@@ -177,6 +177,7 @@ export function Play({ id }: { id: string }) {
   const [openNewImages, setOpenNewImages] = useState(true);
   // Unset until the player moves, so that each new response opens on its first beat.
   const [chosenBeat, setChosenBeat] = useState<number>();
+  const narrow = useNarrow();
   const [shown, setShown] = useState(STORY_WINDOW);
   // The box keeps its own words, and the page hears only whether there are any: a re-render per key lagged in a long story.
   const [hasWords, setHasWords] = useState(() => !!storedDraft(id).trim());
@@ -293,7 +294,7 @@ export function Play({ id }: { id: string }) {
   }
 
   function continueStory() {
-    if (turn || deciding || (hasWords && playMode === "free")) return;
+    if (turn || deciding || hasWords) return;
     playInput(CONTINUE_INPUT, messages);
   }
 
@@ -518,6 +519,36 @@ export function Play({ id }: { id: string }) {
   const opening = chapterOpenings(chapters, told);
   const unshown = Math.max(0, told.length - shown);
 
+  // Outside the form when the Choices sit in the story, so it names its form.
+  const typing = (
+    <label className={choosing ? "own-choice" : undefined}>
+      <span className="visually-hidden">What does {pc} say or do?</span>
+      <textarea
+        ref={inputBox}
+        form="compose"
+        rows={1}
+        placeholder={deciding ? "The Narrator is deciding…" : choosing ? "Or write your own…" : `What does ${pc} say or do?`}
+        defaultValue={storedDraft(id)}
+        // While deciding, the reply would overwrite anything typed.
+        readOnly={!!turn || deciding}
+        onChange={(e) => keepDraft(e.target.value)}
+        onKeyDown={sendOnEnter}
+      />
+    </label>
+  );
+  // Nothing to pick while a Turn writes the next ones, or before the story opens.
+  const choiceBlock = choosing && !turn && latest && (
+    <ChoiceButtons
+      choices={latest.role === "narrator" ? latest.choices : undefined}
+      onChoose={choose}
+      onRegenerate={replaceable && (() => setOfferingChoices(true))}
+    >
+      {typing}
+    </ChoiceButtons>
+  );
+  // A phone's bottom bar would leave the story no room under three Choices. The stage shows one beat, so it keeps them below.
+  const inlineChoices = narrow && !staged;
+
   const actions: MessageActions = {
     replay: (message) => {
       setReplaying(message.text === CONTINUE_INPUT ? "" : message.text);
@@ -654,6 +685,7 @@ export function Play({ id }: { id: string }) {
                 {/* Until the Turn is done, as the text can pause while the Narrator writes the rest of its reply. An Edit has its own. */}
                 {turn && !(turn.edit && turn.narration) && <Writing />}
               </div>
+              {inlineChoices && choiceBlock}
               <div ref={room} aria-hidden="true" />
             </div>
           </div>
@@ -727,32 +759,8 @@ export function Play({ id }: { id: string }) {
         />
       )}
       {questioning && askable && <QuestionForm id={id} pc={pc} signal={leaving.current.signal} onClose={closeQuestion} onError={setError} />}
-      <form className="compose" onSubmit={send}>
-        {choosing ? (
-          // Nothing to pick while a Turn writes the next ones, or before the story opens.
-          !turn &&
-          latest && (
-            <ChoiceButtons
-              choices={latest.role === "narrator" ? latest.choices : undefined}
-              onChoose={choose}
-              onRegenerate={replaceable && (() => setOfferingChoices(true))}
-            />
-          )
-        ) : (
-          <label>
-            <span className="visually-hidden">What does {pc} say or do?</span>
-            <textarea
-              ref={inputBox}
-              rows={1}
-              placeholder={deciding ? "The Narrator is deciding…" : `What does ${pc} say or do?`}
-              defaultValue={storedDraft(id)}
-              // While deciding, the reply would overwrite anything typed.
-              readOnly={!!turn || deciding}
-              onChange={(e) => keepDraft(e.target.value)}
-              onKeyDown={sendOnEnter}
-            />
-          </label>
-        )}
+      <form id="compose" className="compose" onSubmit={send}>
+        {choosing ? !inlineChoices && choiceBlock : typing}
         <div className="compose-actions">
           <button
             ref={drawButton}
@@ -824,7 +832,7 @@ export function Play({ id }: { id: string }) {
               )}
             </>
           )}
-          {(!hasWords || choosing) && (
+          {!hasWords && (
             <button
               type="button"
               className="icon continue"
@@ -848,7 +856,7 @@ export function Play({ id }: { id: string }) {
               {StopIcon}
             </button>
           ) : (
-            !choosing && (
+            (!choosing || hasWords) && (
               // aria-disabled, because a disabled button would drop keyboard focus at every Send.
               <button type="submit" className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !hasWords}>
                 {SendIcon}

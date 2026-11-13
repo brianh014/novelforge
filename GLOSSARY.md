@@ -139,7 +139,7 @@ A standing out-of-character instruction to the Narrator for one Save, such as co
 _Avoid_: Author's Note, edit
 
 **Play Mode**:
-How the player gives the PC's next move in one Story: Free Text, typing it, or Choices, picking one of the Choices every Narrator response offers, with no typing. Free Text is the default, and the player can switch at any time.
+How the player gives the PC's next move in one Story: Free Text, typing it, or Choices, picking one of the Choices every Narrator response offers, or typing in the box under them. Free Text is the default, and the player can switch at any time.
 _Avoid_: Chat style (that is how Messages look)
 
 **Choice**:
