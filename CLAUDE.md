@@ -34,7 +34,7 @@ Follow the conventions in `CONTRIBUTING.md`: Glossary terms, `shortcut:` comment
 ### CI and releases
 
 - `.github/workflows/ci.yml` runs `bun run check` and `bun run e2e` on pushes and pull requests. The repo is on Gitea for now and will move to GitHub later. Gitea runs this same file, so keep steps that only work on GitHub behind `github.server_url == 'https://github.com'`.
-- Releases are published from the user's PC, as Gitea has no runner and is mainly a backup: `bun run publish-release` tags the commit `v<version>` from `package.json`, builds the downloads with `bun run release` and uploads them as a Gitea release, with the user's token in `GITEA_TOKEN`. A version with a hyphen (`-alpha.2`) is a pre-release. NovelForge is in alpha, so versions are `0.1.0-alpha.N` until the user says otherwise. The user runs it; don't add a release workflow unless they ask.
+- Releases are published from the user's PC, as Gitea has no runner and is mainly a backup: `bun run publish-release` tags the commit `v<version>` from `package.json`, builds the downloads with `bun run release` and uploads them as a Gitea release, signed in with the login git pushes with (or a token in `GITEA_TOKEN`). A version with a hyphen (`-alpha.2`) is a pre-release. NovelForge is in alpha, so versions are `0.1.0-alpha.N` until the user says otherwise. The user runs it; don't add a release workflow unless they ask.
 
 ### Testing the app
 

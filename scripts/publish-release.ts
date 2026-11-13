@@ -1,6 +1,7 @@
 // Publishes package.json's version as a Gitea release from this computer: tags the current commit v<version> if it
 // isn't yet, builds the downloads and uploads them. A version with a hyphen (0.1.0-alpha.1) is a pre-release.
-// Needs a Gitea access token with write:repository in GITEA_TOKEN. It is only ever sent to the origin's Gitea.
+// Signs in with the login git pushes with, from git's credential helper, or with an access token in GITEA_TOKEN if
+// that is set. Either is only ever sent to the origin's Gitea.
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -11,8 +12,6 @@ const git = (...args: string[]) => {
   return run.stdout.toString().trim();
 };
 
-const token = process.env.GITEA_TOKEN;
-if (!token) throw new Error("Set GITEA_TOKEN to a Gitea access token with write:repository first.");
 const { version } = (await Bun.file(join(root, "package.json")).json()) as { version: string };
 const tag = `v${version}`;
 
@@ -28,7 +27,21 @@ if (tagged && tagged !== head) throw new Error(`${tag} already names another com
 const remote = git("remote", "get-url", "origin").match(/^(https:\/\/[^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?$/);
 if (!remote) throw new Error("The origin remote isn't an https://host/owner/repo address.");
 const api = `${remote[1]}/api/v1/repos/${remote[2]}/${remote[3]}`;
-const headers = { Authorization: `token ${token}` };
+const headers = { Authorization: authorization(new URL(remote[1]!).host) };
+
+/** Gitea takes the username and token, or password, that git pushes with as Basic auth on its API too. */
+function authorization(host: string) {
+  if (process.env.GITEA_TOKEN) return `token ${process.env.GITEA_TOKEN}`;
+  const fill = Bun.spawnSync(["git", "credential", "fill"], { cwd: root, stdin: Buffer.from(`protocol=https\nhost=${host}\n\n`) });
+  const fields = Object.fromEntries(
+    fill.stdout
+      .toString()
+      .split("\n")
+      .map((line) => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]),
+  );
+  if (fill.exitCode !== 0 || !fields.username || !fields.password) throw new Error(`git has no login for ${host}. Push once to save one, or set GITEA_TOKEN.`);
+  return `Basic ${btoa(`${fields.username}:${fields.password}`)}`;
+}
 
 async function gitea(path: string, init: RequestInit = {}) {
   const response = await fetch(`${api}${path}`, { ...init, headers: { ...headers, ...init.headers } });
@@ -37,8 +50,10 @@ async function gitea(path: string, init: RequestInit = {}) {
   return response.json() as Promise<{ id: number; html_url?: string; assets?: { name: string }[] }>;
 }
 
+// Before the long build, so a login Gitea refuses is found at once.
 const existing = await fetch(`${api}/releases/tags/${tag}`, { headers });
 if (existing.ok) throw new Error(`${tag} is already released on Gitea. Raise the version in package.json for a new one.`);
+if (existing.status !== 404) throw new Error(`Gitea answered ${existing.status} when asked for releases: check the login, or set GITEA_TOKEN.`);
 
 const built = Bun.spawnSync([process.execPath, "scripts/build-release.ts"], { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (built.exitCode !== 0) throw new Error("The build failed, so nothing was published.");
