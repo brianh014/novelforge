@@ -37,7 +37,7 @@ Most AI roleplay is one long chat with a model that agrees with everything, forg
 
 ## Quick Install
 
-Download your system's file from the [Releases](https://github.com/brianh014/novelforge/releases/latest) page. Each system has two:
+Download your system's file from the [Releases](https://github.com/brianh014/novelforge/releases/latest) page, where the files are listed under **Assets** at the bottom. Each system has two, and most people want **NovelForge**; the Server is for running it on another machine and playing from your other devices.
 
 - **NovelForge** is the app: it opens in your browser, for this computer only, and you end it with Quit in the Menu.
 - **NovelForge Server** serves the whole network and opens no browser, so it runs headless too. Its log goes to the terminal, and stopping it (closing the window, or Ctrl+C) stops the server. Browse to it from any device at `http://<its address>:4600/`; it lists its addresses as it starts.
@@ -47,14 +47,14 @@ Both use port 4600. Once it's open, [connect an AI](#connecting-an-ai) in **Sett
 ### Windows
 
 1. Download `NovelForge-Windows.zip` (or `NovelForge-Server-Windows.zip`).
-2. Unzip it into a folder of its own, such as `Documents\NovelForge`. Your Saves, Settings and logs are kept in that folder, beside the program.
+2. Right-click the zip, choose **Extract All**, and extract it into a folder of its own, such as `Documents\NovelForge`. Don't open the program from inside the zip: Windows runs it from a temporary folder then, and your Saves would be lost. Your Saves, Settings and logs are kept in that folder, beside the program.
 3. Open `NovelForge.exe`. If Windows says it protected your PC, choose **More info**, then **Run anyway**.
 
 ### macOS
 
-1. Download `NovelForge-Mac-AppleSilicon.tar.gz` for an M-series Mac, or `NovelForge-Mac-Intel.tar.gz` for an Intel one (the `NovelForge-Server-Mac-…` files for the Server).
+1. Download `NovelForge-Mac-AppleSilicon.tar.gz` for an M-series Mac, or `NovelForge-Mac-Intel.tar.gz` for an Intel one (the `NovelForge-Server-Mac-…` files for the Server). To tell which you have, open the Apple menu → **About This Mac**: **Chip** says Apple M… on an M-series Mac, and **Processor** says Intel on an Intel one.
 2. Open the file to unpack `NovelForge.app`, and drag it to Applications. Your Saves, Settings and logs are kept in `~/Library/Application Support/NovelForge`.
-3. Open it. The first time, macOS refuses it: open **System Settings → Privacy & Security**, choose **Open Anyway** beside NovelForge, and confirm.
+3. Open it. The first time, macOS refuses it: close that message, then open **System Settings → Privacy & Security**, choose **Open Anyway** beside NovelForge, and confirm. **Open Anyway** only shows up after you've tried to open it once.
 
 ### Linux
 

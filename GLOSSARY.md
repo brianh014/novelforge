@@ -147,7 +147,7 @@ One of three things the Narrator offers the PC to say or do next, in a response 
 _Avoid_: Option, suggestion
 
 **Chat style**:
-How the Story shows Messages: Script, Prose, Bubbles or Stage box. It never changes how Chapters read in the Journal.
+How the Story shows Messages: Script, Prose or Bubbles. A fourth, the Stage box, is no longer offered; its code is kept, and a stored pick of it reads as Prose. It never changes how Chapters read in the Journal.
 
 **Beat**:
 One line of a Message, spoken or not, and what a Stage box shows at a time.
