@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { newStory } from "./support";
+import { join } from "node:path";
+import { growStory, newStory, sendTurn, STORY_WINDOW } from "./support";
 
 const PC_INPUT = /say or do\?$/;
 const IMPORTANT = "Nell Brack";
@@ -305,4 +306,23 @@ test("on a phone, a Journal change that can't be refreshed says so on the page i
   await page.getByRole("button", { name: "Save", exact: true }).click();
 
   await expect(page.getByText("Saved, but the Journal couldn't be refreshed.").filter({ visible: true })).toHaveCount(1);
+});
+
+test("a long story draws its newest Messages, and the up arrow shows 50 earlier at a time", async ({ page }) => {
+  await newStory(page);
+  await sendTurn(page, "I walk to the harbour.");
+  const id = page.url().split("/").at(-1)!;
+  await page.goto("/");
+  // The first Message is the Opening's hidden input, so 260 draw as 259.
+  growStory(join(import.meta.dirname, ".data"), id, 260);
+  await page.goto(`/#/play/${id}`);
+  const messages = page.locator("[data-testid^=message-]");
+  const earlier = page.getByRole("button", { name: "Show earlier messages" });
+  await expect(messages).toHaveCount(STORY_WINDOW);
+  await earlier.click();
+  await expect(messages).toHaveCount(STORY_WINDOW + 50);
+  await earlier.click();
+  await expect(messages).toHaveCount(259);
+  await expect(earlier).toBeHidden();
+  await expect(page.getByRole("region", { name: "Story" })).toBeFocused();
 });

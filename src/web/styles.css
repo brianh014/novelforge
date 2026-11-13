@@ -1200,6 +1200,11 @@ a.action {
   margin-inline: auto;
 }
 
+.story .earlier {
+  display: flex;
+  margin: 8px auto;
+}
+
 /* A picture is tipped in whole: its height follows its shape, so nothing is ever cut off. */
 
 .plate {
