@@ -16,7 +16,7 @@ import {
   uploadHeldImage,
 } from "./api";
 import { DecideIcon, EditIcon } from "./icons";
-import { MenuRibbon, Sheet } from "./menu";
+import { ConfirmDialog, MenuRibbon, Sheet } from "./menu";
 import { blank, characterLabel, type Draft, newRef, npcPicture, OWN_THEME, redrew, STEPS, STORAGE_KEY, stored, THEMES, withCoverChoice } from "./wizard-draft";
 import { WorldForm } from "./wizard-form";
 import { Heading, LeaveWorld, PickForMe, Working } from "./wizard-frame";
@@ -34,6 +34,7 @@ export function NewStory({ step }: { step?: string }) {
   /** Where the player asked to go back to from the world, while they confirm it. */
   const [leaving, setLeaving] = useState<string>();
   const [picking, setPicking] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   /** What each box held before Enhance, as replacing a box's value leaves nothing for the browser's own undo. */
   // Keyed by field, and by row as well for an Important Character's.
   const [enhanced, setEnhanced] = useState<Record<string, { was: string; now: string }>>({});
@@ -422,12 +423,28 @@ export function NewStory({ step }: { step?: string }) {
         Back
       </button>,
       <>
-        <button type="button" className="quiet" onClick={regenerate}>
+        <button type="button" className="quiet" aria-haspopup="dialog" onClick={() => setRebuilding(true)}>
           Regenerate
         </button>
         <button type="button" className="action" onClick={begin}>
           {error ? "Try again" : "Begin"}
         </button>
+        {rebuilding && (
+          <ConfirmDialog
+            title="Regenerate this world?"
+            confirm="Regenerate"
+            onConfirm={() => {
+              // Shut here too, as the foot goes while the Narrator works and the dialog's own close event goes with it.
+              setRebuilding(false);
+              regenerate();
+            }}
+            onClose={() => setRebuilding(false)}
+          >
+            <p>
+              The Narrator builds the world again from your choices, which can take a few minutes. The world written now is gone for good. Your pictures stay.
+            </p>
+          </ConfirmDialog>
+        )}
       </>,
     );
   }

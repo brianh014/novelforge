@@ -244,11 +244,13 @@ h2 {
   color: var(--accent);
 }
 
-/* A dialog's heading is a question, so it reads as one. */
+/* A dialog's heading is a question, set in the page titles' face. */
 dialog h2 {
-  font-size: 17px;
+  font: 400 26px / 1.15 var(--display);
   letter-spacing: 0;
   text-transform: none;
+  color: var(--ink);
+  text-wrap: balance;
 }
 
 .muted {
@@ -2340,23 +2342,58 @@ span.drawing {
   field-sizing: content;
 }
 
+/* A dialog is a loose page laid on the book: the same stock, age spots and shadow. */
 dialog {
-  width: min(32rem, calc(100vw - 32px));
+  width: min(34rem, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
-  padding: 24px;
+  padding: 32px 36px 28px;
   border: 1px solid var(--line);
-  background: var(--page);
+  background-color: var(--page);
+  background-image: radial-gradient(circle at 10% 12%, var(--foxing), transparent 34%), radial-gradient(circle at 90% 88%, var(--foxing), transparent 38%);
   color: var(--ink);
-  box-shadow: 0 6px 22px rgb(0 0 0 / 0.45);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.35),
+    0 18px 48px rgb(0 0 0 / 0.5);
 }
 
 dialog[open] {
   display: grid;
-  gap: 12px;
+  gap: 14px;
+}
+
+/* The buttons stand a little apart from what they answer. */
+dialog .row:last-child {
+  margin-top: 8px;
 }
 
 dialog::backdrop {
   background: rgb(10 8 3 / 0.7);
+  backdrop-filter: blur(2px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog[open] {
+    transition:
+      opacity 0.18s ease-out,
+      translate 0.18s ease-out;
+  }
+
+  @starting-style {
+    dialog[open] {
+      opacity: 0;
+      translate: 0 8px;
+    }
+  }
+}
+
+@media (max-width: 760px) {
+  dialog {
+    padding: 24px 20px 20px;
+  }
+
+  dialog h2 {
+    font-size: 22px;
+  }
 }
 
 dialog blockquote {

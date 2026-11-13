@@ -54,6 +54,7 @@ export function MessageControls(props: {
         className="icon revert"
         title="Duplicate from here"
         aria-label={`Duplicate from this Message: ${message.text.slice(0, 40)}`}
+        aria-haspopup="dialog"
         onClick={() => actions.duplicate(message)}
       >
         {DuplicateIcon}
@@ -86,7 +87,7 @@ export function MessageControls(props: {
           <button type="button" className="icon" title="Edit" aria-label="Edit" aria-expanded={open.edit} onClick={() => actions.edit(message)}>
             {EditIcon}
           </button>
-          <button type="button" className="icon" title="Regenerate" aria-label="Regenerate" onClick={actions.regenerate}>
+          <button type="button" className="icon" title="Regenerate" aria-label="Regenerate" aria-haspopup="dialog" onClick={actions.regenerate}>
             {RegenerateIcon}
           </button>
         </>

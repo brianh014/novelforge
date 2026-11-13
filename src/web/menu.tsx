@@ -150,6 +150,34 @@ export function DeleteDialog(props: {
   );
 }
 
+/** Asks before one click does something big. `children` say what it does; `confirm` names the button that does it. */
+export function ConfirmDialog(props: { title: string; confirm: string; children: ReactNode; onConfirm: () => void; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => dialog.current!.showModal(), []);
+  return (
+    <dialog ref={dialog} onClose={props.onClose} aria-labelledby="confirm-title">
+      <h2 id="confirm-title">{props.title}</h2>
+      {props.children}
+      {/* Cancel comes first because a modal focuses its first control, and that must not be the one that acts. */}
+      <div className="row">
+        <button type="button" className="quiet" onClick={() => dialog.current!.close()}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="action"
+          onClick={() => {
+            dialog.current!.close();
+            props.onConfirm();
+          }}
+        >
+          {props.confirm}
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 export function BookTabs({ id, current }: { id: string; current: "Story" | "Journal" | "Gallery" | "Settings" }) {
   const here = (tab: typeof current) => (tab === current ? "page" : undefined);
   return (
