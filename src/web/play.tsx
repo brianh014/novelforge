@@ -170,8 +170,18 @@ export function Play({ id }: { id: string }) {
   const [openNewImages, setOpenNewImages] = useState(true);
   // Unset until the player moves, so that each new response opens on its first beat.
   const [chosenBeat, setChosenBeat] = useState<number>();
-  const [draft, setDraft] = useState(() => storedDraft(id));
-  useEffect(() => storeDraft(id, draft), [id, draft]);
+  // The box keeps its own words, and the page hears only whether there are any: a re-render per key lagged in a long story.
+  const [hasWords, setHasWords] = useState(() => !!storedDraft(id).trim());
+  const draftNow = () => inputBox.current?.value ?? "";
+  const keepDraft = (draft: string) => {
+    storeDraft(id, draft);
+    setHasWords(!!draft.trim());
+    if (enhanced && draft !== enhanced.now) setEnhanced(undefined);
+  };
+  const setDraft = (draft: string) => {
+    inputBox.current!.value = draft;
+    keepDraft(draft);
+  };
   const [turn, setTurn] = useState<TurnInProgress>();
   const [deciding, setDeciding] = useState(false);
   const [questioning, setQuestioning] = useState(false);
@@ -264,13 +274,14 @@ export function Play({ id }: { id: string }) {
 
   function send(event: FormEvent) {
     event.preventDefault();
+    const draft = draftNow();
     if (turn || deciding || !draft.trim()) return;
     setDraft("");
     playInput(draft, messages);
   }
 
   function continueStory() {
-    if (turn || deciding || draft.trim()) return;
+    if (turn || deciding || hasWords) return;
     playInput(CONTINUE_INPUT, messages);
   }
 
@@ -282,10 +293,12 @@ export function Play({ id }: { id: string }) {
     if (turn || deciding) return;
     setDeciding(true);
     try {
+      const draft = draftNow();
       const was = draft.trim();
       const now = await decideForMe(id, was, leaving.current.signal);
-      setEnhanced(was ? { was: draft, now } : undefined);
+      // After setDraft, which drops an earlier Enhance's Undo.
       setDraft(now);
+      setEnhanced(was ? { was: draft, now } : undefined);
       inputBox.current?.focus();
     } catch (failure) {
       if (!leaving.current.signal.aborted) setError((failure as Error).message);
@@ -666,10 +679,10 @@ export function Play({ id }: { id: string }) {
             ref={inputBox}
             rows={1}
             placeholder={deciding ? "The Narrator is deciding…" : `What does ${pc} say or do?`}
-            value={draft}
+            defaultValue={storedDraft(id)}
             // While deciding, the reply would overwrite anything typed.
             readOnly={!!turn || deciding}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => keepDraft(e.target.value)}
             onKeyDown={sendOnEnter}
           />
         </label>
@@ -711,25 +724,25 @@ export function Play({ id }: { id: string }) {
           <button
             type="button"
             className="icon"
-            title={draft.trim() ? "Enhance what you wrote" : "Decide for me"}
-            aria-label={draft.trim() ? "Enhance" : "Decide for me"}
+            title={hasWords ? "Enhance what you wrote" : "Decide for me"}
+            aria-label={hasWords ? "Enhance" : "Decide for me"}
             aria-disabled={!!turn || deciding}
             onClick={decide}
           >
             {DecideIcon}
           </button>
-          {enhanced && enhanced.now === draft && (
+          {enhanced && (
             <button type="button" className="quiet" onClick={() => setDraft(enhanced.was)}>
               Undo
             </button>
           )}
-          {deciding && !!draft.trim() && (
+          {deciding && hasWords && (
             <span role="status" className="waiting drawing">
               <Quilling />
               Enhancing…
             </span>
           )}
-          {!draft.trim() && (
+          {!hasWords && (
             <button
               type="button"
               className="icon continue"
@@ -754,7 +767,7 @@ export function Play({ id }: { id: string }) {
             </button>
           ) : (
             // aria-disabled, because a disabled button would drop keyboard focus at every Send.
-            <button type="submit" className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !draft.trim()}>
+            <button type="submit" className="icon send" title="Send" aria-label="Send" aria-disabled={!!turn || deciding || !hasWords}>
               {SendIcon}
             </button>
           )}
