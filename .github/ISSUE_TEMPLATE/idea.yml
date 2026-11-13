@@ -1,0 +1,16 @@
+name: An idea
+description: Something NovelForge could do, or do better.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd like, and what it would let you do in a story.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: How you manage today
+      description: Optional. What you do now instead, if anything.

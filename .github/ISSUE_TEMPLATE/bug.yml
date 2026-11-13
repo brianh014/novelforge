@@ -1,0 +1,52 @@
+name: Something's wrong
+description: A bug, a crash, or something that doesn't work as the Reader's Guide says.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: At the bottom of the Menu, or in Settings → Updates.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Windows
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: download
+    attributes:
+      label: Which NovelForge
+      options:
+        - NovelForge (the app)
+        - NovelForge Server
+        - Running from source
+    validations:
+      required: true
+  - type: input
+    id: ai
+    attributes:
+      label: Your AI
+      description: The text provider and model, and the image provider if it's about pictures. Never paste a key.
+      placeholder: "OpenRouter, deepseek/deepseek-chat; ComfyUI with FLUX.2"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. A screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The lines around the problem from `logs/novelforge.log` beside the program (on a Mac, `~/Library/Application Support/NovelForge/logs`). The log holds no story text or keys, but read it before you paste.
+      render: text
