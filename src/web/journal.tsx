@@ -38,7 +38,7 @@ function NewestFirst<T>({ items, className, children }: { items: T[]; className?
   );
 }
 
-/** Long text cut to three lines, with More to show it all. More appears only when the text runs past them. */
+/** Long text cut to three lines, with "more" at the end of the third to show it all and "less" after the whole. "more" appears only when the text runs past them. */
 function Clamped({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   const [cut, setCut] = useState(false);
@@ -54,13 +54,21 @@ function Clamped({ text }: { text: string }) {
     return () => resized.disconnect();
   }, [text, open]);
   return (
-    <div>
+    <div className="clamped">
       <p ref={shown} className={open ? undefined : "brief clamp-3"}>
         {text}
+        {open && (
+          <>
+            {" "}
+            <button type="button" className="more-inline" aria-expanded onClick={() => setOpen(false)}>
+              less
+            </button>
+          </>
+        )}
       </p>
-      {(cut || open) && (
-        <button type="button" className="quiet show-more" aria-expanded={open} onClick={() => setOpen(!open)}>
-          {open ? "Less" : "More"}
+      {cut && !open && (
+        <button type="button" className="more-inline more-over" aria-expanded={false} onClick={() => setOpen(true)}>
+          more
         </button>
       )}
     </div>

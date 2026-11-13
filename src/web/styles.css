@@ -609,6 +609,30 @@ dialog h2 {
   -webkit-line-clamp: 3;
 }
 
+/* "more" and "less" read as the last word of the text, like a link in a book. */
+.clamped {
+  position: relative;
+}
+
+.more-inline {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* Laid over the end of the third line, fading the cut words into the page. */
+.more-over {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding-left: 2.5em;
+  background: linear-gradient(to right, transparent, var(--page) 2em);
+}
+
 /* Controls */
 
 button {
