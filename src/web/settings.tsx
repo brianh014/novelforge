@@ -841,13 +841,13 @@ function InstallSettings({
           value={local ? "local" : "openrouter"}
           choices={[
             { value: "openrouter", label: "OpenRouter" },
-            { value: "local", label: "Local" },
+            { value: "local", label: "Local / OpenAI server" },
           ]}
           onChange={(provider) => set({ textBaseUrl: provider === "local" ? "" : OPENROUTER_URL })}
         />
         {local && (
           <label>
-            Local server address
+            Server address
             <input
               type="url"
               required
@@ -981,7 +981,7 @@ function InstallSettings({
         </p>
         <TestBox
           title="Test text"
-          hint="Sends this prompt to your saved model, with the saved Extra Narrator Instructions above. OpenRouter may charge for each test."
+          hint="Sends this prompt to your saved model, with the saved Extra Narrator Instructions above. A paid provider may charge for each test."
           working="Asking…"
           run={askTextTest}
         >
