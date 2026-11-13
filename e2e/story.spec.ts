@@ -172,6 +172,38 @@ test("a story makes and shows everything: pictures, characters, Turns, a Questio
   await expectRealImages(page, page.locator("main"));
 });
 
+test("the wizard asks before removing an Important Character and before regenerating the world", async ({ page }) => {
+  await page.goto("/#/new");
+  await page.getByRole("button", { name: "Add a character" }).click();
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill(IMPORTANT);
+  const name = page.getByRole("textbox", { name: "Name", exact: true });
+  const remove = page.getByRole("button", { name: /^Remove / });
+  const removeDialog = page.getByRole("dialog", { name: `Remove ${IMPORTANT}?` });
+
+  await remove.click();
+  await removeDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(name).toHaveValue(IMPORTANT);
+  await remove.click();
+  await removeDialog.getByRole("button", { name: "Remove" }).click();
+  await expect(name).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Pick for me" }).click();
+  await page.getByRole("dialog", { name: "Pick for me?" }).getByRole("button", { name: "Pick for me" }).click();
+  await expect(page.getByLabel("What is your story called?")).not.toHaveValue("");
+  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Generate the world" }).click();
+  const regenerate = page.getByRole("button", { name: "Regenerate" });
+  const regenerateDialog = page.getByRole("dialog", { name: "Regenerate this world?" });
+  await regenerate.click();
+  await regenerateDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(regenerateDialog).toHaveCount(0);
+  await regenerate.click();
+  await regenerateDialog.getByRole("button", { name: "Regenerate" }).click();
+  // Rebuilt, and the dialog doesn't come back with the page's foot.
+  await expect(page.getByRole("button", { name: "Begin" })).toBeVisible();
+  await expect(regenerateDialog).toHaveCount(0);
+});
+
 test("Load Story opens a story, and a Duplicate is a second one", async ({ page }) => {
   const { title } = await newStory(page);
 
@@ -183,6 +215,7 @@ test("Load Story opens a story, and a Duplicate is a second one", async ({ page 
     .getByRole("button", { name: `Duplicate ${title}` })
     .first()
     .click();
+  await page.getByRole("dialog").getByRole("button", { name: "Duplicate" }).click();
   await expect(listed).toHaveCount(before + 1);
 
   await page
@@ -191,6 +224,21 @@ test("Load Story opens a story, and a Duplicate is a second one", async ({ page 
     .click();
   await expect(page).toHaveURL(/#\/play\//);
   await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
+});
+
+test("Duplicate from here asks first, and then opens the copy", async ({ page }) => {
+  await newStory(page);
+  const story = page.url();
+  const duplicate = page.getByRole("button", { name: /^Duplicate from this Message/ }).first();
+
+  await duplicate.click();
+  await page.getByRole("dialog", { name: "Duplicate from this Message?" }).getByRole("button", { name: "Cancel" }).click();
+  await expect(page).toHaveURL(story);
+
+  await duplicate.click();
+  await page.getByRole("dialog", { name: "Duplicate from this Message?" }).getByRole("button", { name: "Duplicate" }).click();
+  await expect(page).not.toHaveURL(story);
+  await expect(page).toHaveURL(/#\/play\//);
 });
 
 test("the latest response can be edited, rewritten and regenerated, and the story reverted", async ({ page }) => {
@@ -216,6 +264,7 @@ test("the latest response can be edited, rewritten and regenerated, and the stor
   await expect(narrator.last()).not.toHaveText("The door creaks open.");
   await expect(regenerate).toBeVisible();
   await regenerate.click();
+  await page.getByRole("dialog", { name: "Regenerate this response?" }).getByRole("button", { name: "Regenerate" }).click();
   await expect(regenerate).toBeVisible();
   await expect(narrator).toHaveCount(2);
 

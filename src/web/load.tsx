@@ -1,7 +1,7 @@
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { coverUrl, deleteSave, duplicateSave, importSave, type ListedSave, listSaves, storyName } from "./api";
 import { DeleteIcon, DuplicateIcon, ExportIcon } from "./icons";
-import { DeleteDialog, MenuRibbon, Sheet } from "./menu";
+import { ConfirmDialog, DeleteDialog, MenuRibbon, Sheet } from "./menu";
 import { Zoomable } from "./zoom";
 
 const lastChanged = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -12,6 +12,7 @@ export function LoadStory() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<ListedSave>();
+  const [duplicating, setDuplicating] = useState<{ id: string; name: string }>();
   const fileInput = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -104,8 +105,9 @@ export function LoadStory() {
                       className="icon"
                       title="Duplicate"
                       aria-label={`Duplicate ${name}`}
+                      aria-haspopup="dialog"
                       aria-disabled={busy}
-                      onClick={() => attempt(() => duplicateSave(save.id), `Duplicated ${name}.`)}
+                      onClick={() => busy || setDuplicating({ id: save.id, name })}
                     >
                       {DuplicateIcon}
                     </button>
@@ -122,6 +124,16 @@ export function LoadStory() {
           );
         })}
       </ul>
+      {duplicating && (
+        <ConfirmDialog
+          title={`Duplicate ${duplicating.name}?`}
+          confirm="Duplicate"
+          onConfirm={() => attempt(() => duplicateSave(duplicating.id), `Duplicated ${duplicating.name}.`)}
+          onClose={() => setDuplicating(undefined)}
+        >
+          <p>This makes a full copy of the Save, so you can take the story another way and keep the original as it is.</p>
+        </ConfirmDialog>
+      )}
       {deleting && (
         <DeleteDialog
           name={"unreadable" in deleting ? "this unreadable Save" : storyName(deleting)}

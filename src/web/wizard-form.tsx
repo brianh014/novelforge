@@ -1,7 +1,8 @@
-import type { Dispatch, ReactNode, SetStateAction } from "react";
+import { type Dispatch, type ReactNode, type SetStateAction, useState } from "react";
 import { Choices } from "./art-style-picker";
 import type { Character, EnhanceField, PcDraft, WorldField } from "./api";
 import { LONG_TEXT } from "../limits";
+import { ConfirmDialog } from "./menu";
 import { characterLabel, type Draft, MAX_CHARACTERS, newRef, OWN_THEME, THEMES } from "./wizard-draft";
 
 /** A box's Enhance, or Write when it's empty, with an Undo. `row` is for an Important Character's box. */
@@ -25,6 +26,7 @@ export function WorldForm(props: {
   heading: ReactNode;
 }) {
   const { draft, setDraft, setCharacter, enhanceTools } = props;
+  const [removing, setRemoving] = useState<Character>();
   const set = (change: Partial<Draft>) => setDraft((current) => ({ ...current, ...change }));
   const setPc = (field: keyof PcDraft, text: string) => setDraft((current) => ({ ...current, pc: { ...current.pc, [field]: text } }));
   const worldTools = (field: WorldField, label: string) => enhanceTools(field, label, draft[field], (text) => set({ [field]: text }));
@@ -131,12 +133,7 @@ export function WorldForm(props: {
               )}
               {full(character.description)}
               <div className="row">
-                <button
-                  type="button"
-                  className="quiet"
-                  aria-label={`Remove ${label}`}
-                  onClick={() => set({ characters: draft.characters.filter((_, at) => at !== index) })}
-                >
+                <button type="button" className="quiet" aria-label={`Remove ${label}`} aria-haspopup="dialog" onClick={() => setRemoving(character)}>
                   Remove
                 </button>
               </div>
@@ -154,6 +151,16 @@ export function WorldForm(props: {
           </button>
           {draft.characters.length >= MAX_CHARACTERS && <span className="muted">That's the most a story can start with.</span>}
         </div>
+        {removing && (
+          <ConfirmDialog
+            title={`Remove ${removing.name.trim() || "this character"}?`}
+            confirm="Remove"
+            onConfirm={() => setDraft((current) => ({ ...current, characters: current.characters.filter(({ ref }) => ref !== removing.ref) }))}
+            onClose={() => setRemoving(undefined)}
+          >
+            <p>Their name, description and picture all go, and can't be brought back.</p>
+          </ConfirmDialog>
+        )}
       </div>
       <div id="hook" className="fields wizard">
         <label className="toggle">

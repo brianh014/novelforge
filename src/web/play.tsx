@@ -39,7 +39,7 @@ import { CONTINUE_INPUT } from "../prompt-assembler";
 import { AskIcon, StopIcon, ContinueIcon, DecideIcon, DownIcon, DrawIcon, Painting, Quilling, RewriteIcon, SendIcon } from "./icons";
 import { TellTheNarrator } from "./journal";
 import { type MessageActions, MessageControls } from "./message-controls";
-import { Book, BookTabs, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
+import { Book, BookTabs, ConfirmDialog, Fold, leftFolded, MoreBelow, rememberLeftFolded } from "./menu";
 import { ChapterEnd, FeedbackForm, PictureForm, QuestionForm, sendOnEnter } from "./play-asks";
 import { InlineImages, RequestedRows, SceneImage, useStoryPictures } from "./story-pictures";
 import { StoryRecap } from "./story-recap";
@@ -188,6 +188,8 @@ export function Play({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [reverting, setReverting] = useState<Message>();
+  const [duplicatingFrom, setDuplicatingFrom] = useState<Message>();
+  const [regenerating, setRegenerating] = useState(false);
   /** With a Revert to the Message before one of the player's: their words, to edit and send again from there. */
   const [replaying, setReplaying] = useState<string>();
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -469,11 +471,11 @@ export function Play({ id }: { id: string }) {
       setReverting(before(message));
     },
     revert: setReverting,
-    duplicate: duplicateHere,
+    duplicate: setDuplicatingFrom,
     toggleChapterEnd: () => setEndingChapter(!endingChapter),
     rewrite: startRewrite,
     edit: startEdit,
-    regenerate: () => replace(""),
+    regenerate: () => setRegenerating(true),
   };
   // An empty row while a Turn runs keeps the tools' room, so the story doesn't shift when they come back.
   const controls = (message: Message) =>
@@ -760,6 +762,23 @@ export function Play({ id }: { id: string }) {
       </form>
       {/* Outside the chat form, as the dialog holds a form of its own. */}
       {telling && <TellTheNarrator id={id} onDone={pictures.rereadJournal} onClose={() => setTelling(false)} />}
+      {duplicatingFrom && (
+        <ConfirmDialog
+          title="Duplicate from this Message?"
+          confirm="Duplicate"
+          onConfirm={() => duplicateHere(duplicatingFrom)}
+          onClose={() => setDuplicatingFrom(undefined)}
+        >
+          <blockquote>{duplicatingFrom.text}</blockquote>
+          <p>A new Save starts with the story up to here, and opens. This story stays as it is.</p>
+        </ConfirmDialog>
+      )}
+      {regenerating && (
+        <ConfirmDialog title="Regenerate this response?" confirm="Regenerate" onConfirm={() => replace("")} onClose={() => setRegenerating(false)}>
+          <p>The Narrator writes this response again from the start, and the one there now is gone for good.</p>
+          <p className="muted">To keep it and change only part, use Rewrite or Edit instead.</p>
+        </ConfirmDialog>
+      )}
       {reverting && (
         <RevertDialog
           id={id}
