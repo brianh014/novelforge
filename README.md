@@ -39,8 +39,15 @@ Either one opens on port 4600. Open **Settings** first to enter your text model'
 
 ### Linux
 
-1. Download `NovelForge-Linux.tar.gz` (or `NovelForge-Server-Linux.tar.gz`), for x64.
-2. Unpack it into a folder of its own: `mkdir ~/NovelForge && tar -xzf NovelForge-Linux.tar.gz -C ~/NovelForge`. Your Saves, Settings and logs are kept in that folder, beside the program.
+1. Download and unpack it into a folder of its own, for x64. Use the version from the Releases page in place of `v0.1.0-alpha.2`, and `NovelForge-Server-Linux.tar.gz` for the Server:
+
+   ```bash
+   mkdir -p ~/NovelForge && cd ~/NovelForge
+   curl -fL -o NovelForge-Linux.tar.gz https://git.holtops.net/brianh014/novelforge/releases/download/v0.1.0-alpha.2/NovelForge-Linux.tar.gz
+   tar -xzf NovelForge-Linux.tar.gz && rm NovelForge-Linux.tar.gz
+   ```
+
+2. Your Saves, Settings and logs are kept in that folder, beside the program.
 3. Run `~/NovelForge/NovelForge` (or `NovelForge-Server`). The app opens your browser with `xdg-open`; if none opens, go to `http://127.0.0.1:4600/`.
 
 ## Running from source
