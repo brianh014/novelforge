@@ -75,8 +75,21 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </p>
         <ul>
           <li>
-            <b>OpenRouter</b>: choose it as the Text provider, paste your OpenRouter key and pick a model. You can also choose which of its providers serves the
-            model, and how it routes. Staying on one provider keeps its prompt cache, which makes each Turn cheaper.
+            <b>OpenRouter</b>, the easiest, and already chosen. To get a key:
+            <ol>
+              <li>
+                Sign up at <code>openrouter.ai</code>, open <b>Credits</b> and add a few dollars. You pay for what you use, a few cents a Turn.
+              </li>
+              <li>
+                Open <b>Keys</b>, choose <b>Create Key</b> and copy the key. It's shown only once, so keep a copy somewhere safe.
+              </li>
+              <li>
+                In <b>Settings → Text</b>, paste it into <b>Text API key</b>, choose a <b>Text model</b> and press <b>Test text</b>. A good balance of cost and
+                writing right now is MiMo V2.6 Pro (<code>xiaomi/mimo-v2.6-pro</code>).
+              </li>
+            </ol>
+            You can also choose which of its providers serves the model, and how it routes. Staying on one provider keeps its prompt cache, which makes each
+            Turn cheaper.
           </li>
           <li>
             <b>Any other OpenAI-compatible service</b>, such as DeepInfra: choose <b>Local / OpenAI server</b>, give its address (for DeepInfra,{" "}
@@ -102,7 +115,8 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <b>Free GPU memory after each picture</b>.
           </li>
           <li>
-            <b>OpenRouter</b>: for when you have no graphics card for ComfyUI. Paste your key and choose an image AI.
+            <b>OpenRouter</b>: for when you have no graphics card for ComfyUI. Paste the same key you use for the story into <b>Image API key</b> and choose an
+            image AI: try Seedream 5.5, or Nano Banana 2.1 for a little better quality.
           </li>
         </ul>
         <p>
