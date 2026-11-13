@@ -2345,6 +2345,8 @@ span.drawing {
   display: flex;
   align-items: center;
   gap: 6px;
+  /* Send's height, so the tools sit at the same height in Choices mode, which has no Send. */
+  min-height: 36px;
 }
 
 .compose .send,
@@ -2792,6 +2794,11 @@ dialog blockquote {
   .book:has(.tabs) .page.right {
     padding-top: 16px;
   }
+}
+
+/* Without a text box to inset, Choices mode keeps the box's sides even, so its Choices and tools sit centred. */
+.compose:has(.choices, .no-choices) {
+  padding-left: 10px;
 }
 
 /* In Choices mode, the latest response's Choices stand in the text box's place, one under another. */
