@@ -39,11 +39,11 @@ Both use port 4600. Open **Settings** first to enter your text model's address, 
 
 ### Linux
 
-1. Download and unpack it into a folder of its own, for x64. On a machine with no desktop, such as a server reached over SSH, use the Server. Use the version from the Releases page in place of `v0.1.0-alpha.2`, and `NovelForge-Server-Linux.tar.gz` for the Server:
+1. Download and unpack it into a folder of its own, for x64. On a machine with no desktop, such as a server reached over SSH, use the Server. Use the version from the Releases page in place of `v0.1.0-alpha.4`, and `NovelForge-Server-Linux.tar.gz` for the Server:
 
    ```bash
    mkdir -p ~/NovelForge && cd ~/NovelForge
-   curl -fL -o NovelForge-Linux.tar.gz https://git.holtops.net/brianh014/novelforge/releases/download/v0.1.0-alpha.2/NovelForge-Linux.tar.gz
+   curl -fL -o NovelForge-Linux.tar.gz https://git.holtops.net/brianh014/novelforge/releases/download/v0.1.0-alpha.4/NovelForge-Linux.tar.gz
    tar -xzf NovelForge-Linux.tar.gz && rm NovelForge-Linux.tar.gz
    ```
 
