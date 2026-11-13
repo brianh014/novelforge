@@ -22,7 +22,7 @@ export function StoryRecap({
       <div className="story-title">
         <h1 className="title">{storyName(save)}</h1>
         {journal?.storyTime && (
-          <p className="muted" data-testid="story-time">
+          <p className="muted story-time" data-testid="story-time" title={`${journal.storyTime.date}, ${journal.storyTime.timeOfDay}`}>
             {journal.storyTime.date}, {journal.storyTime.timeOfDay}
           </p>
         )}
