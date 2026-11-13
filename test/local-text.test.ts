@@ -64,7 +64,7 @@ afterEach(async () => {
   folder.remove();
 });
 
-test("a server with no key and no schema mode plays a Turn on plain JSON", async () => {
+test("a server with no key and no listed schema support still gets schema mode, so its JSON is enforced", async () => {
   playLocal([[delta(FINISHED), "data: [DONE]\n\n"]]);
   const id = await app.createSave();
 
@@ -72,8 +72,8 @@ test("a server with no key and no schema mode plays a Turn on plain JSON", async
 
   expect(events.at(-1)!.event).toBe("done");
   expect(provider.requests[0]!.authorization).toBeNull();
-  expect(provider.requests[0]!.body.response_format).toBeUndefined();
-  // Without schema mode the prompt is all that tells the model the shape.
+  expect(provider.requests[0]!.body.response_format).toMatchObject({ type: "json_schema" });
+  // The prompt still tells the model the shape, for a server that ignores the schema.
   expect(JSON.stringify(provider.requests[0]!.body.messages)).toContain("state_operations");
 });
 
