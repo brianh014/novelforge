@@ -1206,8 +1206,8 @@ export function SettingsScreen({ id }: { id?: string }) {
       {/* Stays mounted, so an unsaved edit survives a look at another section. */}
       {id && (
         <div hidden={section !== THIS_STORY}>
-          <ArtStyle key={id} id={id} />
           <PlayModeSetting key={`${id}-play`} id={id} />
+          <ArtStyle key={id} id={id} />
         </div>
       )}
       {content}
