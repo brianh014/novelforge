@@ -3,6 +3,7 @@
 // - The Server: serves the whole network from a terminal window, which shows its log, and closing it stops the server.
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { zip } from "./zip";
 
 const root = join(import.meta.dir, "..");
 const out = join(root, "dist", "release");
@@ -74,7 +75,14 @@ for (const server of [false, true]) {
   const appName = server ? "NovelForge Server" : "NovelForge";
 
   // The app hides its console. The Server keeps it, as its window holds the log and closing it stops the server.
-  await compile("bun-windows-x64", join(out, `${name}-Windows.exe`), server, `--windows-icon=${ico}`, ...(server ? [] : ["--windows-hide-console"]));
+  const windows = await compile(
+    "bun-windows-x64",
+    join(work, `${name}-Windows.exe`),
+    server,
+    `--windows-icon=${ico}`,
+    ...(server ? [] : ["--windows-hide-console"]),
+  );
+  await Bun.write(join(out, `${name}-Windows.zip`), zip(`${appName}.exe`, windows));
 
   for (const [arch, label] of [
     ["arm64", "AppleSilicon"],

@@ -50,10 +50,14 @@ async function gitea(path: string, init: RequestInit = {}) {
   return response.json() as Promise<{ id: number; html_url?: string; assets?: { name: string }[] }>;
 }
 
-// Before the long build, so a login Gitea refuses is found at once.
+// Before the long build, so a login Gitea refuses is found at once. A release already there is one an earlier run
+// began, as its tag names this commit, so this run finishes it rather than starting another.
 const existing = await fetch(`${api}/releases/tags/${tag}`, { headers });
-if (existing.ok) throw new Error(`${tag} is already released on Gitea. Raise the version in package.json for a new one.`);
-if (existing.status !== 404) throw new Error(`Gitea answered ${existing.status} when asked for releases: check the login, or set GITEA_TOKEN.`);
+if (!existing.ok && existing.status !== 404) {
+  throw new Error(`Gitea answered ${existing.status} when asked for releases: check the login, or set GITEA_TOKEN.`);
+}
+const begun = existing.ok ? ((await existing.json()) as Awaited<ReturnType<typeof gitea>>) : undefined;
+if (begun && !tagged) throw new Error(`Gitea has a ${tag} release but this computer has no ${tag} tag. Fetch the tags first.`);
 
 const built = Bun.spawnSync([process.execPath, "scripts/build-release.ts"], { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (built.exitCode !== 0) throw new Error("The build failed, so nothing was published.");
@@ -62,13 +66,20 @@ if (built.exitCode !== 0) throw new Error("The build failed, so nothing was publ
 if (!tagged) git("tag", "-a", tag, "-m", `NovelForge ${version}`);
 git("push", "origin", tag);
 
-const release = await gitea("/releases", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ tag_name: tag, name: `NovelForge ${version}`, prerelease: version.includes("-") }),
-});
+const release =
+  begun ??
+  (await gitea("/releases", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag_name: tag, name: `NovelForge ${version}`, prerelease: version.includes("-") }),
+  }));
+const uploaded = new Set(release.assets?.map(({ name }) => name));
 const out = join(root, "dist", "release");
 for (const name of readdirSync(out)) {
+  if (uploaded.has(name)) {
+    console.log(`Already there: ${name}`);
+    continue;
+  }
   console.log(`Uploading ${name}`);
   const form = new FormData();
   form.append("attachment", Bun.file(join(out, name)), name);
