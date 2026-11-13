@@ -78,3 +78,20 @@ test("Settings → Updates checks GitHub on request and offers what it finds", a
   await expect(page.getByText("This is NovelForge 9.0.0.")).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("novelforge-dismissed-version"))).toBeNull();
 });
+
+test("an install whose new version fails to start says the old one is back", async ({ page }) => {
+  let installed = false;
+  await page.route("**/update", (route) => {
+    if (route.request().method() === "POST") {
+      installed = true;
+      return route.fulfill({ status: 202, json: { version: "9.0.0" } });
+    }
+    // Swapped back, it answers as the old version again.
+    return route.fulfill({ json: { version: "0.1.0", failed: false, latest: installed ? undefined : NEW, installable: !installed } });
+  });
+  await page.goto("/");
+  const toast = page.getByRole("complementary", { name: "New version" });
+  await toast.getByRole("button", { name: "Install" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Install" }).click();
+  await expect(toast.getByRole("alert")).toContainText("NovelForge 9.0.0 didn't start, so 0.1.0 is back.");
+});

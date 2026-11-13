@@ -29,6 +29,12 @@ function InstallButton({ latest }: { latest: Latest }) {
       for (let tries = 0; tries < 120; tries++) {
         await new Promise((done) => setTimeout(done, 1000));
         const now = await getUpdate().catch(() => undefined);
+        // The old version answering means the new one failed to start and was swapped back.
+        if (now && now.version !== latest.version) {
+          setError(`NovelForge ${latest.version} didn't start, so ${now.version} is back. Try again later, or download it from its page.`);
+          setBusy("");
+          return;
+        }
         if (now?.version === latest.version) {
           // A version put off and then installed anyway mustn't keep its toast away should it be offered again.
           try {

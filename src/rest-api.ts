@@ -77,7 +77,10 @@ export function startServer(options: ServerOptions) {
   );
 
   // Requests in flight, a Turn's save among them, finish first.
+  // Once the server hands over to a new version, this process only waits on it, so it never quits by itself.
+  let restarting = false;
   const quit = (why: string) => {
+    if (restarting) return;
     log.startup(`NovelForge is closing: ${why}`);
     void server.stop().finally(() => process.exit(0));
   };
@@ -129,7 +132,14 @@ export function startServer(options: ServerOptions) {
             await parseBody(req, NoFields);
             if (turns.busy() || images.busy()) return Response.json({ error: "Wait for the story and its pictures to finish, then update." }, { status: 409 });
             const installed = await updates.install();
-            void server.stop().finally(relaunch);
+            restarting = true;
+            void (async () => {
+              // A Turn or picture begun during the download finishes first, as stopping the server doesn't wait for them.
+              // shortcut: new work can still start while this waits; refuse it with a 503 if players hit that.
+              while (turns.busy() || images.busy()) await Bun.sleep(1000);
+              await server.stop();
+              await relaunch();
+            })();
             return Response.json(installed, { status: 202 });
           },
         },

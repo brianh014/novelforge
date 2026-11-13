@@ -26,6 +26,7 @@ if (tagged && tagged !== head) throw new Error(`${tag} already names another com
 // Before the long build, so a missing sign-in is found at once. A release already there is one an earlier run began.
 run("gh", "auth", "status");
 const begun = Bun.spawnSync(["gh", "release", "view", tag], { cwd: root }).exitCode === 0;
+if (begun && !tagged) throw new Error(`GitHub has a ${tag} release but this computer has no ${tag} tag. Run git fetch --tags first.`);
 
 const built = Bun.spawnSync([process.execPath, "scripts/build-release.ts"], { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (built.exitCode !== 0) throw new Error("The build failed, so nothing was published.");

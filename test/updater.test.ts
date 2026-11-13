@@ -74,3 +74,18 @@ test("Check now asks GitHub again at once, and a GitHub out of reach says so", a
   // The discard port, closed, as no server is there.
   expect(await updater("http://127.0.0.1:9/").status()).toMatchObject({ failed: true, latest: undefined });
 });
+
+test("pages that ask together share one request to GitHub", async () => {
+  let asked = 0;
+  const counting = Bun.serve({
+    port: 0,
+    fetch: () => {
+      asked++;
+      return Response.json({ message: "Not Found" }, { status: 404 });
+    },
+  });
+  const updates = updater(`http://127.0.0.1:${counting.port}/`);
+  await Promise.all([updates.status(), updates.status(), updates.status()]);
+  expect(asked).toBe(1);
+  counting.stop(true);
+});

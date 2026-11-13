@@ -1,4 +1,4 @@
-import { chmodSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { accessSync, chmodSync, constants, readdirSync, renameSync, rmSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { inflateRawSync } from "node:zlib";
 import { z } from "zod";
@@ -109,12 +109,32 @@ export function removeReplacedPrograms() {
   }
 }
 
+/** Whether this copy may replace its own program, which a read-only folder, such as a Mac app macOS runs from a copy, forbids. */
+function canReplaceSelf() {
+  try {
+    accessSync(dirname(process.execPath), constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function updater(latestRelease = LATEST_RELEASE) {
   let checked: { at: number; release?: Release; failed?: boolean } | undefined;
+  // Pages that ask together share one request, as GitHub allows 60 an hour without a login.
+  let asking: Promise<Release | undefined> | undefined;
+  let installing = false;
 
   /** `fresh` skips the wait between checks, for a player who asks. */
-  async function latest(fresh = false) {
-    if (!fresh && checked && Date.now() - checked.at < (checked.failed ? RETRY_FAILED_CHECK_MS : CHECK_EVERY_MS)) return checked.release;
+  function latest(fresh = false) {
+    if (!fresh && checked && Date.now() - checked.at < (checked.failed ? RETRY_FAILED_CHECK_MS : CHECK_EVERY_MS)) return Promise.resolve(checked.release);
+    asking ??= ask().finally(() => {
+      asking = undefined;
+    });
+    return asking;
+  }
+
+  async function ask() {
     try {
       const response = await fetch(latestRelease, { headers: HEADERS, signal: AbortSignal.timeout(10_000) });
       // 404 is a repository with no release yet.
@@ -132,7 +152,7 @@ export function updater(latestRelease = LATEST_RELEASE) {
     return release && isNewer(release.tag_name.slice(1), VERSION) ? release : undefined;
   }
 
-  const download = (release: Release) => isCompiled && release.assets.find(({ name }) => name === downloadName());
+  const download = (release: Release) => isCompiled && canReplaceSelf() && release.assets.find(({ name }) => name === downloadName());
 
   return {
     async status(fresh = false) {
@@ -147,28 +167,46 @@ export function updater(latestRelease = LATEST_RELEASE) {
 
     /** Puts the new program where this one is, keeping this one beside it. The caller restarts with `relaunch`. */
     async install() {
-      const release = await newer();
-      if (!release) throw new UpdateFailed("There's no newer version.");
-      const asset = download(release);
-      if (!asset) throw new UpdateFailed("This copy can't update itself. Download the new version from its page.");
-      const response = await fetch(asset.browser_download_url, { headers: { "User-Agent": HEADERS["User-Agent"] }, signal: AbortSignal.timeout(10 * 60_000) });
-      if (!response.ok) throw new UpdateFailed(`The download failed (${response.status}). Try again later.`);
-      const program = unpack(asset.name, new Uint8Array(await response.arrayBuffer()));
-      // A running program can be renamed on every system, though Windows won't let it be overwritten.
-      const old = replaced(VERSION);
-      rmSync(old, { force: true });
-      renameSync(process.execPath, old);
+      // A second Install would replace the program the first one kept for a failed start.
+      if (installing) throw new UpdateFailed("NovelForge is already installing the new version.");
+      installing = true;
       try {
-        await Bun.write(process.execPath, program);
-        chmodSync(process.execPath, 0o755);
+        return await installNewer();
       } catch (error) {
-        renameSync(old, process.execPath);
+        installing = false;
         throw error;
       }
-      log.startup(`Updated to ${release.tag_name}, restarting`);
-      return { version: release.tag_name.slice(1) };
     },
   };
+
+  async function installNewer() {
+    const release = await newer();
+    if (!release) throw new UpdateFailed("There's no newer version.");
+    const asset = download(release);
+    if (!asset) throw new UpdateFailed("This copy can't update itself. Download the new version from its page.");
+    const response = await fetch(asset.browser_download_url, { headers: { "User-Agent": HEADERS["User-Agent"] }, signal: AbortSignal.timeout(10 * 60_000) });
+    if (!response.ok) throw new UpdateFailed(`The download failed (${response.status}). Try again later.`);
+    const program = unpack(asset.name, new Uint8Array(await response.arrayBuffer()));
+    // A running program can be renamed on every system, though Windows won't let it be overwritten.
+    const old = replaced(VERSION);
+    try {
+      rmSync(old, { force: true });
+      renameSync(process.execPath, old);
+    } catch (error) {
+      log.error("update", "Couldn't move the running program aside", errorFields(error));
+      throw new UpdateFailed("NovelForge can't replace its own program in this folder. Download the new version from its page.");
+    }
+    try {
+      await Bun.write(process.execPath, program);
+      chmodSync(process.execPath, 0o755);
+    } catch (error) {
+      renameSync(old, process.execPath);
+      log.error("update", "Couldn't write the new program", errorFields(error));
+      throw new UpdateFailed("NovelForge couldn't write the new version, so it kept this one. Try again, or download it from its page.");
+    }
+    log.startup(`Updated to ${release.tag_name}, restarting`);
+    return { version: release.tag_name.slice(1) };
+  }
 }
 
 const FAILED_START_MS = 30_000;
@@ -188,9 +226,13 @@ export async function relaunch() {
   const began = Date.now();
   let code = await start().exited;
   if (code !== 0 && Date.now() - began < FAILED_START_MS) {
-    log.error("update", "The new version failed to start, so the old one is back", { code });
-    renameSync(replaced(VERSION), process.execPath);
-    code = await start().exited;
+    try {
+      renameSync(replaced(VERSION), process.execPath);
+      log.error("update", "The new version failed to start, so the old one is back", { code });
+      code = await start().exited;
+    } catch (error) {
+      log.error("update", "The new version failed to start, and the old one couldn't be put back", errorFields(error));
+    }
   }
   process.exit(code);
 }

@@ -870,7 +870,7 @@ function InstallSettings({
     <form
       id="settings-form"
       className="fields settings"
-      hidden={section === THIS_STORY}
+      hidden={section === THIS_STORY || section === UPDATES}
       onSubmit={submit}
       // A required box in a hidden section stops Save with nothing to show for it, so go there. In time for the browser to point at the box.
       onInvalidCapture={(event) => {
