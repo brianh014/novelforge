@@ -152,6 +152,14 @@ How the Story shows Messages: Script, Prose, Bubbles or Stage box. It never chan
 **Beat**:
 One line of a Message, spoken or not, and what a Stage box shows at a time.
 
+**New Version**:
+A newer full release of NovelForge on GitHub, which the Menu offers and Install puts in place of the running program, which then restarts. Pre-releases are never offered.
+_Avoid_: Update (that redraws a Cover or portrait)
+
+**Reader's Guide**:
+The player's help, opened from the Menu: what NovelForge is and how to use each part of it.
+_Avoid_: Wiki, help, manual
+
 **Model Instructions**:
 The player's own global guidance to the Narrator, set in Settings and applying to every Save. Settings shows it as Extra Narrator Instructions, as the Narrator works without it.
 _Avoid_: System prompt

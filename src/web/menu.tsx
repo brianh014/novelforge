@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { getSettings, quitApp } from "./api";
+import { getSettings, getUpdate, installUpdate, quitApp, type UpdateStatus } from "./api";
 import { DownIcon } from "./icons";
 import logo from "./logo.svg";
 
@@ -206,15 +206,73 @@ export const MenuRibbon = () => (
   </nav>
 );
 
+/** A newer release, with an Install that puts it in place, restarts NovelForge and reloads this page as the new version. */
+function NewVersion({ status }: { status: UpdateStatus }) {
+  const latest = status.latest!;
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState<"" | "Downloading" | "Restarting">("");
+  const [error, setError] = useState("");
+
+  async function install() {
+    setBusy("Downloading");
+    setError("");
+    try {
+      await installUpdate();
+      setBusy("Restarting");
+      for (let tries = 0; tries < 120; tries++) {
+        await new Promise((done) => setTimeout(done, 1000));
+        const now = await getUpdate().catch(() => undefined);
+        if (now?.version === latest.version) return location.reload();
+      }
+      setError("NovelForge hasn't come back. Open it again.");
+    } catch (failure) {
+      setError((failure as Error).message);
+    }
+    setBusy("");
+  }
+
+  return (
+    <div className="notice new-version" role="status">
+      <p>
+        NovelForge {latest.version} is out.{" "}
+        <a href={latest.url} target="_blank" rel="noreferrer">
+          What's new
+        </a>
+      </p>
+      {busy ? (
+        <p className="muted">{busy}…</p>
+      ) : status.installable ? (
+        <button type="button" className="action" onClick={() => setAsking(true)}>
+          Install
+        </button>
+      ) : (
+        <p className="muted">Download it from its page, or pull it with git if you run NovelForge from source.</p>
+      )}
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      {asking && (
+        <ConfirmDialog title={`Install NovelForge ${latest.version}?`} confirm="Install" onConfirm={install} onClose={() => setAsking(false)}>
+          <p>NovelForge downloads it, restarts and comes back to this page. Your stories and Settings stay as they are.</p>
+        </ConfirmDialog>
+      )}
+    </div>
+  );
+}
+
 export function Menu() {
   const [canQuit, setCanQuit] = useState(false);
   const [closed, setClosed] = useState(false);
+  const [update, setUpdate] = useState<UpdateStatus>();
 
   useEffect(() => {
     getSettings().then(
       (settings) => setCanQuit(settings.canQuit),
       () => {},
     );
+    getUpdate().then(setUpdate, () => {});
   }, []);
 
   return (
@@ -243,6 +301,7 @@ export function Menu() {
           <nav aria-label="Main Menu">
             <a href="#/new">New Story</a>
             <a href="#/load">Load Story</a>
+            <a href="#/guide">Reader's Guide</a>
             <a href="#/settings">Settings</a>
             {/* A server gone by now still counts as closed. */}
             {canQuit && (
@@ -258,6 +317,8 @@ export function Menu() {
               </button>
             )}
           </nav>
+          {update?.latest && <NewVersion status={update} />}
+          {update && <p className="muted version">Version {update.version}</p>}
         </div>
       )}
     </Book>

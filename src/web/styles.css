@@ -761,7 +761,7 @@ button.quiet:not(.leave, .back):hover:not(:disabled, [aria-disabled="true"]) {
 }
 
 /* Numbered like a book's contents. */
-.menu :is(a, button) {
+.menu nav :is(a, button) {
   display: flex;
   align-items: baseline;
   gap: 18px;
@@ -774,21 +774,21 @@ button.quiet:not(.leave, .back):hover:not(:disabled, [aria-disabled="true"]) {
 }
 
 /* Quit, which is an action rather than a place, but reads as one more entry. */
-.menu button {
+.menu nav button {
   border-width: 0 0 1px;
   background: none;
   text-align: left;
   cursor: pointer;
 }
 
-.menu :is(a, button)::before {
+.menu nav :is(a, button)::before {
   content: counter(entry, upper-roman) ".";
   width: 28px;
   color: var(--muted);
   font: 400 14px var(--label);
 }
 
-.menu :is(a, button):hover {
+.menu nav :is(a, button):hover {
   background: var(--soft);
   color: var(--accent);
 }
@@ -2704,8 +2704,11 @@ dialog blockquote {
   }
 
   /* Name and contents sit together near the top of the screen. */
+  /* Grows past the screen when a new version's notice makes the contents longer. */
   .book:has(.brand) {
     justify-content: flex-start;
+    height: auto;
+    min-height: 100%;
   }
 
   .book:has(.brand) .page {
@@ -2723,7 +2726,7 @@ dialog blockquote {
     gap: 12px;
   }
 
-  .menu :is(a, button) {
+  .menu nav :is(a, button) {
     align-items: center;
     min-height: 52px;
     padding: 8px 24px 8px 8px;
@@ -2861,4 +2864,32 @@ dialog blockquote {
 /* In the story, the Choices sit under the latest response, clear of its tools. */
 .story .choices {
   margin-top: 12px;
+}
+
+.new-version {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.new-version p {
+  margin: 0;
+}
+
+.menu .version {
+  margin: 0;
+  font-size: 13px;
+}
+
+.guide {
+  max-width: 68ch;
+  line-height: 1.55;
+}
+
+.guide h3 {
+  margin: 1.4em 0 0.4em;
+}
+
+.guide li {
+  margin-bottom: 0.4em;
 }

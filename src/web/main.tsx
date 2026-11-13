@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import { Gallery } from "./gallery";
+import { Guide } from "./guide";
 import { Journal } from "./journal";
 import { LoadStory } from "./load";
 import { getSettings, reportEvent, stillHere } from "./api";
@@ -22,6 +23,7 @@ function App() {
   if (screen === "gallery" && id) return <Gallery key={id} id={id} />;
   if (screen === "new") return <NewStory step={id} />;
   if (screen === "load") return <LoadStory />;
+  if (screen === "guide") return <Guide section={id} />;
   if (screen === "settings") return <SettingsScreen id={id} />;
   return <Menu />;
 }

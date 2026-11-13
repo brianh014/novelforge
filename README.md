@@ -18,7 +18,7 @@ It runs on your own computer and talks to models you choose. Bring an OpenAI-com
 
 ## Quick Install
 
-Download your system's file from the [Releases](https://git.holtops.net/brianh014/novelforge/releases) page. Each system has two:
+Download your system's file from the [Releases](https://github.com/brianh014/novelforge/releases/latest) page. Each system has two:
 
 - **NovelForge** is the app: it opens in your browser, for this computer only, and you end it with Quit in the Menu.
 - **NovelForge Server** serves the whole network and opens no browser, so it runs headless too. Its log goes to the terminal, and stopping it (closing the window, or Ctrl+C) stops the server. Browse to it from any device at `http://<its address>:4600/`; it lists its addresses as it starts.
@@ -39,11 +39,11 @@ Both use port 4600. Open **Settings** first to enter your text model's address, 
 
 ### Linux
 
-1. Download and unpack it into a folder of its own, for x64. On a machine with no desktop, such as a server reached over SSH, use the Server. Use the version from the Releases page in place of `v0.1.0-alpha.4`, and `NovelForge-Server-Linux.tar.gz` for the Server:
+1. Download and unpack it into a folder of its own, for x64. On a machine with no desktop, such as a server reached over SSH, use the Server. Use `NovelForge-Server-Linux.tar.gz` for the Server:
 
    ```bash
    mkdir -p ~/NovelForge && cd ~/NovelForge
-   curl -fL -o NovelForge-Linux.tar.gz https://git.holtops.net/brianh014/novelforge/releases/download/v0.1.0-alpha.4/NovelForge-Linux.tar.gz
+   curl -fL -o NovelForge-Linux.tar.gz https://github.com/brianh014/novelforge/releases/latest/download/NovelForge-Linux.tar.gz
    tar -xzf NovelForge-Linux.tar.gz && rm NovelForge-Linux.tar.gz
    ```
 
@@ -77,8 +77,18 @@ sudo systemctl enable --now novelforge
 | --- | --- |
 | See whether it's running, and its addresses | `systemctl status novelforge` |
 | Follow its log | `journalctl -u novelforge -f` (also kept in `~/NovelForge/logs`) |
-| Restart it, after replacing it with a new download | `sudo systemctl restart novelforge` |
+| Restart it | `sudo systemctl restart novelforge` |
 | Stop it, and keep it from starting at boot | `sudo systemctl disable --now novelforge` |
+
+### Updating
+
+When a new version is out, the Menu says so. Choose **Install**, and NovelForge downloads it, restarts and comes back to the Menu, on every system and for the Server too. Your Saves and Settings stay as they are, and if the new version fails to start, the old one comes back. To check, NovelForge asks GitHub for the newest release now and then; nothing else is sent.
+
+You can also update by hand: download the new version and unpack it over the old one, with NovelForge closed (on a Mac, replace `NovelForge.app` in Applications).
+
+## Using NovelForge
+
+The **Reader's Guide** on the Menu explains everything in the app: making a story, playing, changing what happened, the Journal, pictures, Saves, every setting, and answers to common problems.
 
 ## Running from source
 
@@ -89,7 +99,7 @@ bun install
 bun start
 ```
 
-`bun start` serves NovelForge on port 4600 and opens it in your browser. Open **Settings** to enter your text model's address, model and key, and optionally an image model. Your Saves, Settings and logs stay in the project folder, which git ignores.
+`bun start` serves NovelForge on port 4600 and opens it in your browser. Open **Settings** to enter your text model's address, model and key, and optionally an image model. To update, run `git pull` and `bun install`. Your Saves, Settings and logs stay in the project folder, which git ignores.
 
 To try it with no model and no key, run it with stand-ins:
 
@@ -106,7 +116,7 @@ bun src/main.ts --fake --open
 | `PORT` | The port to listen on (default `4600`). |
 | `HOST` | The address to listen on (default `0.0.0.0` for a server, `127.0.0.1` for the app). |
 
-`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a Gitea release, signed in with the login git pushes with (or a token in `GITEA_TOKEN`); a version with a hyphen, such as `0.1.0-alpha.2`, is a pre-release.
+`bun run install-launcher` adds a NovelForge shortcut to your desktop or app menu. `bun run release` builds the one-file downloads into `dist/release`. `bun run publish-release` tags the commit with `package.json`'s version, builds the downloads and uploads them as a GitHub release with the [GitHub CLI](https://cli.github.com) (`gh`), signed in as you; a version with a hyphen, such as `0.2.0-alpha.1`, is a pre-release, which the Menu's Install skips.
 
 > **A server on the network has no accounts.** Anyone who can reach it can play, change Settings and spend your saved keys. Keep it on a network you trust, or set `HOST=127.0.0.1`.
 
@@ -130,6 +140,8 @@ ComfyUI keeps its model on the GPU between pictures. If a local text model or an
 
 ## Development
 
+Bugs and ideas go in [Issues](https://github.com/brianh014/novelforge/issues), and security problems to [a private advisory](https://github.com/brianh014/novelforge/security/advisories/new) (see [`SECURITY.md`](SECURITY.md)).
+
 ```bash
 bun run check   # lint and format check, typecheck, unit tests
 bun run e2e     # Playwright end-to-end tests, against the stand-ins
@@ -145,4 +157,4 @@ The code is TypeScript on Bun, with a React page bundled by Bun itself. Start wi
 
 ## License
 
-Copyright © 2026 BrianH. NovelForge is free software under the [GNU Affero General Public License 3.0](LICENSE). You may use, change, share and sell it. If you share a changed version, or run one as a server that other people use, you must offer them its source under the same license.
+Copyright © 2026 Brian Holt. NovelForge is free software under the [GNU Affero General Public License 3.0](LICENSE). You may use, change, share and sell it. If you share a changed version, or run one as a server that other people use, you must offer them its source under the same license.

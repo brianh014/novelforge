@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { comfyImages } from "./comfyui";
 import { galleryRoutes } from "./gallery-routes";
-import { errorResponse, isLoopback, logged, parseBody, type ServerContext, type ServerOptions } from "./http";
+import { errorResponse, isLoopback, logged, NoFields, parseBody, type ServerContext, type ServerOptions } from "./http";
 import { imagePipeline } from "./image-pipeline";
 import { liveTurns } from "./live-turns";
 import { errorFields, log, setLogLevel } from "./logger";
@@ -9,6 +9,7 @@ import { saveRoutes } from "./save-routes";
 import { MAX_IMPORT_BYTES, saveStore } from "./save-store";
 import { settingsRoutes } from "./settings-routes";
 import { turnRoutes } from "./turn-routes";
+import { relaunch, updater } from "./updater";
 import spa from "./web/index.html";
 import { writePicturePrompt } from "./world-creation";
 import { worldRoutes } from "./world-routes";
@@ -77,6 +78,8 @@ export function startServer(options: ServerOptions) {
     log.startup(`NovelForge is closing: ${why}`);
     void server.stop().finally(() => process.exit(0));
   };
+  const updates = updater(options.latestRelease);
+
   // Pages check in, and the app quits once none has for `idleMs`, after any Turn or picture is done.
   let pageSeen = Date.now();
   if (options.quittable) {
@@ -114,6 +117,17 @@ export function startServer(options: ServerOptions) {
             if (!options.quittable) return Response.json({ error: "Not found" }, { status: 404 });
             quit("the player quit");
             return new Response(null, { status: 204 });
+          },
+        },
+        // A new version: whether there is one, and installing it, which restarts the server once this answer is sent.
+        "/update": {
+          GET: async () => Response.json(await updates.status()),
+          POST: async (req) => {
+            await parseBody(req, NoFields);
+            if (turns.busy() || images.busy()) return Response.json({ error: "Wait for the story and its pictures to finish, then update." }, { status: 409 });
+            const installed = await updates.install();
+            void server.stop().finally(relaunch);
+            return Response.json(installed, { status: 202 });
           },
         },
         "/alive": {

@@ -1,11 +1,12 @@
 {
   "name": "novelforge",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0",
   "description": "A choose-your-own visual novel, written as you play, by a text model you connect.",
   "license": "AGPL-3.0-only",
+  "author": "Brian Holt",
   "repository": {
     "type": "git",
-    "url": "https://git.holtops.net/brianh014/novelforge"
+    "url": "https://github.com/brianh014/novelforge"
   },
   "private": true,
   "type": "module",

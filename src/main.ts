@@ -1,7 +1,7 @@
 import { randomInt } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { homedir, networkInterfaces } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { fakeImages, fakeTextProvider } from "./fake-services";
 import { openRouterImages } from "./image-adapter";
@@ -9,11 +9,11 @@ import { defaultLevelFor, log, startLog } from "./logger";
 import { startServer } from "./rest-api";
 import { settingsStore } from "./settings-store";
 import { textProvider } from "./text-provider";
+import { isCompiled, removeReplacedPrograms } from "./updater";
 
-// Under `bun run`, execPath is Bun itself, so keep dev Saves in the project rather than beside Bun.
-const isCompiled = basename(process.execPath, ".exe") !== "bun";
 // A Mac app can't keep Saves inside itself, which macOS may run from a read-only copy.
 const inMacApp = isCompiled && process.execPath.includes(".app/Contents/MacOS/");
+// Under `bun run`, keep dev Saves in the project rather than beside Bun.
 const appDir = inMacApp ? join(homedir(), "Library", "Application Support", "NovelForge") : isCompiled ? dirname(process.execPath) : process.cwd();
 
 // The download is the app: one player on this computer, a browser that opens by itself, and Quit in the Menu.
@@ -30,6 +30,7 @@ const dataDir = fake ? join(appDir, "fake") : appDir;
 mkdirSync(dataDir, { recursive: true });
 
 startLog(defaultLevelFor(isCompiled), join(dataDir, "logs"));
+removeReplacedPrograms();
 
 const settingsPath = join(dataDir, "settings.json");
 const firstFakeRun = fake && !existsSync(settingsPath);
@@ -77,6 +78,8 @@ const server = startServer({
   // shortcut: anyone on the network can play, change Settings and spend the saved keys, add accounts if the server leaves a trusted LAN.
   hostname: process.env.HOST ?? (app ? "127.0.0.1" : "0.0.0.0"),
   quittable: app ? { idleMs: Number(process.env.IDLE_QUIT_MS ?? 5 * 60_000) } : undefined,
+  // Only to try an update against a release served by hand.
+  latestRelease: process.env.NOVELFORGE_LATEST_RELEASE,
 });
 
 // A listening address of 0.0.0.0 is no use in a browser.

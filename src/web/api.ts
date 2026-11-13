@@ -109,6 +109,14 @@ export const getSettings = () => request<Settings>("/settings");
 
 export const quitApp = () => fetch("/quit", { method: "POST" });
 
+/** This copy's version, and a newer release if there is one. `installable` when this copy can replace itself with it. */
+export type UpdateStatus = { version: string; latest?: { version: string; url: string; notes: string }; installable: boolean };
+
+export const getUpdate = () => request<UpdateStatus>("/update");
+
+/** Answers once the new version is in place, and the server then restarts as it. */
+export const installUpdate = () => request<{ version: string }>("/update", jsonBody({}));
+
 /** A closed app answers nothing, which is no one's problem. */
 export const stillHere = () => void fetch("/alive", { method: "POST" }).catch(() => {});
 
