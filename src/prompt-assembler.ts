@@ -1,7 +1,7 @@
 import type { Check } from "./check-resolver";
 import { activateLore, estimateTokens } from "./lore-activation";
 import type { Message, Save } from "./save-store";
-import { MAX_PLOT_THREADS, type SceneMemory, type State } from "./state-applier";
+import { MAX_PLOT_THREADS, type SceneMemory, type State, type WorldEdit } from "./state-applier";
 import type { PromptStyle } from "./graph-builder";
 
 export type Prompt = { role: "system" | "user" | "assistant"; content: string }[];
@@ -157,11 +157,61 @@ export const memoryPrompt = (batch: Message[], previous?: string): Prompt => [
   { role: "user", content: JSON.stringify(batch.map(({ role, text }) => ({ role, text }))) },
 ];
 
-/** A Save from before Loose Ends has none, and only the Narrator can read them out of the story so far. */
-function fillLooseEnds(looseEnds: string[], messages: Message[]) {
-  if (looseEnds.length > 0 || !messages.some(({ role }) => role === "narrator")) return "";
+/** A Save from before Loose Ends has none, and only the Narrator can read them out of the story so far. A player who emptied the list meant it. */
+function fillLooseEnds(looseEnds: string[], messages: Message[], journalEdits: WorldEdit[]) {
+  if (looseEnds.length > 0 || !messages.some(({ role }) => role === "narrator") || journalEdits.some(({ edit }) => edit === "looseEnd")) return "";
   return `
 looseEnds is empty, so fill it now: use add_loose_end for each thing still unresolved in the summary, known facts and Messages above, if there are any.`;
+}
+
+/**
+ * The player's Journal changes since the last reply, each for what it changes. They tidy the state, never the story,
+ * so a removed item still happened. Other edits need no word: their text is the state the Narrator reads.
+ */
+function journalLines(edits: WorldEdit[]) {
+  const lists = { looseEnds: { removed: [] as string[], written: [] as string[] }, facts: { removed: [] as string[], written: [] as string[] } };
+  const people: Record<string, string> = {};
+  for (const edit of edits) {
+    if (edit.edit === "npcSummary") people[edit.name] = edit.text;
+    if (edit.edit !== "looseEnd" && edit.edit !== "fact") continue;
+    const list = lists[edit.edit === "looseEnd" ? "looseEnds" : "facts"];
+    if (edit.old !== null && edit.new === null) list.removed.push(edit.old);
+    if (edit.new !== null) list.written.push(edit.new);
+  }
+  const { looseEnds, facts } = lists;
+  for (const list of [looseEnds, facts]) list.written = list.written.filter((text) => !list.removed.includes(text));
+  const lines = [
+    looseEnds.removed.length > 0 &&
+      `The player took these off looseEnds: ${JSON.stringify(looseEnds.removed)}. They still happened and people still remember them, but no one presses them now: don't bring them up or move them on unless the PC does, don't add them back, and resolve or rewrite any Plot Thread that would push one.`,
+    looseEnds.written.length > 0 && `The player wrote these into looseEnds, so they are open as worded: ${JSON.stringify(looseEnds.written)}.`,
+    facts.removed.length > 0 &&
+      `The player took these off the known facts: ${JSON.stringify(facts.removed)}. Don't add them back or lean on them, though what the Messages show still happened.`,
+    facts.written.length > 0 &&
+      `The player wrote these known facts, and they are true as worded: ${JSON.stringify(facts.written)}. Fix any Plot Thread or Lore Entry that disagrees with them in this Turn.`,
+    Object.keys(people).length > 0 && `The player rewrote what the PC knows of these people, and it holds: ${JSON.stringify(people)}.`,
+  ].filter(Boolean);
+  return lines.join(" ");
+}
+
+export function journalNote(edits: WorldEdit[]) {
+  const lines = journalLines(edits);
+  return (
+    lines &&
+    `
+The player changed the Journal since the last reply. ${lines} These are changes to the record, not events, so don't mention them in the narration, and change only the state they touch.`
+  );
+}
+
+/**
+ * The World Change that brings the hidden world in line with the player's Journal edits since the last World Change,
+ * which already settled any before it. Empty when there are none to settle.
+ */
+export function journalChange(edits: WorldEdit[]) {
+  const lines = journalLines(edits.slice(edits.findLastIndex(({ edit }) => edit === "world") + 1));
+  return (
+    lines &&
+    `The player changed the Journal. ${lines} Bring the Plot Threads, Lore Entries and world rules in line with this, changing only what it touches. These are changes to the record, not events: what happened in the story still happened, so never change the summary for them or put back what the player removed. If nothing needs to change, leave every list empty and every other field null.`
+  );
 }
 
 /** A Save from before Story Time has none, and only the Narrator can tell from the story where it has got to. */
@@ -193,6 +243,7 @@ export function assemblePrompt({
   modelInstructions,
   imageInstructions = "",
   directions = [],
+  journalEdits = [],
   input,
   responseSchema,
   promptStyle,
@@ -208,6 +259,8 @@ export function assemblePrompt({
   imageInstructions?: string;
   /** From the player's recent Rewrites, which still hold. */
   directions?: string[];
+  /** Made since the last reply, or before the reply being replaced. */
+  journalEdits?: WorldEdit[];
   input: string;
   responseSchema: string;
   /** Null when no image will be drawn. */
@@ -260,7 +313,7 @@ People know only what they have seen, heard or been told themselves, so they can
 Carry on from the last reply: anything left unfinished, such as an action, a question or a person waiting, stays in play even if the player doesn't mention it.
 Avoid melodrama, cliché and overused metaphors, and prefer natural, grounded language. Tell things in order with strong verbs and conjunctions, rather than participle phrases. Vary the length and structure of your sentences. Never use em-dashes.
 Keep the prose fresh. Don't reuse the images, background details or closing moves of the replies above: give each scene something new to notice, vary how replies open and end, and end on what a person in the scene does, says or now faces, never on a background sound or passing detail. Leave the PC free to answer however they like: few replies should end on a choice between two things, and most should end on something other than a question. Say what people do more often than what they do not do. Say what is so, never what it isn't first: no "it's not X, it's Y", and no "Not X. Not Y. Z." No stock phrases such as a beat, letting something sit or land, a voice dropping, "in the way of someone who" or "here's the thing". Don't reach for eyes, hands, mugs or wall clocks to fill a pause: let people say or do something only they would. Give each person their own voice, speaking naturally, with contractions such as don't and I'm.
-The older replies above are shortened, so fill in every field of the schema. When anyone's clothing or looks change in this response, such as clothes coming off or going on, include update_npc for that NPC with their whole appearance as it is now, or the inventory change for the PC, as their pictures are painted from it.${fillLooseEnds(currentState.looseEnds, messages)}${fillStoryTime(currentState.storyTime, messages)}
+The older replies above are shortened, so fill in every field of the schema. When anyone's clothing or looks change in this response, such as clothes coming off or going on, include update_npc for that NPC with their whole appearance as it is now, or the inventory change for the PC, as their pictures are painted from it.${fillLooseEnds(currentState.looseEnds, messages, journalEdits)}${fillStoryTime(currentState.storyTime, messages)}${journalNote(journalEdits)}
 ${PACE}${
   directions.length > 0
     ? `

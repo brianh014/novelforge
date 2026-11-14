@@ -316,10 +316,11 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <b>Story Summary</b> and <b>Recent summary</b>: the story so far, and what just happened.
           </li>
           <li>
-            <b>Loose Ends</b>: what your PC knows is still unsettled, such as promises, plans and open questions. Add, change or remove them.
+            <b>Loose Ends</b>: what your PC knows is still unsettled, such as promises, plans and open questions. Add, change or remove them. Removing one only
+            tells the Narrator to stop pressing it: it still happened.
           </li>
           <li>
-            <b>What your PC knows</b>: the facts your PC has learned so far. Add, change or remove them.
+            <b>What your PC knows</b>: the facts your PC has learned so far. Add, change or remove them, and the Narrator takes what you write as true.
           </li>
           <li>
             <b>Characters</b>: everyone your PC has met, with what your PC knows of them. {tool(RenameIcon, "Rename")} changes a name everywhere in the story.

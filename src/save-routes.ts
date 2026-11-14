@@ -1,13 +1,12 @@
 import { z } from "zod";
 import { knownPortraits } from "./gallery-routes";
 import { ArtStyleRequest, imageResponse, NoFields, parseBody, routes, type ServerContext, someWords } from "./http";
-import { pcNow, restyledBy } from "./image-pipeline";
 import { log } from "./logger";
 import { NoteNotFound, PlayMode, StaleTurn } from "./save-store";
-import { VisibleEdit, type WorldEdit } from "./state-applier";
+import { VisibleEdit } from "./state-applier";
 import { askForChapterTitle, TurnFailed } from "./turn-engine";
 import { readable } from "./web/chat-style";
-import { changeWorld } from "./world-creation";
+import { applyWorldChange } from "./world-creation";
 import { NamedPc } from "./world-routes";
 
 const NewSaveRequest = z.object({
@@ -232,43 +231,9 @@ export function saveRoutes({ options, saves, turns, images }: ServerContext) {
       POST: async (req) => {
         const { change } = await parseBody(req, WorldChangeRequest);
         const { id } = req.params;
-        const basedOn = saves.latestMessageId(id);
         const release = turns.hold(id);
         try {
-          const before = saves.latestState(id);
-          // The PC's looks as they stand, so a change to them keeps all they don't change.
-          const looksNow = pcNow(saves.read(id).pc, before).physicalTraits ?? "";
-          const { world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status, ...update } = await changeWorld(
-            options,
-            { ...before, pcAppearance: looksNow },
-            change,
-            req.signal,
-          );
-          if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
-          const journal: WorldEdit[] = [
-            ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),
-            ...(summary === null ? [] : [{ edit: "summary" as const, text: summary }]),
-            ...facts.map((fact) => ({ edit: "fact" as const, ...fact })),
-            ...npc_summaries.map(({ name, summary }) => ({ edit: "npcSummary" as const, name, text: summary })),
-            ...(inventory === null ? [] : [{ edit: "inventory" as const, ...inventory }]),
-            ...(status === null ? [] : [{ edit: "status" as const, ...status }]),
-          ];
-          const looks = [
-            ...npc_looks.map(({ name, appearance }) => ({ edit: "npcLooks" as const, name, appearance })),
-            ...(pc_looks === null ? [] : [{ edit: "pcLooks" as const, appearance: pc_looks }]),
-          ];
-          for (const edit of [{ edit: "world" as const, update }, ...looks, ...journal]) saves.addEdit(id, edit);
-          const after = saves.latestState(id);
-          images.restyled(id, restyledBy(before, after), after.inventory.wearing);
-          // Counts only, so that the log never repeats the world.
-          log.info("world", "World Change applied", () => ({
-            lore: update.lore_entries.length,
-            removed: update.removed_lore.length,
-            rules: update.world_rules.length,
-            threads: update.plot_threads.length,
-            journal: journal.length,
-            looks: looks.length,
-          }));
+          await applyWorldChange(options, saves, images, id, change, req.signal);
           return Response.json({});
         } catch (error) {
           if (!(error instanceof TurnFailed)) throw error;

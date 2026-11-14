@@ -185,8 +185,9 @@ function turnPrompt(
     messages,
     input,
     directions,
+    journalEdits,
     picture,
-  }: Pick<Parameters<typeof assemblePrompt>[0], "state" | "messages" | "input" | "directions"> & { picture: boolean },
+  }: Pick<Parameters<typeof assemblePrompt>[0], "state" | "messages" | "input" | "directions" | "journalEdits"> & { picture: boolean },
 ) {
   const current = settings.read();
   const memoryStart = saves.memoryStart(id);
@@ -202,6 +203,7 @@ function turnPrompt(
       modelInstructions: current.modelInstructions,
       imageInstructions: current.imageInstructions,
       directions,
+      journalEdits,
       input,
       // shortcut: the schema is in the cached start of the prompt, so switching Play Mode costs one uncached Turn. Move the choices rule below the cache if players switch often.
       responseSchema: JSON.stringify(SCHEMAS[save.playMode].any),
@@ -234,6 +236,7 @@ export async function playTurn(
     messages,
     input,
     directions: saves.directions(id, basedOn),
+    journalEdits: saves.pendingEdits(id),
     picture: images.ready(),
   });
   return narrate(textProvider, signal, emit, {
@@ -267,7 +270,7 @@ export async function replaceResponse(
   signal: AbortSignal,
   emit: TurnEvents = () => {},
 ) {
-  const { input, narration, check, state, messages, sceneImage } = saves.turnToReplace(id, messageId);
+  const { input, narration, check, state, messages, sceneImage, journalEdits } = saves.turnToReplace(id, messageId);
   // The old picture goes with its response, so the new one always gets its own, whatever the Narrator decides.
   const hadPicture = !!sceneImage || images.sceneDrawing(id, messageId);
   const { prompt, memory, playMode } = turnPrompt(saves, settings, id, signal, textProvider, {
@@ -276,6 +279,7 @@ export async function replaceResponse(
     input,
     // The response being replaced keeps its own, which a Regenerate carries over.
     directions: saves.directions(id, messageId),
+    journalEdits,
     picture: images.ready(),
   });
   const kind = feedback === undefined ? "regenerate" : "rewrite";
