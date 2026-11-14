@@ -56,6 +56,8 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       fontSize,
       theme,
       logLevel,
+      textKeys,
+      imageKeys,
     } = settings.read();
     return {
       textBaseUrl,
@@ -64,6 +66,8 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       textHost,
       textHostFallback,
       hasTextApiKey: textApiKey !== "",
+      // Where a key is filed, never the keys, so the form can say which servers already have one.
+      textKeysFor: Object.keys(textKeys),
       modelInstructions,
       imageInstructions,
       textMaxTokens,
@@ -73,6 +77,7 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       imageProvider,
       imageModel,
       hasImageApiKey: imageApiKey !== "",
+      imageKeysFor: Object.keys(imageKeys),
       imagesEnabled,
       openNewImages,
       drawScenes,

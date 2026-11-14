@@ -91,6 +91,15 @@ export const SettingsUpdate = z
 
 export type SettingsChange = z.infer<typeof SettingsUpdate>;
 
+// Keys put away on a switch, by text server address and by image provider, so switching back finds the key again. Kept out of
+// SettingsUpdate, so no request can set one, and a map that won't read is dropped rather than breaking every request.
+const KeyMap = z.record(z.string(), z.string()).catch({});
+const PutAwayKeys = z.object({ textKeys: KeyMap, imageKeys: KeyMap });
+
+/** `keys` with `key` filed under `at`, keeping only keys that are set. */
+const filed = (keys: Record<string, string>, at: string, key: string) =>
+  Object.fromEntries(Object.entries({ ...keys, [at]: key }).filter(([, kept]) => kept !== ""));
+
 const defaults = {
   textBaseUrl: "https://openrouter.ai/api/v1",
   textApiKey: "",
@@ -158,7 +167,7 @@ export function settingsStore(path: string) {
     }
     // A key must only ever reach the server it was entered for, and that server is no longer known.
     if ("textBaseUrl" in fields && !("textBaseUrl" in kept)) delete kept.textApiKey;
-    return kept as SettingsChange;
+    return { ...(kept as SettingsChange), ...PutAwayKeys.parse(fields) };
   };
 
   const read = () => {
@@ -167,7 +176,13 @@ export function settingsStore(path: string) {
     const typed = stored.comfySteps != null || stored.comfyCfg != null;
     // The Stage box is no longer offered (its code is kept), so a stored pick of it reads as Prose.
     if (stored.chatStyle === "stage") stored.chatStyle = "prose";
-    return { ...defaults, comfyDefaults: !typed, ...stored };
+    const all = { ...defaults, comfyDefaults: !typed, ...stored };
+    // The key in use is filed too, which a file from before the put-away keys has only as the key in use.
+    return {
+      ...all,
+      textKeys: filed(all.textKeys, all.textBaseUrl, all.textApiKey),
+      imageKeys: filed(all.imageKeys, all.imageProvider, all.imageApiKey),
+    };
   };
 
   return {
@@ -176,8 +191,13 @@ export function settingsStore(path: string) {
     update(change: SettingsChange) {
       const current = read();
       const next = { ...current, ...change };
-      // A key must only ever reach the server it was entered for.
-      if (next.textBaseUrl !== current.textBaseUrl && change.textApiKey === undefined) next.textApiKey = "";
+      // A key must only ever reach the server it was entered for, so a switch puts it away and takes out the one filed for the new server.
+      const textKeys = filed(current.textKeys, current.textBaseUrl, current.textApiKey);
+      if (next.textBaseUrl !== current.textBaseUrl && change.textApiKey === undefined) next.textApiKey = textKeys[next.textBaseUrl] ?? "";
+      next.textKeys = filed(textKeys, next.textBaseUrl, next.textApiKey);
+      const imageKeys = filed(current.imageKeys, current.imageProvider, current.imageApiKey);
+      if (next.imageProvider !== current.imageProvider && change.imageApiKey === undefined) next.imageApiKey = imageKeys[next.imageProvider] ?? "";
+      next.imageKeys = filed(imageKeys, next.imageProvider, next.imageApiKey);
       if (next.logLevel === null) delete next.logLevel;
       // shortcut: mode does nothing on Windows, so the key has the folder's permissions there, tighten it if Settings ever hold more than local secrets.
       writeFileSync(`${path}.unfinished`, JSON.stringify(next, null, 2), { mode: 0o600 });

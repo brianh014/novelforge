@@ -20,6 +20,8 @@ afterEach(async () => {
 
 const settings = () => app.get("/settings").then((r) => r.json());
 const change = (body: unknown) => app.patch("/settings", body);
+// The app's own settings file, to see the keys a response never shows.
+const store = () => settingsStore(join(folder.path, "settings.json"));
 
 test("a fresh install has images on, Prose, medium type, blank Model Instructions and no keys", async () => {
   expect(await settings()).toEqual({
@@ -29,6 +31,7 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     textHost: "",
     textHostFallback: true,
     hasTextApiKey: false,
+    textKeysFor: [],
     modelInstructions: "",
     imageInstructions: "",
     textMaxTokens: 16_000,
@@ -38,6 +41,7 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     imageProvider: "openrouter",
     imageModel: "",
     hasImageApiKey: false,
+    imageKeysFor: [],
     imagesEnabled: true,
     openNewImages: true,
     drawScenes: true,
@@ -139,6 +143,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     textHost: "xiaomi",
     textHostFallback: false,
     hasTextApiKey: true,
+    textKeysFor: ["http://localhost:1234/v1"],
     modelInstructions: "Keep it short.",
     imageInstructions: "Soft light.",
     textMaxTokens: 9000,
@@ -148,6 +153,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     imageProvider: "local",
     imageModel: "image/model",
     hasImageApiKey: true,
+    imageKeysFor: ["local"],
     imagesEnabled: false,
     openNewImages: false,
     drawScenes: false,
@@ -180,6 +186,53 @@ test("text and image can use different providers, and a text server change leave
     imageProvider: "openrouter",
     hasImageApiKey: true,
   });
+});
+
+test("each text server keeps its own key, which comes back on a switch back and never goes to another server", async () => {
+  await change({ textApiKey: "openrouter-key-value" });
+  expect(await change({ textBaseUrl: "http://localhost:1234/v1", textApiKey: "local-key-value" }).then((r) => r.json())).toMatchObject({
+    hasTextApiKey: true,
+    textKeysFor: ["https://openrouter.ai/api/v1", "http://localhost:1234/v1"],
+  });
+
+  await change({ textBaseUrl: "https://openrouter.ai/api/v1" });
+  expect(store().read().textApiKey).toBe("openrouter-key-value");
+  await change({ textBaseUrl: "http://localhost:1234/v1" });
+  expect(store().read().textApiKey).toBe("local-key-value");
+
+  const elsewhere = await change({ textBaseUrl: "https://api.deepinfra.com/v1/openai" }).then((r) => r.json());
+  expect(elsewhere.hasTextApiKey).toBe(false);
+  expect(store().read().textApiKey).toBe("");
+});
+
+test("each image provider keeps its own key, and the keys themselves never reach a response", async () => {
+  await change({ imageApiKey: "openrouter-image-key" });
+  await change({ imageProvider: "wiro", imageApiKey: "wiro-image-key" });
+
+  const back = await change({ imageProvider: "openrouter" });
+  const text = await back.text();
+  expect(JSON.parse(text)).toMatchObject({ hasImageApiKey: true, imageKeysFor: ["openrouter", "wiro"] });
+  expect(text).not.toContain("image-key");
+  expect(store().read().imageApiKey).toBe("openrouter-image-key");
+
+  await change({ imageProvider: "google" });
+  expect(store().read().imageApiKey).toBe("");
+});
+
+test("a settings file from before put-away keys files the keys in use, so switching away and back keeps them", () => {
+  const old = join(folder.path, "old-keys.json");
+  writeFileSync(old, JSON.stringify({ textApiKey: "openrouter-key-value", imageProvider: "wiro", imageApiKey: "wiro-image-key" }));
+  const keys = settingsStore(old);
+
+  keys.update({ textBaseUrl: "http://localhost:1234/v1", imageProvider: "openrouter" });
+  keys.update({ textBaseUrl: "https://openrouter.ai/api/v1", imageProvider: "wiro" });
+
+  expect(keys.read()).toMatchObject({ textApiKey: "openrouter-key-value", imageApiKey: "wiro-image-key" });
+});
+
+test("put-away keys can't be set by a request", async () => {
+  await change({ textKeys: { "https://evil.example/v1": "planted" } } as never);
+  expect(store().read().textKeys).toEqual({});
 });
 
 test("options that don't exist are refused and change nothing", async () => {

@@ -864,11 +864,11 @@ function InstallSettings({
   // Hosts differ by model, so the old one may not offer a new one.
   const chooseModel = (textModel: string) => set({ textModel, textHost: textModel === draft.textModel ? draft.textHost : "" });
 
-  const losesKey = saved.hasTextApiKey && draft.textBaseUrl !== saved.textBaseUrl && !textKey.trim();
+  const needsKey = saved.hasTextApiKey && draft.textBaseUrl !== saved.textBaseUrl && !saved.textKeysFor.includes(draft.textBaseUrl) && !textKey.trim();
   const keyHint = (stored: boolean) => (stored ? "Saved. Type a new key to replace it." : "None saved");
 
   const { busy, submit, feedback } = useSubmit(async () => {
-    const { hasTextApiKey, hasImageApiKey, workflowProblem, ...change } = draft;
+    const { hasTextApiKey, hasImageApiKey, textKeysFor, imageKeysFor, workflowProblem, ...change } = draft;
     const next = await saveSettings({
       ...change,
       ...(textKey.trim() && { textApiKey: textKey.trim() }),
@@ -880,7 +880,7 @@ function InstallSettings({
     setTextKey("");
     setImageKey("");
     applyLook(next);
-    return saved.hasTextApiKey && !next.hasTextApiKey ? "Saved. The text API key was cleared because the server changed." : "Saved.";
+    return saved.hasTextApiKey && !next.hasTextApiKey ? "Saved. This server has no text API key yet, so enter one for it." : "Saved.";
   });
 
   return frame(
@@ -980,15 +980,15 @@ function InstallSettings({
           <input
             type="password"
             autoComplete="new-password"
-            placeholder={keyHint(saved.hasTextApiKey)}
+            placeholder={keyHint(saved.textKeysFor.includes(draft.textBaseUrl))}
             value={textKey}
             onChange={(e) => setTextKey(e.target.value)}
           />
         </label>
-        {losesKey && (
+        {needsKey && (
           <p className="notice">
-            A key only goes to the server it was entered for, so saving this new server clears the text API key. Enter a key above to use one with the new
-            server.
+            A key only goes to the server it was entered for, so this server needs its own. Enter it above. The old server's key is kept for when you switch
+            back.
           </p>
         )}
         <label>
@@ -1137,7 +1137,7 @@ function InstallSettings({
               <input
                 type="password"
                 autoComplete="new-password"
-                placeholder={keyHint(saved.hasImageApiKey)}
+                placeholder={keyHint(saved.imageKeysFor.includes(draft.imageProvider))}
                 value={imageKey}
                 onChange={(e) => setImageKey(e.target.value)}
               />

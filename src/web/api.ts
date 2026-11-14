@@ -17,6 +17,9 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   defaultLogLevel: LogLevel;
   hasTextApiKey: boolean;
   hasImageApiKey: boolean;
+  /** The text server addresses and image providers that have a key saved. */
+  textKeysFor: string[];
+  imageKeysFor: string[];
   imagesReady: boolean;
   workflowProblem: string;
   /** Only the downloaded app, which has no window to close. A server keeps running for everyone. */
