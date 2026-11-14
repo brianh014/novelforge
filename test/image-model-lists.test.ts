@@ -79,7 +79,14 @@ test("a catalog that fails or answers nonsense lists nothing", async () => {
 });
 
 const googleModels = () =>
-  Response.json({ models: [{ name: "models/gemini-3.8-flash" }, { name: "models/gemini-nano-banana-2.1" }, { name: "models/gemini-3.1-flash-image" }] });
+  Response.json({
+    models: [
+      { name: "models/gemini-3.8-flash" },
+      { name: "models/gemini-nano-banana-2.1" },
+      { name: "models/gemini-3.1-flash-image" },
+      { name: "models/imagen-4.0-generate-001" },
+    ],
+  });
 
 test("Google's list, asked with its saved key, keeps only the drawing models", async () => {
   settings.update({ imageProvider: "google", imageApiKey: "google-key-value" });

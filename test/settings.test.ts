@@ -284,6 +284,13 @@ test("a switch back brings each server's and provider's model and the rest of it
   expect(back.imageProfiles.wiro).toEqual({ imageModel: "bytedance/seedream-5-5", imageResolution: "1k" });
 });
 
+test("an image provider this build doesn't know takes its key with it, so it never reaches OpenRouter", () => {
+  const file = join(folder.path, "newer-provider.json");
+  writeFileSync(file, JSON.stringify({ imageProvider: "someday", imageApiKey: "someday-key-value" }));
+
+  expect(settingsStore(file).read()).toMatchObject({ imageProvider: "openrouter", imageApiKey: "" });
+});
+
 test("put-away settings can't be set by a request", async () => {
   await change({ textProfiles: { "https://evil.example/v1": { textApiKey: "planted" } } } as never);
   expect(Object.keys(store().read().textProfiles)).toEqual(["https://openrouter.ai/api/v1"]);

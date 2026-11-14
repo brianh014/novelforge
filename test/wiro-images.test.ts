@@ -157,7 +157,7 @@ test("an exit code sent as a number counts the same as one sent as text", async 
 test("a model name that isn't owner/model is refused before anything is sent with the key", async () => {
   const adapter = adapterFor(flux);
 
-  for (const imageModel of ["../../Task/Cancel", "bytedance/seedream?x=1", "seedream"]) {
+  for (const imageModel of ["../../Task/Cancel", "../..", "./..", "bytedance/seedream?x=1", "seedream"]) {
     settings.update({ imageModel });
     await expect(adapter(payload(), never)).rejects.toThrow("Wiro models are named owner/model");
   }

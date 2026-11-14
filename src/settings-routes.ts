@@ -6,12 +6,12 @@ import { imageResponse, parseBody, PromptRequest, routes, type ServerContext } f
 import type { ImageAdapter } from "./image-adapter";
 import { defaultLogLevel, errorFields, errorType, log, setLogLevel } from "./logger";
 import { estimateTokens } from "./lore-activation";
-import { type SettingsChange, SettingsUpdate } from "./settings-store";
+import { OnlineImageProvider, type SettingsChange, SettingsUpdate } from "./settings-store";
 import { textHosts, textModels } from "./text-provider";
 import { ContentRefused, TextProviderFailed } from "./turn-engine";
 
 // Only the online providers have a list. ComfyUI's models come from /settings/comfy-models.
-const ImageModelsQuery = z.object({ provider: SettingsUpdate.shape.imageProvider.unwrap().exclude(["local"]) });
+const ImageModelsQuery = z.object({ provider: OnlineImageProvider });
 
 /** `profiles` with each one's key taken out. */
 const unkeyed = <T extends object>(profiles: Record<string, T>, key: keyof T) =>

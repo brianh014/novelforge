@@ -21,6 +21,10 @@ const FamilyPicks = z.object({
 });
 const PicksByFamily = z.partialRecord(Family, FamilyPicks);
 
+/** The image providers reached online, each with its own Image Adapter and model list. */
+export const OnlineImageProvider = z.enum(["openrouter", "wiro", "google", "nanogpt"]);
+export type OnlineImageProvider = z.infer<typeof OnlineImageProvider>;
+
 export const SettingsUpdate = z
   .object({
     textBaseUrl: z.url({ protocol: /^https?$/ }),
@@ -41,7 +45,7 @@ export const SettingsUpdate = z
     textRecentMessages: z.number().int().min(40).max(400),
     // A Question's answer over this many words is retried. Not below the 80 the prompt asks for.
     answerRejectWords: z.number().int().min(80).max(1000),
-    imageProvider: z.enum(["openrouter", "wiro", "google", "nanogpt", "local"]),
+    imageProvider: z.enum([...OnlineImageProvider.options, "local"]),
     imageModel: z.string(),
     imageApiKey: z.string(),
     imagesEnabled: z.boolean(),
@@ -189,6 +193,8 @@ export function settingsStore(path: string) {
     }
     // A key must only ever reach the server it was entered for, and that server is no longer known.
     if ("textBaseUrl" in fields && !("textBaseUrl" in kept)) delete kept.textApiKey;
+    // Likewise a provider this build doesn't know, from a newer one, say, which would read as OpenRouter and get the other's key.
+    if ("imageProvider" in fields && !("imageProvider" in kept)) delete kept.imageApiKey;
     return { ...(kept as SettingsChange), ...PutAway.parse(fields) };
   };
 

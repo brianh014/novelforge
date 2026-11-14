@@ -555,7 +555,7 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
   const tooBig =
     comfySdBase === "sd15" && imageResolution !== "0.5k"
       ? "SD 1.5 models are trained for small images, so this resolution may double faces and figures. 0.5K suits them best."
-      : comfySdBase === "sdxl" && imageResolution !== "1k"
+      : comfySdBase === "sdxl" && (imageResolution === "1.5k" || imageResolution === "2k")
         ? "SDXL models are trained for about 1K, so larger sizes may repeat subjects. 1K suits them best."
         : "";
 
@@ -939,7 +939,9 @@ function InstallSettings({
     setTextKey("");
     setImageKey("");
     applyLook(next);
-    return saved.hasTextApiKey && !next.hasTextApiKey ? "Saved. This server has no text API key yet, so enter one for it." : "Saved.";
+    // Most local servers need no key, so only an online provider is asked for one.
+    const online = Object.values(TEXT_PROVIDERS).includes(next.textBaseUrl);
+    return online && saved.hasTextApiKey && !next.hasTextApiKey ? "Saved. This server has no text API key yet, so enter one for it." : "Saved.";
   });
 
   return frame(

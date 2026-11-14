@@ -67,10 +67,10 @@ const server = startServer({
   savesDir: join(dataDir, "Saves"),
   settings,
   textProvider: fake ? fakeTextProvider : textProvider(settings),
-  imageAdapter: fake ? fakeImages : openRouterImages(settings, "https://openrouter.ai/api/v1"),
-  imageAdapters: fake
-    ? { wiro: fakeImages, google: fakeImages, nanogpt: fakeImages }
+  imageAdapter: fake
+    ? fakeImages
     : {
+        openrouter: openRouterImages(settings, "https://openrouter.ai/api/v1"),
         wiro: wiroImages(settings, "https://api.wiro.ai/v1"),
         google: googleImages(settings, "https://generativelanguage.googleapis.com/v1"),
         nanogpt: nanoGptImages(settings, "https://api.nano-gpt.com/api/v1"),

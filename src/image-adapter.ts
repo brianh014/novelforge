@@ -1,5 +1,5 @@
 import { dimensions } from "./graph-builder";
-import type { SettingsStore } from "./settings-store";
+import type { OnlineImageProvider, SettingsStore } from "./settings-store";
 
 /** The shared payload every Image Adapter formats for its backend. The first references are kept when a model takes fewer. */
 export type ImagePayload = {
@@ -29,7 +29,8 @@ const MOST_REFERENCES = 16;
 const TIER_TARGETS = { "0.5k": 500, "1k": 1000, "1.5k": 1500, "2k": 2000 };
 
 // Wiro writes some as 1k. A size that is a ratio or a video size reads as no number, so it is never chosen.
-const tierPixels = (tier: string) => (/k$/i.test(tier) ? Number.parseFloat(tier) * 1000 : Number(tier));
+// An empty option reads as no number too, not as Number("")'s 0.
+const tierPixels = (tier: string) => (/k$/i.test(tier) ? Number.parseFloat(tier) * 1000 : tier.trim() === "" ? Number.NaN : Number(tier));
 
 /** The size this model lists nearest the resolution, as a tier it doesn't list would be refused. */
 function closestTier(tiers: string[] = [], resolution: keyof typeof TIER_TARGETS) {
@@ -50,24 +51,28 @@ const apiError = (key: string, message: string, status: number) => Object.assign
 const promptWith = ({ prompt, style_preset, negative_prompt }: ImagePayload, avoidElsewhere = false) =>
   [prompt, style_preset, !avoidElsewhere && negative_prompt && `Avoid: ${negative_prompt}.`].filter(Boolean).join("\n");
 
-// Goes into a path sent with the key, so nothing that could climb out of it or add a query.
-const WIRO_MODEL = /^[\w.-]+\/[\w.-]+$/;
+// Goes into a path sent with the key, so nothing that could climb out of it or add a query: a part of only dots would.
+const WIRO_MODEL = /^[\w.-]*\w[\w.-]*\/[\w.-]*\w[\w.-]*$/;
 
-/** The OpenRouter Image Adapter, using the Settings at the time of each call. */
-export function openRouterImages(settings: SettingsStore, baseUrl: string): ImageAdapter {
-  // shortcut: held until the app restarts, so a model that gains image input needs one, refresh it if that ever matters.
-  const known = new Map<string, ImageModel | undefined>();
-
-  async function modelInfo(model: string, headers: Record<string, string>, signal: AbortSignal) {
+/** A model's entry in a catalog listed as `{ data: [{ id, … }] }`, as OpenRouter's and NanoGPT's are. */
+function catalogInfo<T extends { id: string }>(url: string) {
+  // shortcut: held until the app restarts, so a model that gains image input or a size needs one, refresh it if that ever matters.
+  const known = new Map<string, T | undefined>();
+  return async (model: string, headers: Record<string, string>, signal: AbortSignal) => {
     if (known.has(model)) return known.get(model);
-    const response = await fetch(`${baseUrl}/images/models`, { headers, signal }).catch(() => undefined);
-    const { data } = ((await response?.json().catch(() => ({}))) ?? {}) as { data?: ImageModel[] };
+    const response = await fetch(url, { headers, signal }).catch(() => undefined);
+    const { data } = ((await response?.json().catch(() => ({}))) ?? {}) as { data?: T[] };
     // Without an answer the image still generates plainly, so ask again next time.
     if (!response?.ok || !data) return undefined;
     const info = data.find(({ id }) => id === model);
     known.set(model, info);
     return info;
-  }
+  };
+}
+
+/** The OpenRouter Image Adapter, using the Settings at the time of each call. */
+export function openRouterImages(settings: SettingsStore, baseUrl: string): ImageAdapter {
+  const modelInfo = catalogInfo<ImageModel>(`${baseUrl}/images/models`);
 
   return async (payload, signal) => {
     const { aspect_ratio, reference_images } = payload;
@@ -259,25 +264,13 @@ export function nanoGptSize(sizes: string[] = [], resolution: keyof typeof TIER_
 
 /** The NanoGPT Image Adapter, on its own Image API, which takes the references as data URLs. */
 export function nanoGptImages(settings: SettingsStore, baseUrl: string): ImageAdapter {
-  // shortcut: held until the app restarts, like OpenRouter's, refresh it if a model's sizes ever change under a player.
-  const known = new Map<string, NanoGptModel | undefined>();
-
-  async function modelInfo(model: string, signal: AbortSignal) {
-    if (known.has(model)) return known.get(model);
-    const response = await fetch(`${baseUrl}/images/models`, { signal }).catch(() => undefined);
-    const { data } = ((await response?.json().catch(() => ({}))) ?? {}) as { data?: NanoGptModel[] };
-    // Without an answer the image still generates plainly, so ask again next time.
-    if (!response?.ok || !data) return undefined;
-    const info = data.find(({ id }) => id === model);
-    known.set(model, info);
-    return info;
-  }
+  const modelInfo = catalogInfo<NanoGptModel>(`${baseUrl}/images/models`);
 
   return async (payload, signal) => {
     const { aspect_ratio, reference_images } = payload;
     const { imageModel, imageApiKey, imageResolution } = settings.read();
     const limited = AbortSignal.any([signal, AbortSignal.timeout(GIVE_UP_MS)]);
-    const info = await modelInfo(imageModel, limited);
+    const info = await modelInfo(imageModel, {}, limited);
     const parameters = info?.supported_parameters ?? {};
     const resolution = nanoGptSize(parameters.resolutions, imageResolution, aspect_ratio);
     const takesImages = info?.architecture?.input_modalities?.includes("image");
@@ -315,7 +308,7 @@ export function nanoGptImages(settings: SettingsStore, baseUrl: string): ImageAd
 }
 
 /** A provider's image models, by the id its Image model field takes. Empty when it doesn't answer. */
-export type ImageModelList = (provider: "openrouter" | "wiro" | "google" | "nanogpt", signal: AbortSignal) => Promise<string[]>;
+export type ImageModelList = (provider: OnlineImageProvider, signal: AbortSignal) => Promise<string[]>;
 
 // Long enough for a slow catalog, short enough that Settings isn't kept waiting on one that's down.
 const LIST_MS = 15_000;
@@ -334,8 +327,11 @@ export function imageModelLists(settings: SettingsStore, urls: { openRouter: str
       const { models } = (await asked(`${urls.google}/models?pageSize=1000`, signal, { headers: { "x-goog-api-key": imageApiKey } })) as {
         models?: { name?: unknown }[];
       };
-      // shortcut: told apart by name, as the listing doesn't say which models draw, read a capability if Google adds one.
-      return (models ?? []).flatMap(({ name }) => (typeof name === "string" && /image|banana/.test(name) ? [name.replace(/^models\//, "")] : []));
+      // shortcut: told apart by name, as the listing doesn't say which models draw, read a capability if Google adds one. Only Gemini's
+      // image models, as Imagen's aren't served by the Interactions API.
+      return (models ?? []).flatMap(({ name }) =>
+        typeof name === "string" && /^models\/gemini-.*(image|banana)/.test(name) ? [name.replace(/^models\//, "")] : [],
+      );
     }
     if (provider === "openrouter" || provider === "nanogpt") {
       const url = provider === "openrouter" ? urls.openRouter : urls.nanoGpt;
