@@ -105,7 +105,7 @@ NovelForge has no AI of its own, so it needs a key from an AI service before it 
 
 1. Sign up at [openrouter.ai](https://openrouter.ai), open [Credits](https://openrouter.ai/settings/credits) and add a few dollars.
 2. Open [Keys](https://openrouter.ai/settings/keys), choose **Create Key**, give it any name, and copy the key it shows. It's shown only once, so paste it somewhere safe too.
-3. In NovelForge, open **Settings → Text**. Paste the key into **Text API key**, choose a **Text model** and press **Test text**. A good balance of cost and writing right now is [MiMo V2.6 Pro](https://openrouter.ai/xiaomi/mimo-v2.6-pro) (`xiaomi/mimo-v2.6-pro`).
+3. In NovelForge, open **Settings → Text**. Paste the key into **Text API key**, choose a **Text model** and press **Test text**. Two good choices right now write about as well as each other: [MiMo V2.6 Pro](https://openrouter.ai/xiaomi/mimo-v2.6-pro) (`xiaomi/mimo-v2.6-pro`), a good balance of cost and writing, and [DeepSeek V4.1 Flash](https://openrouter.ai/deepseek/deepseek-v4.1-flash) (`deepseek/deepseek-v4.1-flash`), which costs much less a Turn. Try both on the same story and keep the one you like.
 4. For pictures, open **Settings → Images**, choose **OpenRouter**, paste the same key into **Image API key**, choose an image model and press **Test image**. Try Seedream 5.5, or Nano Banana 2.1 for a little better quality. If you have a graphics card, your own ComfyUI draws for free (see [Recommended settings](#images-your-own-comfyui)). Pictures are optional: without them the story is text only.
 
 ### A free key: Google AI Studio

@@ -84,8 +84,9 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
                 Open <b>Keys</b>, choose <b>Create Key</b> and copy the key. It's shown only once, so keep a copy somewhere safe.
               </li>
               <li>
-                In <b>Settings → Text</b>, paste it into <b>Text API key</b>, choose a <b>Text model</b> and press <b>Test text</b>. A good balance of cost and
-                writing right now is MiMo V2.6 Pro (<code>xiaomi/mimo-v2.6-pro</code>).
+                In <b>Settings → Text</b>, paste it into <b>Text API key</b>, choose a <b>Text model</b> and press <b>Test text</b>. Two good choices right now
+                write about as well as each other: MiMo V2.6 Pro (<code>xiaomi/mimo-v2.6-pro</code>), a good balance of cost and writing, and DeepSeek V4.1
+                Flash (<code>deepseek/deepseek-v4.1-flash</code>), which costs much less a Turn. Try both on the same story and keep the one you like.
               </li>
             </ol>
             You can also choose which of its providers serves the model, and how it routes. Staying on one provider keeps its prompt cache, which makes each
