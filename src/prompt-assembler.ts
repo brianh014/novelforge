@@ -1,7 +1,7 @@
 import type { Check } from "./check-resolver";
 import { activateLore, estimateTokens } from "./lore-activation";
 import type { Message, Save } from "./save-store";
-import { MAX_PLOT_THREADS, type SceneMemory, type State, type WorldEdit } from "./state-applier";
+import { MAX_PLOT_THREADS, playersOwn, type SceneMemory, type State, type WorldEdit } from "./state-applier";
 import type { PromptStyle } from "./graph-builder";
 
 export type Prompt = { role: "system" | "user" | "assistant"; content: string }[];
@@ -159,7 +159,7 @@ export const memoryPrompt = (batch: Message[], previous?: string): Prompt => [
 
 /** A Save from before Loose Ends has none, and only the Narrator can read them out of the story so far. A player who emptied the list meant it. */
 function fillLooseEnds(looseEnds: string[], messages: Message[], journalEdits: WorldEdit[]) {
-  if (looseEnds.length > 0 || !messages.some(({ role }) => role === "narrator") || journalEdits.some(({ edit }) => edit === "looseEnd")) return "";
+  if (looseEnds.length > 0 || !messages.some(({ role }) => role === "narrator") || playersOwn(journalEdits).some(({ edit }) => edit === "looseEnd")) return "";
   return `
 looseEnds is empty, so fill it now: use add_loose_end for each thing still unresolved in the summary, known facts and Messages above, if there are any.`;
 }
@@ -169,25 +169,40 @@ looseEnds is empty, so fill it now: use add_loose_end for each thing still unres
  * so a removed item still happened. Other edits need no word: their text is the state the Narrator reads.
  */
 function journalLines(edits: WorldEdit[]) {
-  const lists = { looseEnds: { removed: [] as string[], written: [] as string[] }, facts: { removed: [] as string[], written: [] as string[] } };
+  // Each item as it now reads, from the wording it had before these edits, or null for one they added.
+  const lists = { looseEnds: new Map<string, string | null>(), facts: new Map<string, string | null>() };
+  const removed = { looseEnds: [] as string[], facts: [] as string[] };
   const people: Record<string, string> = {};
-  for (const edit of edits) {
+  for (const edit of playersOwn(edits)) {
     if (edit.edit === "npcSummary") people[edit.name] = edit.text;
     if (edit.edit !== "looseEnd" && edit.edit !== "fact") continue;
-    const list = lists[edit.edit === "looseEnd" ? "looseEnds" : "facts"];
-    if (edit.old !== null && edit.new === null) list.removed.push(edit.old);
-    if (edit.new !== null) list.written.push(edit.new);
+    const kind = edit.edit === "looseEnd" ? "looseEnds" : "facts";
+    const items = lists[kind];
+    let from: string | null = null;
+    if (edit.old !== null) {
+      from = items.has(edit.old) ? items.get(edit.old)! : edit.old;
+      items.delete(edit.old);
+    }
+    if (edit.new !== null) items.set(edit.new, from);
+    // One added and taken off again before a reply was never the Narrator's to hear of.
+    else if (from !== null) removed[kind].push(from);
   }
+  const changed = (items: Map<string, string | null>) => [...items].filter(([now, from]) => now !== from);
+  const written = (items: Map<string, string | null>) => changed(items).map(([now]) => now);
+  const replaced = (items: Map<string, string | null>) => {
+    const old = changed(items).flatMap(([, from]) => (from === null ? [] : [from]));
+    return old.length > 0 ? ` They replace these, which no longer hold, so don't put them back: ${JSON.stringify(old)}.` : "";
+  };
   const { looseEnds, facts } = lists;
-  for (const list of [looseEnds, facts]) list.written = list.written.filter((text) => !list.removed.includes(text));
   const lines = [
-    looseEnds.removed.length > 0 &&
-      `The player took these off looseEnds: ${JSON.stringify(looseEnds.removed)}. They still happened and people still remember them, but no one presses them now: don't bring them up or move them on unless the PC does, don't add them back, and resolve or rewrite any Plot Thread that would push one.`,
-    looseEnds.written.length > 0 && `The player wrote these into looseEnds, so they are open as worded: ${JSON.stringify(looseEnds.written)}.`,
-    facts.removed.length > 0 &&
-      `The player took these off the known facts: ${JSON.stringify(facts.removed)}. Don't add them back or lean on them, though what the Messages show still happened.`,
-    facts.written.length > 0 &&
-      `The player wrote these known facts, and they are true as worded: ${JSON.stringify(facts.written)}. Fix any Plot Thread or Lore Entry that disagrees with them in this Turn.`,
+    removed.looseEnds.length > 0 &&
+      `The player took these off looseEnds: ${JSON.stringify(removed.looseEnds)}. They still happened and people still remember them, but no one presses them now: don't bring them up or move them on unless the PC does, don't add them back, and resolve or rewrite any Plot Thread that would push one.`,
+    written(looseEnds).length > 0 &&
+      `The player wrote these into looseEnds, so they are open as worded: ${JSON.stringify(written(looseEnds))}.${replaced(looseEnds)}`,
+    removed.facts.length > 0 &&
+      `The player took these off the known facts: ${JSON.stringify(removed.facts)}. Don't add them back or lean on them, though what the Messages show still happened.`,
+    written(facts).length > 0 &&
+      `The player wrote these known facts, and they are true as worded: ${JSON.stringify(written(facts))}.${replaced(facts)} Fix any Plot Thread or Lore Entry that disagrees with them.`,
     Object.keys(people).length > 0 && `The player rewrote what the PC knows of these people, and it holds: ${JSON.stringify(people)}.`,
   ].filter(Boolean);
   return lines.join(" ");

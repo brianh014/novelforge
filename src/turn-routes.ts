@@ -4,8 +4,7 @@ import { type BegunTurn, STOPPED_STATUS } from "./live-turns";
 import { errorFields, log } from "./logger";
 import type { Message } from "./save-store";
 import { editResponse, playOpening, playTurn, replaceResponse, TurnFailed, type TurnEvents } from "./turn-engine";
-import { journalChange } from "./prompt-assembler";
-import { answerQuestion, applyWorldChange, decideForPc } from "./world-creation";
+import { answerQuestion, decideForPc } from "./world-creation";
 
 // A `draft` is the player's own move to Enhance. Without one, the PC's next move is written from scratch.
 const DecideRequest = z.object({ draft: z.string().trim().max(4000).default("") });
@@ -87,30 +86,12 @@ data: ${JSON.stringify(data)}
 export function turnRoutes({ options, saves, turns, images }: ServerContext) {
   const engine = { ...options, images };
 
-  /**
-   * Its own call, as a Turn busy writing the story can skip state changes. The Turn goes ahead if it fails, with the
-   * Journal edits still told to it.
-   */
-  const settleJournal = async (id: string, signal: AbortSignal) => {
-    const change = journalChange(saves.pendingEdits(id));
-    if (!change) return;
-    try {
-      await applyWorldChange(options, saves, images, id, change, signal, true);
-    } catch (error) {
-      if (!(error instanceof TurnFailed)) throw error;
-      log.warning("world", "Journal edits weren't settled before the Turn", { failure: error.failure });
-    }
-  };
-
   return routes({
     "/saves/:id/turns": {
       POST: async (req) => {
         const { input } = await parseBody(req, NewTurnRequest);
         const { id } = req.params;
-        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), input), async (emit, signal) => {
-          await settleJournal(id, signal);
-          return playTurn(saves, engine, id, input, signal, emit);
-        });
+        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), input), (emit, signal) => playTurn(saves, engine, id, input, signal, emit));
       },
     },
     "/saves/:id/opening": {
@@ -145,10 +126,9 @@ export function turnRoutes({ options, saves, turns, images }: ServerContext) {
       POST: async (req) => {
         const { feedback } = await parseBody(req, RewriteRequest);
         const { id, messageId } = req.params;
-        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), feedback, Number(messageId)), async (emit, signal) => {
-          await settleJournal(id, signal);
-          return replaceResponse(saves, engine, id, Number(messageId), feedback, signal, emit);
-        });
+        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), feedback, Number(messageId)), (emit, signal) =>
+          replaceResponse(saves, engine, id, Number(messageId), feedback, signal, emit),
+        );
       },
     },
     "/saves/:id/messages/:messageId/edit": {
@@ -164,10 +144,9 @@ export function turnRoutes({ options, saves, turns, images }: ServerContext) {
       POST: async (req) => {
         await parseBody(req, NoFields);
         const { id, messageId } = req.params;
-        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), "", Number(messageId)), async (emit, signal) => {
-          await settleJournal(id, signal);
-          return replaceResponse(saves, engine, id, Number(messageId), undefined, signal, emit);
-        });
+        return turnResponse(req, turns.begin(id, saves.latestMessageId(id), "", Number(messageId)), (emit, signal) =>
+          replaceResponse(saves, engine, id, Number(messageId), undefined, signal, emit),
+        );
       },
     },
   });

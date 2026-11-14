@@ -1117,6 +1117,18 @@ export function saveStore(savesDir: string) {
     },
 
     /**
+     * A World Change's edits, all or none, after the latest Message is still `basedOn`. Its reply was checked against
+     * the state it changes, which for a replaced response is older than the Journal's, so these skip `addEdit`'s check.
+     */
+    addWorldChange(id: string, basedOn: number, edits: WorldEdit[]) {
+      using db = open(id);
+      db.transaction(() => {
+        if (latestMessage(db) !== basedOn) throw new StaleTurn();
+        db.run("UPDATE save SET pending_edits = ?", [JSON.stringify([...pendingEdits(db), ...edits])]);
+      })();
+    },
+
+    /**
      * Renames a known NPC in every Message, Snapshot, pending change and image of the Save, so no Revert brings the old name back.
      * Their first name alone is renamed too, as the story mostly uses it, unless someone else shares it.
      */

@@ -245,21 +245,83 @@ test("a Regenerate is told again of the Journal changes made before the reply it
   expect(textOf(prompts.at(-1)!)).toContain(DROPPED);
 });
 
-test("a Journal note says what each change means, and an item written then removed is only removed", () => {
+test("a Journal note says what each change means, and names a reworded item's old wording", () => {
   const note = journalNote([
     { edit: "fact", old: "The bell rang twice.", new: "The bell rang three times." },
-    { edit: "looseEnd", old: null, new: SOCIAL },
-    { edit: "looseEnd", old: SOCIAL, new: null },
     { edit: "npcSummary", name: "Renata", text: "A ferry pilot." },
     { edit: "chapterTitle", index: 0, title: "Low Water" },
   ]);
 
   expect(note).toContain(`true as worded: ${JSON.stringify(["The bell rang three times."])}`);
-  expect(note).not.toContain("open as worded");
-  expect(note).toContain(`${DROPPED}: ${JSON.stringify([SOCIAL])}`);
+  expect(note).toContain(`don't put them back: ${JSON.stringify(["The bell rang twice."])}`);
   expect(note).toContain('"Renata":"A ferry pilot."');
   expect(note).not.toContain("Low Water");
   expect(journalNote([{ edit: "chapterTitle", index: 0, title: "Low Water" }])).toBe("");
+});
+
+test("a Journal note follows each item through its edits, from the wording the Narrator last saw", () => {
+  // Added and taken off again, which the Narrator never saw.
+  expect(
+    journalNote([
+      { edit: "looseEnd", old: null, new: SOCIAL },
+      { edit: "looseEnd", old: SOCIAL, new: null },
+    ]),
+  ).toBe("");
+  // Reworded and then taken off: the Narrator hears of the wording it knew.
+  const reworded = journalNote([
+    { edit: "looseEnd", old: MISSING, new: "Renata never came home." },
+    { edit: "looseEnd", old: "Renata never came home.", new: null },
+  ]);
+  expect(reworded).toContain(`${DROPPED}: ${JSON.stringify([MISSING])}`);
+  expect(reworded).not.toContain("never came home");
+  // Reworded twice, and back again, comes to nothing.
+  expect(
+    journalNote([
+      { edit: "looseEnd", old: MISSING, new: "A." },
+      { edit: "looseEnd", old: "A.", new: MISSING },
+    ]),
+  ).toBe("");
+});
+
+test("a Journal note leaves out what a World Change wrote, as that isn't the player's", () => {
+  const update = { lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [] };
+  const note = journalNote([
+    { edit: "looseEnd", old: MISSING, new: null },
+    { edit: "fact", old: null, new: "Bells ring." },
+    { edit: "world", update, made: 1 },
+  ]);
+
+  expect(note).toContain(DROPPED);
+  expect(note).not.toContain("Bells ring.");
+});
+
+test("an Edit is told of the player's Journal edits, and doesn't refill the Loose Ends they emptied", async () => {
+  play(narration("One."), settled(), narration("One, edited."));
+  const id = createSave(MISSING);
+  await turn(id);
+  await edit(id, { edit: "looseEnd", old: MISSING, new: null });
+
+  expect((await app.post(`/saves/${id}/messages/2/edit`, { text: "One, edited." })).status).toBe(201);
+
+  const told = textOf(prompts.at(-1)!);
+  expect(told).toContain(DROPPED);
+  expect(told).not.toContain(ASK_TO_FILL);
+});
+
+test("a stale Regenerate makes no World Change, and a fresh one settles against the state before the response", async () => {
+  const ADDED = `${SECRET} a thread from the response.`;
+  play(narration("One."), narration("Two.", { op: "add_plot_thread", thread: ADDED }), settled(), narration("Two again."));
+  const id = createSave(MISSING);
+  await turn(id);
+  await turn(id);
+  await edit(id, { edit: "looseEnd", old: MISSING, new: null });
+
+  expect((await app.post(`/saves/${id}/messages/2/regenerate`, {})).status).toBe(409);
+  expect(prompts).toHaveLength(2);
+
+  expect((await app.post(`/saves/${id}/messages/4/regenerate`, {})).status).toBe(201);
+  expect(textOf(prompts[2]!)).toContain("changing its world between Turns");
+  expect(textOf(prompts[2]!)).not.toContain(ADDED);
 });
 
 test.each([

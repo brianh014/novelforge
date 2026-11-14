@@ -373,7 +373,8 @@ export type VisibleEdit = z.infer<typeof VisibleEdit>;
 /** A change made between Messages. Snapshots are immutable, so these wait on the Save for the next Message to store. */
 export const WorldEdit = z.discriminatedUnion("edit", [
   ...VisibleEdit.options,
-  z.object({ edit: z.literal("world"), update: WorldUpdate }),
+  // `made` counts the edits just before it that the same World Change wrote, which a Save from before it lacks.
+  z.object({ edit: z.literal("world"), update: WorldUpdate, made: z.number().int().min(0).optional() }),
   // Whole lists, as a World Change rewrites what the player says is wrong rather than one item at a time.
   z.object({ edit: z.literal("inventory"), wearing: z.array(z.string()), carrying: z.array(z.string()) }),
   z.object({ edit: z.literal("status"), health: z.string(), injuries: z.array(z.string()), conditions: z.array(z.string()) }),
@@ -384,6 +385,16 @@ export const WorldEdit = z.discriminatedUnion("edit", [
   z.object({ edit: z.literal("closeChapter"), title: z.string() }),
 ]);
 export type WorldEdit = z.infer<typeof WorldEdit>;
+
+/** The edits the player made themselves, leaving out each World Change and the edits it wrote. */
+export function playersOwn(edits: WorldEdit[]) {
+  const own: WorldEdit[] = [];
+  for (const edit of edits) {
+    if (edit.edit === "world") own.splice(own.length - (edit.made ?? 0));
+    else own.push(edit);
+  }
+  return own;
+}
 
 export function applyEdit(state: State, edit: WorldEdit): State {
   switch (edit.edit) {

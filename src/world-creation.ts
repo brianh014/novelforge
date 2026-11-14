@@ -6,7 +6,7 @@ import { errorType, log } from "./logger";
 import { activateLore } from "./lore-activation";
 import { IN_ITS_WORLD_AND_STYLE, imageGuidance, LOOKS, LORE_TOKEN_BUDGET, type Prompt, REQUESTED_IMAGE_PROMPT } from "./prompt-assembler";
 import type { SettingsStore } from "./settings-store";
-import { type Message, type Save, type SaveStore, StaleTurn } from "./save-store";
+import type { Message, Save, SaveStore } from "./save-store";
 import {
   applyOperations,
   changeList,
@@ -569,8 +569,8 @@ export const changeWorld = (context: Context, state: State, change: string, sign
   );
 
 /**
- * Asks for a World Change and keeps it as edits for the next Message, with the hidden `world` edit last, so that any
- * Journal edit after it is the player's own. Logs counts only, as the reply holds the hidden world.
+ * Asks for a World Change and keeps it as edits for the next Message, with the hidden `world` edit last, counting those
+ * it wrote, so that `playersOwn` can tell the player's from them. Logs counts only, as the reply holds the hidden world.
  */
 export async function applyWorldChange(
   context: Context,
@@ -579,10 +579,11 @@ export async function applyWorldChange(
   id: string,
   change: string,
   signal: AbortSignal,
-  mayKeep = false,
+  /** `stateOf` reads the state the change applies to: a replaced response's is the one before it. */
+  { mayKeep = false, stateOf = () => saves.latestState(id) }: { mayKeep?: boolean; stateOf?: () => State } = {},
 ) {
   const basedOn = saves.latestMessageId(id);
-  const before = saves.latestState(id);
+  const before = stateOf();
   // The PC's looks as they stand, so a change to them keeps all they don't change.
   const looksNow = pcNow(saves.read(id).pc, before).physicalTraits ?? "";
   const { world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status, ...update } = await changeWorld(
@@ -592,7 +593,6 @@ export async function applyWorldChange(
     signal,
     mayKeep,
   );
-  if (saves.latestMessageId(id) !== basedOn) throw new StaleTurn();
   const journal: WorldEdit[] = [
     ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),
     ...(summary === null ? [] : [{ edit: "summary" as const, text: summary }]),
@@ -605,8 +605,9 @@ export async function applyWorldChange(
     ...npc_looks.map(({ name, appearance }) => ({ edit: "npcLooks" as const, name, appearance })),
     ...(pc_looks === null ? [] : [{ edit: "pcLooks" as const, appearance: pc_looks }]),
   ];
-  for (const edit of [...looks, ...journal, { edit: "world" as const, update }]) saves.addEdit(id, edit);
-  const after = saves.latestState(id);
+  const made = [...looks, ...journal];
+  saves.addWorldChange(id, basedOn, [...made, { edit: "world", update, made: made.length }]);
+  const after = stateOf();
   images.restyled(id, restyledBy(before, after), after.inventory.wearing);
   log.info("world", "World Change applied", () => ({
     lore: update.lore_entries.length,

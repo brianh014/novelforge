@@ -415,6 +415,24 @@ test("one Narrator call applies a hidden change, and the player hears only that 
   expect(await journal(id)).toEqual(before);
 });
 
+test("a World Change whose reply changes one fact twice is kept whole, with its hidden change", async () => {
+  play(
+    update({
+      world_rules: [{ old: WORLD.worldRules[0], new: "Smuggling pays." }],
+      facts: [
+        { old: firstFact, new: "The city is dry." },
+        { old: firstFact, new: null },
+      ],
+    }),
+  );
+  const id = createSave();
+
+  expect((await change(id)).status).toBe(200);
+
+  expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
+  expect(hidden(id).worldRules).toEqual(["Smuggling pays.", WORLD.worldRules[1]!]);
+});
+
 test("a World Change can fix what the PC wears and carries, and their status, which the Journal shows", async () => {
   play(update({ inventory: { wearing: ["oilskin coat"], carrying: ["brass lantern"] }, status: { health: "bruised", injuries: [], conditions: ["soaked"] } }));
   const id = createSave();
