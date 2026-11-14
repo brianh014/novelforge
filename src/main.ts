@@ -4,7 +4,7 @@ import { homedir, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { fakeImages, fakeTextProvider } from "./fake-services";
-import { openRouterImages } from "./image-adapter";
+import { openRouterImages, wiroImages } from "./image-adapter";
 import { defaultLevelFor, log, startLog } from "./logger";
 import { startServer } from "./rest-api";
 import { settingsStore } from "./settings-store";
@@ -68,6 +68,7 @@ const server = startServer({
   settings,
   textProvider: fake ? fakeTextProvider : textProvider(settings),
   imageAdapter: fake ? fakeImages : openRouterImages(settings, "https://openrouter.ai/api/v1"),
+  wiroAdapter: fake ? fakeImages : wiroImages(settings, "https://api.wiro.ai/v1"),
   dice: () => randomInt(1, 21),
   nearMissMargin: z.coerce
     .number()

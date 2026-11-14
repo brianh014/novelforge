@@ -29,6 +29,8 @@ export type ServerOptions = {
   savesDir: string;
   textProvider: TextProvider;
   imageAdapter: ImageAdapter;
+  /** For Wiro. Without it, Wiro draws with `imageAdapter`, as tests do. */
+  wiroAdapter?: ImageAdapter;
   /** Loopback unless the caller opens the app to the network, which has no accounts to protect it. */
   hostname?: string;
   dice: Dice;

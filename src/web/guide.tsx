@@ -118,6 +118,13 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <b>OpenRouter</b>: for when you have no graphics card for ComfyUI. Paste the same key you use for the story into <b>Image API key</b> and choose an
             image AI: try Seedream 5.5, or Nano Banana 2.1 for a little better quality.
           </li>
+          <li>
+            <b>Wiro</b>: the same, with a key from{" "}
+            <a href="https://wiro.ai" target="_blank" rel="noreferrer">
+              wiro.ai
+            </a>
+            . Set its project to <b>API key only</b>, and type the image AI as the end of its page's address there, such as bytedance/seedream-5-5.
+          </li>
         </ul>
         <p>
           You can turn pictures off at any time with <b>Create new images</b>, and only draw the ones you ask for by turning off <b>Draw scene pictures</b>.

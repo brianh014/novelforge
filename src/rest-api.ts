@@ -71,7 +71,7 @@ export function startServer(options: ServerOptions) {
   const local = comfyImages(settings, undefined, (problem) => (workflow.problem = problem));
   const images = imagePipeline(
     saves,
-    { openrouter: options.imageAdapter, local },
+    { openrouter: options.imageAdapter, wiro: options.wiroAdapter ?? options.imageAdapter, local },
     settings,
     options.writePicture ?? ((ask, style, _template, signal) => writePicturePrompt(options, ask, style, signal)),
   );

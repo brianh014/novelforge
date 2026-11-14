@@ -856,7 +856,7 @@ function InstallSettings({
       ...change,
       ...(textKey.trim() && { textApiKey: textKey.trim() }),
       // Its field is hidden for Local, and a key the player can't see must not be stored.
-      ...(draft.imageProvider === "openrouter" && imageKey.trim() && { imageApiKey: imageKey.trim() }),
+      ...(draft.imageProvider !== "local" && imageKey.trim() && { imageApiKey: imageKey.trim() }),
     });
     setSaved(next);
     setDraft(next);
@@ -1073,6 +1073,7 @@ function InstallSettings({
           value={draft.imageProvider}
           choices={[
             { value: "openrouter", label: "OpenRouter" },
+            { value: "wiro", label: "Wiro" },
             { value: "local", label: "Local (ComfyUI)" },
           ]}
           onChange={(imageProvider) => set({ imageProvider })}
@@ -1083,11 +1084,13 @@ function InstallSettings({
           choices={RESOLUTIONS.map(([value, label]) => ({ value, label }))}
           onChange={(imageResolution) => set({ imageResolution })}
         />
-        {draft.imageProvider === "openrouter" ? (
+        {draft.imageProvider !== "local" ? (
           <>
             <p className="muted">
-              OpenRouter uses the nearest size your model offers, so the image may not match exactly. Larger sizes can cost more, and some models have no size
-              choice, so this changes nothing for them.
+              {draft.imageProvider === "wiro" ? "Wiro" : "OpenRouter"} uses the nearest size your model offers, so the image may not match exactly. Larger sizes
+              can cost more, and some models have no size choice, so this changes nothing for them.
+              {draft.imageProvider === "wiro" &&
+                " The model is the end of its page's address on wiro.ai, such as bytedance/seedream-5-5. Set its Wiro project to API key only, not signatures."}
             </p>
             <label>
               Image model

@@ -6,7 +6,7 @@
 
 NovelForge is a single-player story game. You build a world and a character, then act and speak only as that character, while an AI plays the Narrator: it runs the story, voices everyone else, keeps track of the world, and rolls the dice when what you try could fail. An image AI draws the Cover, portraits and scenes as the story goes.
 
-It runs on your own computer and talks to models you choose. Bring an OpenAI-compatible text API (OpenRouter, DeepInfra, a local server) and, for pictures, OpenRouter or your own ComfyUI.
+It runs on your own computer and talks to models you choose. Bring an OpenAI-compatible text API (OpenRouter, DeepInfra, a local server) and, for pictures, OpenRouter, Wiro or your own ComfyUI.
 
 <p align="center"><img src="docs/screenshots/menu.png" alt="NovelForge's Menu: New Story, Load Story, Reader's Guide and Settings beside the logo" width="800"></p>
 
@@ -164,7 +164,7 @@ A local model works too: choose **Local / OpenAI server** and give the address o
 
 Use **Local (ComfyUI)** if you have a GPU for it. NovelForge draws a lot: the Cover, a portrait for each person, a Scene Image whenever the scene changes, pictures on request, and every redraw. On a paid image API each one costs money, and on your own ComfyUI they are free. Choose FLUX.2 or Qwen Image 2.1 in Simple Mode to keep faces the same from picture to picture, as SD 1.5 and SDXL can't use portraits.
 
-ComfyUI keeps its model on the GPU between pictures. If a local text model or anything else needs the GPU too, turn on **Free GPU memory after each picture**. Use OpenRouter for pictures only if you have no GPU for ComfyUI: try Seedream 5.5, or Nano Banana 2.1 for a little better quality.
+ComfyUI keeps its model on the GPU between pictures. If a local text model or anything else needs the GPU too, turn on **Free GPU memory after each picture**. Use OpenRouter or [Wiro](https://wiro.ai) for pictures only if you have no GPU for ComfyUI: try Seedream 5.5, or Nano Banana 2.1 for a little better quality. On Wiro, set the project to API key only and type the model as the end of its page's address, such as `bytedance/seedream-5-5`.
 
 ## Development
 
