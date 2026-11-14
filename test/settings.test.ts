@@ -32,6 +32,17 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     textHostFallback: true,
     hasTextApiKey: false,
     textKeysFor: [],
+    textProfiles: {
+      "https://openrouter.ai/api/v1": {
+        textModel: "",
+        textRouting: "price",
+        textHost: "",
+        textHostFallback: true,
+        textMaxTokens: 16_000,
+        textReplyMinutes: 8,
+        textRecentMessages: 80,
+      },
+    },
     modelInstructions: "",
     imageInstructions: "",
     textMaxTokens: 16_000,
@@ -42,6 +53,7 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     imageModel: "",
     hasImageApiKey: false,
     imageKeysFor: [],
+    imageProfiles: { openrouter: { imageModel: "", imageResolution: "1k" } },
     imagesEnabled: true,
     openNewImages: true,
     drawScenes: true,
@@ -144,6 +156,26 @@ test("every setting survives a restart, and no key comes back", async () => {
     textHostFallback: false,
     hasTextApiKey: true,
     textKeysFor: ["http://localhost:1234/v1"],
+    textProfiles: {
+      "https://openrouter.ai/api/v1": {
+        textModel: "",
+        textRouting: "price",
+        textHost: "",
+        textHostFallback: true,
+        textMaxTokens: 16_000,
+        textReplyMinutes: 8,
+        textRecentMessages: 80,
+      },
+      "http://localhost:1234/v1": {
+        textModel: "local/model",
+        textRouting: "latency",
+        textHost: "xiaomi",
+        textHostFallback: false,
+        textMaxTokens: 9000,
+        textReplyMinutes: 3,
+        textRecentMessages: 120,
+      },
+    },
     modelInstructions: "Keep it short.",
     imageInstructions: "Soft light.",
     textMaxTokens: 9000,
@@ -154,6 +186,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     imageModel: "image/model",
     hasImageApiKey: true,
     imageKeysFor: ["local"],
+    imageProfiles: { openrouter: { imageModel: "", imageResolution: "1k" }, local: { imageModel: "image/model", imageResolution: "2k" } },
     imagesEnabled: false,
     openNewImages: false,
     drawScenes: false,
@@ -230,9 +263,30 @@ test("a settings file from before put-away keys files the keys in use, so switch
   expect(keys.read()).toMatchObject({ textApiKey: "openrouter-key-value", imageApiKey: "wiro-image-key" });
 });
 
-test("put-away keys can't be set by a request", async () => {
-  await change({ textKeys: { "https://evil.example/v1": "planted" } } as never);
-  expect(store().read().textKeys).toEqual({});
+test("a switch back brings each server's and provider's model and the rest of its own settings with it", async () => {
+  await change({ textModel: "xiaomi/mimo-v2.6-pro", textHost: "deepinfra", textMaxTokens: 9000, imageModel: "bytedance/seedream-5.5", imageResolution: "2k" });
+  await change({ textBaseUrl: "http://localhost:1234/v1", textModel: "gemma-local", textMaxTokens: 3000, imageProvider: "wiro" });
+  // A provider never used starts with no model, and the rest carries over.
+  expect(store().read()).toMatchObject({ imageModel: "", imageResolution: "2k" });
+  await change({ imageModel: "bytedance/seedream-5-5", imageResolution: "1k" });
+
+  const back = await change({ textBaseUrl: "https://openrouter.ai/api/v1", imageProvider: "openrouter" }).then((r) => r.json());
+
+  expect(back).toMatchObject({
+    textModel: "xiaomi/mimo-v2.6-pro",
+    textHost: "deepinfra",
+    textMaxTokens: 9000,
+    imageModel: "bytedance/seedream-5.5",
+    imageResolution: "2k",
+  });
+  // The form switches before it saves, so it gets each one's settings, without the keys.
+  expect(back.textProfiles["http://localhost:1234/v1"]).toMatchObject({ textModel: "gemma-local", textMaxTokens: 3000 });
+  expect(back.imageProfiles.wiro).toEqual({ imageModel: "bytedance/seedream-5-5", imageResolution: "1k" });
+});
+
+test("put-away settings can't be set by a request", async () => {
+  await change({ textProfiles: { "https://evil.example/v1": { textApiKey: "planted" } } } as never);
+  expect(Object.keys(store().read().textProfiles)).toEqual(["https://openrouter.ai/api/v1"]);
 });
 
 test("options that don't exist are refused and change nothing", async () => {

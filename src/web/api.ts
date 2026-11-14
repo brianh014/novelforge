@@ -5,7 +5,7 @@ import type { FailedTurn, LiveTurn } from "../live-turns";
 import type { LogLevel } from "../logger";
 // A Message as the story screen has it: the latest response carries its Choices, if it has any.
 import type { ImageTarget, PlayMode, Reply as Message, Save, SaveStore } from "../save-store";
-import type { SettingsChange } from "../settings-store";
+import type { ImageProfile, SettingsChange, TextProfile } from "../settings-store";
 import type { State, VisibleEdit } from "../state-applier";
 import type { Character, EnhanceField, PcDraft, WorldChoices, WorldField, WorldPc } from "../world-creation";
 
@@ -17,6 +17,9 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   defaultLogLevel: LogLevel;
   hasTextApiKey: boolean;
   hasImageApiKey: boolean;
+  /** Each text server's and image provider's own settings, for switching to, without their keys. */
+  textProfiles: Record<string, Omit<TextProfile, "textApiKey">>;
+  imageProfiles: Record<string, Omit<ImageProfile, "imageApiKey">>;
   /** The text server addresses and image providers that have a key saved. */
   textKeysFor: string[];
   imageKeysFor: string[];

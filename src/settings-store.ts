@@ -91,14 +91,34 @@ export const SettingsUpdate = z
 
 export type SettingsChange = z.infer<typeof SettingsUpdate>;
 
-// Keys put away on a switch, by text server address and by image provider, so switching back finds the key again. Kept out of
-// SettingsUpdate, so no request can set one, and a map that won't read is dropped rather than breaking every request.
-const KeyMap = z.record(z.string(), z.string()).catch({});
-const PutAwayKeys = z.object({ textKeys: KeyMap, imageKeys: KeyMap });
+// What belongs to a text server or an image provider, put away on a switch so switching back finds it all again.
+const TextProfile = SettingsUpdate.pick({
+  textApiKey: true,
+  textModel: true,
+  textRouting: true,
+  textHost: true,
+  textHostFallback: true,
+  textMaxTokens: true,
+  textReplyMinutes: true,
+  textRecentMessages: true,
+});
+const ImageProfile = SettingsUpdate.pick({ imageApiKey: true, imageModel: true, imageResolution: true });
+const TEXT_TIED = Object.keys(TextProfile.shape) as (keyof typeof TextProfile.shape)[];
+const IMAGE_TIED = Object.keys(ImageProfile.shape) as (keyof typeof ImageProfile.shape)[];
+// By text server address and by image provider. Kept out of SettingsUpdate, so no request can set one, and one that won't read is
+// dropped rather than breaking every request.
+const PutAway = z.object({
+  textProfiles: z.record(z.string(), TextProfile.catch({})).catch({}),
+  imageProfiles: z.record(z.string(), ImageProfile.catch({})).catch({}),
+});
+export type TextProfile = z.infer<typeof TextProfile>;
+export type ImageProfile = z.infer<typeof ImageProfile>;
 
-/** `keys` with `key` filed under `at`, keeping only keys that are set. */
-const filed = (keys: Record<string, string>, at: string, key: string) =>
-  Object.fromEntries(Object.entries({ ...keys, [at]: key }).filter(([, kept]) => kept !== ""));
+const tied = <T extends object>(from: T, fields: (keyof T)[]) => Object.fromEntries(fields.map((field) => [field, from[field]]));
+
+/** Each field of `fields` the change leaves out taken from `own`, the profile of the server or provider switched to. */
+const restored = (change: object, own: object, fields: string[]) =>
+  Object.fromEntries(fields.filter((field) => !(field in change) && field in own).map((field) => [field, own[field as keyof typeof own]]));
 
 const defaults = {
   textBaseUrl: "https://openrouter.ai/api/v1",
@@ -167,7 +187,7 @@ export function settingsStore(path: string) {
     }
     // A key must only ever reach the server it was entered for, and that server is no longer known.
     if ("textBaseUrl" in fields && !("textBaseUrl" in kept)) delete kept.textApiKey;
-    return { ...(kept as SettingsChange), ...PutAwayKeys.parse(fields) };
+    return { ...(kept as SettingsChange), ...PutAway.parse(fields) };
   };
 
   const read = () => {
@@ -177,11 +197,11 @@ export function settingsStore(path: string) {
     // The Stage box is no longer offered (its code is kept), so a stored pick of it reads as Prose.
     if (stored.chatStyle === "stage") stored.chatStyle = "prose";
     const all = { ...defaults, comfyDefaults: !typed, ...stored };
-    // The key in use is filed too, which a file from before the put-away keys has only as the key in use.
+    // What is in use is filed too, which a file from before the profiles has only as the settings in use.
     return {
       ...all,
-      textKeys: filed(all.textKeys, all.textBaseUrl, all.textApiKey),
-      imageKeys: filed(all.imageKeys, all.imageProvider, all.imageApiKey),
+      textProfiles: { ...all.textProfiles, [all.textBaseUrl]: tied(all, TEXT_TIED) as TextProfile },
+      imageProfiles: { ...all.imageProfiles, [all.imageProvider]: tied(all, IMAGE_TIED) as ImageProfile },
     };
   };
 
@@ -191,13 +211,18 @@ export function settingsStore(path: string) {
     update(change: SettingsChange) {
       const current = read();
       const next = { ...current, ...change };
-      // A key must only ever reach the server it was entered for, so a switch puts it away and takes out the one filed for the new server.
-      const textKeys = filed(current.textKeys, current.textBaseUrl, current.textApiKey);
-      if (next.textBaseUrl !== current.textBaseUrl && change.textApiKey === undefined) next.textApiKey = textKeys[next.textBaseUrl] ?? "";
-      next.textKeys = filed(textKeys, next.textBaseUrl, next.textApiKey);
-      const imageKeys = filed(current.imageKeys, current.imageProvider, current.imageApiKey);
-      if (next.imageProvider !== current.imageProvider && change.imageApiKey === undefined) next.imageApiKey = imageKeys[next.imageProvider] ?? "";
-      next.imageKeys = filed(imageKeys, next.imageProvider, next.imageApiKey);
+      // A switch puts the old server's settings away and takes out the new one's. One never used starts with no key, as a key must only
+      // ever reach the server it was entered for, and no model, as each names its models its own way. The rest carries over.
+      if (next.textBaseUrl !== current.textBaseUrl) {
+        const own = current.textProfiles[next.textBaseUrl] ?? { textApiKey: "", textModel: "", textHost: "" };
+        Object.assign(next, restored(change, own, TEXT_TIED));
+      }
+      if (next.imageProvider !== current.imageProvider) {
+        const own = current.imageProfiles[next.imageProvider] ?? { imageApiKey: "", imageModel: "" };
+        Object.assign(next, restored(change, own, IMAGE_TIED));
+      }
+      next.textProfiles = { ...current.textProfiles, [next.textBaseUrl]: tied(next, TEXT_TIED) as TextProfile };
+      next.imageProfiles = { ...current.imageProfiles, [next.imageProvider]: tied(next, IMAGE_TIED) as ImageProfile };
       if (next.logLevel === null) delete next.logLevel;
       // shortcut: mode does nothing on Windows, so the key has the folder's permissions there, tighten it if Settings ever hold more than local secrets.
       writeFileSync(`${path}.unfinished`, JSON.stringify(next, null, 2), { mode: 0o600 });

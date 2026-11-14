@@ -9,6 +9,10 @@ import { type SettingsChange, SettingsUpdate } from "./settings-store";
 import { textHosts, textModels } from "./text-provider";
 import { ContentRefused, TextProviderFailed } from "./turn-engine";
 
+/** `profiles` with each one's key taken out. */
+const unkeyed = <T extends object>(profiles: Record<string, T>, key: keyof T) =>
+  Object.fromEntries(Object.entries(profiles).map(([at, { [key]: _key, ...rest }]) => [at, rest])) as Record<string, Omit<T, typeof key>>;
+
 /** Settings and their tests. `local` is the ComfyUI adapter, and `workflow` how its last job went, which only the screen shows. */
 export function settingsRoutes({ options, images }: ServerContext, local: ImageAdapter, workflow: { problem: string }) {
   const { settings } = options;
@@ -56,8 +60,8 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       fontSize,
       theme,
       logLevel,
-      textKeys,
-      imageKeys,
+      textProfiles,
+      imageProfiles,
     } = settings.read();
     return {
       textBaseUrl,
@@ -66,8 +70,9 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       textHost,
       textHostFallback,
       hasTextApiKey: textApiKey !== "",
-      // Where a key is filed, never the keys, so the form can say which servers already have one.
-      textKeysFor: Object.keys(textKeys),
+      // Each server's and provider's own settings, for the form to switch to, and where a key is filed, but never the keys.
+      textProfiles: unkeyed(textProfiles, "textApiKey"),
+      textKeysFor: Object.keys(textProfiles).filter((at) => textProfiles[at]?.textApiKey),
       modelInstructions,
       imageInstructions,
       textMaxTokens,
@@ -77,7 +82,8 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       imageProvider,
       imageModel,
       hasImageApiKey: imageApiKey !== "",
-      imageKeysFor: Object.keys(imageKeys),
+      imageProfiles: unkeyed(imageProfiles, "imageApiKey"),
+      imageKeysFor: Object.keys(imageProfiles).filter((at) => imageProfiles[at]?.imageApiKey),
       imagesEnabled,
       openNewImages,
       drawScenes,

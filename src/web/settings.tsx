@@ -864,11 +864,18 @@ function InstallSettings({
   // Hosts differ by model, so the old one may not offer a new one.
   const chooseModel = (textModel: string) => set({ textModel, textHost: textModel === draft.textModel ? draft.textHost : "" });
 
+  // A server or provider switched to brings back its own settings, and one never used starts with no model, as each names them its own way.
+  const switchText = (provider: "openrouter" | "google" | "local") => {
+    // Local brings back the last local server used, if any.
+    const local = Object.keys(saved.textProfiles).findLast((at) => at !== OPENROUTER_URL && at !== GOOGLE_URL) ?? "";
+    const textBaseUrl = { openrouter: OPENROUTER_URL, google: GOOGLE_URL, local }[provider];
+    set({ textBaseUrl, ...(saved.textProfiles[textBaseUrl] ?? { textModel: "", textHost: "" }) });
+  };
   const needsKey = saved.hasTextApiKey && draft.textBaseUrl !== saved.textBaseUrl && !saved.textKeysFor.includes(draft.textBaseUrl) && !textKey.trim();
   const keyHint = (stored: boolean) => (stored ? "Saved. Type a new key to replace it." : "None saved");
 
   const { busy, submit, feedback } = useSubmit(async () => {
-    const { hasTextApiKey, hasImageApiKey, textKeysFor, imageKeysFor, workflowProblem, ...change } = draft;
+    const { hasTextApiKey, hasImageApiKey, textKeysFor, imageKeysFor, textProfiles, imageProfiles, workflowProblem, ...change } = draft;
     const next = await saveSettings({
       ...change,
       ...(textKey.trim() && { textApiKey: textKey.trim() }),
@@ -905,7 +912,7 @@ function InstallSettings({
             { value: "google", label: "Google AI Studio" },
             { value: "local", label: "Local / OpenAI server" },
           ]}
-          onChange={(provider) => set({ textBaseUrl: { openrouter: OPENROUTER_URL, google: GOOGLE_URL, local: "" }[provider] })}
+          onChange={switchText}
         />
         {local && (
           <label>
@@ -1101,7 +1108,7 @@ function InstallSettings({
             { value: "google", label: "Google AI Studio" },
             { value: "local", label: "Local (ComfyUI)" },
           ]}
-          onChange={(imageProvider) => set({ imageProvider })}
+          onChange={(imageProvider) => set({ imageProvider, ...(saved.imageProfiles[imageProvider] ?? { imageModel: "" }) })}
         />
         <Picker
           label="Resolution"
