@@ -763,6 +763,12 @@ export function saveStore(savesDir: string) {
       return latestMessage(db);
     },
 
+    /** Edits since the latest Message, which the next one stores. */
+    pendingEdits(id: string) {
+      using db = open(id);
+      return pendingEdits(db);
+    },
+
     /** Rewrite directions on the latest responses up to `upTo`, oldest first, as they still hold for a while. */
     directions(id: string, upTo: number) {
       using db = open(id);
@@ -1067,17 +1073,19 @@ export function saveStore(savesDir: string) {
       choices?: string[],
     ): Reply[] {
       using db = open(id);
-      const insert = db.query<ChoicesRow, [Message["role"], string, string | null, string | null]>(
-        `INSERT INTO messages (role, text, hidden_check, choices, created_at) VALUES (?, ?, ?, ?, ${NOW}) RETURNING id, role, text, choices`,
+      const insert = db.query<ChoicesRow, [Message["role"], string, string | null, string | null, string | null]>(
+        `INSERT INTO messages (role, text, hidden_check, choices, edits, created_at) VALUES (?, ?, ?, ?, ?, ${NOW}) RETURNING id, role, text, choices`,
       );
       return db.transaction(() => {
         // Message ids are never reused, so any Revert or other Turn since `basedOn` is caught here.
         if (latestMessage(db) !== basedOn) throw new StaleTurn();
         const state = sealChapter(currentState(db), basedOn);
-        const player = withChoices(insert.get("player", input, null, null)!);
+        // Already in the Snapshot, so kept only for a replacement to tell the Narrator of them again.
+        const { pending_edits } = db.query<{ pending_edits: string | null }, []>("SELECT pending_edits FROM save").get()!;
+        const player = withChoices(insert.get("player", input, null, null, pending_edits)!);
         writeSnapshot(db, player.id, state);
         clearPending(db);
-        const narrator = withChoices(insert.get("narrator", narration, check ? JSON.stringify(check) : null, choicesText(choices))!);
+        const narrator = withChoices(insert.get("narrator", narration, check ? JSON.stringify(check) : null, choicesText(choices), null)!);
         writeSnapshot(db, narrator.id, advance(state));
         return [player, narrator];
       })();
@@ -1105,6 +1113,18 @@ export function saveStore(savesDir: string) {
           (edit.edit === "chapterTitle" && edit.index >= chapters.length);
         if (missing) throw new EditNotFound();
         db.run("UPDATE save SET pending_edits = ?", [JSON.stringify([...pendingEdits(db), edit])]);
+      })();
+    },
+
+    /**
+     * A World Change's edits, all or none, after the latest Message is still `basedOn`. Its reply was checked against
+     * the state it changes, which for a replaced response is older than the Journal's, so these skip `addEdit`'s check.
+     */
+    addWorldChange(id: string, basedOn: number, edits: WorldEdit[]) {
+      using db = open(id);
+      db.transaction(() => {
+        if (latestMessage(db) !== basedOn) throw new StaleTurn();
+        db.run("UPDATE save SET pending_edits = ?", [JSON.stringify([...pendingEdits(db), ...edits])]);
       })();
     },
 
@@ -1148,8 +1168,9 @@ export function saveStore(savesDir: string) {
     turnToReplace(id: string, messageId: number) {
       using db = open(id);
       requireMessage(db, messageId);
-      const { narrator, player, state } = latestTurn(db, messageId);
+      const { narrator, player, state, edits } = latestTurn(db, messageId);
       return {
+        journalEdits: [...parseEdits(player.edits), ...edits],
         input: player.text,
         narration: narrator.text,
         check: narrator.hidden_check ? (JSON.parse(narrator.hidden_check) as Check) : undefined,

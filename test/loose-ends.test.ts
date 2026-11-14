@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { assemblePrompt } from "../src/prompt-assembler";
+import { assemblePrompt, journalNote } from "../src/prompt-assembler";
 import { saveStore } from "../src/save-store";
 import { applyOperations, openingState, type State, type StateOperation } from "../src/state-applier";
 import { logOf, narration, scriptedDice, scriptedTextProvider, startApp, tempFolder } from "./support";
@@ -28,6 +28,7 @@ const play = (...replies: (string | Error)[]) => {
 };
 
 const SECRET = "ZQX-SECRET";
+const THREAD = `${SECRET} a plot.`;
 const MISSING = "Where is Renata?";
 const SOCIAL = "The Summer Social is on Friday.";
 const ASK_TO_FILL = "fill it now";
@@ -36,12 +37,15 @@ const resolve = (loose_end: string): StateOperation => ({ op: "resolve_loose_end
 const withEnds = (...looseEnds: string[]) => ({ ...structuredClone(openingState), looseEnds });
 const store = () => saveStore(savesDir);
 const createSave = (...looseEnds: string[]) =>
-  store().create({ worldBrief: "A drowned city", pc: { name: "Ash" }, opening: { looseEnds, plotThreads: [`${SECRET} a plot.`] } });
+  store().create({ worldBrief: "A drowned city", pc: { name: "Ash" }, opening: { looseEnds, plotThreads: [THREAD] } });
 const turn = (id: string, input = "I wait.") => app.post(`/saves/${id}/turns`, { input });
 const edit = (id: string, change: object) => app.post(`/saves/${id}/edits`, change);
 const ends = (id: string) => store().latestState(id).looseEnds;
 const journal = async (id: string) => ((await (await app.get(`/saves/${id}/journal`)).json()) as { looseEnds: string[] }).looseEnds;
 const textOf = (prompt: { content: string }[]) => prompt.map(({ content }) => content).join("\n");
+/** A World Change reply, which settles Journal edits before a Turn. */
+const settled = (plot_threads: { old: string | null; new: string | null }[] = []) =>
+  JSON.stringify({ lore_entries: [], removed_lore: [], world_rules: [], plot_threads, world_brief: null, summary: null, facts: [], npc_summaries: [] });
 
 const promptWith = (state: Partial<State>, ...text: string[]) =>
   textOf(
@@ -153,13 +157,13 @@ test("an edit naming an item the Journal doesn't show is refused, as is an empty
 });
 
 test("the next Turn hears a Journal edit, and a Revert undoes it and the Turn's own changes", async () => {
-  play(narration("One.", add(SOCIAL)), narration("Two.", resolve(SOCIAL)));
+  play(narration("One.", add(SOCIAL)), settled(), narration("Two.", resolve(SOCIAL)));
   const id = createSave();
   await turn(id);
   await edit(id, { edit: "looseEnd", old: null, new: MISSING });
   await turn(id);
 
-  expect(prompts[1]!.at(-2)!.content).toContain(MISSING);
+  expect(prompts[2]!.at(-2)!.content).toContain(MISSING);
   expect(ends(id)).toEqual([MISSING]);
 
   await app.post(`/saves/${id}/messages/2/revert`, {});
@@ -167,11 +171,164 @@ test("the next Turn hears a Journal edit, and a Revert undoes it and the Turn's 
   expect(store().snapshot(id, 1).looseEnds).toEqual([]);
 });
 
+const DROPPED = "took these off looseEnds";
+
+test("a Loose End the player removes is told to the next Turn as dropped, not unsaid, and only that Turn", async () => {
+  play(narration("One."), settled(), narration("Two."), narration("Three."));
+  const id = createSave(MISSING);
+  await turn(id);
+  await edit(id, { edit: "looseEnd", old: MISSING, new: null });
+  await turn(id);
+  await turn(id);
+
+  const told = textOf(prompts[2]!);
+  expect(told).toContain(DROPPED);
+  expect(told).toContain(JSON.stringify([MISSING]));
+  expect(told).toContain("still happened");
+  // The list is empty now, but by the player's hand, so it isn't filled again.
+  expect(told).not.toContain(ASK_TO_FILL);
+  expect(textOf(prompts[3]!)).not.toContain(DROPPED);
+});
+
+test("Journal edits are settled by a World Change of their own before the Turn, which sees the result", async () => {
+  play(narration("One."), settled([{ old: THREAD, new: `${SECRET} a quieter plot.` }]), narration("Two."), narration("Three."));
+  const id = createSave(MISSING);
+  await turn(id);
+  await edit(id, { edit: "looseEnd", old: MISSING, new: null });
+  await turn(id);
+  await turn(id);
+
+  const asked = textOf(prompts[1]!);
+  expect(asked).toContain("changing its world between Turns");
+  expect(asked).toContain(DROPPED);
+  expect(asked).toContain(MISSING);
+  expect(asked).toContain("never change the summary");
+  expect(textOf(prompts[2]!)).toContain("a quieter plot");
+  expect(textOf(prompts[2]!)).not.toContain(THREAD);
+  // Settled once: the third Turn is the next reply in the script.
+  expect(prompts).toHaveLength(4);
+});
+
+test("a World Change that finds nothing to change still settles the edits, and a failed one lets the Turn go ahead", async () => {
+  play(narration("One."), settled(), narration("Two."), "not json", "not json", "not json", narration("Three."));
+  const id = createSave(MISSING, SOCIAL);
+  await turn(id);
+  await edit(id, { edit: "looseEnd", old: MISSING, new: null });
+  expect((await turn(id)).status).toBe(201);
+  await edit(id, { edit: "looseEnd", old: SOCIAL, new: null });
+
+  const line = await logOf(() => turn(id).then((r) => r.text()), "warning");
+
+  expect(line).toContain("Journal edits weren't settled before the Turn");
+  expect(line).not.toContain(SOCIAL);
+  expect(store().messages(id).at(-1)!.text).toBe("Three.");
+});
+
+test("Tell the Narrator's own Journal changes aren't settled again", async () => {
+  play(settled([{ old: THREAD, new: `${SECRET} a quieter plot.` }]), narration("One."));
+  const id = createSave(MISSING);
+  expect((await app.post(`/saves/${id}/world-change`, { change: "calmer" })).status).toBe(200);
+  expect((await turn(id)).status).toBe(201);
+
+  expect(prompts).toHaveLength(2);
+});
+
+test("a Regenerate is told again of the Journal changes made before the reply it replaces", async () => {
+  play(narration("One."), settled(), narration("Two."), narration("Two again."));
+  const id = createSave(MISSING);
+  await turn(id);
+  await edit(id, { edit: "looseEnd", old: MISSING, new: null });
+  await turn(id);
+
+  expect((await app.post(`/saves/${id}/messages/4/regenerate`, {})).status).toBe(201);
+
+  expect(textOf(prompts.at(-1)!)).toContain(DROPPED);
+});
+
+test("a Journal note says what each change means, and names a reworded item's old wording", () => {
+  const note = journalNote([
+    { edit: "fact", old: "The bell rang twice.", new: "The bell rang three times." },
+    { edit: "npcSummary", name: "Renata", text: "A ferry pilot." },
+    { edit: "chapterTitle", index: 0, title: "Low Water" },
+  ]);
+
+  expect(note).toContain(`true as worded: ${JSON.stringify(["The bell rang three times."])}`);
+  expect(note).toContain(`don't put them back: ${JSON.stringify(["The bell rang twice."])}`);
+  expect(note).toContain('"Renata":"A ferry pilot."');
+  expect(note).not.toContain("Low Water");
+  expect(journalNote([{ edit: "chapterTitle", index: 0, title: "Low Water" }])).toBe("");
+});
+
+test("a Journal note follows each item through its edits, from the wording the Narrator last saw", () => {
+  // Added and taken off again, which the Narrator never saw.
+  expect(
+    journalNote([
+      { edit: "looseEnd", old: null, new: SOCIAL },
+      { edit: "looseEnd", old: SOCIAL, new: null },
+    ]),
+  ).toBe("");
+  // Reworded and then taken off: the Narrator hears of the wording it knew.
+  const reworded = journalNote([
+    { edit: "looseEnd", old: MISSING, new: "Renata never came home." },
+    { edit: "looseEnd", old: "Renata never came home.", new: null },
+  ]);
+  expect(reworded).toContain(`${DROPPED}: ${JSON.stringify([MISSING])}`);
+  expect(reworded).not.toContain("never came home");
+  // Reworded twice, and back again, comes to nothing.
+  expect(
+    journalNote([
+      { edit: "looseEnd", old: MISSING, new: "A." },
+      { edit: "looseEnd", old: "A.", new: MISSING },
+    ]),
+  ).toBe("");
+});
+
+test("a Journal note leaves out what a World Change wrote, as that isn't the player's", () => {
+  const update = { lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [] };
+  const note = journalNote([
+    { edit: "looseEnd", old: MISSING, new: null },
+    { edit: "fact", old: null, new: "Bells ring." },
+    { edit: "world", update, made: 1 },
+  ]);
+
+  expect(note).toContain(DROPPED);
+  expect(note).not.toContain("Bells ring.");
+});
+
+test("an Edit is told of the player's Journal edits, and doesn't refill the Loose Ends they emptied", async () => {
+  play(narration("One."), settled(), narration("One, edited."));
+  const id = createSave(MISSING);
+  await turn(id);
+  await edit(id, { edit: "looseEnd", old: MISSING, new: null });
+
+  expect((await app.post(`/saves/${id}/messages/2/edit`, { text: "One, edited." })).status).toBe(201);
+
+  const told = textOf(prompts.at(-1)!);
+  expect(told).toContain(DROPPED);
+  expect(told).not.toContain(ASK_TO_FILL);
+});
+
+test("a stale Regenerate makes no World Change, and a fresh one settles against the state before the response", async () => {
+  const ADDED = `${SECRET} a thread from the response.`;
+  play(narration("One."), narration("Two.", { op: "add_plot_thread", thread: ADDED }), settled(), narration("Two again."));
+  const id = createSave(MISSING);
+  await turn(id);
+  await turn(id);
+  await edit(id, { edit: "looseEnd", old: MISSING, new: null });
+
+  expect((await app.post(`/saves/${id}/messages/2/regenerate`, {})).status).toBe(409);
+  expect(prompts).toHaveLength(2);
+
+  expect((await app.post(`/saves/${id}/messages/4/regenerate`, {})).status).toBe(201);
+  expect(textOf(prompts[2]!)).toContain("changing its world between Turns");
+  expect(textOf(prompts[2]!)).not.toContain(ADDED);
+});
+
 test.each([
   ["Rewrite", "rewrite", { feedback: "Softer." }],
   ["Regenerate", "regenerate", {}],
 ])("%s starts again from the list before the Turn, and keeps a later edit", async (_, action, body) => {
-  play(narration("One.", add("Gone with the response.")), narration("Two.", add(SOCIAL)));
+  play(narration("One.", add("Gone with the response.")), settled(), narration("Two.", add(SOCIAL)));
   const id = createSave(MISSING);
   await turn(id);
   await edit(id, { edit: "looseEnd", old: null, new: "Added by hand." });

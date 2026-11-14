@@ -1,12 +1,12 @@
 import { z } from "zod";
 import type { PromptStyle } from "./graph-builder";
-import { pcLooks, pcNow, visibleNpcs } from "./image-pipeline";
+import { type ImagePipeline, pcLooks, pcNow, restyledBy, visibleNpcs } from "./image-pipeline";
 import { LONG_TEXT } from "./limits";
 import { errorType, log } from "./logger";
 import { activateLore } from "./lore-activation";
 import { IN_ITS_WORLD_AND_STYLE, imageGuidance, LOOKS, LORE_TOKEN_BUDGET, type Prompt, REQUESTED_IMAGE_PROMPT } from "./prompt-assembler";
 import type { SettingsStore } from "./settings-store";
-import type { Message, Save } from "./save-store";
+import type { Message, Save, SaveStore } from "./save-store";
 import {
   applyOperations,
   changeList,
@@ -18,6 +18,7 @@ import {
   type State,
   type StateOperation,
   type World,
+  type WorldEdit,
   WorldUpdate,
 } from "./state-applier";
 import { askForJson, jsonSchemaOf, type TextProvider } from "./turn-engine";
@@ -491,7 +492,8 @@ const WorldChange = WorldUpdate.extend({
 });
 
 // A misquoted entry can't be matched, and a reply with no change would tell the player it was done when it wasn't.
-const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown, npcs }: State) =>
+// A player's change must change something, but settling Journal edits may find nothing to.
+const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown, npcs }: State, mayKeep: boolean) =>
   WorldChange.refine(
     ({ lore_entries, removed_lore, world_rules, plot_threads, world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status }) => {
       const quotes = (list: string[], changes: typeof world_rules) => changes.every(({ old }) => old === null || list.includes(old));
@@ -503,7 +505,7 @@ const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown, npcs }: State
       // Past the limit a thread never reaches a Turn's prompt, so the change would do nothing. A Save from before the limit may hold more, but not gain any.
       const threadsFit = plot_threads.reduce(changeList, plotThreads).length <= Math.max(MAX_PLOT_THREADS, plotThreads.length);
       return (
-        changed &&
+        (changed || mayKeep) &&
         statusInWords &&
         threadsFit &&
         removed_lore.every((title) => worldBible.some((entry) => entry.title === title)) &&
@@ -557,14 +559,65 @@ The world as it stands, as JSON: ${JSON.stringify({
  * A change to the world, in the player's plain words. The hidden part of the reply never reaches them, so it may hold every secret.
  * shortcut: the Journal's part is Narrator free text the player reads, kept clean only by its prompt, screen it if models leak.
  */
-export const changeWorld = (context: Context, state: State, change: string, signal: AbortSignal) =>
+export const changeWorld = (context: Context, state: State, change: string, signal: AbortSignal, mayKeep = false) =>
   askForJson(
     context.textProvider,
     worldChangePrompt(context, state, change),
-    fitsWorld(state),
+    fitsWorld(state, mayKeep),
     "The Narrator refused this change. Reword it and try again.",
     signal,
   );
+
+/**
+ * Asks for a World Change and keeps it as edits for the next Message, with the hidden `world` edit last, counting those
+ * it wrote, so that `playersOwn` can tell the player's from them. Logs counts only, as the reply holds the hidden world.
+ */
+export async function applyWorldChange(
+  context: Context,
+  saves: SaveStore,
+  images: ImagePipeline,
+  id: string,
+  change: string,
+  signal: AbortSignal,
+  /** `stateOf` reads the state the change applies to: a replaced response's is the one before it. */
+  { mayKeep = false, stateOf = () => saves.latestState(id) }: { mayKeep?: boolean; stateOf?: () => State } = {},
+) {
+  const basedOn = saves.latestMessageId(id);
+  const before = stateOf();
+  // The PC's looks as they stand, so a change to them keeps all they don't change.
+  const looksNow = pcNow(saves.read(id).pc, before).physicalTraits ?? "";
+  const { world_brief, summary, facts, npc_summaries, npc_looks, pc_looks, inventory, status, ...update } = await changeWorld(
+    context,
+    { ...before, pcAppearance: looksNow },
+    change,
+    signal,
+    mayKeep,
+  );
+  const journal: WorldEdit[] = [
+    ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),
+    ...(summary === null ? [] : [{ edit: "summary" as const, text: summary }]),
+    ...facts.map((fact) => ({ edit: "fact" as const, ...fact })),
+    ...npc_summaries.map(({ name, summary }) => ({ edit: "npcSummary" as const, name, text: summary })),
+    ...(inventory === null ? [] : [{ edit: "inventory" as const, ...inventory }]),
+    ...(status === null ? [] : [{ edit: "status" as const, ...status }]),
+  ];
+  const looks = [
+    ...npc_looks.map(({ name, appearance }) => ({ edit: "npcLooks" as const, name, appearance })),
+    ...(pc_looks === null ? [] : [{ edit: "pcLooks" as const, appearance: pc_looks }]),
+  ];
+  const made = [...looks, ...journal];
+  saves.addWorldChange(id, basedOn, [...made, { edit: "world", update, made: made.length }]);
+  const after = stateOf();
+  images.restyled(id, restyledBy(before, after), after.inventory.wearing);
+  log.info("world", "World Change applied", () => ({
+    lore: update.lore_entries.length,
+    removed: update.removed_lore.length,
+    rules: update.world_rules.length,
+    threads: update.plot_threads.length,
+    journal: journal.length,
+    looks: looks.length,
+  }));
+}
 
 /** Only `overview` may reach the player. */
 export async function generateWorld(context: Context, choices: WorldChoices, pc: WorldPc, signal: AbortSignal) {

@@ -143,16 +143,17 @@ test.each([
 });
 
 test("the next Turn uses the edited world, and its Snapshots hold the edit", async () => {
-  play(narration("Glass rings.", { op: "add_known_fact", fact: "Bells ring." }));
+  // The first reply settles the edited fact, before the Turn.
+  play(update(), narration("Glass rings.", { op: "add_known_fact", fact: "Bells ring." }));
   const id = createSave();
   await edit(id, { edit: "worldBrief", text: "A city of glass" });
   await edit(id, { edit: "fact", old: firstFact, new: "The city is dry." });
 
   await turn(id);
 
-  const [system] = prompts[0]!;
+  const [system] = prompts[1]!;
   expect(system!.content).toContain("World Brief: A city of glass");
-  expect(prompts[0]!.at(-2)!.content).toContain("The city is dry.");
+  expect(prompts[1]!.at(-2)!.content).toContain("The city is dry.");
   expect(system!.content).not.toContain("A drowned city");
   expect(system!.content).not.toContain(firstFact);
   expect(store().snapshot(id, 1).pcKnown.facts).toEqual(["The city is dry.", "Ferries stop at dusk."]);
@@ -196,7 +197,8 @@ test.each([
   ["Regenerate", "regenerate", {}],
   ["Rewrite", "rewrite", { feedback: "Louder." }],
 ])("%s keeps an edit made since the response, and so does doing it again", async (_, action, body) => {
-  play(narration("One."), narration("Two."), narration("Three."));
+  // The second reply settles the edited fact, once, before the first replacement.
+  play(narration("One."), update(), narration("Two."), narration("Three."));
   const id = createSave();
   await turn(id);
   await edit(id, { edit: "worldBrief", text: "A city of glass" });
@@ -204,16 +206,16 @@ test.each([
 
   const first = await app.post(`/saves/${id}/messages/2/${action}`, body);
   expect(first.status).toBe(201);
-  expect(prompts[1]![0]!.content).toContain("World Brief: A city of glass");
+  expect(prompts[2]![0]!.content).toContain("World Brief: A city of glass");
   // A Rewrite's direction is one more message at the end.
   const state = action === "rewrite" ? -4 : -3;
-  expect(prompts[1]!.at(state)!.content).toContain("The city is dry.");
+  expect(prompts[2]!.at(state)!.content).toContain("The city is dry.");
   expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
 
   const { messages } = (await first.json()) as { messages: { id: number }[] };
   await app.post(`/saves/${id}/messages/${messages[0]!.id}/${action}`, body);
-  expect(prompts[2]!.at(state)!.content).toContain("The city is dry.");
-  expect(prompts[2]![0]!.content).toContain("World Brief: A city of glass");
+  expect(prompts[3]!.at(state)!.content).toContain("The city is dry.");
+  expect(prompts[3]![0]!.content).toContain("World Brief: A city of glass");
   expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
   expect(await brief(id)).toBe("A city of glass");
 });
@@ -411,6 +413,24 @@ test("one Narrator call applies a hidden change, and the player hears only that 
     plotThreads: WORLD.plotThreads,
   });
   expect(await journal(id)).toEqual(before);
+});
+
+test("a World Change whose reply changes one fact twice is kept whole, with its hidden change", async () => {
+  play(
+    update({
+      world_rules: [{ old: WORLD.worldRules[0], new: "Smuggling pays." }],
+      facts: [
+        { old: firstFact, new: "The city is dry." },
+        { old: firstFact, new: null },
+      ],
+    }),
+  );
+  const id = createSave();
+
+  expect((await change(id)).status).toBe(200);
+
+  expect(facts(id)).toEqual(["The city is dry.", "Ferries stop at dusk."]);
+  expect(hidden(id).worldRules).toEqual(["Smuggling pays.", WORLD.worldRules[1]!]);
 });
 
 test("a World Change can fix what the PC wears and carries, and their status, which the Journal shows", async () => {

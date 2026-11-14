@@ -3,12 +3,13 @@ import { type Check, CheckRequest, type Dice, resolveCheck } from "./check-resol
 import { type ImagePipeline, movedScene, portraitsDue, restyledBy, type Scene } from "./image-pipeline";
 import { promptStyle } from "./graph-builder";
 import { withArtStyleFor } from "./web/art-styles";
-import { errorFields, log } from "./logger";
+import { errorFields, errorType, log } from "./logger";
 import {
   assemblePrompt,
   chapterTitlePrompt,
   CONTINUE_INPUT,
   editInstruction,
+  journalChange,
   memoryDue,
   memoryPrompt,
   OPENING_INPUT,
@@ -21,6 +22,7 @@ import { type Message, type PlayMode, type Reply, type SaveStore, StaleTurn } fr
 import type { SettingsStore } from "./settings-store";
 import { applyOperations, introduce, Person, type SceneMemory, type State, StateOperation } from "./state-applier";
 import { readable } from "./web/chat-style";
+import { applyWorldChange } from "./world-creation";
 
 /** Throws ContentRefused when the content is refused. Anything else it throws is a network or API error. */
 export type TextProvider = (
@@ -185,8 +187,9 @@ function turnPrompt(
     messages,
     input,
     directions,
+    journalEdits,
     picture,
-  }: Pick<Parameters<typeof assemblePrompt>[0], "state" | "messages" | "input" | "directions"> & { picture: boolean },
+  }: Pick<Parameters<typeof assemblePrompt>[0], "state" | "messages" | "input" | "directions" | "journalEdits"> & { picture: boolean },
 ) {
   const current = settings.read();
   const memoryStart = saves.memoryStart(id);
@@ -202,6 +205,7 @@ function turnPrompt(
       modelInstructions: current.modelInstructions,
       imageInstructions: current.imageInstructions,
       directions,
+      journalEdits,
       input,
       // shortcut: the schema is in the cached start of the prompt, so switching Play Mode costs one uncached Turn. Move the choices rule below the cache if players switch often.
       responseSchema: JSON.stringify(SCHEMAS[save.playMode].any),
@@ -209,6 +213,29 @@ function turnPrompt(
     }),
     memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, current.textRecentMessages, signal),
   };
+}
+
+/**
+ * Brings the hidden world in line with the player's Journal edits in a call of its own, as a Turn busy writing the
+ * story can skip state changes. `stateOf` reads the state the reply starts from, and a stale request throws there,
+ * before any call. Any other failure only skips it, as the reply is still told of the edits.
+ */
+async function settleJournal(
+  saves: SaveStore,
+  context: { textProvider: TextProvider; settings: SettingsStore; images: ImagePipeline },
+  id: string,
+  signal: AbortSignal,
+  stateOf: () => State,
+) {
+  const change = journalChange(saves.pendingEdits(id));
+  if (!change) return;
+  stateOf();
+  try {
+    await applyWorldChange(context, saves, context.images, id, change, signal, { mayKeep: true, stateOf });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    log.warning("world", "Journal edits weren't settled before the Turn", errorType(error));
+  }
 }
 
 export async function playTurn(
@@ -226,6 +253,7 @@ export async function playTurn(
   emit: TurnEvents = () => {},
   mayCheck = true,
 ) {
+  await settleJournal(saves, { textProvider, settings, images }, id, signal, () => saves.latestState(id));
   const basedOn = saves.latestMessageId(id);
   const state = saves.latestState(id);
   const messages = saves.messages(id);
@@ -234,6 +262,7 @@ export async function playTurn(
     messages,
     input,
     directions: saves.directions(id, basedOn),
+    journalEdits: saves.pendingEdits(id),
     picture: images.ready(),
   });
   return narrate(textProvider, signal, emit, {
@@ -267,7 +296,8 @@ export async function replaceResponse(
   signal: AbortSignal,
   emit: TurnEvents = () => {},
 ) {
-  const { input, narration, check, state, messages, sceneImage } = saves.turnToReplace(id, messageId);
+  await settleJournal(saves, { textProvider, settings, images }, id, signal, () => saves.turnToReplace(id, messageId).state);
+  const { input, narration, check, state, messages, sceneImage, journalEdits } = saves.turnToReplace(id, messageId);
   // The old picture goes with its response, so the new one always gets its own, whatever the Narrator decides.
   const hadPicture = !!sceneImage || images.sceneDrawing(id, messageId);
   const { prompt, memory, playMode } = turnPrompt(saves, settings, id, signal, textProvider, {
@@ -276,6 +306,7 @@ export async function replaceResponse(
     input,
     // The response being replaced keeps its own, which a Regenerate carries over.
     directions: saves.directions(id, messageId),
+    journalEdits,
     picture: images.ready(),
   });
   const kind = feedback === undefined ? "regenerate" : "rewrite";
@@ -310,11 +341,13 @@ export async function editResponse(
   signal: AbortSignal,
   emit: TurnEvents = () => {},
 ) {
-  const { input, state, messages } = saves.turnToReplace(id, messageId);
+  await settleJournal(saves, { textProvider, settings, images }, id, signal, () => saves.turnToReplace(id, messageId).state);
+  const { input, state, messages, journalEdits } = saves.turnToReplace(id, messageId);
   const { prompt, memory, playMode } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
     input,
+    journalEdits,
     // No picture is drawn, so the Narrator needn't write a prompt for one.
     picture: false,
   });
