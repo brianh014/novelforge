@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
 import { InvalidWorkflow } from "./comfy-workflow";
-import type { ImageAdapter } from "./image-adapter";
+import type { ImageAdapter, ImageModelList } from "./image-adapter";
 import type { ImagePipeline, PictureWriter } from "./image-pipeline";
 import { LONG_TEXT } from "./limits";
 import type { liveTurns } from "./live-turns";
@@ -31,6 +31,8 @@ export type ServerOptions = {
   imageAdapter: ImageAdapter;
   /** For Wiro. Without it, Wiro draws with `imageAdapter`, as tests do. */
   wiroAdapter?: ImageAdapter;
+  /** For the Image model dropdown. Without it, Settings lists none and keeps the text box. */
+  imageModels?: ImageModelList;
   /** Loopback unless the caller opens the app to the network, which has no accounts to protect it. */
   hostname?: string;
   dice: Dice;

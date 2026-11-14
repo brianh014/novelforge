@@ -123,7 +123,7 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             <a href="https://wiro.ai" target="_blank" rel="noreferrer">
               wiro.ai
             </a>
-            . Set its project to <b>API key only</b>, and type the image AI as the end of its page's address there, such as bytedance/seedream-5-5.
+            . Set its project to <b>API key only</b>, and choose an image AI from the list, such as bytedance/seedream-5-5.
           </li>
         </ul>
         <p>

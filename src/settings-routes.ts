@@ -128,6 +128,14 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
     "/settings/text-models": {
       GET: async (req) => Response.json({ models: await textModels(settings, req.signal) }),
     },
+    // Public catalogs, so the provider the form shows now is asked, saved or not.
+    "/settings/image-models": {
+      GET: async (req) => {
+        const provider = new URL(req.url).searchParams.get("provider");
+        if (provider !== "openrouter" && provider !== "wiro") return Response.json({ models: [] });
+        return Response.json({ models: (await options.imageModels?.(provider, req.signal)) ?? [] });
+      },
+    },
     "/settings/text-hosts": {
       GET: async (req) => Response.json({ hosts: await textHosts(settings, new URL(req.url).searchParams.get("model") ?? "", req.signal) }),
     },

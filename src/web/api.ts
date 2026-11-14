@@ -148,6 +148,8 @@ export async function drawComfyTest(prompt: string, signal: AbortSignal) {
   return { url: URL.createObjectURL(blob), fileSize: blob.size, ...stats };
 }
 
+export const getImageModels = (provider: "openrouter" | "wiro") =>
+  request<{ models: string[] }>(`/settings/image-models?provider=${provider}`).then(({ models }) => models);
 export const getTextModels = () => request<{ models: string[] }>("/settings/text-models").then(({ models }) => models);
 export const getTextHosts = (model: string) =>
   request<{ hosts: TextHost[] }>(`/settings/text-hosts?model=${encodeURIComponent(model)}`).then(({ hosts }) => hosts);

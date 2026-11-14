@@ -11,6 +11,7 @@ import {
   getSave,
   getSettings,
   getTextHosts,
+  getImageModels,
   getTextModels,
   OPENROUTER_URL,
   type PlayMode,
@@ -828,6 +829,20 @@ function InstallSettings({
     };
   }, [saved]);
 
+  // A provider that doesn't answer keeps the text box.
+  const [imageModels, setImageModels] = useState<string[]>();
+
+  useEffect(() => {
+    setImageModels(undefined);
+    if (draft.imageProvider === "local") return;
+    let current = true;
+    const show = (list: string[]) => current && setImageModels(list);
+    getImageModels(draft.imageProvider).then(show, () => show([]));
+    return () => {
+      current = false;
+    };
+  }, [draft.imageProvider]);
+
   const [hosts, setHosts] = useState<TextHost[]>([]);
   const hostsListed = !local && addressSaved && !!models?.includes(draft.textModel);
 
@@ -1089,13 +1104,22 @@ function InstallSettings({
             <p className="muted">
               {draft.imageProvider === "wiro" ? "Wiro" : "OpenRouter"} uses the nearest size your model offers, so the image may not match exactly. Larger sizes
               can cost more, and some models have no size choice, so this changes nothing for them.
-              {draft.imageProvider === "wiro" &&
-                " The model is the end of its page's address on wiro.ai, such as bytedance/seedream-5-5. Set its Wiro project to API key only, not signatures."}
+              {draft.imageProvider === "wiro" && " Set your Wiro project to API key only, not signatures."}
             </p>
-            <label>
-              Image model
-              <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />
-            </label>
+            {imageModels?.length ? (
+              <Picker
+                label="Image model"
+                empty="Choose a model"
+                value={draft.imageModel}
+                choices={imageModels.map((model) => ({ value: model, label: model }))}
+                onChange={(imageModel) => set({ imageModel })}
+              />
+            ) : (
+              <label>
+                Image model
+                <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />
+              </label>
+            )}
             <label>
               Image API key
               <input

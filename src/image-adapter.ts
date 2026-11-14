@@ -176,3 +176,32 @@ export function wiroImages(settings: SettingsStore, baseUrl: string): ImageAdapt
     return new Uint8Array(await image.arrayBuffer());
   };
 }
+
+/** A provider's image models, by the id its Image model field takes. Empty when it doesn't answer. */
+export type ImageModelList = (provider: "openrouter" | "wiro", signal: AbortSignal) => Promise<string[]>;
+
+// Long enough for a slow catalog, short enough that Settings isn't kept waiting on one that's down.
+const LIST_MS = 15_000;
+
+/** The public catalogs of OpenRouter and Wiro, which take no key, so none is sent. */
+export function imageModelLists(openRouterUrl: string, wiroUrl: string): ImageModelList {
+  const asked = async (url: string, signal: AbortSignal, init?: RequestInit) => {
+    const response = await fetch(url, { ...init, signal: AbortSignal.any([signal, AbortSignal.timeout(LIST_MS)]) }).catch(() => undefined);
+    return response?.ok ? response.json().catch(() => ({})) : {};
+  };
+  return async (provider, signal) => {
+    if (provider === "openrouter") {
+      const { data } = (await asked(`${openRouterUrl}/images/models`, signal)) as { data?: { id?: unknown }[] };
+      return (data ?? []).map(({ id }) => id).filter((id) => typeof id === "string");
+    }
+    const { tool } = (await asked(`${wiroUrl}/Tool/List`, signal, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // shortcut: the first 500 drawing models in one page, page through them if Wiro ever lists more.
+      body: JSON.stringify({ start: "0", limit: "500", categories: ["text-to-image"], hideworkflows: true, summary: true }),
+    })) as { tool?: { cleanslugowner?: unknown; cleanslugproject?: unknown }[] };
+    return (tool ?? []).flatMap(({ cleanslugowner, cleanslugproject }) =>
+      typeof cleanslugowner === "string" && typeof cleanslugproject === "string" ? [`${cleanslugowner}/${cleanslugproject}`] : [],
+    );
+  };
+}
