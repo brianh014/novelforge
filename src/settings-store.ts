@@ -41,7 +41,7 @@ export const SettingsUpdate = z
     textRecentMessages: z.number().int().min(40).max(400),
     // A Question's answer over this many words is retried. Not below the 80 the prompt asks for.
     answerRejectWords: z.number().int().min(80).max(1000),
-    imageProvider: z.enum(["openrouter", "wiro", "local"]),
+    imageProvider: z.enum(["openrouter", "wiro", "google", "local"]),
     imageModel: z.string(),
     imageApiKey: z.string(),
     imagesEnabled: z.boolean(),

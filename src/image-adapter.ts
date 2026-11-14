@@ -177,24 +177,80 @@ export function wiroImages(settings: SettingsStore, baseUrl: string): ImageAdapt
   };
 }
 
+// The ratios Google's image models take. Any other is left to the model.
+const GOOGLE_RATIOS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
+// Nano Banana takes at most this many reference images.
+const GOOGLE_REFERENCES = 14;
+
+type GoogleReply = { status?: string; steps?: { type?: string; content?: { type?: string; data?: string }[] }[]; error?: unknown };
+
+/** The Google AI Studio Image Adapter, on the Interactions API, which takes the references inline with the prompt. */
+export function googleImages(settings: SettingsStore, baseUrl: string): ImageAdapter {
+  return async ({ prompt, negative_prompt, aspect_ratio, reference_images, style_preset }, signal) => {
+    const { imageModel, imageApiKey, imageResolution } = settings.read();
+    const response = await fetch(`${baseUrl}/interactions`, {
+      method: "POST",
+      headers: { "x-goog-api-key": imageApiKey, "Content-Type": "application/json" },
+      signal: AbortSignal.any([signal, AbortSignal.timeout(GIVE_UP_MS)]),
+      body: JSON.stringify({
+        model: imageModel,
+        input: [
+          // There is no field for these, so the model reads them as part of the prompt.
+          { type: "text", text: [prompt, style_preset, negative_prompt && `Avoid: ${negative_prompt}.`].filter(Boolean).join("\n") },
+          ...reference_images.slice(0, GOOGLE_REFERENCES).map(({ bytes, mediaType }) => ({
+            type: "image",
+            mime_type: mediaType,
+            data: Buffer.from(bytes).toString("base64"),
+          })),
+        ],
+        // 1.5K falls between Google's sizes and takes the smaller, cheaper one.
+        response_format: {
+          type: "image",
+          image_size: closestTier(["1K", "2K"], imageResolution),
+          ...(GOOGLE_RATIOS.includes(aspect_ratio) && { aspect_ratio }),
+        },
+        // Otherwise Google keeps the request and the picture, a day on the free tier and 55 on a paid one.
+        store: false,
+      }),
+    });
+    const reply = (await response.json().catch(() => ({}))) as GoogleReply;
+    const encoded = reply.steps?.flatMap(({ content = [] }) => content).find(({ type, data }) => type === "image" && data)?.data;
+    if (!response.ok || !encoded) {
+      const message = `Image API error: ${JSON.stringify({ status: response.status, state: reply.status, error: reply.error })}`;
+      throw Object.assign(new Error(imageApiKey ? message.replaceAll(imageApiKey, "[key]") : message), { status: response.status });
+    }
+    return new Uint8Array(Buffer.from(encoded, "base64"));
+  };
+}
+
 /** A provider's image models, by the id its Image model field takes. Empty when it doesn't answer. */
-export type ImageModelList = (provider: "openrouter" | "wiro", signal: AbortSignal) => Promise<string[]>;
+export type ImageModelList = (provider: "openrouter" | "wiro" | "google", signal: AbortSignal) => Promise<string[]>;
 
 // Long enough for a slow catalog, short enough that Settings isn't kept waiting on one that's down.
 const LIST_MS = 15_000;
 
-/** The public catalogs of OpenRouter and Wiro, which take no key, so none is sent. */
-export function imageModelLists(openRouterUrl: string, wiroUrl: string): ImageModelList {
+/** OpenRouter's and Wiro's public catalogs, which take no key, so none is sent, and Google's, which only lists for a key. */
+export function imageModelLists(settings: SettingsStore, urls: { openRouter: string; wiro: string; google: string }): ImageModelList {
   const asked = async (url: string, signal: AbortSignal, init?: RequestInit) => {
     const response = await fetch(url, { ...init, signal: AbortSignal.any([signal, AbortSignal.timeout(LIST_MS)]) }).catch(() => undefined);
     return response?.ok ? response.json().catch(() => ({})) : {};
   };
   return async (provider, signal) => {
+    if (provider === "google") {
+      const { imageProvider, imageApiKey } = settings.read();
+      // A key saved for another provider must not be sent to Google, so this waits until Google's is saved.
+      if (imageProvider !== "google" || !imageApiKey) return [];
+      const { models } = (await asked(`${urls.google}/models?pageSize=1000`, signal, { headers: { "x-goog-api-key": imageApiKey } })) as {
+        models?: { name?: unknown }[];
+      };
+      // shortcut: told apart by name, as the listing doesn't say which models draw, read a capability if Google adds one.
+      return (models ?? []).flatMap(({ name }) => (typeof name === "string" && /image|banana/.test(name) ? [name.replace(/^models\//, "")] : []));
+    }
     if (provider === "openrouter") {
-      const { data } = (await asked(`${openRouterUrl}/images/models`, signal)) as { data?: { id?: unknown }[] };
+      const { data } = (await asked(`${urls.openRouter}/images/models`, signal)) as { data?: { id?: unknown }[] };
       return (data ?? []).map(({ id }) => id).filter((id) => typeof id === "string");
     }
-    const { tool } = (await asked(`${wiroUrl}/Tool/List`, signal, {
+    const { tool } = (await asked(`${urls.wiro}/Tool/List`, signal, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // shortcut: the first 500 drawing models in one page, page through them if Wiro ever lists more.

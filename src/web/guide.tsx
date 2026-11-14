@@ -92,6 +92,11 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             Turn cheaper.
           </li>
           <li>
+            <b>Google AI Studio</b>, which has a free key: sign in at <code>aistudio.google.com</code> with a Google account and choose <b>Get API key</b>.
+            Choose <b>Google AI Studio</b> in <b>Settings → Text</b>, paste the key, save, then pick a Gemini Flash model. On the free tier Google may use what
+            you send, your story among it, to improve its products, and it limits how many Turns a day you get.
+          </li>
+          <li>
             <b>Any other OpenAI-compatible service</b>, such as DeepInfra: choose <b>Local / OpenAI server</b>, give its address (for DeepInfra,{" "}
             <code>https://api.deepinfra.com/v1/openai</code>), save, then pick the model and enter its key.
           </li>
@@ -117,6 +122,10 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           <li>
             <b>OpenRouter</b>: for when you have no graphics card for ComfyUI. Paste the same key you use for the story into <b>Image API key</b> and choose an
             image AI: try Seedream 5.5, or Nano Banana 2.1 for a little better quality.
+          </li>
+          <li>
+            <b>Google AI Studio</b>: the same key as for the story draws with Nano Banana, but pictures aren't free, so turn on billing for it in AI Studio
+            first.
           </li>
           <li>
             <b>Wiro</b>: the same, with a key from{" "}

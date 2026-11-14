@@ -132,7 +132,7 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
     "/settings/image-models": {
       GET: async (req) => {
         const provider = new URL(req.url).searchParams.get("provider");
-        if (provider !== "openrouter" && provider !== "wiro") return Response.json({ models: [] });
+        if (provider !== "openrouter" && provider !== "wiro" && provider !== "google") return Response.json({ models: [] });
         return Response.json({ models: (await options.imageModels?.(provider, req.signal)) ?? [] });
       },
     },

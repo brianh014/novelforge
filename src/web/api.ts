@@ -104,6 +104,8 @@ export const importSave = (file: File) =>
   });
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1";
+// Google AI Studio's OpenAI-compatible address, so the Narrator reaches Gemini the way it reaches any other server.
+export const GOOGLE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
 
 export const getSettings = () => request<Settings>("/settings");
 
@@ -148,7 +150,7 @@ export async function drawComfyTest(prompt: string, signal: AbortSignal) {
   return { url: URL.createObjectURL(blob), fileSize: blob.size, ...stats };
 }
 
-export const getImageModels = (provider: "openrouter" | "wiro") =>
+export const getImageModels = (provider: "openrouter" | "wiro" | "google") =>
   request<{ models: string[] }>(`/settings/image-models?provider=${provider}`).then(({ models }) => models);
 export const getTextModels = () => request<{ models: string[] }>("/settings/text-models").then(({ models }) => models);
 export const getTextHosts = (model: string) =>

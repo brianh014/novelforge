@@ -101,12 +101,16 @@ sudo systemctl enable --now novelforge
 
 ### Connecting an AI
 
-NovelForge has no AI of its own, so it needs a key from an AI service before it can write. The easiest is [OpenRouter](https://openrouter.ai), which is already chosen in Settings. You pay it for what you use, a few cents a Turn.
+NovelForge has no AI of its own, so it needs a key from an AI service before it can write. The easiest is [OpenRouter](https://openrouter.ai), which is already chosen in Settings. You pay it for what you use, a few cents a Turn. To try it for free, see [Google AI Studio](#a-free-key-google-ai-studio) below.
 
 1. Sign up at [openrouter.ai](https://openrouter.ai), open [Credits](https://openrouter.ai/settings/credits) and add a few dollars.
 2. Open [Keys](https://openrouter.ai/settings/keys), choose **Create Key**, give it any name, and copy the key it shows. It's shown only once, so paste it somewhere safe too.
 3. In NovelForge, open **Settings → Text**. Paste the key into **Text API key**, choose a **Text model** and press **Test text**. A good balance of cost and writing right now is [MiMo V2.6 Pro](https://openrouter.ai/xiaomi/mimo-v2.6-pro) (`xiaomi/mimo-v2.6-pro`).
 4. For pictures, open **Settings → Images**, choose **OpenRouter**, paste the same key into **Image API key**, choose an image model and press **Test image**. Try Seedream 5.5, or Nano Banana 2.1 for a little better quality. If you have a graphics card, your own ComfyUI draws for free (see [Recommended settings](#images-your-own-comfyui)). Pictures are optional: without them the story is text only.
+
+### A free key: Google AI Studio
+
+[Google AI Studio](https://aistudio.google.com) gives a free key with a Google account, no card needed. Sign in, choose **Get API key**, then in **Settings → Text** choose **Google AI Studio**, paste the key, save, and pick a Gemini Flash model. The free tier limits how many Turns a day you get, and Google may use what you send, your story among it, to improve its products. The same key draws pictures with Nano Banana under **Settings → Images → Google AI Studio**, but pictures aren't free: turn on billing in AI Studio first.
 
 ### Updating
 
@@ -152,7 +156,7 @@ bun src/main.ts --fake --open
 
 ### Text: a hosted API
 
-Use a hosted text API, such as OpenRouter (see [Connecting an AI](#connecting-an-ai)) or any other OpenAI-compatible provider. Every Turn sends the Narrator the newest Messages in full, plus the world, the Journal and the Old Memories, so a long story's prompt grows past 30,000 tokens. Large hosted models take all of it, keep the story straight and return the Narrator's JSON first time, for pennies a Turn. Staying on one provider keeps its prompt cache, which makes each Turn cheaper.
+Use a hosted text API, such as OpenRouter (see [Connecting an AI](#connecting-an-ai)), Google AI Studio or any other OpenAI-compatible provider. Every Turn sends the Narrator the newest Messages in full, plus the world, the Journal and the Old Memories, so a long story's prompt grows past 30,000 tokens. Large hosted models take all of it, keep the story straight and return the Narrator's JSON first time, for pennies a Turn. Staying on one provider keeps its prompt cache, which makes each Turn cheaper.
 
 A local model works too: choose **Local / OpenAI server** and give the address of Ollama (`http://localhost:11434/v1`), LM Studio (`http://localhost:1234/v1`) or another OpenAI-compatible server. It suits short stories, play with nothing leaving your computer, and trying things out. A 10 GB GPU fits a model of about 12B at Q4 with a 16,000-token context, so the Narrator sees much less of a long story, and a Turn can take a minute. To get the most from it:
 

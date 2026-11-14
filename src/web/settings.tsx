@@ -12,6 +12,7 @@ import {
   getSettings,
   getTextHosts,
   getImageModels,
+  GOOGLE_URL,
   getTextModels,
   OPENROUTER_URL,
   type PlayMode,
@@ -814,7 +815,8 @@ function InstallSettings({
   const [imageKey, setImageKey] = useState("");
   const set = (change: Partial<Settings>) => setDraft({ ...draft, ...change });
 
-  const local = draft.textBaseUrl !== OPENROUTER_URL;
+  const textChoice = draft.textBaseUrl === OPENROUTER_URL ? "openrouter" : draft.textBaseUrl === GOOGLE_URL ? "google" : "local";
+  const local = textChoice === "local";
   const addressSaved = draft.textBaseUrl === saved.textBaseUrl;
   // Not all servers list their models, so those keep the text box.
   const [models, setModels] = useState<string[]>();
@@ -844,7 +846,7 @@ function InstallSettings({
   }, [draft.imageProvider]);
 
   const [hosts, setHosts] = useState<TextHost[]>([]);
-  const hostsListed = !local && addressSaved && !!models?.includes(draft.textModel);
+  const hostsListed = textChoice === "openrouter" && addressSaved && !!models?.includes(draft.textModel);
 
   useEffect(() => {
     setHosts([]);
@@ -897,12 +899,13 @@ function InstallSettings({
         <h2>Text</h2>
         <Picker
           label="Text provider"
-          value={local ? "local" : "openrouter"}
+          value={textChoice}
           choices={[
             { value: "openrouter", label: "OpenRouter" },
+            { value: "google", label: "Google AI Studio" },
             { value: "local", label: "Local / OpenAI server" },
           ]}
-          onChange={(provider) => set({ textBaseUrl: provider === "local" ? "" : OPENROUTER_URL })}
+          onChange={(provider) => set({ textBaseUrl: { openrouter: OPENROUTER_URL, google: GOOGLE_URL, local: "" }[provider] })}
         />
         {local && (
           <label>
@@ -931,8 +934,14 @@ function InstallSettings({
           </label>
         )}
         {local && !addressSaved && <p className="muted">Save the address to choose from this server's models.</p>}
+        {textChoice === "google" && (
+          <p className="muted">
+            {!addressSaved && "Save your key to choose from Google's models. "}
+            Its free key needs only a Google account, but on the free tier Google may use what you send, your story among it, to improve its products.
+          </p>
+        )}
         {addressSaved && models?.length === 0 && <p className="muted">No models listed. Make sure the server is running, or type the model's name.</p>}
-        {!local && (
+        {textChoice === "openrouter" && (
           <>
             <Picker
               label="Provider"
@@ -1089,6 +1098,7 @@ function InstallSettings({
           choices={[
             { value: "openrouter", label: "OpenRouter" },
             { value: "wiro", label: "Wiro" },
+            { value: "google", label: "Google AI Studio" },
             { value: "local", label: "Local (ComfyUI)" },
           ]}
           onChange={(imageProvider) => set({ imageProvider })}
@@ -1102,9 +1112,11 @@ function InstallSettings({
         {draft.imageProvider !== "local" ? (
           <>
             <p className="muted">
-              {draft.imageProvider === "wiro" ? "Wiro" : "OpenRouter"} uses the nearest size your model offers, so the image may not match exactly. Larger sizes
-              can cost more, and some models have no size choice, so this changes nothing for them.
+              {{ openrouter: "OpenRouter", wiro: "Wiro", google: "Google" }[draft.imageProvider]} uses the nearest size your model offers, so the image may not
+              match exactly. Larger sizes can cost more, and some models have no size choice, so this changes nothing for them.
               {draft.imageProvider === "wiro" && " Set your Wiro project to API key only, not signatures."}
+              {draft.imageProvider === "google" &&
+                " Pictures aren't on Google's free tier, so its key needs billing turned on. Save your key to choose a model."}
             </p>
             {imageModels?.length ? (
               <Picker

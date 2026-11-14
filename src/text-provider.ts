@@ -86,7 +86,8 @@ const listModels = async (url: string, headers: Record<string, string>, signal: 
 export async function textModels(settings: SettingsStore, signal: AbortSignal) {
   const { textBaseUrl, textApiKey } = settings.read();
   const models = await listModels(textBaseUrl.replace(/\/$/, ""), keyHeader(textApiKey), signal, LIMITS.listMs);
-  return models?.map(({ id }) => id) ?? [];
+  // Google's OpenAI-compatible list names each model `models/…`, and its chat takes the bare id.
+  return models?.map(({ id }) => id.replace(/^models\//, "")) ?? [];
 }
 
 // Goes into a path sent with the key, so nothing that could climb out of it.
