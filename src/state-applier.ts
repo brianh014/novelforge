@@ -142,6 +142,9 @@ export const hasNumber = (text: string) => /\p{N}/u.test(text);
 /** The most injuries, and the most conditions, the PC keeps, so the status the player reads stays a line or two. */
 export const MAX_STATUS = 3;
 
+/** The most Plot Threads the Narrator keeps open, so it isn't pulling on a dozen at once. A world starts with three to six. */
+export const MAX_PLOT_THREADS = 8;
+
 function addOnce(list: string[], value: string) {
   if (list.includes(value)) return false;
   list.push(value);
@@ -257,8 +260,11 @@ function apply(state: State, operation: StateOperation): string | undefined {
       state.worldBible = state.worldBible.filter(({ title, alwaysOn }) => alwaysOn || title !== operation.title);
       return;
     case "add_plot_thread":
+      if (state.plotThreads.length >= MAX_PLOT_THREADS) return "full";
       return addOnce(state.plotThreads, operation.thread) ? undefined : "already there";
     case "update_plot_thread":
+      // A miscopied thread would be added, so it meets the same limit.
+      if (!state.plotThreads.includes(operation.thread) && state.plotThreads.length >= MAX_PLOT_THREADS) return "full";
       replaceOnce(state.plotThreads, operation.thread, operation.replacement);
       return;
     case "resolve_plot_thread":
@@ -287,7 +293,8 @@ const isRepeat = ({ pcKnown, looseEnds }: State, operation: StateOperation) =>
 
 // None of these contradict the narration, so they aren't worth a whole response. Someone nameless is added once they're named.
 const IGNORABLE: StateOperation["op"][] = ["resolve_loose_end", "add_known_npc", "set_known_npc_summary", "set_story_time"];
-const isHarmless = ({ op, reason }: { op: StateOperation["op"]; reason: string }) => IGNORABLE.includes(op) || reason === "already there";
+// A full list of Plot Threads is the Narrator's to tidy later, not worth a whole response.
+const isHarmless = ({ op, reason }: { op: StateOperation["op"]; reason: string }) => IGNORABLE.includes(op) || reason === "already there" || reason === "full";
 
 /** Applies operations in order, so each is judged against the ones before it. */
 export function applyOperations(state: State, operations: StateOperation[]) {
