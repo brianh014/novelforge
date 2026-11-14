@@ -96,7 +96,7 @@ test("Plot Threads come forward at the Narrator's choice of a pause, by a rule i
 
   for (let turn = 0; turn < 9; turn++) await playTurn(id);
 
-  expect(prompts.at(-1)![0]!.content).toContain("When a scene reaches a natural pause");
+  expect(prompts.at(-1)![0]!.content).toContain("At a natural pause in the story");
   expect(lastSystem()).not.toContain("THREAD-ONE");
 });
 
