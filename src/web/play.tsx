@@ -900,13 +900,14 @@ export function Play({ id }: { id: string }) {
         <RevertDialog
           id={id}
           message={reverting}
+          before={before(reverting)}
           replay={replaying}
           onClose={() => {
             setReverting(undefined);
             setReplaying(undefined);
           }}
-          onReverted={(input) => {
-            const kept = messages.filter((message) => message.id <= reverting.id);
+          onReverted={(to, input) => {
+            const kept = messages.filter((message) => message.id <= to);
             setMessages(kept);
             setChosenBeat(undefined);
             checkChapter();
@@ -1004,9 +1005,20 @@ const DRAWING: Record<string, string> = {
 
 const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
-/** With `replay`, the Revert goes to `message`, just before the player's words, and sends them again as edited. */
-function RevertDialog(props: { id: string; message: Message; replay?: string; onClose: () => void; onReverted: (input?: string) => void }) {
+/**
+ * With `replay`, the Revert goes to `message`, just before the player's words, and sends them again as edited. A Revert to
+ * the player's own words goes to `before` and sends them again unchanged, as a Turn can't answer words already there.
+ */
+function RevertDialog(props: {
+  id: string;
+  message: Message;
+  before?: Message;
+  replay?: string;
+  onClose: () => void;
+  onReverted: (to: number, input?: string) => void;
+}) {
   const { id, message, replay } = props;
+  const resend = replay === undefined && message.role === "player" ? props.before : undefined;
   const [input, setInput] = useState(replay ?? "");
   const dialog = useRef<HTMLDialogElement>(null);
   const [preview, setPreview] = useState<{ messages: number; images: number; portraits: number }>();
@@ -1031,10 +1043,11 @@ function RevertDialog(props: { id: string; message: Message; replay?: string; on
 
   const confirmRevert = () =>
     attempt(async () => {
-      await revert(id, message.id);
+      const to = (resend ?? message).id;
+      await revert(id, to);
       // Gone if the player pressed Escape while this was in flight, and the Revert happened all the same.
       dialog.current?.close();
-      props.onReverted(replay === undefined ? undefined : input.trim());
+      props.onReverted(to, replay === undefined ? resend && message.text : input.trim());
     });
 
   const duplicate = () =>
@@ -1066,7 +1079,8 @@ function RevertDialog(props: { id: string; message: Message; replay?: string; on
         <p>
           This permanently deletes the {plural(preview.messages, "Message")} after it
           {preview.images > 0 && ` and ${plural(preview.images, "image")}`}
-          {preview.portraits > 0 && ` and ${plural(preview.portraits, "portrait")}`}.
+          {preview.portraits > 0 && ` and ${plural(preview.portraits, "portrait")}`}
+          {resend ? ", then the Narrator answers it again." : "."}
         </p>
       )}
       {replay === undefined && <p className="muted">“Duplicate from here” keeps this story and carries on in a new Save instead.</p>}

@@ -294,6 +294,28 @@ test("the latest response can be edited, rewritten and regenerated, and the stor
   await expect(page.getByTestId("message-player")).toHaveCount(0);
 });
 
+test("a Revert to the player's own words has the Narrator answer them again", async ({ page }) => {
+  await newStory(page);
+  const narrator = page.getByTestId("message-narrator");
+  const player = page.getByTestId("message-player");
+  for (const words of ["I knock on the door.", "I wait."]) {
+    await page.getByRole("textbox", { name: PC_INPUT }).fill(words);
+    await page.getByRole("button", { name: "Send" }).click();
+    await expect(page.getByRole("button", { name: "Regenerate" })).toBeVisible();
+  }
+  await expect(narrator).toHaveCount(3);
+
+  await page.getByRole("button", { name: /^Revert to this Message: I knock/ }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("then the Narrator answers it again");
+  await dialog.getByRole("button", { name: "Revert", exact: true }).click();
+
+  await expect(page.getByRole("button", { name: "Regenerate" })).toBeVisible();
+  await expect(player).toHaveCount(1);
+  await expect(player).toContainText("I knock on the door.");
+  await expect(narrator).toHaveCount(2);
+});
+
 test("on a phone, a Journal change that can't be refreshed says so on the page it was made", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await newStory(page);

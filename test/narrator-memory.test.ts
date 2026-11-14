@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { activateLore } from "../src/lore-activation";
 import { assemblePrompt } from "../src/prompt-assembler";
-import { applyOperations, openingState, type LoreEntry, type State, type StateOperation } from "../src/state-applier";
+import { applyOperations, MAX_PLOT_THREADS, openingState, type LoreEntry, type State, type StateOperation } from "../src/state-applier";
 
 const entry = (title: string, keywords: string[], extra: Partial<LoreEntry> = {}): LoreEntry => ({
   title,
@@ -89,6 +89,19 @@ for (const [name, list, operation] of [
   });
 }
 
+test("a full list of Plot Threads takes no new one, by add or by a miscopied rewrite, but still takes an exact rewrite, and costs no Turn", () => {
+  const full = withState({ plotThreads: Array.from({ length: MAX_PLOT_THREADS }, (_, i) => `t${i}`) });
+
+  const { next, refused } = applyOperations(full, [
+    { op: "add_plot_thread", thread: "new" },
+    { op: "update_plot_thread", thread: "miscopied", replacement: "new" },
+    { op: "update_plot_thread", thread: "t0", replacement: "T0" },
+  ]);
+
+  expect(refused).toEqual([]);
+  expect(next.plotThreads).toEqual(["T0", ...full.plotThreads.slice(1)]);
+});
+
 test("a known fact can be removed, and removing one that isn't there changes nothing", () => {
   const state = withState({ pcKnown: { facts: ["a", "b"], npcs: [] } });
 
@@ -150,6 +163,13 @@ const promptFor = (sections: Partial<State> = {}, input = "I wait.") => {
   });
   return prompt.map(({ content }) => content).join("\n");
 };
+
+test("a Save holding more Plot Threads than the limit sends only the first ones", () => {
+  const prompt = promptFor({ plotThreads: Array.from({ length: MAX_PLOT_THREADS + 1 }, (_, i) => `THREAD-${i}.`) });
+
+  expect(prompt).toContain(`THREAD-${MAX_PLOT_THREADS - 1}.`);
+  expect(prompt).not.toContain(`THREAD-${MAX_PLOT_THREADS}.`);
+});
 
 test("the Narrator is told to keep its records true to play", () => {
   const prompt = promptFor();

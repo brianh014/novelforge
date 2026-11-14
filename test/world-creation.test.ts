@@ -157,6 +157,7 @@ test.each([
   ["no Lore Entries", { lore_entries: [] }],
   ["no world_rules", { world_rules: [] }],
   ["no Plot Threads", { plot_threads: [] }],
+  ["more Plot Threads than a Turn can see", { plot_threads: Array.from({ length: 9 }, (_, i) => `Plot ${i}.`) }],
   ["no World Overview", { world_overview: "" }],
 ])("a reply with %s is retried", async (_name, changes) => {
   play(sheet, generated("", changes), generated());

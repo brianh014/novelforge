@@ -39,6 +39,7 @@ Follow the conventions in `CONTRIBUTING.md`: Glossary terms, `shortcut:` comment
 
 - The repo, Issues and releases are on GitHub (`origin`, https://github.com/brianh014/novelforge). The `gitea` remote is only the user's private backup; push there only when asked. `.github/workflows/ci.yml` runs `bun run check` and `bun run e2e` on pushes and pull requests.
 - Releases are published by GitHub: `bun run publish-release`, run by the user from an up-to-date `main`, tags the commit `v<version>` from `package.json` and pushes the tag. `.github/workflows/release.yml` then builds the downloads on a Windows runner (Bun sets the Windows icon only when building on Windows) and publishes the GitHub release. Run by hand from the Actions tab, it only builds, as a trial. A version with a hyphen (`-alpha.2`) is a pre-release, which the New Version toast and Settings → Updates (`src/web/new-version.tsx`, `src/updater.ts`) never offer: it offers only GitHub's latest full release, and swaps the program file for the one in that release's download. Keep the download names in `scripts/build-release.ts` and `downloadName` in step. The user decides when to release; never push a `v` tag yourself.
+- A branch that changes the app bumps the version in `package.json` if that version is already released, that is, a `v<version>` tag exists (`git tag -l v<version>`). Bump the patch for fixes and changes to behaviour, the minor for new features, and bump once per release, not per branch: a version not yet tagged stays as it is.
 
 ### Testing the app
 

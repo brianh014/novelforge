@@ -528,6 +528,7 @@ test.each([
   ["the wrong shape", JSON.stringify({ world_rules: [`${SECRET} every rule again`] })],
   ["a change to a rule that doesn't exist", update({ world_rules: [{ old: `${SECRET} misquoted`, new: "x" }] })],
   ["a change to a thread that doesn't exist", update({ plot_threads: [{ old: `${SECRET} misquoted`, new: "x" }] })],
+  ["more Plot Threads than a Turn can see", update({ plot_threads: Array.from({ length: 7 }, (_, i) => ({ old: null, new: `${SECRET} plot ${i}` })) })],
   ["removing a Lore Entry that doesn't exist", update({ removed_lore: [`${SECRET} misquoted`] })],
   ["a Lore Entry without enough keywords", update({ lore_entries: [{ title: SECRET, keywords: [], content: SECRET }] })],
   ["a list change with nothing in it", update({ world_rules: [{ old: null, new: null }] })],

@@ -90,32 +90,14 @@ test("the last word before the player's action keeps the PC's choices theirs and
   expect(lastSystem()).toContain("private thought");
 });
 
-test("every eighth response brings the next Plot Thread forward, by turns", async () => {
-  const threads = [
-    { op: "add_plot_thread", thread: "THREAD-ONE" },
-    { op: "add_plot_thread", thread: "THREAD-TWO" },
-  ];
-  play(narration("Rain.", ...threads), ...Array(16).fill(narration("Rain.")));
-  const id = await app.createSave();
-
-  const asked: string[] = [];
-  for (let turn = 0; turn < 17; turn++) {
-    await playTurn(id);
-    const nudge = lastSystem().match(/Bring this Plot Thread into play.*(THREAD-\w+)/s);
-    if (nudge) asked.push(`${turn}:${nudge[1]}`);
-  }
-
-  // A Turn sees the responses before it, so the eighth response has been told by the ninth Turn, numbered 8 here.
-  expect(asked).toEqual(["8:THREAD-ONE", "16:THREAD-TWO"]);
-});
-
-test("a story with no Plot Threads gets no nudge", async () => {
-  play(...Array(9).fill(narration("Rain.")));
+test("Plot Threads come forward at the Narrator's choice of a pause, by a rule in the cached start, never by the clock", async () => {
+  play(...Array(9).fill(narration("Rain.", { op: "add_plot_thread", thread: "THREAD-ONE" })));
   const id = await app.createSave();
 
   for (let turn = 0; turn < 9; turn++) await playTurn(id);
 
-  expect(lastSystem()).not.toContain("Bring this Plot Thread into play");
+  expect(prompts.at(-1)![0]!.content).toContain("At a natural pause in the story");
+  expect(lastSystem()).not.toContain("THREAD-ONE");
 });
 
 test("the Narrator may invent the present but not the PC's past, and that rule leaves the cached start alone", async () => {
