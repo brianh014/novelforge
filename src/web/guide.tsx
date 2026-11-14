@@ -98,6 +98,10 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             you send, your story among it, to improve its products, and it limits how many Turns a day you get.
           </li>
           <li>
+            <b>NanoGPT</b>, which sells hundreds of models on one key and one balance, like OpenRouter: sign up at <code>nano-gpt.com</code>, add a balance,
+            create an API key, then choose <b>NanoGPT</b> in <b>Settings → Text</b>, paste the key, save, and pick a model.
+          </li>
+          <li>
             <b>Any other OpenAI-compatible service</b>, such as DeepInfra: choose <b>Local / OpenAI server</b>, give its address (for DeepInfra,{" "}
             <code>https://api.deepinfra.com/v1/openai</code>), save, then pick the model and enter its key.
           </li>
@@ -127,6 +131,10 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           <li>
             <b>Google AI Studio</b>: the same key as for the story draws with Nano Banana, but pictures aren't free, so turn on billing for it in AI Studio
             first.
+          </li>
+          <li>
+            <b>NanoGPT</b>: the same key as for the story draws with any of its image AIs, Seedream and Nano Banana among them. NanoGPT says the services it
+            sends pictures to may keep the prompts and pictures.
           </li>
           <li>
             <b>Wiro</b>: the same, with a key from{" "}

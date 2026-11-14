@@ -30,7 +30,7 @@ export type ServerOptions = {
   textProvider: TextProvider;
   imageAdapter: ImageAdapter;
   /** For Wiro and Google. Without one, that provider draws with `imageAdapter`, as tests do. */
-  imageAdapters?: { wiro?: ImageAdapter; google?: ImageAdapter };
+  imageAdapters?: { wiro?: ImageAdapter; google?: ImageAdapter; nanogpt?: ImageAdapter };
   /** For the Image model dropdown. Without it, Settings lists none and keeps the text box. */
   imageModels?: ImageModelList;
   /** Loopback unless the caller opens the app to the network, which has no accounts to protect it. */

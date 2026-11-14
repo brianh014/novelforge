@@ -13,6 +13,7 @@ import {
   getTextHosts,
   getImageModels,
   GOOGLE_URL,
+  NANOGPT_URL,
   getTextModels,
   OPENROUTER_URL,
   type PlayMode,
@@ -164,6 +165,9 @@ function ModelSelect({ label, value, list, onChange }: { label: string; value: s
     />
   );
 }
+
+// The named text providers, by the address each is reached at.
+const TEXT_PROVIDERS = { openrouter: OPENROUTER_URL, google: GOOGLE_URL, nanogpt: NANOGPT_URL };
 
 // Not a model id, as those always hold a letter.
 const TYPE_OWN = "\u0000type";
@@ -862,7 +866,8 @@ function InstallSettings({
   const [imageKey, setImageKey] = useState("");
   const set = (change: Partial<Settings>) => setDraft({ ...draft, ...change });
 
-  const textChoice = draft.textBaseUrl === OPENROUTER_URL ? "openrouter" : draft.textBaseUrl === GOOGLE_URL ? "google" : "local";
+  // An address that is one of the named providers picks it, and any other is a local or OpenAI-compatible server.
+  const textChoice = (Object.entries(TEXT_PROVIDERS).find(([, url]) => url === draft.textBaseUrl)?.[0] ?? "local") as keyof typeof TEXT_PROVIDERS | "local";
   const local = textChoice === "local";
   const addressSaved = draft.textBaseUrl === saved.textBaseUrl;
   // Not all servers list their models, so those keep the text box.
@@ -912,10 +917,10 @@ function InstallSettings({
   const chooseModel = (textModel: string) => set({ textModel, textHost: textModel === draft.textModel ? draft.textHost : "" });
 
   // A server or provider switched to brings back its own settings, and one never used starts with no model, as each names them its own way.
-  const switchText = (provider: "openrouter" | "google" | "local") => {
+  const switchText = (provider: keyof typeof TEXT_PROVIDERS | "local") => {
     // Local brings back the last local server used, if any.
-    const local = Object.keys(saved.textProfiles).findLast((at) => at !== OPENROUTER_URL && at !== GOOGLE_URL) ?? "";
-    const textBaseUrl = { openrouter: OPENROUTER_URL, google: GOOGLE_URL, local }[provider];
+    const local = Object.keys(saved.textProfiles).findLast((at) => !Object.values(TEXT_PROVIDERS).includes(at)) ?? "";
+    const textBaseUrl = provider === "local" ? local : TEXT_PROVIDERS[provider];
     set({ textBaseUrl, ...(saved.textProfiles[textBaseUrl] ?? { textModel: "", textHost: "" }) });
   };
   const needsKey = saved.hasTextApiKey && draft.textBaseUrl !== saved.textBaseUrl && !saved.textKeysFor.includes(draft.textBaseUrl) && !textKey.trim();
@@ -957,6 +962,7 @@ function InstallSettings({
           choices={[
             { value: "openrouter", label: "OpenRouter" },
             { value: "google", label: "Google AI Studio" },
+            { value: "nanogpt", label: "NanoGPT" },
             { value: "local", label: "Local / OpenAI server" },
           ]}
           onChange={switchText}
@@ -1140,6 +1146,7 @@ function InstallSettings({
             { value: "openrouter", label: "OpenRouter" },
             { value: "wiro", label: "Wiro" },
             { value: "google", label: "Google AI Studio" },
+            { value: "nanogpt", label: "NanoGPT" },
             { value: "local", label: "Local (ComfyUI)" },
           ]}
           onChange={(imageProvider) => set({ imageProvider, ...(saved.imageProfiles[imageProvider] ?? { imageModel: "" }) })}
@@ -1153,8 +1160,8 @@ function InstallSettings({
         {draft.imageProvider !== "local" ? (
           <>
             <p className="muted">
-              {{ openrouter: "OpenRouter", wiro: "Wiro", google: "Google" }[draft.imageProvider]} uses the nearest size your model offers, so the image may not
-              match exactly. Larger sizes can cost more, and some models have no size choice, so this changes nothing for them.
+              {{ openrouter: "OpenRouter", wiro: "Wiro", google: "Google", nanogpt: "NanoGPT" }[draft.imageProvider]} uses the nearest size your model offers,
+              so the image may not match exactly. Larger sizes can cost more, and some models have no size choice, so this changes nothing for them.
               {draft.imageProvider === "wiro" && " Set your Wiro project to API key only, not signatures."}
               {draft.imageProvider === "google" &&
                 " Pictures aren't on Google's free tier, so its key needs billing turned on. Save your key to choose a model."}

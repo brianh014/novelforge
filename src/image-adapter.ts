@@ -235,14 +235,93 @@ export function googleImages(settings: SettingsStore, baseUrl: string): ImageAda
   };
 }
 
+type NanoGptModel = {
+  id: string;
+  architecture?: { input_modalities?: string[] };
+  supported_parameters?: { resolutions?: string[]; aspect_ratio?: string[]; max_input_images?: number };
+};
+
+/**
+ * The size a NanoGPT model lists nearest the Resolution. Some list tiers such as 1k, and some list pixel sizes such as
+ * 1280*720, one per shape, so for those the shape comes first and then the area.
+ */
+export function nanoGptSize(sizes: string[] = [], resolution: keyof typeof TIER_TARGETS, aspectRatio: string) {
+  const tier = closestTier(sizes, resolution);
+  if (tier) return tier;
+  const [wide = 1, tall = 1] = aspectRatio.split(":").map(Number);
+  const area = TIER_TARGETS[resolution] ** 2;
+  const gap = (size: string) => {
+    const [width = 0, height = 0] = size.split(/[*x]/).map(Number);
+    return Math.abs(Math.log(width / height / (wide / tall))) * 10 + Math.abs(Math.log((width * height) / area));
+  };
+  return sizes.filter((size) => /^\d+[*x]\d+$/.test(size)).toSorted((a, b) => gap(a) - gap(b))[0];
+}
+
+/** The NanoGPT Image Adapter, on its own Image API, which takes the references as data URLs. */
+export function nanoGptImages(settings: SettingsStore, baseUrl: string): ImageAdapter {
+  // shortcut: held until the app restarts, like OpenRouter's, refresh it if a model's sizes ever change under a player.
+  const known = new Map<string, NanoGptModel | undefined>();
+
+  async function modelInfo(model: string, signal: AbortSignal) {
+    if (known.has(model)) return known.get(model);
+    const response = await fetch(`${baseUrl}/images/models`, { signal }).catch(() => undefined);
+    const { data } = ((await response?.json().catch(() => ({}))) ?? {}) as { data?: NanoGptModel[] };
+    // Without an answer the image still generates plainly, so ask again next time.
+    if (!response?.ok || !data) return undefined;
+    const info = data.find(({ id }) => id === model);
+    known.set(model, info);
+    return info;
+  }
+
+  return async (payload, signal) => {
+    const { aspect_ratio, reference_images } = payload;
+    const { imageModel, imageApiKey, imageResolution } = settings.read();
+    const limited = AbortSignal.any([signal, AbortSignal.timeout(GIVE_UP_MS)]);
+    const info = await modelInfo(imageModel, limited);
+    const parameters = info?.supported_parameters ?? {};
+    const resolution = nanoGptSize(parameters.resolutions, imageResolution, aspect_ratio);
+    const takesImages = info?.architecture?.input_modalities?.includes("image");
+    const references = takesImages ? reference_images.slice(0, parameters.max_input_images ?? MOST_REFERENCES) : [];
+
+    const response = await fetch(`${baseUrl}/images`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${imageApiKey}`, "Content-Type": "application/json" },
+      signal: limited,
+      body: JSON.stringify({
+        model: imageModel,
+        prompt: promptWith(payload),
+        n: 1,
+        ...(resolution && { resolution }),
+        ...(parameters.aspect_ratio?.includes(aspect_ratio) && { aspect_ratio }),
+        ...(references.length > 0 && {
+          input_references: references.map(({ bytes, mediaType }) => ({
+            type: "image_url",
+            image_url: { url: `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}` },
+          })),
+        }),
+      }),
+    });
+    const reply = (await response.json().catch(() => ({}))) as { data?: { b64_json?: string; url?: string }[]; error?: unknown };
+    const [first] = reply.data ?? [];
+    if (!response.ok || !(first?.b64_json || first?.url)) {
+      throw apiError(imageApiKey, `Image API error: ${JSON.stringify({ status: response.status, error: reply.error })}`, response.status);
+    }
+    // The reply's shape isn't documented for this route, so a picture sent as a link is fetched like the OpenAI-style route's.
+    if (first.b64_json) return new Uint8Array(Buffer.from(first.b64_json, "base64"));
+    const image = await fetch(first.url!, { signal: limited });
+    if (!image.ok) throw apiError(imageApiKey, `NanoGPT's picture wouldn't download: ${image.status}`, image.status);
+    return new Uint8Array(await image.arrayBuffer());
+  };
+}
+
 /** A provider's image models, by the id its Image model field takes. Empty when it doesn't answer. */
-export type ImageModelList = (provider: "openrouter" | "wiro" | "google", signal: AbortSignal) => Promise<string[]>;
+export type ImageModelList = (provider: "openrouter" | "wiro" | "google" | "nanogpt", signal: AbortSignal) => Promise<string[]>;
 
 // Long enough for a slow catalog, short enough that Settings isn't kept waiting on one that's down.
 const LIST_MS = 15_000;
 
-/** OpenRouter's and Wiro's public catalogs, which take no key, so none is sent, and Google's, which only lists for a key. */
-export function imageModelLists(settings: SettingsStore, urls: { openRouter: string; wiro: string; google: string }): ImageModelList {
+/** OpenRouter's, Wiro's and NanoGPT's public catalogs, which take no key, so none is sent, and Google's, which only lists for a key. */
+export function imageModelLists(settings: SettingsStore, urls: { openRouter: string; wiro: string; google: string; nanoGpt: string }): ImageModelList {
   const asked = async (url: string, signal: AbortSignal, init?: RequestInit) => {
     const response = await fetch(url, { ...init, signal: AbortSignal.any([signal, AbortSignal.timeout(LIST_MS)]) }).catch(() => undefined);
     return response?.ok ? response.json().catch(() => ({})) : {};
@@ -258,8 +337,9 @@ export function imageModelLists(settings: SettingsStore, urls: { openRouter: str
       // shortcut: told apart by name, as the listing doesn't say which models draw, read a capability if Google adds one.
       return (models ?? []).flatMap(({ name }) => (typeof name === "string" && /image|banana/.test(name) ? [name.replace(/^models\//, "")] : []));
     }
-    if (provider === "openrouter") {
-      const { data } = (await asked(`${urls.openRouter}/images/models`, signal)) as { data?: { id?: unknown }[] };
+    if (provider === "openrouter" || provider === "nanogpt") {
+      const url = provider === "openrouter" ? urls.openRouter : urls.nanoGpt;
+      const { data } = (await asked(`${url}/images/models`, signal)) as { data?: { id?: unknown }[] };
       return (data ?? []).map(({ id }) => id).filter((id) => typeof id === "string");
     }
     const { tool } = (await asked(`${urls.wiro}/Tool/List`, signal, {

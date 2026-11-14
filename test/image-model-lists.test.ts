@@ -22,7 +22,7 @@ afterEach(() => {
 const ok = () => Response.json({});
 
 /** Stand-ins for each provider's catalog, recording the key each was sent. */
-function catalogs({ openRouter = ok, wiro = ok, google = ok }: Partial<Record<"openRouter" | "wiro" | "google", () => Response>>) {
+function catalogs({ openRouter = ok, wiro = ok, google = ok, nanoGpt = ok }: Partial<Record<"openRouter" | "wiro" | "google" | "nanoGpt", () => Response>>) {
   const keys: Record<string, string | null> = {};
   const server = Bun.serve({
     port: 0,
@@ -36,6 +36,10 @@ function catalogs({ openRouter = ok, wiro = ok, google = ok }: Partial<Record<"o
         expect((await req.json()).categories).toEqual(["text-to-image"]);
         return wiro();
       },
+      "/nano/images/models": (req) => {
+        keys.nanoGpt = req.headers.get("authorization");
+        return nanoGpt();
+      },
       "/google/models": (req) => {
         keys.google = req.headers.get("x-goog-api-key");
         return google();
@@ -44,7 +48,7 @@ function catalogs({ openRouter = ok, wiro = ok, google = ok }: Partial<Record<"o
   });
   stop = () => server.stop(true);
   const at = (path: string) => new URL(path, server.url).href;
-  return { keys, list: imageModelLists(settings, { openRouter: at("/or"), wiro: at("/wiro"), google: at("/google") }) };
+  return { keys, list: imageModelLists(settings, { openRouter: at("/or"), wiro: at("/wiro"), google: at("/google"), nanoGpt: at("/nano") }) };
 }
 
 test("OpenRouter's and Wiro's catalogs list their models by the id the Image model field takes, with no key sent", async () => {
@@ -57,6 +61,14 @@ test("OpenRouter's and Wiro's catalogs list their models by the id the Image mod
   expect(await list("openrouter", never)).toEqual(["bytedance/seedream-5.5"]);
   expect(await list("wiro", never)).toEqual(["bytedance/seedream-5-5"]);
   expect(keys).toEqual({ openRouter: null, wiro: null });
+});
+
+test("NanoGPT's public catalog lists its image models with no key sent", async () => {
+  settings.update({ imageApiKey: "image-key-value" });
+  const { keys, list } = catalogs({ nanoGpt: () => Response.json({ object: "list", data: [{ id: "bytedance/seedream-v5.5" }, { id: "nano-banana-2.1" }] }) });
+
+  expect(await list("nanogpt", never)).toEqual(["bytedance/seedream-v5.5", "nano-banana-2.1"]);
+  expect(keys).toEqual({ nanoGpt: null });
 });
 
 test("a catalog that fails or answers nonsense lists nothing", async () => {

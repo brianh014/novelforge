@@ -75,6 +75,7 @@ export function startServer(options: ServerOptions) {
       openrouter: options.imageAdapter,
       wiro: options.imageAdapters?.wiro ?? options.imageAdapter,
       google: options.imageAdapters?.google ?? options.imageAdapter,
+      nanogpt: options.imageAdapters?.nanogpt ?? options.imageAdapter,
       local,
     },
     settings,
