@@ -275,7 +275,10 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
         </ul>
         <h3>Earlier Messages</h3>
         <ul>
-          <li>{tool(RevertIcon, "Revert to here")}: go back to that Message and delete everything after it, for good.</li>
+          <li>
+            {tool(RevertIcon, "Revert to here")}: go back to that Message and delete everything after it, for good. Revert to your own words and the AI answers
+            them again.
+          </li>
           <li>
             {tool(EditIcon, "Edit and replay from here")} (on your own Messages): change what you wrote and play the story again from there. Everything after it
             goes.
