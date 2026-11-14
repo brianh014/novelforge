@@ -9,7 +9,9 @@ import type { SettingsStore } from "./settings-store";
 import type { Message, Save } from "./save-store";
 import {
   applyOperations,
+  changeList,
   hasNumber,
+  MAX_PLOT_THREADS,
   ListChange,
   LoreEntryReply,
   openingState,
@@ -57,7 +59,7 @@ const WorldReply = z.object({
   world_overview: text,
   lore_entries: z.array(LoreEntryReply).min(1),
   world_rules: z.array(text).min(1),
-  plot_threads: z.array(text).min(1),
+  plot_threads: z.array(text).min(1).max(MAX_PLOT_THREADS),
   calendar: text,
   start_date: text,
   start_time_of_day: text,
@@ -498,9 +500,12 @@ const fitsWorld = ({ worldBible, worldRules, plotThreads, pcKnown, npcs }: State
         [world_brief, summary, pc_looks, inventory, status].some((part) => part !== null);
       // The same rule as a Turn's status.
       const statusInWords = status === null || ![status.health, ...status.injuries, ...status.conditions].some(hasNumber);
+      // Past the limit a thread never reaches a Turn's prompt, so the change would do nothing. A Save from before the limit may hold more, but not gain any.
+      const threadsFit = plot_threads.reduce(changeList, plotThreads).length <= Math.max(MAX_PLOT_THREADS, plotThreads.length);
       return (
         changed &&
         statusInWords &&
+        threadsFit &&
         removed_lore.every((title) => worldBible.some((entry) => entry.title === title)) &&
         quotes(worldRules, world_rules) &&
         quotes(plotThreads, plot_threads) &&
@@ -523,7 +528,7 @@ const worldChangePrompt = (
 It may correct a mistake, or nudge where the story goes, which belongs in the Plot Threads and the World Bible. Make the smallest change that makes it true, and change whatever it contradicts. Reply only with JSON matching this schema: ${JSON.stringify(jsonSchemaOf(WorldChange))}
 List only what changes, as everything you leave out stays exactly as it is, and never repeat what stays the same.
 lore_entries holds each entry you add or rewrite. To rewrite one, use its exact title and give its whole new content and keywords. Give each at least three keywords, including names, nicknames and everyday paraphrases. removed_lore holds the exact title of each entry that no longer holds.
-Each change in world_rules, plot_threads and facts has old, copied exactly from the world or null to add a new one, and new, the text to put there or null to remove it.
+Each change in world_rules, plot_threads and facts has old, copied exactly from the world or null to add a new one, and new, the text to put there or null to remove it. Keep at most ${MAX_PLOT_THREADS} plot_threads, so to add one when that many are there, rewrite or remove one.
 world_brief, summary, facts and npc_summaries are the Journal, which the player reads. Change them only where they no longer hold, and give null or an empty list otherwise. Write them as the PC knows the world: a secret stays out of them, even when the player's instruction names it, and goes in the hidden parts. Each of npc_summaries holds a new summary with the exact name of an NPC already in the Journal.
 inventory and status are what the PC wears and carries, and their health, injuries and conditions, which the player also reads. Give the whole new inventory or status only when the instruction changes it, keeping everything it doesn't change, and null otherwise. Write status in words with no digits: health in at most five words, and at most three injuries and three conditions of at most eight words each.
 npc_looks holds new looks only for each NPC whose looks or clothing the instruction changes, with their exact name from npcs, ${LOOKS}. These are hidden, and they are what pictures of that NPC are drawn from.

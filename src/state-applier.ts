@@ -331,7 +331,7 @@ export const WorldUpdate = z.object({
 export type WorldUpdate = z.infer<typeof WorldUpdate>;
 
 /** An edit can outlive the entry it names, when a replaced response took that entry away, so a missing `old` adds rather than failing. */
-function changeList(list: string[], change: ListChange) {
+export function changeList(list: string[], change: ListChange) {
   const at = change.old === null ? -1 : list.indexOf(change.old);
   const added = change.new === null ? [] : [change.new];
   return [...new Set(at < 0 ? [...list, ...added] : list.toSpliced(at, 1, ...added))];
