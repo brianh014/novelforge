@@ -395,6 +395,10 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
             who serves the model. See {link("models", "Choosing your AI")}.
           </li>
           <li>
+            Each provider keeps its own key, model and settings, so switching back brings them back. Where a provider lists its models, choose{" "}
+            <b>Type a model name…</b> at the end of the list for one it leaves out, and {tool(ChoicesIcon, "Choose from the list")} to go back.
+          </li>
+          <li>
             <b>Extra Narrator Instructions</b>: your own guidance for the Narrator in every story, such as "Keep replies short" or "No romance".
           </li>
           <li>

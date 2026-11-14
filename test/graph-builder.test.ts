@@ -69,6 +69,7 @@ test("SD draws from an empty latent with the checkpoint's own model, CLIP and VA
 });
 
 test.each([
+  ["0.5k", "16:9", 688, 384],
   ["1k", "16:9", 1360, 768],
   ["1.5k", "16:9", 2048, 1152],
   ["2k", "16:9", 2736, 1536],

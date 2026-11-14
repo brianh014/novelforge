@@ -147,3 +147,20 @@ test("a run that fails throws with the key removed", async () => {
   expect(failure.message).toContain("Image API error");
   expect(failure.message).not.toContain("wiro-key-value");
 });
+
+test("an exit code sent as a number counts the same as one sent as text", async () => {
+  const adapter = adapterFor(flux, { pexit: 0 });
+
+  expect(await adapter(payload(), never)).toEqual(new Uint8Array(PNG));
+});
+
+test("a model name that isn't owner/model is refused before anything is sent with the key", async () => {
+  const adapter = adapterFor(flux);
+
+  for (const imageModel of ["../../Task/Cancel", "bytedance/seedream?x=1", "seedream"]) {
+    settings.update({ imageModel });
+    await expect(adapter(payload(), never)).rejects.toThrow("Wiro models are named owner/model");
+  }
+  expect(wiro.details()).toBe(0);
+  expect(wiro.runs).toHaveLength(0);
+});

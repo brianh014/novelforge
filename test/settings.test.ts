@@ -244,7 +244,7 @@ test("each image provider keeps its own key, and the keys themselves never reach
 
   const back = await change({ imageProvider: "openrouter" });
   const text = await back.text();
-  expect(JSON.parse(text)).toMatchObject({ hasImageApiKey: true, imageKeysFor: ["openrouter", "wiro"] });
+  expect(JSON.parse(text)).toMatchObject({ hasImageApiKey: true, imageKeysFor: ["wiro", "openrouter"] });
   expect(text).not.toContain("image-key");
   expect(store().read().imageApiKey).toBe("openrouter-image-key");
 
@@ -287,6 +287,33 @@ test("a switch back brings each server's and provider's model and the rest of it
 test("put-away settings can't be set by a request", async () => {
   await change({ textProfiles: { "https://evil.example/v1": { textApiKey: "planted" } } } as never);
   expect(Object.keys(store().read().textProfiles)).toEqual(["https://openrouter.ai/api/v1"]);
+});
+
+test("a saved profile that won't read never hands on the old server's key", () => {
+  const file = join(folder.path, "broken-profile.json");
+  // The local server's profile has a Recent Messages value no build takes, so it reads as nothing at all.
+  writeFileSync(
+    file,
+    JSON.stringify({ textApiKey: "openrouter-key-value", textProfiles: { "http://localhost:1234/v1": { textApiKey: 7, textRecentMessages: 1 } } }),
+  );
+  const keys = settingsStore(file);
+
+  keys.update({ textBaseUrl: "http://localhost:1234/v1" });
+
+  expect(keys.read().textApiKey).toBe("");
+});
+
+test("the profiles are filed with the one used last at the end, which is how Settings finds the last local server", () => {
+  const file = join(folder.path, "order.json");
+  const order = settingsStore(file);
+  for (const textBaseUrl of ["http://a.local/v1", "http://b.local/v1", "http://a.local/v1", "https://openrouter.ai/api/v1"]) order.update({ textBaseUrl });
+
+  expect(Object.keys(order.read().textProfiles)).toEqual(["http://b.local/v1", "http://a.local/v1", "https://openrouter.ai/api/v1"]);
+});
+
+test("the image model list only answers for an online provider", async () => {
+  expect((await app.get("/settings/image-models?provider=local")).status).toBe(400);
+  expect((await app.get("/settings/image-models?provider=wiro")).status).toBe(200);
 });
 
 test("options that don't exist are refused and change nothing", async () => {
@@ -409,11 +436,11 @@ test("API keys never enter a Save, its duplicates or its export", async () => {
 test("a resolution saved by its old video name or in megapixels reads as the nearest K", () => {
   const path = join(folder.path, "old-settings.json");
   for (const [old, now] of [
-    ["480p", "1k"],
+    ["480p", "0.5k"],
     ["720p", "1k"],
     ["1080p", "1.5k"],
     ["4k", "2k"],
-    ["0.5mp", "1k"],
+    ["0.5mp", "0.5k"],
     ["1mp", "1k"],
     ["2mp", "1.5k"],
   ]) {

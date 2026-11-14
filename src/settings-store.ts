@@ -53,8 +53,8 @@ export const SettingsUpdate = z
     updatePortraits: z.boolean(),
     // By the 1K, 1.5K and 2K that image providers use, each the area of a square that wide. Settings from before name a video size or megapixels.
     imageResolution: z.preprocess(
-      (value) => ({ "480p": "1k", "720p": "1k", "1080p": "1.5k", "4k": "2k", "0.5mp": "1k", "1mp": "1k", "2mp": "1.5k" })[value as string] ?? value,
-      z.enum(["1k", "1.5k", "2k"]),
+      (value) => ({ "480p": "0.5k", "720p": "1k", "1080p": "1.5k", "4k": "2k", "0.5mp": "0.5k", "1mp": "1k", "2mp": "1.5k" })[value as string] ?? value,
+      z.enum(["0.5k", "1k", "1.5k", "2k"]),
     ),
     comfyUrl: z.url({ protocol: /^https?$/ }),
     comfyFamily: Family,
@@ -115,6 +115,8 @@ export type TextProfile = z.infer<typeof TextProfile>;
 export type ImageProfile = z.infer<typeof ImageProfile>;
 
 const tied = <T extends object>(from: T, fields: (keyof T)[]) => Object.fromEntries(fields.map((field) => [field, from[field]]));
+
+const without = <T>(profiles: Record<string, T>, at: string) => Object.fromEntries(Object.entries(profiles).filter(([key]) => key !== at));
 
 /** Each field of `fields` the change leaves out taken from `own`, the profile of the server or provider switched to. */
 const restored = (change: object, own: object, fields: string[]) =>
@@ -214,15 +216,17 @@ export function settingsStore(path: string) {
       // A switch puts the old server's settings away and takes out the new one's. One never used starts with no key, as a key must only
       // ever reach the server it was entered for, and no model, as each names its models its own way. The rest carries over.
       if (next.textBaseUrl !== current.textBaseUrl) {
-        const own = current.textProfiles[next.textBaseUrl] ?? { textApiKey: "", textModel: "", textHost: "" };
+        // Over the blanks, so a profile that lost its key, say one that wouldn't read, still never hands on the old server's.
+        const own = { textApiKey: "", textModel: "", textHost: "", ...current.textProfiles[next.textBaseUrl] };
         Object.assign(next, restored(change, own, TEXT_TIED));
       }
       if (next.imageProvider !== current.imageProvider) {
-        const own = current.imageProfiles[next.imageProvider] ?? { imageApiKey: "", imageModel: "" };
+        const own = { imageApiKey: "", imageModel: "", ...current.imageProfiles[next.imageProvider] };
         Object.assign(next, restored(change, own, IMAGE_TIED));
       }
-      next.textProfiles = { ...current.textProfiles, [next.textBaseUrl]: tied(next, TEXT_TIED) as TextProfile };
-      next.imageProfiles = { ...current.imageProfiles, [next.imageProvider]: tied(next, IMAGE_TIED) as ImageProfile };
+      // Filed last, so the newest is the one used last, which is how Settings finds the last local server.
+      next.textProfiles = { ...without(current.textProfiles, next.textBaseUrl), [next.textBaseUrl]: tied(next, TEXT_TIED) as TextProfile };
+      next.imageProfiles = { ...without(current.imageProfiles, next.imageProvider), [next.imageProvider]: tied(next, IMAGE_TIED) as ImageProfile };
       if (next.logLevel === null) delete next.logLevel;
       // shortcut: mode does nothing on Windows, so the key has the folder's permissions there, tighten it if Settings ever hold more than local secrets.
       writeFileSync(`${path}.unfinished`, JSON.stringify(next, null, 2), { mode: 0o600 });

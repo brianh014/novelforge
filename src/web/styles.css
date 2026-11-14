@@ -2934,3 +2934,15 @@ dialog blockquote {
 .toast a {
   white-space: nowrap;
 }
+
+/* A model typed by hand, with the button back to the provider's list beside it. */
+.typed-model {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.typed-model label {
+  flex: 1;
+  min-width: 0;
+}

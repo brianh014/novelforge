@@ -25,8 +25,8 @@ type ImageModel = {
 // The most that POST /images accepts. A model's own limit, where it has one, is its input_references descriptor.
 const MOST_REFERENCES = 16;
 
-// The tier each resolution aims for, as OpenRouter's and Wiro's sizes go by 1K, 1.5K and 2K.
-const TIER_TARGETS = { "1k": 1000, "1.5k": 1500, "2k": 2000 };
+// The tier each resolution aims for, as OpenRouter's and Wiro's sizes go by 0.5K (512), 1K, 1.5K and 2K.
+const TIER_TARGETS = { "0.5k": 500, "1k": 1000, "1.5k": 1500, "2k": 2000 };
 
 // Wiro writes some as 1k. A size that is a ratio or a video size reads as no number, so it is never chosen.
 const tierPixels = (tier: string) => (/k$/i.test(tier) ? Number.parseFloat(tier) * 1000 : Number(tier));
@@ -39,6 +39,19 @@ function closestTier(tiers: string[] = [], resolution: keyof typeof TIER_TARGETS
 
 // An image can take minutes, but one that never answers must not hold up the Save's next image forever.
 const GIVE_UP_MS = 5 * 60 * 1000;
+
+/** `text` with the key taken out, as an image API's error can repeat what it was sent. */
+const withoutKey = (key: string, text: string) => (key ? text.replaceAll(key, "[key]") : text);
+
+/** An Image API error that is safe to log. */
+const apiError = (key: string, message: string, status: number) => Object.assign(new Error(withoutKey(key, message)), { status });
+
+/** One prompt with the Art Style, and what to avoid unless the model has a field of its own for that. */
+const promptWith = ({ prompt, style_preset, negative_prompt }: ImagePayload, avoidElsewhere = false) =>
+  [prompt, style_preset, !avoidElsewhere && negative_prompt && `Avoid: ${negative_prompt}.`].filter(Boolean).join("\n");
+
+// Goes into a path sent with the key, so nothing that could climb out of it or add a query.
+const WIRO_MODEL = /^[\w.-]+\/[\w.-]+$/;
 
 /** The OpenRouter Image Adapter, using the Settings at the time of each call. */
 export function openRouterImages(settings: SettingsStore, baseUrl: string): ImageAdapter {
@@ -56,10 +69,10 @@ export function openRouterImages(settings: SettingsStore, baseUrl: string): Imag
     return info;
   }
 
-  return async ({ prompt, negative_prompt, aspect_ratio, reference_images, style_preset }, signal) => {
+  return async (payload, signal) => {
+    const { aspect_ratio, reference_images } = payload;
     const { imageModel, imageApiKey, imageResolution } = settings.read();
     const headers = { Authorization: `Bearer ${imageApiKey}` };
-    const redacted = (detail: string) => (imageApiKey ? detail.replaceAll(imageApiKey, "[key]") : detail);
     const limited = AbortSignal.any([signal, AbortSignal.timeout(GIVE_UP_MS)]);
 
     const info = await modelInfo(imageModel, headers, limited);
@@ -77,7 +90,7 @@ export function openRouterImages(settings: SettingsStore, baseUrl: string): Imag
       body: JSON.stringify({
         model: imageModel,
         // The Image API has no fields for these, so the model reads them as part of the prompt.
-        prompt: [prompt, style_preset, negative_prompt && `Avoid: ${negative_prompt}.`].filter(Boolean).join("\n"),
+        prompt: promptWith(payload),
         ...(takesRatio && { aspect_ratio }),
         ...(resolution && { resolution }),
         ...(references.length > 0 && {
@@ -91,29 +104,27 @@ export function openRouterImages(settings: SettingsStore, baseUrl: string): Imag
     const reply = (await response.json().catch(() => ({}))) as { data?: { b64_json?: string }[]; error?: unknown };
     const encoded = reply.data?.[0]?.b64_json;
     if (!response.ok || !encoded) {
-      const message = redacted(`Image API error: ${JSON.stringify({ status: response.status, error: reply.error })}`);
-      throw Object.assign(new Error(message), { status: response.status });
+      throw apiError(imageApiKey, `Image API error: ${JSON.stringify({ status: response.status, error: reply.error })}`, response.status);
     }
     return new Uint8Array(Buffer.from(encoded, "base64"));
   };
 }
 
 type WiroField = { id: string; type: string; required?: boolean; defaultvalue?: unknown; options?: { value: string }[]; maxinputlenght?: number };
-type WiroTask = { pexit?: string; outputs?: { url?: string }[] };
+type WiroTask = { pexit?: string | number; outputs?: { url?: string }[] };
 
 /** The Wiro Image Adapter. Each model names its own fields, so it reads them from the model's details and fills the ones it knows. */
 export function wiroImages(settings: SettingsStore, baseUrl: string): ImageAdapter {
   // shortcut: held until the app restarts, so a model whose fields change needs one, refresh it if that ever matters.
   const known = new Map<string, WiroField[]>();
 
-  return async ({ prompt, negative_prompt, aspect_ratio, reference_images, style_preset }, signal) => {
+  return async (payload, signal) => {
+    const { negative_prompt, aspect_ratio, reference_images } = payload;
     const { imageModel, imageApiKey, imageResolution } = settings.read();
     const headers = { "x-api-key": imageApiKey };
     const limited = AbortSignal.any([signal, AbortSignal.timeout(GIVE_UP_MS)]);
-    const failed = (what: string, status: number, detail: unknown) => {
-      const message = `${what}: ${JSON.stringify({ status, detail })}`;
-      return Object.assign(new Error(imageApiKey ? message.replaceAll(imageApiKey, "[key]") : message), { status });
-    };
+    const failed = (what: string, status: number, detail: unknown) => apiError(imageApiKey, `${what}: ${JSON.stringify({ status, detail })}`, status);
+    if (!WIRO_MODEL.test(imageModel)) throw failed("Wiro models are named owner/model", 0, undefined);
 
     let fields = known.get(imageModel);
     if (!fields) {
@@ -140,7 +151,7 @@ export function wiroImages(settings: SettingsStore, baseUrl: string): ImageAdapt
       if (required && !type.includes("file") && defaultvalue !== undefined && defaultvalue !== "") form.set(id, String(defaultvalue));
     }
     const negative = ["negativePrompt", "negative_prompt"].find(field);
-    form.set("prompt", [prompt, style_preset, !negative && negative_prompt && `Avoid: ${negative_prompt}.`].filter(Boolean).join("\n"));
+    form.set("prompt", promptWith(payload, !!negative));
     if (negative && negative_prompt) form.set(negative, negative_prompt);
     const ratio = withOptions(["aspectRatio", "ratio", "aspect_ratio"]);
     if (ratio?.options?.some(({ value }) => value === aspect_ratio)) form.set(ratio.id, aspect_ratio);
@@ -169,7 +180,8 @@ export function wiroImages(settings: SettingsStore, baseUrl: string): ImageAdapt
     const response = await fetch(`${baseUrl}/Run/${imageModel}/sync`, { method: "POST", headers, signal: limited, body: form });
     const reply = (await response.json().catch(() => ({}))) as { errors?: unknown; tasklist?: WiroTask[] };
     const task = reply.tasklist?.[0];
-    const url = task?.pexit === "0" ? task.outputs?.[0]?.url : undefined;
+    // Wiro's docs give the exit code as text, and a number is read the same in case a model sends one.
+    const url = String(task?.pexit) === "0" ? task?.outputs?.[0]?.url : undefined;
     if (!response.ok || !url) throw failed("Image API error", response.status, reply.errors ?? { pexit: task?.pexit });
     const image = await fetch(url, { signal: limited });
     if (!image.ok) throw failed("Wiro's picture wouldn't download", image.status, undefined);
@@ -186,7 +198,8 @@ type GoogleReply = { status?: string; steps?: { type?: string; content?: { type?
 
 /** The Google AI Studio Image Adapter, on the Interactions API, which takes the references inline with the prompt. */
 export function googleImages(settings: SettingsStore, baseUrl: string): ImageAdapter {
-  return async ({ prompt, negative_prompt, aspect_ratio, reference_images, style_preset }, signal) => {
+  return async (payload, signal) => {
+    const { aspect_ratio, reference_images } = payload;
     const { imageModel, imageApiKey, imageResolution } = settings.read();
     const response = await fetch(`${baseUrl}/interactions`, {
       method: "POST",
@@ -196,7 +209,7 @@ export function googleImages(settings: SettingsStore, baseUrl: string): ImageAda
         model: imageModel,
         input: [
           // There is no field for these, so the model reads them as part of the prompt.
-          { type: "text", text: [prompt, style_preset, negative_prompt && `Avoid: ${negative_prompt}.`].filter(Boolean).join("\n") },
+          { type: "text", text: promptWith(payload) },
           ...reference_images.slice(0, GOOGLE_REFERENCES).map(({ bytes, mediaType }) => ({
             type: "image",
             mime_type: mediaType,
@@ -216,8 +229,7 @@ export function googleImages(settings: SettingsStore, baseUrl: string): ImageAda
     const reply = (await response.json().catch(() => ({}))) as GoogleReply;
     const encoded = reply.steps?.flatMap(({ content = [] }) => content).find(({ type, data }) => type === "image" && data)?.data;
     if (!response.ok || !encoded) {
-      const message = `Image API error: ${JSON.stringify({ status: response.status, state: reply.status, error: reply.error })}`;
-      throw Object.assign(new Error(imageApiKey ? message.replaceAll(imageApiKey, "[key]") : message), { status: response.status });
+      throw apiError(imageApiKey, `Image API error: ${JSON.stringify({ status: response.status, state: reply.status, error: reply.error })}`, response.status);
     }
     return new Uint8Array(Buffer.from(encoded, "base64"));
   };

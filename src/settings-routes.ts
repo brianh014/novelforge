@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { parseWorkflow } from "./comfy-workflow";
 import { comfyModels, randomSeed } from "./comfyui";
 import { chosenModels, drawSteps, localIsSetUp } from "./graph-builder";
@@ -8,6 +9,9 @@ import { estimateTokens } from "./lore-activation";
 import { type SettingsChange, SettingsUpdate } from "./settings-store";
 import { textHosts, textModels } from "./text-provider";
 import { ContentRefused, TextProviderFailed } from "./turn-engine";
+
+// Only the online providers have a list. ComfyUI's models come from /settings/comfy-models.
+const ImageModelsQuery = z.object({ provider: SettingsUpdate.shape.imageProvider.unwrap().exclude(["local"]) });
 
 /** `profiles` with each one's key taken out. */
 const unkeyed = <T extends object>(profiles: Record<string, T>, key: keyof T) =>
@@ -142,8 +146,7 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
     // Public catalogs, so the provider the form shows now is asked, saved or not.
     "/settings/image-models": {
       GET: async (req) => {
-        const provider = new URL(req.url).searchParams.get("provider");
-        if (provider !== "openrouter" && provider !== "wiro" && provider !== "google") return Response.json({ models: [] });
+        const { provider } = ImageModelsQuery.parse(Object.fromEntries(new URL(req.url).searchParams));
         return Response.json({ models: (await options.imageModels?.(provider, req.signal)) ?? [] });
       },
     },

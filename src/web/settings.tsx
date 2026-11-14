@@ -23,6 +23,7 @@ import {
   type TextHost,
   type TextTest,
 } from "./api";
+import { ChoicesIcon } from "./icons";
 import { BookTabs, MenuRibbon, Sheet } from "./menu";
 import { UpdatesSection } from "./new-version";
 import { PlayModePicker } from "./play-choices";
@@ -36,6 +37,7 @@ const LOG_LEVELS = [
   ["verbose", "Verbose"],
 ] as const;
 const RESOLUTIONS = [
+  ["0.5k", "0.5K (512 × 512 portrait, 688 × 384 scene)"],
   ["1k", "1K (1024 × 1024 portrait, 1360 × 768 scene)"],
   ["1.5k", "1.5K (1536 × 1536 portrait, 2048 × 1152 scene)"],
   ["2k", "2K (2048 × 2048 portrait, 2736 × 1536 scene)"],
@@ -159,6 +161,51 @@ function ModelSelect({ label, value, list, onChange }: { label: string; value: s
       // A saved model that's gone stays as it is, with a notice, until the player changes it.
       choices={[...new Set([value, ...list])].filter(Boolean).map((model) => ({ value: model, label: model }))}
       onChange={onChange}
+    />
+  );
+}
+
+// Not a model id, as those always hold a letter.
+const TYPE_OWN = "\u0000type";
+
+/**
+ * A provider's models to choose from, and a way to type one the list leaves out, such as a Wiro model past its first 500. With
+ * no list, or one typed, it's a text box. Give it a `key` per provider, so a switch shows the new one's list.
+ */
+function ModelField({ label, value, list, onChange }: { label: string; value: string; list?: string[]; onChange: (value: string) => void }) {
+  const [typing, setTyping] = useState(false);
+  if (!list?.length || typing) {
+    return (
+      <div className="typed-model">
+        <label>
+          {label}
+          <input value={value} onChange={(e) => onChange(e.target.value)} />
+        </label>
+        {!!list?.length && (
+          <button
+            type="button"
+            className="icon"
+            title="Choose from the list"
+            aria-label={`Choose the ${label.toLowerCase()} from the list`}
+            onClick={() => setTyping(false)}
+          >
+            {ChoicesIcon}
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <Picker
+      label={label}
+      empty="Choose a model"
+      value={value}
+      // A typed model the list leaves out stays as it is until the player changes it.
+      choices={[
+        ...[...new Set([value, ...list])].filter(Boolean).map((model) => ({ value: model, label: model })),
+        { value: TYPE_OWN, label: "Type a model name…" },
+      ]}
+      onChange={(chosen) => (chosen === TYPE_OWN ? setTyping(true) : onChange(chosen))}
     />
   );
 }
@@ -502,8 +549,8 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
   const nextLoraKey = useRef(0);
   const { comfySdBase, imageResolution } = draft;
   const tooBig =
-    comfySdBase === "sd15"
-      ? "SD 1.5 models are trained for small images, so even 1K may double faces and figures. A workflow file can set a smaller size."
+    comfySdBase === "sd15" && imageResolution !== "0.5k"
+      ? "SD 1.5 models are trained for small images, so this resolution may double faces and figures. 0.5K suits them best."
       : comfySdBase === "sdxl" && imageResolution !== "1k"
         ? "SDXL models are trained for about 1K, so larger sizes may repeat subjects. 1K suits them best."
         : "";
@@ -843,7 +890,7 @@ function InstallSettings({
     return () => {
       current = false;
     };
-  }, [draft.imageProvider]);
+  }, [draft.imageProvider, saved]);
 
   const [hosts, setHosts] = useState<TextHost[]>([]);
   const hostsListed = textChoice === "openrouter" && addressSaved && !!models?.includes(draft.textModel);
@@ -926,20 +973,7 @@ function InstallSettings({
             />
           </label>
         )}
-        {addressSaved && models?.length ? (
-          <Picker
-            label="Text model"
-            empty="Choose a model"
-            value={draft.textModel}
-            choices={models.map((model) => ({ value: model, label: model }))}
-            onChange={chooseModel}
-          />
-        ) : (
-          <label>
-            Text model
-            <input value={draft.textModel} onChange={(e) => chooseModel(e.target.value)} />
-          </label>
-        )}
+        <ModelField key={draft.textBaseUrl} label="Text model" value={draft.textModel} list={addressSaved ? models : undefined} onChange={chooseModel} />
         {local && !addressSaved && <p className="muted">Save the address to choose from this server's models.</p>}
         {textChoice === "google" && (
           <p className="muted">
@@ -1125,20 +1159,13 @@ function InstallSettings({
               {draft.imageProvider === "google" &&
                 " Pictures aren't on Google's free tier, so its key needs billing turned on. Save your key to choose a model."}
             </p>
-            {imageModels?.length ? (
-              <Picker
-                label="Image model"
-                empty="Choose a model"
-                value={draft.imageModel}
-                choices={imageModels.map((model) => ({ value: model, label: model }))}
-                onChange={(imageModel) => set({ imageModel })}
-              />
-            ) : (
-              <label>
-                Image model
-                <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />
-              </label>
-            )}
+            <ModelField
+              key={draft.imageProvider}
+              label="Image model"
+              value={draft.imageModel}
+              list={imageModels}
+              onChange={(imageModel) => set({ imageModel })}
+            />
             <label>
               Image API key
               <input
