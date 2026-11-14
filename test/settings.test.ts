@@ -46,7 +46,7 @@ test("a fresh install has images on, Prose, medium type, blank Model Instruction
     comfyUrl: "http://127.0.0.1:8188",
     comfyFamily: "sd",
     comfySdBase: "sdxl",
-    imageResolution: "1mp",
+    imageResolution: "1k",
     comfyCheckpoint: "",
     comfyDiffusionModel: "",
     comfyTextEncoder: "",
@@ -81,7 +81,7 @@ test("every setting survives a restart, and no key comes back", async () => {
     comfyUrl: "http://localhost:8188",
     comfyFamily: "flux2",
     comfySdBase: "sd15",
-    imageResolution: "2mp",
+    imageResolution: "2k",
     comfyCheckpoint: "dream.safetensors",
     comfyDiffusionModel: "flux2.safetensors",
     comfyTextEncoder: "mistral.safetensors",
@@ -299,13 +299,16 @@ test("API keys never enter a Save, its duplicates or its export", async () => {
   expect(await app.get("/settings").then((r) => r.text())).not.toContain("-key-");
 });
 
-test("a resolution saved by its old video name reads as megapixels, and 4K as the largest left", () => {
+test("a resolution saved by its old video name or in megapixels reads as the nearest K", () => {
   const path = join(folder.path, "old-settings.json");
   for (const [old, now] of [
-    ["480p", "0.5mp"],
-    ["720p", "1mp"],
-    ["1080p", "2mp"],
-    ["4k", "2mp"],
+    ["480p", "1k"],
+    ["720p", "1k"],
+    ["1080p", "1.5k"],
+    ["4k", "2k"],
+    ["0.5mp", "1k"],
+    ["1mp", "1k"],
+    ["2mp", "1.5k"],
   ]) {
     writeFileSync(path, JSON.stringify({ imageResolution: old }));
     expect(settingsStore(path).read().imageResolution).toBe(now as never);

@@ -34,9 +34,9 @@ const LOG_LEVELS = [
   ["verbose", "Verbose"],
 ] as const;
 const RESOLUTIONS = [
-  ["0.5mp", "0.5 MP (704 × 704 portrait, 944 × 528 scene)"],
-  ["1mp", "1 MP (1024 × 1024 portrait, 1360 × 768 scene)"],
-  ["2mp", "2 MP (1408 × 1408 portrait, 1872 × 1056 scene)"],
+  ["1k", "1K (1024 × 1024 portrait, 1360 × 768 scene)"],
+  ["1.5k", "1.5K (1536 × 1536 portrait, 2048 × 1152 scene)"],
+  ["2k", "2K (2048 × 2048 portrait, 2736 × 1536 scene)"],
 ] as const;
 const THIS_STORY = "This story";
 /** Not a setting, so outside the form and its Save. */
@@ -340,7 +340,7 @@ function WorkflowGuide() {
         <dt>
           <code>{"{{aspect_ratio}}"}</code>, <code>{"{{width}}"}</code>, <code>{"{{height}}"}</code>
         </dt>
-        <dd>The shape, such as 16:9, and a size of about one megapixel in multiples of 16. For SD 1.5, type your own size instead.</dd>
+        <dd>The shape, such as 16:9, and a size at the Resolution below, in multiples of 16. For SD 1.5, type your own size instead.</dd>
         <dt>
           <code>{"{{seed}}"}</code>
         </dt>
@@ -500,10 +500,10 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
   const nextLoraKey = useRef(0);
   const { comfySdBase, imageResolution } = draft;
   const tooBig =
-    comfySdBase === "sd15" && imageResolution !== "0.5mp"
-      ? "SD 1.5 models are trained for small images, so this resolution may double faces and figures. 0.5 MP suits them best."
-      : comfySdBase === "sdxl" && imageResolution === "2mp"
-        ? "SDXL models are trained for about 1 MP, so 2 MP may repeat subjects. 1 MP suits them best."
+    comfySdBase === "sd15"
+      ? "SD 1.5 models are trained for small images, so even 1K may double faces and figures. A workflow file can set a smaller size."
+      : comfySdBase === "sdxl" && imageResolution !== "1k"
+        ? "SDXL models are trained for about 1K, so larger sizes may repeat subjects. 1K suits them best."
         : "";
 
   useEffect(() => {

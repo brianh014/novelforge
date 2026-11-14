@@ -51,10 +51,10 @@ export const SettingsUpdate = z
     drawScenes: z.boolean(),
     // On, a portrait is drawn again, keeping its face, whenever a Turn changes how that person looks.
     updatePortraits: z.boolean(),
-    // In megapixels, as each shape of image gets the same area. Settings from before name a video size, and 4K is too costly to keep.
+    // By the 1K, 1.5K and 2K that image providers use, each the area of a square that wide. Settings from before name a video size or megapixels.
     imageResolution: z.preprocess(
-      (value) => ({ "480p": "0.5mp", "720p": "1mp", "1080p": "2mp", "4k": "2mp" })[value as string] ?? value,
-      z.enum(["0.5mp", "1mp", "2mp"]),
+      (value) => ({ "480p": "1k", "720p": "1k", "1080p": "1.5k", "4k": "2k", "0.5mp": "1k", "1mp": "1k", "2mp": "1.5k" })[value as string] ?? value,
+      z.enum(["1k", "1.5k", "2k"]),
     ),
     comfyUrl: z.url({ protocol: /^https?$/ }),
     comfyFamily: Family,
@@ -116,7 +116,7 @@ const defaults = {
   comfyUrl: "http://127.0.0.1:8188",
   comfyFamily: "sd",
   comfySdBase: "sdxl",
-  imageResolution: "1mp",
+  imageResolution: "1k",
   comfyCheckpoint: "",
   comfyDiffusionModel: "",
   comfyTextEncoder: "",

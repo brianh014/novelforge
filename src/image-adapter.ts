@@ -24,8 +24,8 @@ type ImageModel = {
 // The most that POST /images accepts. A model's own limit, where it has one, is its input_references descriptor.
 const MOST_REFERENCES = 16;
 
-// The tier each resolution aims for, as OpenRouter's sizes go by 1K and 2K. 1 MP aims for 1K, the usual base size.
-const TIER_TARGETS = { "0.5mp": 768, "1mp": 1000, "2mp": 2000 };
+// The tier each resolution aims for, as OpenRouter's sizes go by 1K, 1.5K and 2K.
+const TIER_TARGETS = { "1k": 1000, "1.5k": 1500, "2k": 2000 };
 
 const tierPixels = (tier: string) => (tier.endsWith("K") ? Number.parseFloat(tier) * 1000 : Number(tier));
 
