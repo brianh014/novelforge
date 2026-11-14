@@ -2,12 +2,14 @@ import { z } from "zod";
 import { comfyImages } from "./comfyui";
 import { galleryRoutes } from "./gallery-routes";
 import { errorResponse, isLoopback, logged, NoFields, parseBody, type ServerContext, type ServerOptions } from "./http";
+import type { ImageAdapter } from "./image-adapter";
 import { imagePipeline } from "./image-pipeline";
 import { liveTurns } from "./live-turns";
 import { errorFields, log, setLogLevel } from "./logger";
 import { saveRoutes } from "./save-routes";
 import { MAX_IMPORT_BYTES, saveStore } from "./save-store";
 import { settingsRoutes } from "./settings-routes";
+import { OnlineImageProvider } from "./settings-store";
 import { turnRoutes } from "./turn-routes";
 import { relaunch, updater } from "./updater";
 import spa from "./web/index.html";
@@ -42,6 +44,12 @@ const MOST_PAGE_EVENT_BYTES = 1024;
 /** `?fresh=1` asks GitHub now, rather than within the last few hours. */
 const UpdateCheck = z.strictObject({ fresh: z.literal("1").optional() });
 
+/** Every online provider's adapter, from one given for all or from a list that names each. */
+const onlineAdapters = (given: ServerOptions["imageAdapter"]) =>
+  typeof given === "function"
+    ? (Object.fromEntries(OnlineImageProvider.options.map((provider) => [provider, given])) as Record<OnlineImageProvider, ImageAdapter>)
+    : given;
+
 /** Stops reading at the cap, as a Save's import needs the server's own limit to be huge. */
 async function cappedBody(req: Request) {
   let bytes = 0;
@@ -71,7 +79,7 @@ export function startServer(options: ServerOptions) {
   const local = comfyImages(settings, undefined, (problem) => (workflow.problem = problem));
   const images = imagePipeline(
     saves,
-    { openrouter: options.imageAdapter, local },
+    { ...onlineAdapters(options.imageAdapter), local },
     settings,
     options.writePicture ?? ((ask, style, _template, signal) => writePicturePrompt(options, ask, style, signal)),
   );

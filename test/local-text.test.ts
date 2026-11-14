@@ -198,7 +198,7 @@ test("a refused connection gives a wizard call the same message, and it works on
   expect(await failed.json()).toEqual({ error: expect.stringMatching(UNREACHABLE), failure: "retryable", input: "" });
 
   provider = fakeOpenAi([[delta('{"worldBrief":"A city of canals"}')]]);
-  settings.update({ textBaseUrl: provider.baseUrl });
+  settings.update({ textBaseUrl: provider.baseUrl, textModel: MODEL });
   expect((await pick()).status).toBe(200);
 });
 

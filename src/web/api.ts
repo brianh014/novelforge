@@ -5,7 +5,7 @@ import type { FailedTurn, LiveTurn } from "../live-turns";
 import type { LogLevel } from "../logger";
 // A Message as the story screen has it: the latest response carries its Choices, if it has any.
 import type { ImageTarget, PlayMode, Reply as Message, Save, SaveStore } from "../save-store";
-import type { SettingsChange } from "../settings-store";
+import type { ImageProfile, SettingsChange, TextProfile } from "../settings-store";
 import type { State, VisibleEdit } from "../state-applier";
 import type { Character, EnhanceField, PcDraft, WorldChoices, WorldField, WorldPc } from "../world-creation";
 
@@ -17,6 +17,12 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
   defaultLogLevel: LogLevel;
   hasTextApiKey: boolean;
   hasImageApiKey: boolean;
+  /** Each text server's and image provider's own settings, for switching to, without their keys. */
+  textProfiles: Record<string, Omit<TextProfile, "textApiKey">>;
+  imageProfiles: Record<string, Omit<ImageProfile, "imageApiKey">>;
+  /** The text server addresses and image providers that have a key saved. */
+  textKeysFor: string[];
+  imageKeysFor: string[];
   imagesReady: boolean;
   workflowProblem: string;
   /** Only the downloaded app, which has no window to close. A server keeps running for everyone. */
@@ -104,6 +110,10 @@ export const importSave = (file: File) =>
   });
 
 export const OPENROUTER_URL = "https://openrouter.ai/api/v1";
+// Google AI Studio's OpenAI-compatible address, so the Narrator reaches Gemini the way it reaches any other server.
+export const GOOGLE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
+// NanoGPT's direct API host, which allows longer requests than its website's.
+export const NANOGPT_URL = "https://api.nano-gpt.com/api/v1";
 
 export const getSettings = () => request<Settings>("/settings");
 
@@ -148,6 +158,8 @@ export async function drawComfyTest(prompt: string, signal: AbortSignal) {
   return { url: URL.createObjectURL(blob), fileSize: blob.size, ...stats };
 }
 
+export const getImageModels = (provider: "openrouter" | "wiro" | "google" | "nanogpt") =>
+  request<{ models: string[] }>(`/settings/image-models?provider=${provider}`).then(({ models }) => models);
 export const getTextModels = () => request<{ models: string[] }>("/settings/text-models").then(({ models }) => models);
 export const getTextHosts = (model: string) =>
   request<{ hosts: TextHost[] }>(`/settings/text-hosts?model=${encodeURIComponent(model)}`).then(({ hosts }) => hosts);

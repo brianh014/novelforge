@@ -15,7 +15,7 @@ const unused = async () => "unused";
 const workflow = (inputs: object, extra = {}) => JSON.stringify({ "1": { class_type: "Node", inputs: { text: "{{prompt}}", ...inputs }, ...extra } });
 
 const fill = async (inputs: object, change: Partial<ImagePayload> = {}) =>
-  (await fillWorkflow(workflow(inputs), { ...payload, ...change }, 7, unused, "1mp"))["1"]!.inputs;
+  (await fillWorkflow(workflow(inputs), { ...payload, ...change }, 7, unused, "1k"))["1"]!.inputs;
 
 test("each payload field reaches its placeholder", async () => {
   const inputs = await fill({
@@ -34,9 +34,9 @@ test("a placeholder that is the whole value keeps its number, as ComfyUI wants o
 });
 
 test("the width and height follow the resolution", async () => {
-  const graph = await fillWorkflow(workflow({ width: "{{width}}", height: "{{height}}" }), payload, 7, unused, "2mp");
+  const graph = await fillWorkflow(workflow({ width: "{{width}}", height: "{{height}}" }), payload, 7, unused, "2k");
 
-  expect(graph["1"]!.inputs).toMatchObject({ width: 1872, height: 1056 });
+  expect(graph["1"]!.inputs).toMatchObject({ width: 2736, height: 1536 });
 });
 
 test("a placeholder inside longer text joins it", async () => {
@@ -48,14 +48,14 @@ test.each([
   ["text that looks like another placeholder", "{{seed}} and {{negative_prompt}}"],
   ["a replacement pattern", "$& $1 $`"],
 ])("prompt text with %s stays plain text", async (_name, prompt) => {
-  const graph = await fillWorkflow(workflow({ text: "{{prompt}}!" }), { ...payload, prompt }, 7, unused, "1mp");
+  const graph = await fillWorkflow(workflow({ text: "{{prompt}}!" }), { ...payload, prompt }, 7, unused, "1k");
 
   expect(Object.keys(graph)).toEqual(["1"]);
   expect(graph["1"]!.inputs.text).toBe(`${prompt}!`);
 });
 
 test("only inputs are filled, so the Narrator's words can't change what a node is", async () => {
-  const graph = await fillWorkflow(workflow({}, { class_type: "{{prompt}}", _meta: { title: "{{prompt}}" } }), payload, 7, unused, "1mp");
+  const graph = await fillWorkflow(workflow({}, { class_type: "{{prompt}}", _meta: { title: "{{prompt}}" } }), payload, 7, unused, "1k");
 
   expect(graph["1"]).toMatchObject({ class_type: "{{prompt}}", _meta: { title: "{{prompt}}" } });
 });
@@ -112,7 +112,7 @@ async function withReferences(inputs: object, reference_images: ImagePayload["re
     stored.push(bytes);
     return `stored-${bytes[0]}`;
   };
-  const graph = await fillWorkflow(workflow(inputs), { ...payload, reference_images }, 7, store, "1mp");
+  const graph = await fillWorkflow(workflow(inputs), { ...payload, reference_images }, 7, store, "1k");
   return { inputs: graph["1"]!.inputs, stored };
 }
 

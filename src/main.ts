@@ -4,7 +4,7 @@ import { homedir, networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { fakeImages, fakeTextProvider } from "./fake-services";
-import { openRouterImages } from "./image-adapter";
+import { googleImages, imageModelLists, nanoGptImages, openRouterImages, wiroImages } from "./image-adapter";
 import { defaultLevelFor, log, startLog } from "./logger";
 import { startServer } from "./rest-api";
 import { settingsStore } from "./settings-store";
@@ -67,7 +67,22 @@ const server = startServer({
   savesDir: join(dataDir, "Saves"),
   settings,
   textProvider: fake ? fakeTextProvider : textProvider(settings),
-  imageAdapter: fake ? fakeImages : openRouterImages(settings, "https://openrouter.ai/api/v1"),
+  imageAdapter: fake
+    ? fakeImages
+    : {
+        openrouter: openRouterImages(settings, "https://openrouter.ai/api/v1"),
+        wiro: wiroImages(settings, "https://api.wiro.ai/v1"),
+        google: googleImages(settings, "https://generativelanguage.googleapis.com/v1"),
+        nanogpt: nanoGptImages(settings, "https://api.nano-gpt.com/api/v1"),
+      },
+  imageModels: fake
+    ? async () => ["fake-images", "fake/other-images"]
+    : imageModelLists(settings, {
+        openRouter: "https://openrouter.ai/api/v1",
+        wiro: "https://api.wiro.ai/v1",
+        google: "https://generativelanguage.googleapis.com/v1beta",
+        nanoGpt: "https://api.nano-gpt.com/api/v1",
+      }),
   dice: () => randomInt(1, 21),
   nearMissMargin: z.coerce
     .number()

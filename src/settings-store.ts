@@ -21,6 +21,10 @@ const FamilyPicks = z.object({
 });
 const PicksByFamily = z.partialRecord(Family, FamilyPicks);
 
+/** The image providers reached online, each with its own Image Adapter and model list. */
+export const OnlineImageProvider = z.enum(["openrouter", "wiro", "google", "nanogpt"]);
+export type OnlineImageProvider = z.infer<typeof OnlineImageProvider>;
+
 export const SettingsUpdate = z
   .object({
     textBaseUrl: z.url({ protocol: /^https?$/ }),
@@ -41,7 +45,7 @@ export const SettingsUpdate = z
     textRecentMessages: z.number().int().min(40).max(400),
     // A Question's answer over this many words is retried. Not below the 80 the prompt asks for.
     answerRejectWords: z.number().int().min(80).max(1000),
-    imageProvider: z.enum(["openrouter", "local"]),
+    imageProvider: z.enum([...OnlineImageProvider.options, "local"]),
     imageModel: z.string(),
     imageApiKey: z.string(),
     imagesEnabled: z.boolean(),
@@ -51,10 +55,10 @@ export const SettingsUpdate = z
     drawScenes: z.boolean(),
     // On, a portrait is drawn again, keeping its face, whenever a Turn changes how that person looks.
     updatePortraits: z.boolean(),
-    // In megapixels, as each shape of image gets the same area. Settings from before name a video size, and 4K is too costly to keep.
+    // By the 1K, 1.5K and 2K that image providers use, each the area of a square that wide. Settings from before name a video size or megapixels.
     imageResolution: z.preprocess(
-      (value) => ({ "480p": "0.5mp", "720p": "1mp", "1080p": "2mp", "4k": "2mp" })[value as string] ?? value,
-      z.enum(["0.5mp", "1mp", "2mp"]),
+      (value) => ({ "480p": "0.5k", "720p": "1k", "1080p": "1.5k", "4k": "2k", "0.5mp": "0.5k", "1mp": "1k", "2mp": "1.5k" })[value as string] ?? value,
+      z.enum(["0.5k", "1k", "1.5k", "2k"]),
     ),
     comfyUrl: z.url({ protocol: /^https?$/ }),
     comfyFamily: Family,
@@ -91,6 +95,37 @@ export const SettingsUpdate = z
 
 export type SettingsChange = z.infer<typeof SettingsUpdate>;
 
+// What belongs to a text server or an image provider, put away on a switch so switching back finds it all again.
+const TextProfile = SettingsUpdate.pick({
+  textApiKey: true,
+  textModel: true,
+  textRouting: true,
+  textHost: true,
+  textHostFallback: true,
+  textMaxTokens: true,
+  textReplyMinutes: true,
+  textRecentMessages: true,
+});
+const ImageProfile = SettingsUpdate.pick({ imageApiKey: true, imageModel: true, imageResolution: true });
+const TEXT_TIED = Object.keys(TextProfile.shape) as (keyof typeof TextProfile.shape)[];
+const IMAGE_TIED = Object.keys(ImageProfile.shape) as (keyof typeof ImageProfile.shape)[];
+// By text server address and by image provider. Kept out of SettingsUpdate, so no request can set one, and one that won't read is
+// dropped rather than breaking every request.
+const PutAway = z.object({
+  textProfiles: z.record(z.string(), TextProfile.catch({})).catch({}),
+  imageProfiles: z.record(z.string(), ImageProfile.catch({})).catch({}),
+});
+export type TextProfile = z.infer<typeof TextProfile>;
+export type ImageProfile = z.infer<typeof ImageProfile>;
+
+const tied = <T extends object>(from: T, fields: (keyof T)[]) => Object.fromEntries(fields.map((field) => [field, from[field]]));
+
+const without = <T>(profiles: Record<string, T>, at: string) => Object.fromEntries(Object.entries(profiles).filter(([key]) => key !== at));
+
+/** Each field of `fields` the change leaves out taken from `own`, the profile of the server or provider switched to. */
+const restored = (change: object, own: object, fields: string[]) =>
+  Object.fromEntries(fields.filter((field) => !(field in change) && field in own).map((field) => [field, own[field as keyof typeof own]]));
+
 const defaults = {
   textBaseUrl: "https://openrouter.ai/api/v1",
   textApiKey: "",
@@ -116,7 +151,7 @@ const defaults = {
   comfyUrl: "http://127.0.0.1:8188",
   comfyFamily: "sd",
   comfySdBase: "sdxl",
-  imageResolution: "1mp",
+  imageResolution: "1k",
   comfyCheckpoint: "",
   comfyDiffusionModel: "",
   comfyTextEncoder: "",
@@ -158,7 +193,9 @@ export function settingsStore(path: string) {
     }
     // A key must only ever reach the server it was entered for, and that server is no longer known.
     if ("textBaseUrl" in fields && !("textBaseUrl" in kept)) delete kept.textApiKey;
-    return kept as SettingsChange;
+    // Likewise a provider this build doesn't know, from a newer one, say, which would read as OpenRouter and get the other's key.
+    if ("imageProvider" in fields && !("imageProvider" in kept)) delete kept.imageApiKey;
+    return { ...(kept as SettingsChange), ...PutAway.parse(fields) };
   };
 
   const read = () => {
@@ -167,7 +204,13 @@ export function settingsStore(path: string) {
     const typed = stored.comfySteps != null || stored.comfyCfg != null;
     // The Stage box is no longer offered (its code is kept), so a stored pick of it reads as Prose.
     if (stored.chatStyle === "stage") stored.chatStyle = "prose";
-    return { ...defaults, comfyDefaults: !typed, ...stored };
+    const all = { ...defaults, comfyDefaults: !typed, ...stored };
+    // What is in use is filed too, which a file from before the profiles has only as the settings in use.
+    return {
+      ...all,
+      textProfiles: { ...all.textProfiles, [all.textBaseUrl]: tied(all, TEXT_TIED) as TextProfile },
+      imageProfiles: { ...all.imageProfiles, [all.imageProvider]: tied(all, IMAGE_TIED) as ImageProfile },
+    };
   };
 
   return {
@@ -176,8 +219,20 @@ export function settingsStore(path: string) {
     update(change: SettingsChange) {
       const current = read();
       const next = { ...current, ...change };
-      // A key must only ever reach the server it was entered for.
-      if (next.textBaseUrl !== current.textBaseUrl && change.textApiKey === undefined) next.textApiKey = "";
+      // A switch puts the old server's settings away and takes out the new one's. One never used starts with no key, as a key must only
+      // ever reach the server it was entered for, and no model, as each names its models its own way. The rest carries over.
+      if (next.textBaseUrl !== current.textBaseUrl) {
+        // Over the blanks, so a profile that lost its key, say one that wouldn't read, still never hands on the old server's.
+        const own = { textApiKey: "", textModel: "", textHost: "", ...current.textProfiles[next.textBaseUrl] };
+        Object.assign(next, restored(change, own, TEXT_TIED));
+      }
+      if (next.imageProvider !== current.imageProvider) {
+        const own = { imageApiKey: "", imageModel: "", ...current.imageProfiles[next.imageProvider] };
+        Object.assign(next, restored(change, own, IMAGE_TIED));
+      }
+      // Filed last, so the newest is the one used last, which is how Settings finds the last local server.
+      next.textProfiles = { ...without(current.textProfiles, next.textBaseUrl), [next.textBaseUrl]: tied(next, TEXT_TIED) as TextProfile };
+      next.imageProfiles = { ...without(current.imageProfiles, next.imageProvider), [next.imageProvider]: tied(next, IMAGE_TIED) as ImageProfile };
       if (next.logLevel === null) delete next.logLevel;
       // shortcut: mode does nothing on Windows, so the key has the folder's permissions there, tighten it if Settings ever hold more than local secrets.
       writeFileSync(`${path}.unfinished`, JSON.stringify(next, null, 2), { mode: 0o600 });

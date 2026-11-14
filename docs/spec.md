@@ -391,7 +391,7 @@ The player pastes a workflow from ComfyUI's Export (API) into Settings. It's per
 | Placeholder | Value |
 |---|---|
 | `{{prompt}}` (required), `{{negative_prompt}}`, `{{art_style}}`, `{{aspect_ratio}}` | The image payload's text. `{{prompt}}` doesn't include the Art Style |
-| `{{width}}`, `{{height}}` | About one megapixel at the aspect ratio, in multiples of 16 |
+| `{{width}}`, `{{height}}` | The Resolution setting's area at the aspect ratio, in multiples of 16 |
 | `{{seed}}` | A new random number per image |
 | `{{npc_1}}`, `{{npc_2}}`, ... | Portraits of NPCs marked in this image who have one, in the order they're marked, so a number is a position and not a set person |
 | `{{previous_scene}}`, `{{pc}}` | The previous Scene Image, and the PC's portrait when the PC is marked in this image |

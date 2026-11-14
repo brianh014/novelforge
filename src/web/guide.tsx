@@ -84,12 +84,22 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
                 Open <b>Keys</b>, choose <b>Create Key</b> and copy the key. It's shown only once, so keep a copy somewhere safe.
               </li>
               <li>
-                In <b>Settings → Text</b>, paste it into <b>Text API key</b>, choose a <b>Text model</b> and press <b>Test text</b>. A good balance of cost and
-                writing right now is MiMo V2.6 Pro (<code>xiaomi/mimo-v2.6-pro</code>).
+                In <b>Settings → Text</b>, paste it into <b>Text API key</b>, choose a <b>Text model</b> and press <b>Test text</b>. Two good choices right now
+                write about as well as each other: MiMo V2.6 Pro (<code>xiaomi/mimo-v2.6-pro</code>), a good balance of cost and writing, and DeepSeek V4.1
+                Flash (<code>deepseek/deepseek-v4.1-flash</code>), which costs much less a Turn. Try both on the same story and keep the one you like.
               </li>
             </ol>
             You can also choose which of its providers serves the model, and how it routes. Staying on one provider keeps its prompt cache, which makes each
             Turn cheaper.
+          </li>
+          <li>
+            <b>Google AI Studio</b>, which has a free key: sign in at <code>aistudio.google.com</code> with a Google account and choose <b>Get API key</b>.
+            Choose <b>Google AI Studio</b> in <b>Settings → Text</b>, paste the key, save, then pick a Gemini Flash model. On the free tier Google may use what
+            you send, your story among it, to improve its products, and it limits how many Turns a day you get.
+          </li>
+          <li>
+            <b>NanoGPT</b>, which sells hundreds of models on one key and one balance, like OpenRouter: sign up at <code>nano-gpt.com</code>, add a balance,
+            create an API key, then choose <b>NanoGPT</b> in <b>Settings → Text</b>, paste the key, save, and pick a model.
           </li>
           <li>
             <b>Any other OpenAI-compatible service</b>, such as DeepInfra: choose <b>Local / OpenAI server</b>, give its address (for DeepInfra,{" "}
@@ -117,6 +127,21 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           <li>
             <b>OpenRouter</b>: for when you have no graphics card for ComfyUI. Paste the same key you use for the story into <b>Image API key</b> and choose an
             image AI: try Seedream 5.5, or Nano Banana 2.1 for a little better quality.
+          </li>
+          <li>
+            <b>Google AI Studio</b>: the same key as for the story draws with Nano Banana, but pictures aren't free, so turn on billing for it in AI Studio
+            first.
+          </li>
+          <li>
+            <b>NanoGPT</b>: the same key as for the story draws with any of its image AIs, Seedream and Nano Banana among them. NanoGPT says the services it
+            sends pictures to may keep the prompts and pictures.
+          </li>
+          <li>
+            <b>Wiro</b>: the same, with a key from{" "}
+            <a href="https://wiro.ai" target="_blank" rel="noreferrer">
+              wiro.ai
+            </a>
+            . Set its project to <b>API key only</b>, and choose an image AI from the list, such as bytedance/seedream-5-5.
           </li>
         </ul>
         <p>
@@ -376,6 +401,10 @@ const SECTIONS: { slug: string; name: string; body: ReactNode }[] = [
           <li>
             <b>Text provider, Server address, Text model, Text API key</b>: where your Narrator is. With OpenRouter, <b>Provider</b> and <b>Routing</b> choose
             who serves the model. See {link("models", "Choosing your AI")}.
+          </li>
+          <li>
+            Each provider keeps its own key, model and settings, so switching back brings them back. Where a provider lists its models, choose{" "}
+            <b>Type a model name…</b> at the end of the list for one it leaves out, and {tool(ChoicesIcon, "Choose from the list")} to go back.
           </li>
           <li>
             <b>Extra Narrator Instructions</b>: your own guidance for the Narrator in every story, such as "Keep replies short" or "No romance".

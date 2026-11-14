@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Dice } from "./check-resolver";
 import { InvalidWorkflow } from "./comfy-workflow";
-import type { ImageAdapter } from "./image-adapter";
+import type { ImageAdapter, ImageModelList } from "./image-adapter";
 import type { ImagePipeline, PictureWriter } from "./image-pipeline";
 import { LONG_TEXT } from "./limits";
 import type { liveTurns } from "./live-turns";
@@ -19,7 +19,7 @@ import {
   SaveNotFound,
   StaleTurn,
 } from "./save-store";
-import type { SettingsStore } from "./settings-store";
+import type { OnlineImageProvider, SettingsStore } from "./settings-store";
 import { type TextProvider, TurnFailed } from "./turn-engine";
 import { UpdateFailed } from "./updater";
 
@@ -28,7 +28,13 @@ import { UpdateFailed } from "./updater";
 export type ServerOptions = {
   savesDir: string;
   textProvider: TextProvider;
-  imageAdapter: ImageAdapter;
+  /**
+   * One adapter for every online provider, as tests and --fake use, or one per provider. A list must name them all, so a provider
+   * added later can't fall back to another's adapter and send it that provider's key.
+   */
+  imageAdapter: ImageAdapter | Record<OnlineImageProvider, ImageAdapter>;
+  /** For the Image model dropdown. Without it, Settings lists none and keeps the text box. */
+  imageModels?: ImageModelList;
   /** Loopback unless the caller opens the app to the network, which has no accounts to protect it. */
   hostname?: string;
   dice: Dice;

@@ -117,11 +117,14 @@ test("a ratio the model doesn't list is dropped too", async () => {
 });
 
 test.each([
-  ["0.5mp", ["768", "1K", "2K"], "768"],
-  ["0.5mp", ["1K", "2K"], "1K"],
-  ["1mp", ["768", "1K", "1.5K", "2K", "4K"], "1K"],
-  ["2mp", ["1K", "1.5K", "2K", "4K"], "2K"],
-  ["1mp", ["2K", "4K"], "2K"],
+  ["0.5k", ["512", "1K", "2K"], "512"],
+  ["0.5k", ["1K", "2K"], "1K"],
+  ["0.5k", ["", "1k", "2k"], "1k"],
+  ["1k", ["768", "2K"], "768"],
+  ["1k", ["768", "1K", "1.5K", "2K", "4K"], "1K"],
+  ["1.5k", ["1K", "1.5K", "2K", "4K"], "1.5K"],
+  ["2k", ["1K", "1.5K", "2K", "4K"], "2K"],
+  ["1k", ["2K", "4K"], "2K"],
 ] as const)("%s on a model with %j asks for %s", async (imageResolution, values, resolution) => {
   settings.update({ imageResolution });
   const adapter = adapterFor(listing(["text"], { resolution: { type: "enum", values } }));

@@ -11,6 +11,9 @@ import {
   getSave,
   getSettings,
   getTextHosts,
+  getImageModels,
+  GOOGLE_URL,
+  NANOGPT_URL,
   getTextModels,
   OPENROUTER_URL,
   type PlayMode,
@@ -21,6 +24,7 @@ import {
   type TextHost,
   type TextTest,
 } from "./api";
+import { ChoicesIcon } from "./icons";
 import { BookTabs, MenuRibbon, Sheet } from "./menu";
 import { UpdatesSection } from "./new-version";
 import { PlayModePicker } from "./play-choices";
@@ -34,9 +38,10 @@ const LOG_LEVELS = [
   ["verbose", "Verbose"],
 ] as const;
 const RESOLUTIONS = [
-  ["0.5mp", "0.5 MP (704 × 704 portrait, 944 × 528 scene)"],
-  ["1mp", "1 MP (1024 × 1024 portrait, 1360 × 768 scene)"],
-  ["2mp", "2 MP (1408 × 1408 portrait, 1872 × 1056 scene)"],
+  ["0.5k", "0.5K (512 × 512 portrait, 688 × 384 scene)"],
+  ["1k", "1K (1024 × 1024 portrait, 1360 × 768 scene)"],
+  ["1.5k", "1.5K (1536 × 1536 portrait, 2048 × 1152 scene)"],
+  ["2k", "2K (2048 × 2048 portrait, 2736 × 1536 scene)"],
 ] as const;
 const THIS_STORY = "This story";
 /** Not a setting, so outside the form and its Save. */
@@ -157,6 +162,54 @@ function ModelSelect({ label, value, list, onChange }: { label: string; value: s
       // A saved model that's gone stays as it is, with a notice, until the player changes it.
       choices={[...new Set([value, ...list])].filter(Boolean).map((model) => ({ value: model, label: model }))}
       onChange={onChange}
+    />
+  );
+}
+
+// The named text providers, by the address each is reached at.
+const TEXT_PROVIDERS = { openrouter: OPENROUTER_URL, google: GOOGLE_URL, nanogpt: NANOGPT_URL };
+
+// Not a model id, as those always hold a letter.
+const TYPE_OWN = "\u0000type";
+
+/**
+ * A provider's models to choose from, and a way to type one the list leaves out, such as a Wiro model past its first 500. With
+ * no list, or one typed, it's a text box. Give it a `key` per provider, so a switch shows the new one's list.
+ */
+function ModelField({ label, value, list, onChange }: { label: string; value: string; list?: string[]; onChange: (value: string) => void }) {
+  const [typing, setTyping] = useState(false);
+  if (!list?.length || typing) {
+    return (
+      <div className="typed-model">
+        <label>
+          {label}
+          <input value={value} onChange={(e) => onChange(e.target.value)} />
+        </label>
+        {!!list?.length && (
+          <button
+            type="button"
+            className="icon"
+            title="Choose from the list"
+            aria-label={`Choose the ${label.toLowerCase()} from the list`}
+            onClick={() => setTyping(false)}
+          >
+            {ChoicesIcon}
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <Picker
+      label={label}
+      empty="Choose a model"
+      value={value}
+      // A typed model the list leaves out stays as it is until the player changes it.
+      choices={[
+        ...[...new Set([value, ...list])].filter(Boolean).map((model) => ({ value: model, label: model })),
+        { value: TYPE_OWN, label: "Type a model name…" },
+      ]}
+      onChange={(chosen) => (chosen === TYPE_OWN ? setTyping(true) : onChange(chosen))}
     />
   );
 }
@@ -340,7 +393,7 @@ function WorkflowGuide() {
         <dt>
           <code>{"{{aspect_ratio}}"}</code>, <code>{"{{width}}"}</code>, <code>{"{{height}}"}</code>
         </dt>
-        <dd>The shape, such as 16:9, and a size of about one megapixel in multiples of 16. For SD 1.5, type your own size instead.</dd>
+        <dd>The shape, such as 16:9, and a size at the Resolution below, in multiples of 16. For SD 1.5, type your own size instead.</dd>
         <dt>
           <code>{"{{seed}}"}</code>
         </dt>
@@ -500,10 +553,10 @@ function ComfySettings({ draft, saved, set }: { draft: Settings; saved: Settings
   const nextLoraKey = useRef(0);
   const { comfySdBase, imageResolution } = draft;
   const tooBig =
-    comfySdBase === "sd15" && imageResolution !== "0.5mp"
-      ? "SD 1.5 models are trained for small images, so this resolution may double faces and figures. 0.5 MP suits them best."
-      : comfySdBase === "sdxl" && imageResolution === "2mp"
-        ? "SDXL models are trained for about 1 MP, so 2 MP may repeat subjects. 1 MP suits them best."
+    comfySdBase === "sd15" && imageResolution !== "0.5k"
+      ? "SD 1.5 models are trained for small images, so this resolution may double faces and figures. 0.5K suits them best."
+      : comfySdBase === "sdxl" && (imageResolution === "1.5k" || imageResolution === "2k")
+        ? "SDXL models are trained for about 1K, so larger sizes may repeat subjects. 1K suits them best."
         : "";
 
   useEffect(() => {
@@ -813,7 +866,9 @@ function InstallSettings({
   const [imageKey, setImageKey] = useState("");
   const set = (change: Partial<Settings>) => setDraft({ ...draft, ...change });
 
-  const local = draft.textBaseUrl !== OPENROUTER_URL;
+  // An address that is one of the named providers picks it, and any other is a local or OpenAI-compatible server.
+  const textChoice = (Object.entries(TEXT_PROVIDERS).find(([, url]) => url === draft.textBaseUrl)?.[0] ?? "local") as keyof typeof TEXT_PROVIDERS | "local";
+  const local = textChoice === "local";
   const addressSaved = draft.textBaseUrl === saved.textBaseUrl;
   // Not all servers list their models, so those keep the text box.
   const [models, setModels] = useState<string[]>();
@@ -828,8 +883,22 @@ function InstallSettings({
     };
   }, [saved]);
 
+  // A provider that doesn't answer keeps the text box.
+  const [imageModels, setImageModels] = useState<string[]>();
+
+  useEffect(() => {
+    setImageModels(undefined);
+    if (draft.imageProvider === "local") return;
+    let current = true;
+    const show = (list: string[]) => current && setImageModels(list);
+    getImageModels(draft.imageProvider).then(show, () => show([]));
+    return () => {
+      current = false;
+    };
+  }, [draft.imageProvider, saved]);
+
   const [hosts, setHosts] = useState<TextHost[]>([]);
-  const hostsListed = !local && addressSaved && !!models?.includes(draft.textModel);
+  const hostsListed = textChoice === "openrouter" && addressSaved && !!models?.includes(draft.textModel);
 
   useEffect(() => {
     setHosts([]);
@@ -847,23 +916,32 @@ function InstallSettings({
   // Hosts differ by model, so the old one may not offer a new one.
   const chooseModel = (textModel: string) => set({ textModel, textHost: textModel === draft.textModel ? draft.textHost : "" });
 
-  const losesKey = saved.hasTextApiKey && draft.textBaseUrl !== saved.textBaseUrl && !textKey.trim();
+  // A server or provider switched to brings back its own settings, and one never used starts with no model, as each names them its own way.
+  const switchText = (provider: keyof typeof TEXT_PROVIDERS | "local") => {
+    // Local brings back the last local server used, if any.
+    const local = Object.keys(saved.textProfiles).findLast((at) => !Object.values(TEXT_PROVIDERS).includes(at)) ?? "";
+    const textBaseUrl = provider === "local" ? local : TEXT_PROVIDERS[provider];
+    set({ textBaseUrl, ...(saved.textProfiles[textBaseUrl] ?? { textModel: "", textHost: "" }) });
+  };
+  const needsKey = saved.hasTextApiKey && draft.textBaseUrl !== saved.textBaseUrl && !saved.textKeysFor.includes(draft.textBaseUrl) && !textKey.trim();
   const keyHint = (stored: boolean) => (stored ? "Saved. Type a new key to replace it." : "None saved");
 
   const { busy, submit, feedback } = useSubmit(async () => {
-    const { hasTextApiKey, hasImageApiKey, workflowProblem, ...change } = draft;
+    const { hasTextApiKey, hasImageApiKey, textKeysFor, imageKeysFor, textProfiles, imageProfiles, workflowProblem, ...change } = draft;
     const next = await saveSettings({
       ...change,
       ...(textKey.trim() && { textApiKey: textKey.trim() }),
       // Its field is hidden for Local, and a key the player can't see must not be stored.
-      ...(draft.imageProvider === "openrouter" && imageKey.trim() && { imageApiKey: imageKey.trim() }),
+      ...(draft.imageProvider !== "local" && imageKey.trim() && { imageApiKey: imageKey.trim() }),
     });
     setSaved(next);
     setDraft(next);
     setTextKey("");
     setImageKey("");
     applyLook(next);
-    return saved.hasTextApiKey && !next.hasTextApiKey ? "Saved. The text API key was cleared because the server changed." : "Saved.";
+    // Most local servers need no key, so only an online provider is asked for one.
+    const online = Object.values(TEXT_PROVIDERS).includes(next.textBaseUrl);
+    return online && saved.hasTextApiKey && !next.hasTextApiKey ? "Saved. This server has no text API key yet, so enter one for it." : "Saved.";
   });
 
   return frame(
@@ -882,12 +960,14 @@ function InstallSettings({
         <h2>Text</h2>
         <Picker
           label="Text provider"
-          value={local ? "local" : "openrouter"}
+          value={textChoice}
           choices={[
             { value: "openrouter", label: "OpenRouter" },
+            { value: "google", label: "Google AI Studio" },
+            { value: "nanogpt", label: "NanoGPT" },
             { value: "local", label: "Local / OpenAI server" },
           ]}
-          onChange={(provider) => set({ textBaseUrl: provider === "local" ? "" : OPENROUTER_URL })}
+          onChange={switchText}
         />
         {local && (
           <label>
@@ -901,23 +981,16 @@ function InstallSettings({
             />
           </label>
         )}
-        {addressSaved && models?.length ? (
-          <Picker
-            label="Text model"
-            empty="Choose a model"
-            value={draft.textModel}
-            choices={models.map((model) => ({ value: model, label: model }))}
-            onChange={chooseModel}
-          />
-        ) : (
-          <label>
-            Text model
-            <input value={draft.textModel} onChange={(e) => chooseModel(e.target.value)} />
-          </label>
-        )}
+        <ModelField key={draft.textBaseUrl} label="Text model" value={draft.textModel} list={addressSaved ? models : undefined} onChange={chooseModel} />
         {local && !addressSaved && <p className="muted">Save the address to choose from this server's models.</p>}
+        {textChoice === "google" && (
+          <p className="muted">
+            {!addressSaved && "Save your key to choose from Google's models. "}
+            Its free key needs only a Google account, but on the free tier Google may use what you send, your story among it, to improve its products.
+          </p>
+        )}
         {addressSaved && models?.length === 0 && <p className="muted">No models listed. Make sure the server is running, or type the model's name.</p>}
-        {!local && (
+        {textChoice === "openrouter" && (
           <>
             <Picker
               label="Provider"
@@ -956,15 +1029,15 @@ function InstallSettings({
           <input
             type="password"
             autoComplete="new-password"
-            placeholder={keyHint(saved.hasTextApiKey)}
+            placeholder={keyHint(saved.textKeysFor.includes(draft.textBaseUrl))}
             value={textKey}
             onChange={(e) => setTextKey(e.target.value)}
           />
         </label>
-        {losesKey && (
+        {needsKey && (
           <p className="notice">
-            A key only goes to the server it was entered for, so saving this new server clears the text API key. Enter a key above to use one with the new
-            server.
+            A key only goes to the server it was entered for, so this server needs its own. Enter it above. The old server's key is kept for when you switch
+            back.
           </p>
         )}
         <label>
@@ -1073,9 +1146,12 @@ function InstallSettings({
           value={draft.imageProvider}
           choices={[
             { value: "openrouter", label: "OpenRouter" },
+            { value: "wiro", label: "Wiro" },
+            { value: "google", label: "Google AI Studio" },
+            { value: "nanogpt", label: "NanoGPT" },
             { value: "local", label: "Local (ComfyUI)" },
           ]}
-          onChange={(imageProvider) => set({ imageProvider })}
+          onChange={(imageProvider) => set({ imageProvider, ...(saved.imageProfiles[imageProvider] ?? { imageModel: "" }) })}
         />
         <Picker
           label="Resolution"
@@ -1083,22 +1159,28 @@ function InstallSettings({
           choices={RESOLUTIONS.map(([value, label]) => ({ value, label }))}
           onChange={(imageResolution) => set({ imageResolution })}
         />
-        {draft.imageProvider === "openrouter" ? (
+        {draft.imageProvider !== "local" ? (
           <>
             <p className="muted">
-              OpenRouter uses the nearest size your model offers, so the image may not match exactly. Larger sizes can cost more, and some models have no size
-              choice, so this changes nothing for them.
+              {{ openrouter: "OpenRouter", wiro: "Wiro", google: "Google", nanogpt: "NanoGPT" }[draft.imageProvider]} uses the nearest size your model offers,
+              so the image may not match exactly. Larger sizes can cost more, and some models have no size choice, so this changes nothing for them.
+              {draft.imageProvider === "wiro" && " Set your Wiro project to API key only, not signatures."}
+              {draft.imageProvider === "google" &&
+                " Pictures aren't on Google's free tier, so its key needs billing turned on. Save your key to choose a model."}
             </p>
-            <label>
-              Image model
-              <input value={draft.imageModel} onChange={(e) => set({ imageModel: e.target.value })} />
-            </label>
+            <ModelField
+              key={draft.imageProvider}
+              label="Image model"
+              value={draft.imageModel}
+              list={imageModels}
+              onChange={(imageModel) => set({ imageModel })}
+            />
             <label>
               Image API key
               <input
                 type="password"
                 autoComplete="new-password"
-                placeholder={keyHint(saved.hasImageApiKey)}
+                placeholder={keyHint(saved.imageKeysFor.includes(draft.imageProvider))}
                 value={imageKey}
                 onChange={(e) => setImageKey(e.target.value)}
               />

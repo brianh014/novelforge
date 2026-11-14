@@ -443,8 +443,8 @@ export function imagePipeline(
      */
     redraw(id: string, target: ImageTarget, messageId: number, prompt: string | PictureAsk) {
       const keepFace = typeof prompt !== "string" && (target.kind === "portrait" || target.kind === "original");
-      // OpenRouter's image models take the reference too; a ComfyUI workflow or an SD checkpoint may not.
-      const takesFace = settings.read().imageProvider === "openrouter" || usesPortraits(settings.read());
+      // OpenRouter's and Wiro's image models take the reference too; a ComfyUI workflow or an SD checkpoint may not.
+      const takesFace = settings.read().imageProvider !== "local" || usesPortraits(settings.read());
       const was = keepFace && takesFace ? saves.originalPrompt(id, target.ref) : undefined;
       // The player's own prompt for a portrait that has been replaced draws from the original's face too, as nothing else holds it.
       const fromOriginal = typeof prompt === "string" && target.kind === "portrait" && takesFace && !!saves.original(id, target.ref);

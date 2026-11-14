@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { parseWorkflow } from "./comfy-workflow";
 import { comfyModels, randomSeed } from "./comfyui";
 import { chosenModels, drawSteps, localIsSetUp } from "./graph-builder";
@@ -5,9 +6,16 @@ import { imageResponse, parseBody, PromptRequest, routes, type ServerContext } f
 import type { ImageAdapter } from "./image-adapter";
 import { defaultLogLevel, errorFields, errorType, log, setLogLevel } from "./logger";
 import { estimateTokens } from "./lore-activation";
-import { type SettingsChange, SettingsUpdate } from "./settings-store";
+import { OnlineImageProvider, type SettingsChange, SettingsUpdate } from "./settings-store";
 import { textHosts, textModels } from "./text-provider";
 import { ContentRefused, TextProviderFailed } from "./turn-engine";
+
+// Only the online providers have a list. ComfyUI's models come from /settings/comfy-models.
+const ImageModelsQuery = z.object({ provider: OnlineImageProvider });
+
+/** `profiles` with each one's key taken out. */
+const unkeyed = <T extends object>(profiles: Record<string, T>, key: keyof T) =>
+  Object.fromEntries(Object.entries(profiles).map(([at, { [key]: _key, ...rest }]) => [at, rest])) as Record<string, Omit<T, typeof key>>;
 
 /** Settings and their tests. `local` is the ComfyUI adapter, and `workflow` how its last job went, which only the screen shows. */
 export function settingsRoutes({ options, images }: ServerContext, local: ImageAdapter, workflow: { problem: string }) {
@@ -56,6 +64,8 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       fontSize,
       theme,
       logLevel,
+      textProfiles,
+      imageProfiles,
     } = settings.read();
     return {
       textBaseUrl,
@@ -64,6 +74,9 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       textHost,
       textHostFallback,
       hasTextApiKey: textApiKey !== "",
+      // Each server's and provider's own settings, for the form to switch to, and where a key is filed, but never the keys.
+      textProfiles: unkeyed(textProfiles, "textApiKey"),
+      textKeysFor: Object.keys(textProfiles).filter((at) => textProfiles[at]?.textApiKey),
       modelInstructions,
       imageInstructions,
       textMaxTokens,
@@ -73,6 +86,8 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
       imageProvider,
       imageModel,
       hasImageApiKey: imageApiKey !== "",
+      imageProfiles: unkeyed(imageProfiles, "imageApiKey"),
+      imageKeysFor: Object.keys(imageProfiles).filter((at) => imageProfiles[at]?.imageApiKey),
       imagesEnabled,
       openNewImages,
       drawScenes,
@@ -127,6 +142,13 @@ export function settingsRoutes({ options, images }: ServerContext, local: ImageA
     // Only ever the saved server, so a key can't reach an address that is still being typed.
     "/settings/text-models": {
       GET: async (req) => Response.json({ models: await textModels(settings, req.signal) }),
+    },
+    // Public catalogs, so the provider the form shows now is asked, saved or not.
+    "/settings/image-models": {
+      GET: async (req) => {
+        const { provider } = ImageModelsQuery.parse(Object.fromEntries(new URL(req.url).searchParams));
+        return Response.json({ models: (await options.imageModels?.(provider, req.signal)) ?? [] });
+      },
     },
     "/settings/text-hosts": {
       GET: async (req) => Response.json({ hosts: await textHosts(settings, new URL(req.url).searchParams.get("model") ?? "", req.signal) }),

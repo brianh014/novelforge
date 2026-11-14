@@ -4,7 +4,7 @@ import { buildGraph, type GraphChoices, type GraphRequest, type Graph, switchFam
 const sd: GraphChoices = {
   comfyFamily: "sd",
   comfySdBase: "sdxl",
-  imageResolution: "1mp",
+  imageResolution: "1k",
   comfyCheckpoint: "dream.safetensors",
   comfyDiffusionModel: "",
   comfyTextEncoder: "",
@@ -69,10 +69,11 @@ test("SD draws from an empty latent with the checkpoint's own model, CLIP and VA
 });
 
 test.each([
-  ["0.5mp", "16:9", 944, 528],
-  ["1mp", "16:9", 1360, 768],
-  ["2mp", "16:9", 1872, 1056],
-  ["1mp", "1:1", 1024, 1024],
+  ["0.5k", "16:9", 688, 384],
+  ["1k", "16:9", 1360, 768],
+  ["1.5k", "16:9", 2048, 1152],
+  ["2k", "16:9", 2736, 1536],
+  ["1k", "1:1", 1024, 1024],
 ] as const)("%s at %s is %i by %i, whichever the family", (imageResolution, aspect_ratio, width, height) => {
   const graph = buildGraph({ ...sd, imageResolution }, { ...request, aspect_ratio });
   const flux = buildGraph({ ...flux2, imageResolution }, { ...request, aspect_ratio });
