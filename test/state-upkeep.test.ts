@@ -269,7 +269,7 @@ test("State Upkeep doesn't move time in a Turn where the Narrator did, as it mov
 
   const log = await logOf(async () => expect((await turn(id)).ok).toBe(true), "info");
 
-  expect(store().latestState(id).storyTime).toEqual({ day: 2, date: "2nd of Thaw", timeOfDay: "dawn" });
+  expect(store().latestState(id).storyTime).toMatchObject({ day: 2, date: "2nd of Thaw", timeOfDay: "dawn" });
   expect(store().latestState(id).scene.location).toBe("Ash's flat");
   // Not even offered, so its wrong time can't creep into the facts it rewrites; one given anyway is dropped.
   expect(upkeep.prompts.map((prompt) => prompt[0]!.content.includes("set_story_time"))).toEqual([false, false]);
@@ -372,7 +372,7 @@ test("State Upkeep may move time in a Turn where the Narrator didn't", async () 
   expect(upkeep.prompts[0]![0]!.content).toContain("set_story_time");
   // Named as the reply shows it, as on DeepSeek the clock sat at early afternoon through 30 rounds while the light went amber.
   expect(upkeep.prompts[0]![0]!.content).toContain("shows the light, a meal or the hour moved on");
-  expect(store().latestState(id).storyTime).toEqual({ day: 1, date: "1st of Thaw", timeOfDay: "night" });
+  expect(store().latestState(id).storyTime).toMatchObject({ day: 1, date: "1st of Thaw", timeOfDay: "night" });
 });
 
 test("an operation State Upkeep may not give, or a broken one, is dropped and the rest kept, with no second call", async () => {
@@ -438,4 +438,20 @@ test("State Upkeep is sent the reply before, so a description two replies agree 
   await turn(id, "I shake off the rain.");
 
   expect(JSON.parse(upkeep.prompts[1]!.at(-1)!.content).previous_reply).toBe("Ash walks home in the rain.");
+});
+
+test("an Edit that adds to the response gives State Upkeep only the added words, after the response, so it records nothing twice", async () => {
+  const GIVEN = "Ash hands the key to Owen.";
+  const { upkeep } = play([narration(GIVEN), narration(`${GIVEN}\n\nA gull cries.`)], [upkept(), upkept()]);
+  const id = createSave();
+  expect((await turn(id)).ok).toBe(true);
+
+  const edited = await fetch(new URL(`/saves/${id}/messages/2/edit`, server.url), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: `${GIVEN}\n\nA gull cries.` }),
+  });
+
+  expect(edited.ok).toBe(true);
+  expect(JSON.parse(upkeep.prompts[1]!.at(-1)!.content)).toMatchObject({ previous_reply: GIVEN, reply: "A gull cries." });
 });

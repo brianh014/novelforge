@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { PromptStyle } from "./graph-builder";
-import { type ImagePipeline, pcLooks, pcNow, restyledBy, visibleNpcs } from "./image-pipeline";
+import { type ImagePipeline, missingFeatures, pcLooks, pcNow, restyledBy, visibleNpcs } from "./image-pipeline";
 import { countWords, LONG_TEXT, withinLimit } from "./limits";
 import { errorType, log } from "./logger";
 import { activateLore } from "./lore-activation";
@@ -490,6 +490,25 @@ const editReply = z.object({
 const MARKS =
   /\b(?:soot\w*|smudge\w*|smear\w*|stain\w*|streak\w*|grime\w*|dirt\w*|mud\w*|ash|ashes|blood\w*|bruise\w*|scar\w*|scratch\w*|cut|cuts|wound\w*|mark|marks|marked)\b/g;
 
+/**
+ * Refuses a Cover's or portrait's prompt that came back plainly garbled, as DeepSeek wrote one in two scripts with a note to
+ * itself and a stray brace, and its portrait of a boy was drawn as a bare-chested man. Only these fixed reasons are logged.
+ * shortcut: no floor on its length, as tests and the fake Narrator write short prompts; add one if cut-off prompts get drawn.
+ */
+const refuseGarbled = (prompt: string, context: z.RefinementCtx) => {
+  const faults: [boolean, string][] = [
+    // Another script's letter touching a Latin one, as in "and张", so a word in another script, set apart, still passes.
+    [/\p{Script=Latin}[^\P{L}\p{Script=Latin}]|[^\P{L}\p{Script=Latin}]\p{Script=Latin}/u.test(prompt), "letters of another script"],
+    // The model's asides only, as a bare "I" is also "World War I".
+    [/\b(?:let['’]s|let me|I['’]ll|I need|I should|I will)\b/i.test(prompt), "a note to yourself"],
+    // Not a hex colour, as an art style or Image Instructions may name one.
+    [/[{}]|#(?![0-9a-f]{3,8}\b)/i.test(prompt), "stray braces or hashes"],
+  ];
+  for (const [fault, message] of faults) if (fault) context.addIssue({ code: "custom", message });
+};
+// What an Update's edit leaves out of the face, as the hair and beard: "never describe their face" left a beard out, and the edit shaved it.
+const SKIN = /\b(?:skin|skinned|complexion|freckles|freckled)\b/i;
+
 // The scene rules' limits, and a review may keep one already over them, as it changes only what fails.
 const SCENE_WORDS: Record<PromptStyle, number> = { prose: 150, keywords: 80 };
 // The marks name who is drawn, so a review may take a person out but never add or change one, and keeps the curly sentence.
@@ -551,13 +570,19 @@ export async function writePicturePrompt(context: Context, ask: PictureAsk, styl
   const quoted = (title: string) => [`"${title}"`, `“${title}”`, `'${title}'`, `‘${title}’`];
   const lettered = (prompt: string) => ask.kind !== "cover" || quoted(ask.title.toLowerCase()).some((title) => prompt.toLowerCase().includes(title));
   const edit = ask.kind === "portrait" && !!ask.was;
-  const whole = z.object({ text: atMost(words).refine(lettered, "no title in quotation marks") });
+  // The player's title is taken out first, as its letters and marks are theirs.
+  const untitled = (prompt: string) => (ask.kind === "cover" ? prompt.replace(new RegExp(RegExp.escape(ask.title), "gi"), "") : prompt);
+  const whole = z
+    .object({ text: atMost(words).refine(lettered, "no title in quotation marks") })
+    .superRefine(({ text }, context) => refuseGarbled(untitled(text), context));
   // No mark the looks or nudge don't name, as redraws added soot smudges that drew a beard.
   const given = ask.kind === "portrait" ? `${ask.looks} ${ask.nudge ?? ""}`.toLowerCase() : "";
-  const edited = editReply.refine(
-    ({ changes }) => (changes.toLowerCase().match(MARKS) ?? []).every((mark) => given.includes(mark.replace(/(?:e?s|ed)$/, ""))),
-    "a mark the looks don't have",
-  );
+  const edited = editReply
+    .refine(
+      ({ changes }) => (changes.toLowerCase().match(MARKS) ?? []).every((mark) => given.includes(mark.replace(/(?:e?s|ed)$/, ""))),
+      "a mark the looks don't have",
+    )
+    .superRefine(({ keep, changes }, context) => refuseGarbled(`${keep} ${changes}`, context));
   const reply = edit ? edited : whole;
   const { kind, face, ...details } = { face: false, ...ask };
   const prompt: Prompt = [
@@ -574,8 +599,10 @@ ${imageInstructions(context)}`,
     const call = `${ask.kind}Prompt`;
     if (!edit) return (await askForJson(context.textProvider, prompt, whole, REFUSAL, signal, { call, picture: true })).text;
     const { keep, changes } = await askForJson(context.textProvider, prompt, edited, REFUSAL, signal, { call, picture: true });
+    const left = ask.kind === "portrait" ? missingFeatures(ask.looks, changes).filter((part) => !SKIN.test(part)) : [];
+    const features = left.length > 0 ? `With ${left.join(" and ")}.` : "";
     // The Art Style in code, last so the face stays up front, as edits without it came out as photographs.
-    return [keep, changes, ask.artStyle]
+    return [keep, features, changes, ask.artStyle]
       .map((part) => part.trim())
       .filter(Boolean)
       .join(" ");
@@ -691,7 +718,7 @@ function withoutStrangers<T extends z.infer<typeof WorldChange>>(state: State, c
 const CHANGE_FORM = `List only what changes, as everything you leave out stays exactly as it is, and never repeat what stays the same.
 lore_entries holds each entry you add or rewrite. To rewrite one, use its exact title and give its whole new content and keywords. Give each at least three keywords, including names, nicknames and everyday paraphrases. removed_lore holds the exact title of each entry that no longer holds.
 Each change in world_rules, plot_threads and facts has old, copied exactly from the world (a thread's truth) or null to add a new one, and new, the text to put there or null to remove it. A thread's new is its truth alone: give a thread you add or rewrite its now and plan apart, as the world shows them, and null otherwise. Keep at most ${MAX_PLOT_THREADS} plot_threads, so to add one when that many are there, rewrite or remove one.
-world_brief, summary, facts and npc_summaries are the Journal, which the player reads. Change them only where they no longer hold, and give null or an empty list otherwise. Write them as the PC knows the world: a secret stays out of them, even when the player's instruction names it, and goes in the hidden parts. Each of npc_summaries holds a new summary with the exact name of an NPC already in the Journal.
+world_brief, summary, facts and npc_summaries are the Journal, which the player reads. Change them only where they no longer hold, and give null or an empty list otherwise. Write them as the PC knows the world: a secret, and news of anything the PC hasn't seen or been told, stays out of them, even when the player's instruction names it, and goes in the hidden parts, such as a thread's now, for the story to bring to the PC. Each of npc_summaries holds a new summary with the exact name of an NPC already in the Journal.
 inventory and status are what the PC wears and carries, and their health, injuries and conditions, which the player also reads. Give the whole new inventory or status only when the instruction changes it, keeping everything it doesn't change, and null otherwise. Write status in words with no digits: health in at most five words, and at most three injuries and three conditions of at most eight words each.
 npc_looks holds new looks only for each NPC whose looks or clothing the instruction changes, with their exact name from npcs, ${LOOKS}. These are hidden, and they are what pictures of that NPC are drawn from.
 pc_looks is the PC's new looks, only when the instruction changes how their body or face looks, such as their hair, a scar, a tattoo or makeup, and null otherwise: start from pc_looks in the world, keep all it doesn't change, and write only how their body and face look in at most 40 words, never clothing, gear, temperament or history. Pictures of the PC are drawn from it.`;
@@ -836,19 +863,10 @@ export async function applyWorldChange(
     signal,
     mayKeep,
   );
-  // What a change only adds to the summary is a known fact too, as a later Turn rewrites the summary: a cutter the player
-  // anchored offshore was written there alone, dropped a Turn later, and never reached the page.
-  // shortcut: only when it keeps every old sentence and writes no fact, so a rewrite or a fact of the same news isn't doubled.
-  const sentences = (text: string) => text.split(/(?<=[.!?])\s+/).filter(Boolean);
-  const old = sentences(before.summary);
-  const news =
-    summary === null || facts.length > 0 || !old.every((sentence) => summary.includes(sentence))
-      ? []
-      : sentences(summary).filter((sentence) => !old.includes(sentence));
   const journal: WorldEdit[] = [
     ...(world_brief === null ? [] : [{ edit: "worldBrief" as const, text: world_brief }]),
     ...(summary === null ? [] : [{ edit: "summary" as const, text: summary }]),
-    ...[...facts, ...news.map((sentence) => ({ old: null, new: sentence }))].map((fact) => ({ edit: "fact" as const, ...fact })),
+    ...facts.map((fact) => ({ edit: "fact" as const, ...fact })),
     ...npc_summaries.map(({ name, summary }) => ({ edit: "npcSummary" as const, name, text: summary })),
     ...(inventory === null ? [] : [{ edit: "inventory" as const, ...inventory }]),
     ...(status === null ? [] : [{ edit: "status" as const, ...status }]),
@@ -869,7 +887,6 @@ export async function applyWorldChange(
     rules: update.world_rules.length,
     threads: update.plot_threads.length,
     journal: journal.length,
-    news: news.length,
     looks: looks.length,
   }));
 }

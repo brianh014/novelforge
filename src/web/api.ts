@@ -35,7 +35,7 @@ export type Settings = Omit<Required<SettingsChange>, "textApiKey" | "imageApiKe
 export type TextHost = Awaited<ReturnType<typeof textHosts>>[number];
 export type Journal = {
   status: Status;
-  storyTime: { date: string; timeOfDay: string } | null;
+  storyTime: { date: string; timeOfDay: string; dateDue?: boolean } | null;
   summary: string;
   recentSummary: string;
   facts: string[];

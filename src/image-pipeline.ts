@@ -62,12 +62,16 @@ export const movedScene = (before: State, after: State) => before.scene.location
 export const visibleNpcs = ({ scene, npcs }: State) => scene.visibleCast.flatMap((name) => npcs.filter((npc) => npc.name === name));
 
 /**
- * Who to ask for a portrait after a Turn. Anyone the PC just came to know, in view or not, and on every move of the
- * Scene everyone in it and everyone known, so someone missed is drawn then, without paying each Turn after a failure.
+ * Who to ask for a portrait after a Turn: only those the page shows, in view or given a spoken line (`speakers`), as someone
+ * only spoken of, a painter dead two hundred years, was drawn in the story's own dress. Anyone shown who wasn't in view or
+ * known before, and on every move of the Scene everyone shown, so someone missed is drawn then, without paying each Turn after
+ * a failure. Someone only spoken of is drawn the first Turn they appear.
  */
-export function portraitsDue(before: State, after: State) {
-  const { scene, pcKnown } = after;
-  const due = movedScene(before, after) ? [...scene.visibleCast, ...pcKnown.npcs] : pcKnown.npcs.filter((name) => !before.pcKnown.npcs.includes(name));
+export function portraitsDue(before: State, after: State, speakers: string[] = []) {
+  const shown = [...after.scene.visibleCast, ...speakers.filter((name) => after.pcKnown.npcs.includes(name))];
+  // Someone known is due again only on coming into view, as a voice heard each Turn from behind a door was asked for every Turn.
+  const cameIntoView = (name: string) => after.scene.visibleCast.includes(name) && !before.scene.visibleCast.includes(name);
+  const due = movedScene(before, after) ? shown : shown.filter((name) => !before.pcKnown.npcs.includes(name) || cameIntoView(name));
   // Not someone named as a body, as a portrait draws them alive.
   const dead = (name: string) => isBody(after, name);
   const bodies = [...new Set(due)].filter(dead).length;
@@ -109,10 +113,26 @@ export function pcLooks({ name, physicalTraits = "" }: Save["pc"], wearing: stri
   return [traits, dressed].filter(Boolean).join(", ");
 }
 
+const FEATURE = /\b(?:skin|skinned|complexion|hair|haired|beard|bearded|moustache|moustached|bald|freckles|freckled)\b/i;
+const FILLER = new Set(["a", "an", "the", "his", "her", "their", "of"]);
+
+/**
+ * The parts of someone's looks that give their skin, hair or beard and that `phrase` leaves out, as a fair-bearded man was drawn
+ * dark-bearded from "a gaunt bearded man" though his portrait went in. Only these, as adding the whole looks nearly doubled prompts.
+ */
+export function missingFeatures(looks: string, phrase: string) {
+  const said = (word: string) => new RegExp(`(?<![\\p{L}])${RegExp.escape(word)}`, "iu").test(phrase);
+  return looks
+    .split(/,|;|\s+with\s+/)
+    .flatMap((part) => part.split(/\s+and\s+/))
+    .map((part) => part.trim())
+    .filter((part) => FEATURE.test(part) && part.split(/\s+/).some((word) => !FILLER.has(word.toLowerCase()) && !said(word)));
+}
+
 /**
  * Turns the Narrator's [Name: phrase] marks into its phrases, so no name reaches a model that might letter it into the
- * picture, and says who is pictured. The phrase is all the model reads of them: no stored looks are added, as the
- * Narrator writes the whole prompt to its length and order, and added looks made prompts nearly twice that length.
+ * picture, and says who is pictured. The phrase is all the model reads of them, with only the skin, hair or beard of their
+ * stored looks it leaves out, as the whole looks made prompts nearly twice the length the Narrator writes to.
  * `referenced` are those whose portrait reaches the model, in its order: each is pointed at their image by number, and the
  * Narrator's {likeness sentence} is kept only when there is one, so a picture with no portraits is prompted as before.
  */
@@ -138,12 +158,14 @@ export function expandMarks(text: string, npcs: Npc[], pcName: string, reference
       const firstDescribed = !!brief && !described.has(person);
       if (brief) described.add(person);
       if (pictured.includes(person) && !firstDescribed) return "the same person";
-      if (!pictured.includes(person)) pictured.push(person);
+      const first = !pictured.includes(person);
+      if (first) pictured.push(person);
+      const looks = [brief, ...(first && npc ? missingFeatures(npc.appearance, brief) : [])].filter(Boolean).join(", ");
       const image = referenced.indexOf(person) + 1;
-      if (!image) return brief || "a person";
+      if (!image) return looks || "a person";
       // A comma closes the phrase only when the sentence reads on, as in "the person from image 1, a tall woman, kneels".
       const readsOn = /^\s*[a-z]/i.test(whole.slice(at + _.length));
-      return brief ? `the person from image ${image}, ${brief}${readsOn ? "," : ""}` : `the person from image ${image}`;
+      return looks ? `the person from image ${image}, ${looks}${readsOn ? "," : ""}` : `the person from image ${image}`;
     });
   // A DeepSeek prompt ended with its likeness sentence some sixty times over.
   const sentences = prompt.split(/(?<=[.!?])\s+/);

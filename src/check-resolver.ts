@@ -10,6 +10,8 @@ export const CheckRequest = z.object({
   difficulty: z.enum(["Easy", "Moderate", "Hard", "Very Hard"]),
   // Kept for the result, as one told without them won a failure its prize and undid a success later.
   stakes: z.string().optional(),
+  // The most those it touches would truly give, set before the roll, as a success made a killer confess to the man he served.
+  at_most: z.string().nullish(),
 });
 
 function judge(roll: number, dc: number, nearMissMargin: number) {

@@ -133,8 +133,8 @@ export function saveRoutes({ options, saves, turns, images }: ServerContext) {
         const lastMention = (name: string) => fullLog.findLastIndex(({ text }) => text.includes(name));
         return Response.json({
           status,
-          // Without the day count, which only the Narrator uses.
-          storyTime: storyTime && { date: storyTime.date, timeOfDay: storyTime.timeOfDay },
+          // Without the day count, which only the Narrator uses. dateDue marks a date the clock has passed, kept until a Turn names the new one.
+          storyTime: storyTime && { date: storyTime.date, timeOfDay: storyTime.timeOfDay, ...(storyTime.dateDue && { dateDue: true }) },
           summary,
           recentSummary,
           facts: pcKnown.facts,

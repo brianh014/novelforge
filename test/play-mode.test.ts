@@ -114,6 +114,17 @@ test("a Choice that names the PC, written as someone else, is dropped and the ot
   expect(log).toContain("Choices naming the PC dropped");
 });
 
+test("a Choice where the PC gives their own name is kept", async () => {
+  const own = ["I'll answer that I'm Ash and ask his name.", "I shout, “Call me Ash!”", "I tell her my name is Ash."];
+  const script = play(narration("A voice calls."), chosen(own));
+  const id = await script.app.createSave();
+  await script.app.patch(`/saves/${id}`, { playMode: "choices" });
+
+  await script.app.post(`/saves/${id}/turns`, { input: "I listen." });
+
+  expect(await latestChoices(id)).toEqual(own);
+});
+
 test("switching to Free Text and back keeps the latest Choices, and the next Turn ends them", async () => {
   const { id } = await choosing(narration("The wall holds."));
 
@@ -216,7 +227,9 @@ test("a Play Mode that isn't Free Text or Choices is refused", async () => {
 });
 
 test("the log names which Choice was picked by number, and only Story in log shows the Choices' words", async () => {
-  const { id } = await choosing(narration("The wall holds."), chosen(), narration("The rope frays."), chosen());
+  // Choices that leave out the one just picked, which would be dropped as a repeat of the player's move.
+  const OTHERS = ["I wade on.", "I climb the wall.", "I swim for it."];
+  const { id } = await choosing(narration("The wall holds."), chosen(OTHERS), narration("The rope frays."), chosen(OTHERS));
 
   const quiet = await logOf(() => app!.post(`/saves/${id}/turns`, { input: CHOICES[1] }), "info");
   expect(quiet).toContain('Choice picked {"route":"/saves/:id/turns","save":"');
@@ -226,5 +239,5 @@ test("the log names which Choice was picked by number, and only Story in log sho
   await app!.patch("/settings", { storyInLog: true });
   const told = await logOf(() => app!.post(`/saves/${id}/turns`, { input: "I shout at the tide." }), "info");
   expect(told).toContain('"choice":"own words"');
-  expect(told).toContain(`Choices offered {"route":"/saves/:id/turns","save":"${id}","choices":${JSON.stringify(CHOICES)}}`);
+  expect(told).toContain(`Choices offered {"route":"/saves/:id/turns","save":"${id}","choices":${JSON.stringify(OTHERS)}}`);
 });

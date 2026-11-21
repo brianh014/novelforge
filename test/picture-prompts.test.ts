@@ -134,6 +134,44 @@ test.each([
   expect(prompts[0]![0]!.content).toContain(style === "keywords" ? "comma-separated keyword phrases" : "connected sentences");
 });
 
+test("a portrait prompt naming a hex colour is taken at once", async () => {
+  const { written, prompts } = write(portrait, "prose", text("A tall woman in an oilskin coat of #2b1d0e brown."));
+
+  expect(await written).toBe("A tall woman in an oilskin coat of #2b1d0e brown.");
+  expect(prompts).toHaveLength(1);
+});
+
+test("a garbled portrait prompt is written again, with only the reason logged, and one never written fails", async () => {
+  const garbled = text("A cinematic portrait. Head and张 shoulders ofEXPOSED of##. Let's just produce proper text.{");
+  const { written, prompts } = write(portrait, "prose", garbled, text("A tall woman in an oilskin coat."));
+
+  const line = await logOf(() => written, "warning");
+
+  expect(await written).toBe("A tall woman in an oilskin coat.");
+  expect(prompts).toHaveLength(2);
+  expect(line).toContain("letters of another script");
+  expect(line).toContain("a note to yourself");
+  expect(line).toContain("stray braces or hashes");
+  expect(line).not.toContain("EXPOSED");
+  const edit = JSON.stringify({ keep: "The same woman.", changes: "Let me think: she wears a coat." });
+  await expect(write({ ...portrait, was: "A tall woman." }, "prose", edit, edit, edit).written).rejects.toThrow("couldn't write this picture's prompt");
+  // A word in another script, set apart, or a reign number, is no garble.
+  expect(await write(portrait, "prose", text("A man of the World War I era with a 塩 charm.")).written).toBe("A man of the World War I era with a 塩 charm.");
+  // A Cover's own title may hold any letters.
+  const titled = write({ ...cover, title: "Salt #9 塩" }, "prose", text(`A drowned city, "Salt #9 塩" lettered above.`));
+  expect(await titled.written).toBe(`A drowned city, "Salt #9 塩" lettered above.`);
+});
+
+test("an Update's portrait prompt keeps the hair and beard of their looks it leaves out, but not their skin", async () => {
+  const reply = JSON.stringify({ keep: "The same man with his face preserved.", changes: "He wears a white shirt." });
+  const looks = "a tall man with weathered olive skin, close-cut greying hair, a short beard and grey-green eyes, wearing a white shirt";
+  const { written } = write({ ...portrait, looks, was: "A tall man." }, "prose", reply);
+
+  expect(await written).toBe(
+    `The same man with his face preserved. With close-cut greying hair and a short beard. He wears a white shirt. ${setting.artStyle}`,
+  );
+});
+
 test("a prompt the text model can't write fails with a reason to show, and nothing is drawn from a template", async () => {
   const failed = new TextProviderFailed("offline");
   const { written } = write(portrait, "prose", failed, failed, failed);

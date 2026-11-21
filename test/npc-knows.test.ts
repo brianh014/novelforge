@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { saveStore } from "../src/save-store";
-import { knownOnly } from "../src/state-applier";
+import { applyOperations, knownOnly, openingState } from "../src/state-applier";
 import { narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
 let folder: ReturnType<typeof tempFolder>;
@@ -61,4 +61,40 @@ test("what someone doesn't know is left out however it's worded, and what they d
   expect(knownOnly("She searched the cottage and found nothing, and has told no one.")).toBe(
     "She searched the cottage and found nothing, and has told no one.",
   );
+});
+
+test("what a thread gave someone under their title before they were met joins them when met by name alone, and back", () => {
+  for (const [given, met] of [
+    ["Reverend Amos Thorne", "Amos Thorne"],
+    ["Thorne", "Reverend Amos Thorne"],
+  ] as const) {
+    const state = { ...structuredClone(openingState), npcKnows: { [given]: ["Crane wrote to the Revenue."] } };
+    const { next } = applyOperations(state, [{ op: "add_npc", name: met, appearance: "a soft-voiced man in his sixties" }]);
+    expect(next.npcKnows).toEqual({ [met]: ["Crane wrote to the Revenue."] });
+  }
+});
+
+test("what someone learns loses a trailing run of symbols a reply garbled onto it", () => {
+  const state = { ...structuredClone(openingState), npcs: [{ name: "Owen", appearance: "a tall man" }] };
+  const { next } = applyOperations(state, [{ op: "npc_learns", name: "Owen", fact: "Crane wrote to the Revenue.+#+#+#+#+#+" }]);
+  expect(next.npcKnows.Owen).toEqual(["Crane wrote to the Revenue."]);
+});
+
+test("a garbled or titled form of someone already met finds them, rather than adding a second person", () => {
+  const state = {
+    ...structuredClone(openingState),
+    npcs: [
+      { name: "Reverend Amos Thorne", appearance: "a soft-voiced vicar" },
+      { name: "Owen Price", appearance: "a broad constable" },
+    ],
+  };
+  const { next } = applyOperations(state, [
+    { op: "add_npc", name: "Rerend Amos Thorne", appearance: "a soft-voiced vicar in a wet coat" },
+    { op: "npc_learns", name: "Constable Owen Price", fact: "The ledger is in the chimney." },
+  ]);
+  expect(next.npcs.map(({ name }) => name)).toEqual(["Reverend Amos Thorne", "Owen Price"]);
+  // A relative whose name holds theirs is someone new.
+  const father = applyOperations(state, [{ op: "add_npc", name: "Thomas Owen Price", appearance: "an old fisherman" }]).next;
+  expect(father.npcs.map(({ name }) => name)).toEqual(["Reverend Amos Thorne", "Owen Price", "Thomas Owen Price"]);
+  expect(next.npcKnows).toEqual({ "Owen Price": ["The ledger is in the chimney."] });
 });

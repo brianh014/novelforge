@@ -8,6 +8,8 @@
 //   bun bench run --draw [...]   draws the pictures on the Settings file's local ComfyUI, never a paid API, into each play's
 //                                pictures folder, to judge the pictures themselves
 //   bun bench run --keep-save [...]   keeps each play's Saves folder in its run folder, to open or play on later
+//   bun bench run --from <Saves folder> --world <its world> [...]   plays on from a kept Save for --rounds more, with no
+//                                                                   opening, numbering rounds after those it has
 //   bun bench judge <run folder> --by <model> --scores <scores.json>   (scores for a --judge self run, one entry per play)
 //   bun bench keep <run folder>        copies the run's numbers, never its story, to bench/results to commit
 //   bun bench table [--csv]            every kept and recent run, side by side
@@ -28,7 +30,7 @@ import { fakeImages, fakeTextProvider } from "../src/fake-services";
 import { setLogLevel, startLog } from "../src/logger";
 import { CONTINUE } from "../src/prompt-assembler";
 import { startServer } from "../src/rest-api";
-import { type State, StateOperation } from "../src/state-applier";
+import { MAX_NPC_KNOWS, type State, StateOperation } from "../src/state-applier";
 import { saveStore } from "../src/save-store";
 import { localIsSetUp } from "../src/graph-builder";
 import { reviewerSettings, settingsStore } from "../src/settings-store";
@@ -46,7 +48,7 @@ const BENCH = import.meta.dir;
 const DEFAULT_WORLD = "adventure.json";
 // The app's version, then the iteration on it: bump the iteration whenever the prompts, the rubric, a world or how a Turn is
 // checked and retried change, and start it again at 1 when the app's version changes. A chart compares only runs of one version.
-const BENCH_ITERATION = 1;
+const BENCH_ITERATION = 2;
 const BENCH_VERSION = `${VERSION}.${BENCH_ITERATION}`;
 // The length a chart compares, as a longer story scores differently; runs of another length are left out.
 const CHART_ROUNDS = 45;
@@ -56,6 +58,8 @@ const fake = process.argv.includes("--fake");
 const draw = process.argv.includes("--draw");
 // Keeps each play's Saves in its folder, to open or play on later, as a long story to test against.
 const keepSave = process.argv.includes("--keep-save");
+// A kept Saves folder to play on from, as long play is tested by going on from a judged run.
+const fromSaves = process.argv.includes("--from") ? resolve(process.argv[process.argv.indexOf("--from") + 1]!) : undefined;
 const narratorOf = (settings: ReturnType<typeof settingsStore>) => (fake ? fakeTextProvider : textProvider(settings));
 const RUNS = join(BENCH, "runs");
 const RESULTS = join(BENCH, "results");
@@ -92,7 +96,7 @@ const COVERAGE: [string, string[]][] = [
   ["Known NPC summary", ["ops.set_known_npc_summary"]],
   ["Loose End added", ["ops.add_loose_end"]],
   ["Loose End resolved", ["ops.resolve_loose_end", "upkeep.resolve_loose_end"]],
-  ["World Bible grew", ["ops.add_lore_entry"]],
+  ["World Bible grew", ["ops.add_lore_entry", "lore.added"]],
   ["World Bible entry updated", ["ops.update_lore_entry"]],
   ["New NPC", ["ops.add_npc"]],
   ["NPC look changed", ["ops.update_npc", "upkeep.update_npc"]],
@@ -340,8 +344,13 @@ function hiddenChanges(before: State, after: State) {
     if (plan && plan !== before.threadsPlan[truth]) lines.push(`Plot Thread plan, of "${truth.split(" ").slice(0, 8).join(" ")}…": ${plan}`);
   }
   diff("Loose End", before.looseEnds, after.looseEnds);
-  for (const [name, known] of Object.entries(after.npcKnows)) {
-    for (const text of known.filter((item) => !(before.npcKnows[name] ?? []).includes(item))) lines.push(`${name} now knows: ${text}`);
+  for (const name of new Set([...Object.keys(before.npcKnows), ...Object.keys(after.npcKnows)])) {
+    const [was, now] = [before.npcKnows[name] ?? [], after.npcKnows[name] ?? []];
+    for (const text of now.filter((item) => !was.includes(item))) lines.push(`${name} now knows: ${text}`);
+    // Shown too, as a judge took a fact a Regenerate dropped for one it kept.
+    // A full list that dropped its oldest for a new one is the cap making room, as judges read "no longer knows" as knowledge wiped.
+    const room = was.length >= MAX_NPC_KNOWS && now.length >= MAX_NPC_KNOWS;
+    for (const text of was.filter((item) => !now.includes(item))) lines.push(`${name} ${room ? "has dropped, for room" : "no longer knows"}: ${text}`);
   }
   // Its words too, as a long story is judged on lore staying true, and an entry rewritten keeps its title.
   diff(
@@ -398,7 +407,8 @@ async function play(
   const pick = seeded(seed * 1000 + index);
   const roll = seeded(seed * 7919 + index);
   // The log goes to the play's folder, and only warnings and up to the terminal.
-  startLog("verbose", folder);
+  // Never rotated, as the counts below read the whole play from it.
+  startLog("verbose", folder, Number.POSITIVE_INFINITY);
   const { info, debug, warn } = console;
   console.info = () => {};
   console.debug = () => {};
@@ -418,8 +428,11 @@ async function play(
     port: 0,
   });
   setLogLevel("verbose");
+  if (fromSaves) cpSync(fromSaves, savesDir, { recursive: true });
   const saves = saveStore(savesDir);
-  const id = saves.create({ ...world.save, playMode: moves ? "free" : "choices", opening: world.opening as Partial<State> });
+  const id = fromSaves ? saves.list()[0]!.id : saves.create({ ...world.save, playMode: moves ? "free" : "choices", opening: world.opening as Partial<State> });
+  // The rounds a kept Save already holds, so the timeline's rounds follow on from them.
+  const first = saves.messages(id).filter(({ role }) => role === "player").length;
   const steps: Step[] = [];
   // Each step's states, for the state checks code can make without a judge.
   const changes: { action: string; before: State; after: State }[] = [];
@@ -488,16 +501,17 @@ async function play(
   const due = new Map(ACTIONS.map((action, at) => [Math.max(1, Math.round((rounds * (at + 1)) / (ACTIONS.length + 1))), action] as const).reverse());
   try {
     // Tried again once, as a player would, since one dropped connection otherwise left the whole play without its opening.
-    if (!(await send(0, "opening", `/saves/${id}/opening`, {})).ok) await send(0, "opening", `/saves/${id}/opening`, {});
-    for (let round = 1; round <= rounds; round++) {
-      const move = moves?.[round - 1];
+    if (!fromSaves && !(await send(0, "opening", `/saves/${id}/opening`, {})).ok) await send(0, "opening", `/saves/${id}/opening`, {});
+    for (let at = 1; at <= rounds; at++) {
+      const round = first + at;
+      const move = moves?.[at - 1];
       const choices = move === undefined ? saves.latestChoices(id) : undefined;
       // A reply kept without Choices leaves the player to Continue.
       const input = move ?? (choices ? choices[Math.floor(pick() * choices.length)]! : CONTINUE);
       const step = await send(round, move !== undefined ? "move" : choices ? "choice" : "continue (no Choices)", `/saves/${id}/turns`, { input }, input);
       // All three, so a judge can tell whether risky Choices were offered and passed over.
       step.offered = choices;
-      const action = due.get(round);
+      const action = due.get(at);
       const narrator = latestNarrator();
       const sent =
         action === "rewrite" && narrator
@@ -571,6 +585,8 @@ async function play(
     add("moves.added", added);
     add("moves.removed", removed);
   }
+  // The Scribe's Lore at each pause, added by a World Change rather than a Turn's operation.
+  flat["lore.added"] = logged("Lore grown").reduce((sum, grown) => sum + (grown.added as number), 0);
   flat["moves.failed"] = logged("World didn't move on").length;
   flat.unusable = logged("Unusable Narrator reply").length;
   flat.failed = steps.filter(({ ok }) => !ok).length;
@@ -856,6 +872,7 @@ async function playApart(index: number, seed: number, rounds: number, movesFile:
       ...(fake ? ["--fake"] : []),
       ...(draw ? ["--draw"] : []),
       ...(keepSave ? ["--keep-save"] : []),
+      ...(fromSaves ? ["--from", fromSaves] : []),
     ],
     { stdout: "inherit", stderr: "inherit" },
   );
@@ -902,6 +919,8 @@ async function run() {
     fail("--draw needs local ComfyUI set up as the image provider in the Settings file.");
   if (drawing.imageProvider === "local" ? !localIsSetUp(drawing) : !(drawing.imageModel && drawing.imageApiKey))
     settings.update({ imageProvider: "openrouter", imageModel: "fake-images", imageApiKey: "fake-key" });
+  // No LoRAs, so pictures are judged on the model and the prompts alone, as the player's pulled watercolour scenes to photographs.
+  settings.update({ comfyLoras: [] });
   const chosen = { narrator: option("--narrator"), reviewer: option("--reviewer") };
   if (flag("--narrator-only") && chosen.reviewer) fail("--narrator-only can't go with --reviewer.");
   if (chosen.narrator) settings.update({ textModel: chosen.narrator });

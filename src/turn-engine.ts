@@ -44,7 +44,8 @@ import { wholeWord } from "./lore-activation";
 import { type Upkeep, upkeepOperations } from "./state-upkeep";
 import { readable, withoutStrayMarks } from "./web/chat-style";
 import { applyWorldChange } from "./world-creation";
-import { askToClose, MOVE_LIMIT, moveDue, moveWorldOn, turnThreadChanges } from "./world-moves-on";
+import { growLore } from "./lore-growth";
+import { askToClose, MOVE_LIMIT, moveDue, moveSoon, moveWorldOn, turnThreadChanges } from "./world-moves-on";
 
 // Each Save's move of the world still running, which the next Turn waits for, so it reads the world as moved.
 const moving = new Map<string, Promise<void>>();
@@ -233,10 +234,16 @@ const FinishedTurn = z.object({
   // Checked by usableChoices, as a reply with bad Choices still holds a Turn worth keeping.
   choices: z.unknown().optional(),
 });
+// An action rated None or Easy needs no roll, so it reads as a finished Turn: Easy stays a choice, so those moves don't drift to
+// Moderate, but rolling it spent a third of a play's Checks on trivia, and a 1 threw the PC out for sitting quietly.
 const NONE = "None";
-// An action rated None needs no roll, so it reads as a finished Turn.
-const unrated = (reply: unknown) =>
-  (reply as { check?: { difficulty?: unknown } })?.check?.difficulty === NONE ? { ...(reply as object), check: null } : reply;
+// Easy only with its narration, as one sent unnarrated, awaiting a roll, came back with none and was written again.
+const unrated = (reply: unknown) => {
+  const { check, narration } = (reply ?? {}) as { check?: { difficulty?: unknown }; narration?: unknown };
+  const told = typeof narration === "string" && narration.trim() !== "";
+  if (check?.difficulty === "Easy" && told) log.info("turn", "Check rated Easy, narrated without a roll", { difficulty: "Easy" });
+  return check?.difficulty === NONE || (check?.difficulty === "Easy" && told) ? { ...(reply as object), check: null } : reply;
+};
 const NarratorResponse = z.preprocess(unrated, z.union([z.object({ check: CheckRequest }), FinishedTurn]));
 /** The player wrote the narration of an Edit, so the reply holds only what follows from it. */
 const EditedTurn = FinishedTurn.extend({ narration: z.string().nullish() });
@@ -275,12 +282,18 @@ const ResponseShape = z.object({
     action: CheckRequest.shape.action.describe(
       "the PC's action as the player's move has the PC say or do it, never what someone asked of the PC or where the scene is heading",
     ),
-    stakes: z.string().describe("in a few words, what could go wrong, and how anyone it touches would truly take it"),
+    stakes: z
+      .string()
+      .describe("in a few words, what could go wrong in the doing itself, not in what it leads to, and how anyone it touches would truly take it"),
+    at_most: z
+      .string()
+      .nullable()
+      .describe("in a few words, the most anyone it touches would truly give or allow, however well it goes, or null when it rests on no one"),
     // The odds beside the names, as a model that wrote stakes of real harm still chose Moderate, not knowing what it meant.
     difficulty: z
       .enum([NONE, ...CheckRequest.shape.difficulty.options])
       .describe(
-        "from the stakes: None when it can't fail and nothing rides on it, Easy when it almost always works, Moderate when it's about even, Hard when it usually fails or would rarely be welcomed, Very Hard when only rare luck makes it work or welcome",
+        "from the stakes: None when it can't fail and nothing rides on it, Easy when it almost always works, Moderate when it's about even, Hard when it usually fails or would rarely be welcomed, Very Hard when only rare luck makes it work or welcome. None and Easy are narrated at once",
       ),
   }),
   narration: z.string().nullable(),
@@ -309,10 +322,14 @@ const ResponseShape = z.object({
 });
 // For the Choices, written apart from the reply in a call that sees no secret, and beside their field, as a rule mid-prompt gets ignored.
 export const CHOICES_RULE =
-  "exactly three things the PC might say or do next, each one first-person sentence of at most 25 words, built only on what the replies show has happened and the PC knows, naming no event, place or thing they don't show, fitting what they now hold, wear and have just done, and each taking a clearly different approach, at most one of them only watching, waiting or carrying word to someone and at least one of them moving the story on toward what comes next that the PC knows of, such as setting out, acting on a plan, facing what waits or taking up what someone offers or the PC wants. Never hint at risk, difficulty, dice or a Check";
+  "exactly three things the PC might say or do next, each one first-person sentence of at most 25 words, built only on what the replies show has happened and the PC knows, naming no event, place or thing they don't show, fitting what they now hold, wear and have just done, and each taking a clearly different approach, at most one of them only watching, waiting or carrying word to someone and at least one of them moving the story on toward what comes next that the PC knows of, such as setting out, acting on a plan, facing what waits, letting the hours pass until what the PC expects, or taking up what someone offers or the PC wants. Never hint at risk, difficulty, dice or a Check";
 // Once a Check is rolled, or none can be, the schema itself forbids one and asks for the story, as the prompt's "Do not request another check" was ignored three times running.
 // Never with Choices, in either Play Mode, as Choices the Narrator wrote beside the secrets in its prompt named them in everyday words.
-const SCHEMAS = { any: jsonSchemaOf(ResponseShape), noCheck: jsonSchemaOf(ResponseShape.extend({ check: z.null(), narration: z.string() })) };
+// Described, as a strict mode drops minLength and a Check's result call came back with an empty narration twice in 48 Checks.
+const SCHEMAS = {
+  any: jsonSchemaOf(ResponseShape),
+  noCheck: jsonSchemaOf(ResponseShape.extend({ check: z.null(), narration: z.string().describe("the story's next moment, never empty") })),
+};
 
 /**
  * A text field without JSON punctuation or invisible characters a model left at its end, such as `:null,`, `]]}` or `"],`.
@@ -335,12 +352,16 @@ export function withoutJsonTail(text: string) {
 /**
  * Without a Choice that names the PC, as one written as someone else, "I crouch beside Nell and tell her…", was offered to Nell
  * as her own move. The PC's name only with its capital, so a name that is also a word isn't taken for it. The rest stay, even
- * if fewer than three, as asking again costs a call for one bad Choice.
+ * if fewer than three, as asking again costs a call for one bad Choice. The PC giving their own name, "I tell him I'm Sol", is
+ * theirs, as dropping it left a bench play one Choice for three rounds.
  */
 function forThePc(choices: string[] | undefined, pcName: string) {
   if (!choices || !pcName) return choices;
   const names = [pcName, ...pcName.split(" ").filter((part) => part.length > 2 && /^\p{Lu}/u.test(part))];
-  const kept = choices.filter((choice) => !names.some((name) => wholeWord(name, "u").test(choice)));
+  const ownName = (name: string) => new RegExp(`(?:\\bI['’]m|\\bI am|\\bme|\\bname is|\\bname['’]s|\\bit['’]s) ${RegExp.escape(name)}`, "giu");
+  // Every form of their own name taken out first, full name before its parts, so "I'm Sol Varga" isn't dropped for "Varga".
+  const unnamed = (choice: string) => names.reduce((text, name) => text.replace(ownName(name), ""), choice);
+  const kept = choices.filter((choice) => !names.some((name) => wholeWord(name, "u").test(unnamed(choice))));
   if (kept.length < choices.length) log.info("turn", "Choices naming the PC dropped", { count: choices.length - kept.length });
   return kept.length > 0 ? kept : undefined;
 }
@@ -424,7 +445,7 @@ function openingCheck(reply: string): unknown {
   }
 }
 
-const isNone = (opened: unknown) => opened === null || (opened as { difficulty?: unknown }).difficulty === NONE;
+const isNone = (opened: unknown) => opened === null || [NONE, "Easy"].includes((opened as { difficulty?: unknown }).difficulty as string);
 
 /** The narration in a visible reply whose check is known to be None or null. */
 function narrationSoFar(reply: string) {
@@ -464,6 +485,15 @@ type Narrated = {
   memory: Promise<SceneMemory | null>;
   /** The Narrator's replies before this one, which say whether the summary is due and how many a new one covers. */
   replies: number;
+  /** The clock's hours a few replies back, to tell whether the story time has stood still. */
+  clockBack?: number;
+  /**
+   * What State Upkeep reads in place of the narration, after the reply it reads as the previous one: an Edit's added words after
+   * the response they add to, as Upkeep handed the whole response again put back things the PC had already given away.
+   */
+  upkeepReads?: { narration: string; previous: string };
+  /** The player's moves before this one, which no Choice offers again. */
+  recentMoves?: string[];
   /** Left out when no new roll is allowed, which makes a Check request an invalid reply. */
   rollCheck?: (request: z.infer<typeof CheckRequest>) => Check;
   playMode: PlayMode;
@@ -518,7 +548,24 @@ function turnPrompt(
     }),
     memory: nextMemory(textProvider, messages, state.sceneMemories, memoryStart, current.textRecentMessages, signal),
     replies: narratorReplies(messages),
+    clockBack: clockBack(saves, id, messages),
+    // The player's moves before this one, so the Choices offer none again, as the same safe beat was offered three times in nine rounds.
+    recentMoves: messages
+      .filter(({ role, text }) => role === "player" && text !== OPENING_INPUT)
+      .slice(-RECENT_MOVES)
+      .map((message) => plainMessage(message).text),
   };
+}
+
+// Replies and story hours below which the story time stands still, so the Choices offer one that moves on, as a 160-round play
+// passed three hours, a minute a reply, its seeded picks never offered a way to let time pass.
+const STILL_REPLIES = 6;
+const STILL_HOURS = 1;
+const RECENT_MOVES = 4;
+/** The clock's hours a few replies back, undefined in a short story or one from before the clock. */
+function clockBack(saves: SaveStore, id: string, messages: Message[]) {
+  const back = messages.filter(({ role }) => role === "narrator").at(-STILL_REPLIES);
+  return back && (saves.storyTimeBefore(id, back.id)?.hours ?? undefined);
 }
 
 const lastNarration = (messages: Message[]) => messages.findLast(({ role }) => role === "narrator")?.text ?? "";
@@ -602,7 +649,7 @@ export async function playTurn(
   const basedOn = saves.latestMessageId(id);
   const state = saves.latestState(id);
   const messages = saves.messages(id);
-  const { prompt, memory, playMode, replies } = turnPrompt(saves, settings, id, signal, textProvider, {
+  const { prompt, memory, playMode, replies, clockBack, recentMoves } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
     input,
@@ -631,6 +678,8 @@ export async function playTurn(
         : [],
     memory,
     replies,
+    clockBack,
+    recentMoves,
     // The PC attempts nothing in a Continue, so there is nothing to roll for.
     rollCheck: mayCheck && !isContinueInput(input) ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     playMode,
@@ -643,7 +692,12 @@ export async function playTurn(
   });
   if (moveWorld && kind === "turn" && moveDue(id, state, saves.latestState(id), replies + 1)) {
     // Not awaited, as it runs while the player reads; its own signal, as the Turn's request has ended.
-    const move = moveWorldOn(textProvider, settings, saves, id, AbortSignal.timeout(MOVE_LIMIT.ms)).finally(() => moving.delete(id));
+    // Lore beside the move, by the Scribe, as Upkeep is, so the next Turn waits on both at most one MOVE_LIMIT, never one after the other.
+    const limit = AbortSignal.timeout(MOVE_LIMIT.ms);
+    // Settled both, as a move that threw let the next Turn start while the Lore was still being written, which then came too late.
+    const move = Promise.allSettled([moveWorldOn(textProvider, settings, saves, id, limit), reviewProvider && growLore(reviewProvider, saves, id, limit)])
+      .then(() => undefined)
+      .finally(() => moving.delete(id));
     moving.set(id, move);
   }
   followedUp(id, kind, images, times);
@@ -670,11 +724,11 @@ export async function replaceResponse(
   emit: TurnEvents = () => {},
 ) {
   const times = { started: Date.now() };
-  await settleJournal(saves, { textProvider, settings, images, reviewProvider }, id, signal, () => saves.turnToReplace(id, messageId).state);
-  const { input, narration, check, state, messages, sceneImage, journalEdits } = saves.turnToReplace(id, messageId);
+  await settleJournal(saves, { textProvider, settings, images, reviewProvider }, id, signal, () => saves.turnToReplace(id, messageId, true).state);
+  const { input, narration, check, state, messages, sceneImage, journalEdits, movesDropped } = saves.turnToReplace(id, messageId, true);
   // The old picture goes with its response, so the new one always gets its own, whatever the Narrator decides.
   const hadPicture = !!sceneImage || images.sceneDrawing(id, messageId);
-  const { prompt, memory, playMode, replies } = turnPrompt(saves, settings, id, signal, textProvider, {
+  const { prompt, memory, playMode, replies, clockBack, recentMoves } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
     input,
@@ -700,6 +754,8 @@ export async function replaceResponse(
     seen: () => [saves.read(id).startingHook ?? "", ...messages.map(({ text }) => text)].join("\n"),
     memory,
     replies,
+    clockBack,
+    recentMoves,
     rollCheck: mayRate ? (request) => resolveCheck(request, dice, nearMissMargin) : undefined,
     playMode,
     commit: (text, rolled, advance, choices) => {
@@ -711,7 +767,12 @@ export async function replaceResponse(
           roll: rolled?.roll,
           outcome: rolled?.outcome,
         });
-      return saves.replaceTurn(id, messageId, text, rolled, advance, feedback?.trim() || undefined, choices);
+      const replies = saves.replaceTurn(id, messageId, text, rolled, advance, feedback?.trim() || undefined, choices);
+      if (movesDropped > 0) {
+        moveSoon(id);
+        log.info("world", "World move dropped with the replaced response", { save: id, kind, moves: movesDropped });
+      }
+      return replies;
     },
     committed: (replacement, scene) => {
       images.forget(id, messageId - 1, kind);
@@ -739,16 +800,16 @@ export async function editResponse(
 ) {
   const times = { started: Date.now() };
   await settleJournal(saves, { textProvider, settings, images, reviewProvider }, id, signal, () => saves.turnToReplace(id, messageId).state);
-  const { input, state, messages, journalEdits } = saves.turnToReplace(id, messageId);
-  // An Edit that keeps the response whole keeps the Loose Ends it resolved and opened and the looks it changed, as the Narrator,
-  // bringing the state in line again, left one open to the end of a play, dropped another and lost a coat taken off.
+  const turn = saves.turnToReplace(id, messageId);
+  const { input, messages, journalEdits } = turn;
+  // An Edit that keeps the response whole starts from the state the response left, so the Narrator records only what the added
+  // words change, as rebuilding it all again lost Loose Ends, looks and Lore the response had changed.
   const replaced = saves.messages(id).find((message) => message.id === messageId)?.text ?? "";
-  const whole = !!replaced && text.includes(replaced);
-  const after = saves.latestState(id);
-  const resolved = whole ? state.looseEnds.filter((end) => !after.looseEnds.includes(end)) : [];
-  const opened = whole ? after.looseEnds.filter((end) => !state.looseEnds.includes(end)) : [];
-  const restyled = whole ? after.npcs.filter(({ name, appearance }) => state.npcs.some((npc) => npc.name === name && npc.appearance !== appearance)) : [];
-  const { prompt, memory, playMode, replies } = turnPrompt(saves, settings, id, signal, textProvider, {
+  // Nothing added is no Edit that adds, as one saved unchanged sent the Narrator and State Upkeep empty words to record.
+  const added = (replaced && text.includes(replaced) ? text.split(replaced).join("\n").trim() : undefined) || undefined;
+  const state = added === undefined ? turn.state : saves.latestState(id);
+  if (added !== undefined) log.info("turn", "Edit adds to the response", { save: id, message: messageId });
+  const { prompt, memory, playMode, replies, clockBack, recentMoves } = turnPrompt(saves, settings, id, signal, textProvider, {
     state,
     messages,
     input,
@@ -758,7 +819,7 @@ export async function editResponse(
   });
   const done = await narrate(textProvider, signal, emit, {
     kind: "edit",
-    prompt: [...prompt, editInstruction(text)],
+    prompt: [...prompt, editInstruction(text, added)],
     input: text,
     refusal: "The Narrator refused this edit, so the response stays as it was.",
     pcName: saves.read(id).pc.name,
@@ -770,31 +831,11 @@ export async function editResponse(
     narration: text,
     memory,
     replies,
+    clockBack,
+    recentMoves,
+    ...(added !== undefined && { upkeepReads: { narration: added, previous: replaced } }),
     playMode,
-    commit: (narration, _check, advance, choices) =>
-      saves.editTurn(
-        id,
-        messageId,
-        narration,
-        (before) => {
-          const next = advance(before);
-          const kept = next.looseEnds.filter((end) => resolved.includes(end));
-          if (kept.length > 0) log.info("turn", "Loose Ends kept resolved by an Edit", { looseEndsKept: kept.length });
-          const reopened = opened.filter((end) => !next.looseEnds.includes(end));
-          // Only where the Edit left the looks as they were before the response, so its own change stands.
-          const looks = restyled.filter(
-            ({ name }) => next.npcs.find((npc) => npc.name === name)?.appearance === state.npcs.find((npc) => npc.name === name)?.appearance,
-          );
-          if (reopened.length > 0 || looks.length > 0)
-            log.info("turn", "An Edit's kept response carried over", { looseEndsOpened: reopened.length, looksKept: looks.length });
-          return {
-            ...next,
-            looseEnds: [...next.looseEnds.filter((end) => !kept.includes(end)), ...reopened],
-            npcs: next.npcs.map((npc) => looks.find(({ name }) => name === npc.name) ?? npc),
-          };
-        },
-        choices,
-      ),
+    commit: (narration, _check, advance, choices) => saves.editTurn(id, messageId, narration, advance, choices, added !== undefined),
     // Only portraits for anyone new, as the Scene Image stays.
     committed: (edited, scene) => images.sceneChanged(id, edited, { ...scene, changed: false }),
     times,
@@ -823,6 +864,9 @@ async function narrate(
     narration: edited,
     memory: pendingMemory,
     replies,
+    clockBack,
+    recentMoves,
+    upkeepReads,
     rollCheck,
     playMode,
     commit,
@@ -993,11 +1037,13 @@ async function narrate(
       state_operations = threads.kept;
       const amended = state_operations.filter((operation) => operation.op === "update_plot_thread" && operation.truth).length;
       if (amended > 0) log.info("turn", "Thread truths amended", { attempt, generation, amended });
+      // With the move, as the player has read their own words, and the Messages don't hold it yet.
+      const read = `${story}\n${move}\n${narration}`;
       if (seen) {
-        const read = withoutUnread(state_operations, narrated.next, `${story}\n${narration}`);
-        if (read.length < state_operations.length)
-          log.info("turn", "Journal entries naming secrets dropped", { attempt, generation, operations: state_operations.length - read.length });
-        state_operations = read;
+        const kept = journalRead(state_operations, narrated.next, read);
+        if (kept.length < state_operations.length)
+          log.info("turn", "Journal entries naming secrets dropped", { attempt, generation, operations: state_operations.length - kept.length });
+        state_operations = kept;
       }
       // The text is final here, so the player reads it while the follow-ups below run, and nothing after changes it.
       emit("reply", { text: narration });
@@ -1020,6 +1066,8 @@ async function narrate(
           facts: narrated.next.pcKnown.facts,
           looseEnds: narrated.next.looseEnds,
           storyTime: narrated.next.storyTime,
+          moves: recentMoves,
+          still: clockBack !== undefined && (narrated.next.storyTime?.hours ?? clockBack) - clockBack < STILL_HOURS,
           pc: {
             name: pcName,
             wearing: narrated.next.inventory.wearing,
@@ -1048,9 +1096,16 @@ async function narrate(
         followUp(
           "upkeep",
           upkeep
-            ? upkeepOperations(upkeep, pcName, narrated.next, check, previous, narration, signal, timed).then(
-                (ops) => ops && withoutRelearned(ops, state_operations, narrated.next.npcs),
-              )
+            ? upkeepOperations(
+                upkeep,
+                pcName,
+                narrated.next,
+                check,
+                upkeepReads?.previous ?? previous,
+                upkeepReads?.narration ?? narration,
+                signal,
+                timed,
+              ).then((ops) => ops && withoutRelearned(seen ? journalRead(ops, narrated.next, read) : ops, state_operations, narrated.next.npcs))
             : undefined,
         ),
         // Always asked for alone, in a call that sees no secret, as the Narrator's own named its secrets in everyday words.
@@ -1122,7 +1177,11 @@ async function narrate(
           location = next.scene.location;
           npcs = next.npcs;
           wearing = next.inventory.wearing;
-          portraits = portraitsDue(state, next);
+          portraits = portraitsDue(
+            state,
+            next,
+            [...narration.matchAll(/^\[([^[\]]+)\]:/gm)].map(([, speaker]) => speaker!.trim()),
+          );
           restyled = restyledBy(state, next);
           return next;
         },
@@ -1194,6 +1253,15 @@ const sameApproach = (one: string, other: string) => {
   const shared = [...a].filter((word) => b.has(word)).length;
   return one === other || (shared >= 4 && shared * 2 >= Math.min(a.size, b.size));
 };
+/** The operations without a Journal entry naming a secret, logging the Loose Ends among those dropped. */
+function journalRead<Operation extends StateOperation>(operations: Operation[], state: State, read: string) {
+  const kept = withoutUnread(operations, state, read);
+  const ends = (list: Operation[]) => list.filter(({ op }) => op === "add_loose_end").length;
+  const dropped = ends(operations) - ends(kept);
+  if (dropped > 0) log.info("turn", "Loose Ends with unknown words dropped", { dropped, kept: ends(kept) });
+  return kept;
+}
+
 /**
  * State Upkeep's operations without an npc_learns that says again in other words what the Narrator's own gave that person in
  * the same Turn, as Upkeep repeated them most Turns of a bench play.

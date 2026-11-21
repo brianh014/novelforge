@@ -4,7 +4,7 @@ import { z } from "zod";
 import { jsonSchemaOf } from "../src/turn-engine";
 
 /** Bumped when the rubric changes how scores read, so a comparison never sets a score beside one from another rubric. */
-export const RUBRIC_VERSION = 2;
+export const RUBRIC_VERSION = 4;
 
 /** The rubric, in general words, as it judges any story the bench plays, each item with anchors written from a reader's side. */
 export const RUBRIC = {
@@ -15,11 +15,11 @@ export const RUBRIC = {
   threads:
     "Plot Threads move toward natural endings at the pace of story time, bending to what the player did rather than steering them back, and new ones follow on from what came before; none need end within the run. 1-2 threads never move, or end at random; 3-4 they stall for long stretches, steer the PC back, or end against what the page showed; 5-6 they move, but slowly or out of step with story time, or new ones come from nowhere; 7-8 they move with story time toward endings, bend to what the PC did, and new ones grow from the old; 9-10 a novelist's subplots, each building to an ending the reader feels coming and still wants",
   characters:
-    "Characters stay true to what they said, know and want, and act on their own motives. 1-2 people say or do whatever the scene needs; 3-4 people act on what they were never told, tell all on first asking, or turn without cause; 5-6 mostly true to themselves, with lapses a reader notices; 7-8 each wants something, keeps to what they said and knows only what they saw or were told; 9-10 people a reader would know by voice alone, whose choices surprise and convince",
+    "Characters stay true to what they said, know and want, and act on their own motives. 1-2 people say or do whatever the scene needs; 3-4 people act on what they were never told, tell all on first asking, turn without cause, or do what a Check's result needed rather than what they would; 5-6 mostly true to themselves, with lapses a reader notices; 7-8 each wants something, keeps to what they said and knows only what they saw or were told; 9-10 people a reader would know by voice alone, whose choices surprise and convince",
   continuity:
     "Continuity: time, place, who is present, what people wear and carry, and what happened stay consistent. 1-2 the story restarts, replays or loses who is where; 3-4 contradictions a reader trips over: someone in two places, time stuck or going back, the dead acting, a thing carried after it was lost; 5-6 small slips a careful reader catches, none that breaks a scene; 7-8 everything holds, a slip at most; 9-10 nothing a reader rereading would catch",
   pacing:
-    "Pacing: every reply moves something on, such as a new fact, a change in someone or a decision, whatever the player picked; a slow stretch the picks asked for is no fault if each beat adds something, but a reply that repeats the one before it, or stalls on the player's move, is. 1-2 the story goes nowhere for long stretches; 3-4 frequent stalls on one standoff, or replies repeating the one before; 5-6 most replies move something on, with stretches of treading water; 7-8 every reply adds something, and quiet stretches earn their place; 9-10 a page-turner, each reply pulling the reader into the next",
+    "Pacing: every reply moves something on, such as a new fact, a change in someone or a decision, whatever the player picked; a slow stretch the picks asked for is no fault if each beat adds something, but a reply that repeats the one before it, or stalls on the player's move, is, as is one that rushes, skipping time or a scene the PC was still in, or settling in one reply what should take several. 1-2 the story goes nowhere for long stretches, or races through what should have been played; 3-4 frequent stalls on one standoff, replies repeating the one before, or frequent skips past what the PC was doing; 5-6 most replies move something on, with stretches of treading water or hurry; 7-8 every reply adds something, and quiet stretches earn their place; 9-10 a page-turner, each reply pulling the reader into the next",
   prose:
     "Prose: clear, vivid and varied, in a consistent voice, without repeated phrases. 1-2 hard to follow, or broken text (stray markup, another language, cut sentences); 3-4 clear but flat, with repeats a reader notices, or garbled or mislabelled lines; 5-6 competent genre prose with tics; 7-8 vivid and varied in one voice, few repeats; 9-10 prose a reader would quote",
   pictures:
@@ -29,7 +29,7 @@ export const RUBRIC = {
   agency:
     "The player's character is the player's: the Narrator never puts words in their mouth beyond what carrying out the move needs, decides for them, changes their plan or decides how they feel about something, and narrates the move the player gave rather than a different one; on a Continue the world acts and the PC decides nothing new. 1-2 the Narrator plays the PC; 3-4 often adds lines, decisions or feelings past the move, or narrates another move; 5-6 now and then speaks or decides a little past the move; 7-8 the PC does only what the player gave; 9-10 every move carried out as meant, and the PC wholly the player's",
   stakes:
-    "Checks and stakes: a risky move gets a Check rather than being waved through, a failed Check costs something real that the story carries forward, and a success reads as won, not handed over; judge the risks that came up, however few, and if none did, whether the Choices ever offered one. 1-2 risks waved through, failures cost nothing; 3-4 Checks rare or toothless, success handed over; 5-6 some risks checked and some costs real, but soon forgotten; 7-8 risky moves checked, failures carried forward, success won; 9-10 every risk felt before the roll, and its outcome changes the story",
+    "Checks and stakes: a risky move gets a Check rather than being waved through, a failed Check costs something real that the story carries forward, and a success reads as won, not handed over; judge the risks that came up, however few, and if none did, whether the Choices ever offered one. 1-2 risks waved through, failures cost nothing; 3-4 Checks rare or toothless, success handed over; 5-6 some risks checked and some costs real, but soon forgotten; 7-8 risky moves checked, failures carried forward, success won, and each result true to the people it touches, its cost coming from luck, the world or the PC rather than from someone acting against themselves; 9-10 every risk felt before the roll, and its outcome changes the story",
   state:
     "State kept true: everything the app records and shows (the features audited) matches what happened on the page at each point, is kept up when the page changes it, and stays so after a Rewrite, Edit, Regenerate or World Change. 1-2 mostly wrong or stuck; 3-4 many records stale or wrong, some the player sees; 5-6 a few stale or wrong records, mostly hidden; 7-8 right, a slip or two; 9-10 every record right at every point",
 } as const;
@@ -68,7 +68,8 @@ export type GenreKey = keyof typeof GENRES;
 export const MISTAKES = {
   secret: "a secret given away: narration, speech, a Choice, the summary or the Journal tells what the PC hasn't found",
   knowledge: "knowledge crossing: someone acts on or says what they were never told or shown",
-  character: "a character false to themselves: acting against what they said, know or want, turning without cause, or giving up their own secret unasked",
+  character:
+    "a character false to themselves: acting against what they said, know or want, turning without cause, giving up their own secret unasked, or bending to a Check's result against who they are",
   contradiction: "a contradiction: time, place, who is present, what people wear or carry, what happened, or the dead acting",
   pcVoiced: "the PC voiced or decided past the move: lines, choices, feelings or a changed plan the player never gave",
   restart: "the story restarting or replaying what already happened",

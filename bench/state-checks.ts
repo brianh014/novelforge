@@ -32,7 +32,12 @@ export function stateFaults(steps: { action: string; before: State; after: State
     const [was, now] = [before.storyTime, after.storyTime];
     if (turn && was && now) {
       const [wasPart, nowPart] = [dayPart(was.timeOfDay), dayPart(now.timeOfDay)];
-      if (now.day < was.day || (now.day === was.day && wasPart !== undefined && nowPart !== undefined && nowPart < wasPart)) faults.timeBack++;
+      // By the clock where both have it, as "a quarter to one" after "half past midnight" read as going back by its words.
+      const back =
+        was.hours !== undefined && now.hours !== undefined
+          ? now.hours < was.hours
+          : now.day < was.day || (now.day === was.day && wasPart !== undefined && nowPart !== undefined && nowPart < wasPart);
+      if (back) faults.timeBack++;
     }
     for (const [name, known] of Object.entries(after.npcKnows)) {
       const earlier = before.npcKnows[name] ?? [];

@@ -571,11 +571,12 @@ test("settings that can't be read mid-queue fail that image, not the Save", asyn
   restore();
 });
 
-test("an NPC the PC comes to know gets a portrait without being in view, and one who is only in the state doesn't", async () => {
-  play([turn(meet("Stranger")), turn(meet("Jenny"), know("Jenny"))], png(1), png(2));
+test("an NPC the PC comes to know gets a portrait once in view, and one only spoken of, or only in the state, doesn't", async () => {
+  play([turn(meet("Stranger")), turn(meet("Jenny"), know("Jenny")), turn(inView("Jenny"))], png(1), png(2));
   await enableImages();
   const id = await app.createSave();
 
+  await playSettled(id);
   await playSettled(id);
   expect(images.payloads).toEqual([]);
 
@@ -584,8 +585,25 @@ test("an NPC the PC comes to know gets a portrait without being in view, and one
   expect(portraitPrompts()).toHaveLength(1);
 });
 
+test("someone given a spoken line gets a portrait though not in view, as a voice through a door", async () => {
+  const spoken = JSON.stringify({
+    check: null,
+    narration: "A voice calls through the door.\n\n[Jenny]: “Open up.”",
+    state_operations: [meet("Jenny"), know("Jenny")],
+    scene_changed: false,
+    visual_description: "A shut door",
+  });
+  play([spoken], png(1));
+  await enableImages();
+  const id = await app.createSave();
+
+  await playSettled(id);
+
+  expect((await journalOf(id)).portraits.map(({ npc }) => npc)).toEqual(["Jenny"]);
+});
+
 test("a Revert past the Turn an NPC became known takes their portrait with that knowledge", async () => {
-  play([turn(), turn(meet("Jenny"), know("Jenny"))], png(1), png(2));
+  play([turn(), turn(meet("Jenny"), know("Jenny"), inView("Jenny"))], png(1), png(2));
   await enableImages();
   const id = await app.createSave();
   await playSettled(id);
@@ -600,7 +618,7 @@ test("a Revert past the Turn an NPC became known takes their portrait with that 
 });
 
 test("someone already known with no portrait is drawn when the Scene next moves, and a failure isn't retried every Turn", async () => {
-  play([turn(meet("Jenny"), know("Jenny")), turn(), turn(moveTo("The pier"))], new Error("image model down"), png(1), png(2));
+  play([turn(meet("Jenny"), know("Jenny"), inView("Jenny")), turn(), turn(moveTo("The pier", "Jenny"))], new Error("image model down"), png(1), png(2));
   await enableImages();
   const id = await app.createSave();
 
@@ -618,7 +636,7 @@ const naming = (people: unknown, ...state_operations: object[]) =>
 const person = (name: string, appearance = "Tall, in oilskins") => ({ name, appearance });
 
 test("someone the response names but the Narrator never added becomes a known NPC with a portrait", async () => {
-  play([naming([person("Priya", "Short, with a green scarf")])], png(1));
+  play([naming([person("Priya", "Short, with a green scarf")], inView("Priya"))], png(1));
   await enableImages();
   const id = await app.createSave();
 
@@ -665,7 +683,7 @@ test("the Narrator doing the same work in its operations costs nothing, and a su
 });
 
 test("the PC, someone with no looks to draw, and a repeat in the list add no NPC", async () => {
-  play([naming([person("Ash"), person("Nobody", " "), person("Priya"), person("Priya", "Someone else")])], png(1));
+  play([naming([person("Ash"), person("Nobody", " "), person("Priya"), person("Priya", "Someone else")], inView("Priya"))], png(1));
   await enableImages();
   const id = await app.createSave();
 

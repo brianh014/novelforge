@@ -10,6 +10,17 @@ const npcs = [
 ];
 const pc = "Ash Vane";
 
+test("a mark gets the skin, hair and beard of someone's looks that its phrase leaves out, once, and nothing else of them", () => {
+  const vik = { name: "Vik", appearance: "a big man with fair skin, a ragged blond beard and frostbitten fingers, in a torn smock" };
+
+  expect(expandMarks("[Vik: a gaunt bearded man in a grey coat] stops. [Vik] waves.", [vik], pc, ["Vik"]).prompt).toBe(
+    "the person from image 1, a gaunt bearded man in a grey coat, fair skin, a ragged blond beard, stops. the same person waves.",
+  );
+  expect(expandMarks("[Vik: a man with fair skin and a ragged blond beard] stops.", [vik], pc).prompt).toBe(
+    "a man with fair skin and a ragged blond beard stops.",
+  );
+});
+
 test("each mark becomes the Narrator's own phrase, beside what they do, and says who is pictured", () => {
   expect(expandMarks("[Hesper: a tall woman in black] waves at [Ash Vane: a short man with a tin badge] on the quay", npcs, pc)).toEqual({
     prompt: "a tall woman in black waves at a short man with a tin badge on the quay",
@@ -193,7 +204,7 @@ test("someone's looks keep what lasts, not what they hold or where they are, and
 test("someone's looks keep no weather, dust or thing carried, which pass with the scene", () => {
   const coat = "a broad man in his fifties with a grey moustache, in a dark blue coat";
   const before = { ...openingState, npcs: [{ name: "Price", appearance: coat }] };
-  const passing = `${coat}, rain-dark shoulders, boots grey with road dust, a ledger carried hard against his ribs, soaked through, hair dripping`;
+  const passing = `${coat}, rain-dark shoulders, boots grey with road dust, a ledger carried hard against his ribs, soaked through, hair dripping, barefoot`;
   const { next } = applyOperations(before, [{ op: "update_npc", name: "Price", appearance: passing }]);
   expect(next.npcs[0]!.appearance).toBe(coat);
 });
@@ -236,4 +247,12 @@ test("someone whose own Lore Entry the world keys as a body is given no portrait
   const after = { ...openingState, worldBible, npcs: [living, drowned], scene: { location: "The loft", visibleCast: ["Owen Price", "Tobias Crane"] } };
 
   expect(portraitsDue(openingState, after)).toEqual([living]);
+});
+
+test("someone known and heard from out of view is due no portrait again each Turn, but is on coming into view", () => {
+  const voice = { name: "Owen Price", appearance: "a broad constable" };
+  const known = { ...openingState, npcs: [voice], pcKnown: { facts: [], npcs: ["Owen Price"] }, scene: { location: "The loft", visibleCast: [] } };
+
+  expect(portraitsDue(known, known, ["Owen Price"])).toEqual([]);
+  expect(portraitsDue(known, { ...known, scene: { location: "The loft", visibleCast: ["Owen Price"] } })).toEqual([voice]);
 });

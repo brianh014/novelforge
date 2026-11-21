@@ -19,6 +19,7 @@ let buildLevel: LogLevel = "warning";
 let chosenLevel: LogLevel | undefined;
 let logFile: string | undefined;
 let logBytes = 0;
+let mostLogBytes = MOST_LOG_BYTES;
 let fileFailed = false;
 
 const context = new AsyncLocalStorage<Fields>();
@@ -33,9 +34,10 @@ export function setLogLevel(level: LogLevel | null | undefined) {
   chosenLevel = level ?? undefined;
 }
 
-/** Called first thing, so that no line comes before it. Without a `folder`, nothing goes to a file. */
-export function startLog(level: LogLevel, folder?: string) {
+/** Called first thing, so that no line comes before it. Without a `folder`, nothing goes to a file. `mostBytes` lifts the rotation size, for the bench's long plays. */
+export function startLog(level: LogLevel, folder?: string, mostBytes = MOST_LOG_BYTES) {
   buildLevel = level;
+  mostLogBytes = mostBytes;
   logFile = folder && join(folder, "inkandthread.log");
   fileFailed = false;
   if (!folder || !logFile) return;
@@ -59,7 +61,7 @@ function fileFailure(error: unknown) {
 function toFile(line: string) {
   if (!logFile) return;
   try {
-    if (logBytes >= MOST_LOG_BYTES) {
+    if (logBytes >= mostLogBytes) {
       // Before the rename, so a file that won't rotate is tried again at its next 25 MB, not on every line.
       logBytes = 0;
       renameSync(logFile, `${logFile}.1`);

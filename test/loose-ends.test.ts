@@ -92,41 +92,44 @@ test("a miscopied resolve costs no Turn or second call, and logs why with no sto
   expect(line).not.toContain("ZQX");
 });
 
-test("an Edit that keeps the response whole keeps the Loose Ends it resolved, though the Narrator misses them the second time", async () => {
-  play(narration("You find the guide.", resolve(MISSING)), narration("You find the guide.\n\nA bell rings."));
-  const id = createSave(MISSING, SOCIAL);
-  expect((await turn(id)).status).toBe(201);
-
-  const line = await logOf(() => app.post(`/saves/${id}/messages/2/edit`, { text: "You find the guide.\n\nA bell rings." }), "info");
-
-  expect(ends(id)).toEqual([SOCIAL]);
-  expect(line).toContain('"looseEndsKept":1');
-});
-
-test("an Edit that keeps the response whole keeps the Loose Ends it opened and the looks it changed, though the Narrator misses them", async () => {
+test("an Edit that keeps the response whole starts from the state it left, so what it changed stays though the Narrator misses it", async () => {
   const OPENED = "Where did Kit run to?";
+  const LORE = { op: "add_lore_entry", title: "The Bell", keywords: ["bell"], content: "It rings at the flood." } as StateOperation;
   play(
     narration("Owen waits.", { op: "add_npc", name: "Owen", appearance: "a tall man in a grey coat" }),
-    narration("Owen shaves his beard. Kit runs off.", add(OPENED), {
+    narration("Owen shaves his beard. Kit runs off. The bell rings.", resolve(MISSING), add(OPENED), LORE, {
       op: "update_npc",
       name: "Owen",
       appearance: "a tall man, clean-shaven, in a grey coat",
     }),
-    narration("Owen shaves his beard. Kit runs off.\n\nA bell rings."),
+    narration("Owen shaves his beard. Kit runs off. The bell rings.\n\nA gull cries."),
   );
-  const id = createSave(SOCIAL);
+  const id = createSave(MISSING, SOCIAL);
   expect((await turn(id)).status).toBe(201);
   expect((await turn(id)).status).toBe(201);
 
-  const line = await logOf(() => app.post(`/saves/${id}/messages/4/edit`, { text: "Owen shaves his beard. Kit runs off.\n\nA bell rings." }), "info");
+  const line = await logOf(
+    () => app.post(`/saves/${id}/messages/4/edit`, { text: "Owen shaves his beard. Kit runs off. The bell rings.\n\nA gull cries." }),
+    "info",
+  );
 
-  expect(ends(id)).toEqual([SOCIAL, OPENED]);
-  expect(
-    store()
-      .latestState(id)
-      .npcs.find(({ name }) => name === "Owen")?.appearance,
-  ).toBe("a tall man, clean-shaven, in a grey coat");
-  expect(line).toContain('"looksKept":1');
+  const state = store().latestState(id);
+  expect(state.looseEnds).toEqual([SOCIAL, OPENED]);
+  expect(state.npcs.find(({ name }) => name === "Owen")?.appearance).toBe("a tall man, clean-shaven, in a grey coat");
+  expect(state.worldBible.map(({ title }) => title)).toContain("The Bell");
+  expect(textOf(prompts.at(-1)!)).toContain('"added_words":"A gull cries."');
+  expect(line).toContain("Edit adds to the response");
+});
+
+test("an Edit that changes the response's words rebuilds from the state before it", async () => {
+  play(narration("You find the guide.", resolve(MISSING)), narration("You lose the guide."));
+  const id = createSave(MISSING, SOCIAL);
+  expect((await turn(id)).status).toBe(201);
+
+  expect((await app.post(`/saves/${id}/messages/2/edit`, { text: "You lose the guide." })).status).toBe(201);
+
+  expect(ends(id)).toEqual([MISSING, SOCIAL]);
+  expect(textOf(prompts.at(-1)!)).not.toContain("added_words");
 });
 
 test("a repeated Loose End logs only its count, at Info", async () => {

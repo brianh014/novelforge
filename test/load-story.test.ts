@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { MAX_IMPORT_BYTES, type Message } from "../src/save-store";
+import { MAX_IMPORT_BYTES, type Message, saveStore } from "../src/save-store";
 import type { ListedSave } from "../src/web/api";
 import { narration, scriptedTextProvider, startApp, tempFolder } from "./support";
 
@@ -785,4 +785,19 @@ test("a Continue a Save kept in its old words, or empty, becomes the Continue ma
 
   const players = (await messagesOf(id)).filter(({ role }) => role === "player");
   expect(players.map(({ text }) => text)).toEqual(["(Continue)", "(Continue)"]);
+});
+
+test("a Save from before the clock and thread bookkeeping gets their sections, at the values they would have held", async () => {
+  play();
+  const id = await app.createSave();
+  {
+    using db = new Database(savePath(id));
+    db.run("DELETE FROM snapshot_sections WHERE name IN ('npcParts', 'threadsQuestion', 'threadsDue')");
+  }
+  // 29, the version 0.5.2 Saves are at.
+  setSchemaVersion(savePath(id), 29);
+
+  const state = saveStore(savesDir).latestState(id);
+
+  expect([state.npcParts, state.threadsQuestion, state.threadsDue]).toEqual([{}, {}, {}]);
 });

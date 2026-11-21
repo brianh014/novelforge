@@ -144,7 +144,13 @@ function storyChanges(people: string[]) {
     { op: "add_status", kind: "conditions", text: pick(CONDITIONS) },
     { op: "add_status", kind: "injuries", text: pick(INJURIES) },
     // A new date with each round of the times, so a retry that skips ahead never takes the story back within a day.
-    { op: "set_story_time", days_passed: at % TIMES.length === 0 ? 1 : 0, date: `Day ${Math.floor(at / TIMES.length) + 1} of Thaw`, time_of_day: pick(TIMES) },
+    {
+      op: "set_story_time",
+      days_passed: at % TIMES.length === 0 ? 1 : 0,
+      hours_passed: 1,
+      date: `Day ${Math.floor(at / TIMES.length) + 1} of Thaw`,
+      time_of_day: pick(TIMES),
+    },
   ];
 }
 

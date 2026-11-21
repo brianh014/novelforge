@@ -767,7 +767,7 @@ test("a Message's Check reaches the page only with Show Checks on", async () => 
 });
 
 test("a stored Check that won't read is left out, and the rest still reach the page", async () => {
-  const { app } = playWithDice([19, 4], requestCheck("Very Hard"), narration("She goes along."), requestCheck("Easy"), narration("You land."));
+  const { app } = playWithDice([19, 4], requestCheck("Very Hard"), narration("She goes along."), requestCheck("Moderate"), narration("You land."));
   const id = await app.createSave();
   await app.post(`/saves/${id}/turns`, { input: "I ask her." });
   await app.post(`/saves/${id}/turns`, { input: "I leap the gap." });
@@ -778,7 +778,7 @@ test("a stored Check that won't read is left out, and the rest still reach the p
   }
 
   const { checks } = (await (await app.get(`/saves/${id}/checks`)).json()) as { checks: { messageId: number; difficulty: string }[] };
-  expect(checks.map(({ messageId, difficulty }) => [messageId, difficulty])).toEqual([[4, "Easy"]]);
+  expect(checks.map(({ messageId, difficulty }) => [messageId, difficulty])).toEqual([[4, "Moderate"]]);
 });
 
 test("once the Check is rolled, the schema sent for the result allows no second Check request", async () => {
@@ -790,6 +790,57 @@ test("once the Check is rolled, the schema sent for the result allows no second 
   const check = (schema: unknown) => (schema as { properties: { check: unknown } }).properties.check;
   expect(JSON.stringify(check(schemas[0]))).toContain("action");
   expect(check(schemas[1])).toEqual({ type: "null" });
+});
+
+test("a move rated Easy is never rolled: the reply reads as a finished Turn with no Check", async () => {
+  // No die scripted, so a roll would fail the Turn.
+  const { app, prompts } = playWithDice([], JSON.stringify({ narration: "You step over the puddle.", check: { action: "Step over", difficulty: "Easy" } }));
+  const id = await app.createSave();
+
+  expect((await app.post(`/saves/${id}/turns`, { input: "I step over the puddle." })).status).toBe(201);
+  expect(storedChecks(id)).toEqual([null, null]);
+  expect(prompts).toHaveLength(1);
+});
+
+test("a move rated Easy but sent without narration is rolled, rather than written again", async () => {
+  const { app, prompts } = playWithDice([12], requestCheck("Easy", "Step over"), narration("You step over."));
+  const id = await app.createSave();
+
+  expect((await app.post(`/saves/${id}/turns`, { input: "I step over the puddle." })).status).toBe(201);
+  expect(storedChecks(id)[1]).toMatchObject({ action: "Step over", difficulty: "Easy", outcome: "success" });
+  expect(prompts).toHaveLength(2);
+});
+
+test("the most someone would give, rated before the roll, goes to the result call as its ceiling", async () => {
+  const AT_MOST = "She names the ship, never the captain.";
+  const { app, prompts } = playWithDice(
+    [20],
+    JSON.stringify({ check: { action: "Ask Mara who paid", difficulty: "Hard", stakes: "She shuts the door.", at_most: AT_MOST } }),
+    narration("She names the ship."),
+  );
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I ask Mara who paid." });
+
+  const result = contents(prompts[1]).join();
+  expect(result).toContain(AT_MOST);
+  expect(result).toContain(`The most anyone it touches gives is this: ${AT_MOST} Whatever the move asked beyond it, they refuse.`);
+  // Only the rolled degree's words.
+  expect(result).not.toContain("The PC fails");
+});
+
+test("a failed Check's result call has only the failure's words, and no ceiling", async () => {
+  const { app, prompts } = playWithDice(
+    [6],
+    JSON.stringify({ check: { action: "Ask Mara who paid", difficulty: "Hard", stakes: "She shuts the door.", at_most: "She names the ship." } }),
+    narration("She shuts the door."),
+  );
+  const id = await app.createSave();
+  await app.post(`/saves/${id}/turns`, { input: "I ask Mara who paid." });
+
+  const result = contents(prompts[1]).join();
+  expect(result).toContain("The PC fails, and the stakes come true");
+  expect(result).not.toContain("The PC succeeds");
+  expect(result).not.toContain("She names the ship.");
 });
 
 test("a Check takes two calls, and the second receives the outcome and degree", async () => {
@@ -831,10 +882,8 @@ test.each([
   ["Hard", 12, 2, "failure", "plain"],
   ["Hard", 14, 0, "failure", "plain"],
   ["Hard", 10, 5, "success", "mixed"],
-  ["Easy", 1, 2, "failure", "bad"],
-  ["Easy", 1, 10, "failure", "bad"],
-  ["Easy", 5, 2, "success", "mixed"],
-  ["Easy", 6, 2, "success", "clean"],
+  ["Moderate", 1, 2, "failure", "bad"],
+  ["Moderate", 1, 10, "failure", "bad"],
   ["Moderate", 10, 2, "success", "mixed"],
   ["Moderate", 11, 2, "success", "clean"],
   ["Very Hard", 19, 2, "success", "mixed"],
@@ -894,8 +943,8 @@ test("a Check request retried after an invalid reply still rolls once", async ()
 test.each([
   ["an invalid reply", "Not JSON"],
   ["a refused operation", narration("You trade.", { op: "remove_item", item: "rope" })],
-  ["a second Check request", requestCheck("Easy")],
-  ["a second Check request with narration", JSON.stringify({ narration: "Again.", check: { action: "Leap", difficulty: "Easy" } })],
+  ["a second Check request", requestCheck("Hard")],
+  ["a second Check request with narration", JSON.stringify({ narration: "Again.", check: { action: "Leap", difficulty: "Hard" } })],
 ])("a result call retried after %s reuses the same roll", async (_, bad) => {
   // One scripted roll, so a second roll would fail the Turn.
   const { app, prompts } = playWithDice([3], requestCheck("Hard"), bad, narration("You fall."));
@@ -1257,7 +1306,7 @@ test("world_rules come after the story so far, with the instruction to fail viol
 });
 
 test("the Check result call keeps the whole prompt, including world_rules and the rule against mentioning Checks", async () => {
-  const { app, prompts } = playWithDice([10], JSON.stringify({ check: { action: "leap", difficulty: "Easy" } }), narration("You land."));
+  const { app, prompts } = playWithDice([10], JSON.stringify({ check: { action: "leap", difficulty: "Moderate" } }), narration("You land."));
   const id = await app.createSave();
   seed(id, { worldRules: ["no-magic-rule"] });
 
@@ -1988,10 +2037,10 @@ test("a Regenerate whose new rating is None drops the stored Check and narrates 
 
 test("a replacement's new Check is rated afresh and rolled with a fresh die", async () => {
   const { app, prompts } = playWithDice(
-    [14, 3, 8],
+    [14, 10, 8],
     requestCheck("Hard"),
     narration("You land, but your pack is gone."),
-    requestCheck("Easy", "Step across"),
+    requestCheck("Moderate", "Step across"),
     narration("You step across, soaked."),
     requestCheck("Very Hard", "Vault the gap"),
     narration("You fall short."),
@@ -2000,7 +2049,7 @@ test("a replacement's new Check is rated afresh and rolled with a fresh die", as
   await app.post(`/saves/${id}/turns`, { input: "I leap the gap." });
 
   expect((await regenerate(app, id, 2)).status).toBe(201);
-  expect(storedChecks(id)[1]).toEqual({ action: "Step across", difficulty: "Easy", roll: 3, outcome: "success", degree: "mixed" });
+  expect(storedChecks(id)[1]).toEqual({ action: "Step across", difficulty: "Moderate", roll: 10, outcome: "success", degree: "mixed" });
   expect((await rewrite(app, id, 3, "Make it harder.")).status).toBe(201);
 
   expect(storedChecks(id)).toEqual([null, { action: "Vault the gap", difficulty: "Very Hard", roll: 8, outcome: "failure", degree: "plain" }]);

@@ -22,8 +22,9 @@ export function StoryRecap({
       <div className="story-title">
         <h1 className="title">{storyName(save)}</h1>
         {journal?.storyTime && (
-          <p className="muted story-time" data-testid="story-time" title={`${journal.storyTime.date}, ${journal.storyTime.timeOfDay}`}>
-            {journal.storyTime.date}, {journal.storyTime.timeOfDay}
+          // The time of day alone past midnight, until a Turn names the new date, as the old one read "Monday" on Tuesday.
+          <p className="muted story-time" data-testid="story-time" title={storyTimeText(journal.storyTime)}>
+            {storyTimeText(journal.storyTime)}
           </p>
         )}
       </div>
@@ -66,3 +67,5 @@ export function StoryRecap({
     </>
   );
 }
+
+const storyTimeText = ({ date, timeOfDay, dateDue }: { date: string; timeOfDay: string; dateDue?: boolean }) => (dateDue ? timeOfDay : `${date}, ${timeOfDay}`);

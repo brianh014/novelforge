@@ -223,6 +223,27 @@ test("a move is told which of each thread's people are with the PC, so it never 
   expect(JSON.parse(told.prompts[1]!.at(-1)!.content).plot_threads[0].with_pc).toEqual(["Kit"]);
 });
 
+test("a move is told which of each thread's people the latest replies showed after they left, so it starts them from there", async () => {
+  const told = play(
+    narration(
+      "Kit runs off down the quay.",
+      { op: "add_npc", name: "Kit", appearance: "a boy in a cap" },
+      { op: "set_scene", location: "The library", visible_cast: [] },
+      { op: "update_plot_thread", thread: THIEF, truth: null, now: "Kit watches the library stacks.", plan: null },
+      nextDay(),
+    ),
+    moved({ ...change(THIEF, "Kit hides on the quay."), knows: [{ name: "Kit", knows: "A thief is coming." }] }),
+    narration("Ash reads."),
+  );
+  const id = createSave();
+  expect((await turn(id, "I go in.")).ok).toBe(true);
+  expect((await turn(id, "I read.")).ok).toBe(true);
+
+  const thread = JSON.parse(told.prompts[1]!.at(-1)!.content).plot_threads[0];
+  expect(thread.seen_lately).toEqual(["Kit"]);
+  expect(thread.with_pc).toBeUndefined();
+});
+
 test("a move reads the replies the summary doesn't cover yet, as the summary is written only every few replies", async () => {
   const told = play(
     narration("Ash enters the archive.", { summary: "Ash entered the archive." }),
@@ -359,13 +380,18 @@ test("the player's Journal edits are still settled after a move, which settles n
   expect(journalChange([fact, world])).toBe("");
 });
 
-test("a Regenerate and a Rewrite keep the move made from the reply they replace, as dropping it lost paid moves", async () => {
+test("a Regenerate and a Rewrite drop the move made from the reply they replace, and the next Turn moves the world again", async () => {
   const robbed = "The thief has robbed the library.";
+  const fled = "The thief has fled to the hills.";
   play(
     narration("Ash walks to the dock.", { op: "set_scene", location: "The dock", visible_cast: [] }, nextDay()),
     moved(change(THIEF, robbed)),
     narration("Ash stays in the library."),
+    narration("Ash waits."),
+    moved(change(THIEF, robbed)),
     narration("Ash sits in the library."),
+    narration("Ash reads."),
+    moved(change(THIEF, fled)),
   );
   const id = createSave();
   expect((await turn(id, "I walk to the dock.")).ok).toBe(true);
@@ -375,15 +401,23 @@ test("a Regenerate and a Rewrite keep the move made from the reply they replace,
     ["rewrite", { feedback: "Slower." }],
   ] as const) {
     const replaced = store().latestMessageId(id);
-    const response = await fetch(new URL(`/saves/${id}/messages/${replaced}/${action}`, server.url), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    expect(response.ok).toBe(true);
-    await response.text();
-    expect(store().latestState(id).threadsNow).toEqual({ [THIEF]: robbed });
+    const line = await logOf(async () => {
+      const response = await fetch(new URL(`/saves/${id}/messages/${replaced}/${action}`, server.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect(response.ok).toBe(true);
+      await response.text();
+    }, "info");
+    expect(store().latestState(id).threadsNow[THIEF]).toBeUndefined();
+    expect(line).toContain("World move dropped with the replaced response");
+    // Moves the world again at once, for the Rewrite to drop.
+    if (action === "regenerate") expect((await turn(id, "I wait.")).ok).toBe(true);
   }
+  expect((await turn(id, "I read.")).ok).toBe(true);
+  for (let tries = 0; tries < 100 && !store().latestState(id).threadsNow[THIEF]; tries++) await Bun.sleep(10);
+  expect(store().latestState(id).threadsNow).toEqual({ [THIEF]: fled });
 });
 
 test("a move adds threads only while fewer than three are open, as an 80-round story's grew to seven that nothing ended", async () => {
@@ -439,6 +473,103 @@ test("a move removes a thread only when the replies show its people or a Turn as
   expect(store().latestState(id).plotThreads).toEqual(["The tide is wrong.", "The gulls are omens."]);
   expect(log).toContain('"dropped":{"a remove of a thread whose people the replies never name":1}');
   expect(told.prompts.some((prompt) => prompt.at(-1)!.content.includes("a remove leaves fewer than three threads and adds none"))).toBe(true);
+});
+
+test("a thread whose question play has answered is removed in place of its rewrite, and one missing from left stays", async () => {
+  const PELL = "Mr Pell means to burn the mill.";
+  const [TIDE, GULLS] = ["The tide is wrong.", "The gulls are omens."];
+  play(
+    narration("Ash sees Mr Pell hanged at the quay.", { op: "set_scene", location: "The quay", visible_cast: [] }, nextDay()),
+    JSON.stringify({
+      left: [
+        { thread: PELL, answer: "He was hanged at the quay." },
+        { thread: TIDE, answer: null, question: "Why the tide turns early." },
+      ],
+      plot_threads: [change(PELL, "He waits."), change(null, "Soon.", "The mill burns anyway.")],
+    }),
+    narration("Ash goes home."),
+  );
+  const id = store().create({
+    worldBrief: "A drowned city",
+    pc: { name: "Ash" },
+    opening: {
+      inventory: { wearing: [], carrying: [] },
+      scene: { location: "The library", visibleCast: [] },
+      summary: "",
+      worldRules: [],
+      plotThreads: [PELL, TIDE, GULLS],
+      worldBible: [{ title: "The miller", keywords: ["Mr Pell"], content: "", alwaysOn: false }],
+    },
+  });
+
+  const log = await logOf(async () => {
+    for (const input of ["I walk to the quay.", "I go home."]) expect((await turn(id, input)).ok).toBe(true);
+  }, "info");
+
+  expect(store().latestState(id).plotThreads).toEqual([TIDE, GULLS, "The mill burns anyway."]);
+  expect(log).toContain('"rewritten":0,"added":1,"removed":1');
+});
+
+test("an answer that says play hasn't answered it yet leaves the thread open", async () => {
+  const PELL = "Mr Pell means to burn the mill.";
+  // Four, so a close would leave three and nothing else holds it.
+  const [TIDE, GULLS, BELLS] = ["The tide is wrong.", "The gulls are omens.", "The bells ring wrong."];
+  play(
+    narration("Ash sees Mr Pell at the quay.", { op: "set_scene", location: "The quay", visible_cast: [] }, nextDay()),
+    JSON.stringify({ left: [{ thread: PELL, answer: "Not yet: whether the mill burns." }], plot_threads: [] }),
+    narration("Ash goes home."),
+  );
+  const id = store().create({
+    worldBrief: "A drowned city",
+    pc: { name: "Ash" },
+    opening: {
+      inventory: { wearing: [], carrying: [] },
+      scene: { location: "The library", visibleCast: [] },
+      summary: "",
+      worldRules: [],
+      plotThreads: [PELL, TIDE, GULLS, BELLS],
+      worldBible: [{ title: "The miller", keywords: ["Mr Pell"], content: "", alwaysOn: false }],
+    },
+  });
+
+  for (const input of ["I walk to the quay.", "I go home."]) expect((await turn(id, input)).ok).toBe(true);
+
+  expect(store().latestState(id).plotThreads).toEqual([PELL, TIDE, GULLS, BELLS]);
+});
+
+test("a thread keeps the question it began with, and a plan whose hour the clock has reached is marked due at the next move", async () => {
+  const TIDE = "The harbourmaster floods the lower town.";
+  const told = play(
+    narration("Ash watches the harbourmaster at the sluice.", { ...nextDay(), hours_passed: 20 }),
+    JSON.stringify({
+      left: [{ thread: TIDE, answer: null, question: "Whether the lower town floods." }],
+      plot_threads: [{ thread: TIDE, truth: null, now: "He oils the sluice gate.", plan: "He opens the sluice at dusk.", plan_in_hours: 2 }],
+    }),
+    narration("Night falls on the quay.", { ...nextDay("3rd of Thaw"), hours_passed: 24 }),
+    JSON.stringify({ left: [{ thread: TIDE, answer: null, question: "Whether he is caught." }], plot_threads: [] }),
+    narration("Ash goes home."),
+  );
+  const id = store().create({
+    worldBrief: "A drowned city",
+    pc: { name: "Ash" },
+    opening: {
+      inventory: { wearing: [], carrying: [] },
+      scene: { location: "The quay", visibleCast: [] },
+      summary: "",
+      worldRules: [],
+      plotThreads: [TIDE],
+      worldBible: [],
+      storyTime: { day: 1, date: "1st of Thaw", timeOfDay: "morning" },
+    },
+  });
+
+  for (const input of ["I watch the sluice.", "I wait for night.", "I go home."]) expect((await turn(id, input)).ok).toBe(true);
+
+  // The first question stands, never the one a later move gave.
+  expect(store().latestState(id).threadsQuestion[TIDE]).toBe("Whether the lower town floods.");
+  const moves = told.prompts.filter((prompt) => prompt[0]!.content.startsWith("You plot the hidden side"));
+  expect(JSON.parse(moves[0]!.at(-1)!.content).plot_threads[0]).not.toHaveProperty("plan_due");
+  expect(JSON.parse(moves[1]!.at(-1)!.content).plot_threads[0]).toMatchObject({ question: "Whether the lower town floods.", plan_due: true });
 });
 
 test("a move keeps its usable changes and drops only those that change a thread twice, misquote one or add one without its truth", async () => {
@@ -615,6 +746,26 @@ test("what a move gives someone to know is capped, so it never grows without bou
   };
 
   expect(applyEdit(state, edit).npcKnows.Ferryman).toEqual([...known.slice(1), "New."]);
+});
+
+test("the cap keeps someone's part of a thread however much they learn after, and drops the oldest of the rest", () => {
+  const secret = "He held the harbourmaster under for the vicar.";
+  const state = { ...openingState, npcs: [{ name: "Ferryman", appearance: "" }], plotThreads: ["The drowning."] };
+  const given = applyEdit(state, {
+    edit: "world",
+    update: { lore_entries: [], removed_lore: [], world_rules: [], plot_threads: [] },
+    knows: { Ferryman: [secret] },
+    parts: { "The drowning.": ["Ferryman"] },
+    moved: true,
+  });
+  const learned = Array.from({ length: MAX_NPC_KNOWS + 3 }, (_, at) => ({ op: "npc_learns" as const, name: "Ferryman", fact: `Fact ${at}.` }));
+
+  const { npcKnows } = applyOperations(given, learned).next;
+
+  expect(npcKnows.Ferryman).toHaveLength(MAX_NPC_KNOWS);
+  expect(npcKnows.Ferryman![0]).toBe(secret);
+  expect(npcKnows.Ferryman!.at(-1)).toBe(`Fact ${MAX_NPC_KNOWS + 2}.`);
+  expect(npcKnows.Ferryman).not.toContain("Fact 3.");
 });
 
 test("a now that waits on the PC, puts someone with the PC elsewhere or gives them what only a secret holds is asked again once", async () => {

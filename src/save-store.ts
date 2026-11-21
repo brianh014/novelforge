@@ -165,6 +165,9 @@ function deleteAfter(db: Database, messageId: number) {
   clearPending(db);
 }
 
+const STORY_TIME_BEFORE =
+  "SELECT s.content FROM snapshot_sections ss JOIN sections s ON s.id = ss.section_id WHERE ss.name = 'storyTime' AND ss.message_id < ? ORDER BY ss.message_id DESC LIMIT 1";
+
 const hasColumn = (db: Database, table: string, column: string) => db.query("SELECT 1 FROM pragma_table_info(?) WHERE name = ?").get(table, column) !== null;
 
 // The only kind of change ever made to a stored Snapshot: it gets the sections it lacks, at the values they would have held
@@ -349,6 +352,9 @@ const toVersion28 = addMissingSections;
 /** How many replies the summary covers, which starts at 0, so an older Save's next reply writes one. */
 const toVersion29 = addMissingSections;
 
+// npcParts, threadsQuestion and threadsDue.
+const toVersion30 = addMissingSections;
+
 /** One step per schema version, where step N takes a Save from version N to N + 1. New Saves take them too, so they can't drift from old ones. */
 const MIGRATIONS = [
   toVersion1,
@@ -380,6 +386,7 @@ const MIGRATIONS = [
   toVersion27,
   toVersion28,
   toVersion29,
+  toVersion30,
 ];
 
 function schemaVersion(db: Database) {
@@ -576,7 +583,7 @@ const withChoices = ({ choices, ...message }: ChoicesRow): Reply => ({ ...messag
 const choicesText = (choices?: string[]) => (choices ? JSON.stringify(choices) : null);
 
 /** The latest Turn, if its Narrator Message is still `messageId`, so a page behind the story can't replace what it never showed. */
-function latestTurn(db: Database, messageId: number) {
+function latestTurn(db: Database, messageId: number, replacing = false) {
   const [narrator, player] = db
     .query<Message & { hidden_check: string | null; edits: string | null; direction: string | null }, []>(
       "SELECT id, role, text, hidden_check, edits, direction FROM messages ORDER BY id DESC LIMIT 2",
@@ -586,11 +593,18 @@ function latestTurn(db: Database, messageId: number) {
   if (narrator!.id !== messageId || narrator!.role !== "narrator") throw new StaleTurn();
   // Director's Notes changed since the player Message must carry across, or the replacement would undo them. So must edits.
   const { directorsNotes } = currentState(db);
-  // A pending move of the world is kept too, though it read the response being replaced, as dropping it lost paid moves and left
-  // the threads' nows stale for rounds; what its people did out of sight mostly stands whatever the replacement says.
-  const edits = [...parseEdits(narrator!.edits), ...pendingEdits(db)];
+  // A pending move of the world read the response, so a new one drops it, as it kept deeds of the discarded reply in a thread's now.
+  // An Edit keeps it, as the response mostly stands.
+  // Those an Edit already stored on the Message too, as it copies pending edits there, and a Regenerate after it kept the move.
+  const read = (edit: WorldEdit) => edit.edit === "world" && edit.moved;
+  const all = [...parseEdits(narrator!.edits), ...pendingEdits(db)];
+  const edits = replacing ? all.filter((edit) => !read(edit)) : all;
   const state = edits.reduce(applyEdit, { ...toState(sectionsAt(db, player!.id)), directorsNotes });
-  return { narrator: narrator!, player: player!, state, edits };
+  // Only a move of the threads counts, so Lore alone, dropped as it read the response too, asks for no new move.
+  const movesDropped = replacing
+    ? all.filter((edit) => read(edit) && edit.edit === "world" && edit.update.plot_threads.length + Object.keys(edit.now ?? {}).length > 0).length
+    : 0;
+  return { narrator: narrator!, player: player!, state, edits, movesDropped };
 }
 
 // shortcut: room for a few hundred images, and import holds several copies in memory, so a longer story can export but not import until import streams.
@@ -838,15 +852,20 @@ export function saveStore(savesDir: string) {
       return latestMessage(db);
     },
 
+    /** The story time as it stood before a Message, or null before the Narrator first set one. */
+    storyTimeBefore(id: string, messageId: number) {
+      using db = open(id);
+      const row = db.query<{ content: string }, [number]>(STORY_TIME_BEFORE).get(messageId);
+      return row ? (JSON.parse(row.content) as State["storyTime"]) : null;
+    },
+
     /**
      * The Story Time just before each of `messageIds`, read as the PC would, for those the story had one by then. Before,
      * as the Turn that wrote a Message may have moved time on, and a memory is dated from when its scene began.
      */
     storyTimesAt(id: string, messageIds: number[]) {
       using db = open(id);
-      const before = db.query<{ content: string }, [number]>(
-        "SELECT s.content FROM snapshot_sections ss JOIN sections s ON s.id = ss.section_id WHERE ss.name = 'storyTime' AND ss.message_id < ? ORDER BY ss.message_id DESC LIMIT 1",
-      );
+      const before = db.query<{ content: string }, [number]>(STORY_TIME_BEFORE);
       const times: Record<number, string> = {};
       for (const messageId of messageIds) {
         const row = before.get(messageId);
@@ -1267,11 +1286,12 @@ export function saveStore(savesDir: string) {
     },
 
     /** What a new response to the latest Turn starts from: the state and story from before its Narrator Message. */
-    turnToReplace(id: string, messageId: number) {
+    turnToReplace(id: string, messageId: number, replacing = false) {
       using db = open(id);
       requireMessage(db, messageId);
-      const { narrator, player, state, edits } = latestTurn(db, messageId);
+      const { narrator, player, state, edits, movesDropped } = latestTurn(db, messageId, replacing);
       return {
+        movesDropped,
         journalEdits: [...parseEdits(player.edits), ...edits],
         input: player.text,
         narration: narrator.text,
@@ -1287,10 +1307,14 @@ export function saveStore(savesDir: string) {
      * Turn or replacement in flight from the old response is caught as stale.
      */
     /** In place, so the Message keeps its id and with it its Scene Image, Requested Images and portraits. */
-    editTurn(id: string, messageId: number, narration: string, advance: (state: State) => State, choices?: string[]): Reply[] {
+    /** `whole` advances the state the response left, as it stands now, for an Edit that keeps the response and adds to it. */
+    editTurn(id: string, messageId: number, narration: string, advance: (state: State) => State, choices?: string[], whole = false): Reply[] {
       using db = open(id);
       return db.transaction(() => {
-        const { state, edits } = latestTurn(db, messageId);
+        const turn = latestTurn(db, messageId);
+        const { edits } = turn;
+        // Read here, inside the write, as one read before the Narrator's call lost a World Change sent meanwhile.
+        const state = whole ? currentState(db) : turn.state;
         const edited = db
           .query<ChoicesRow, [string, string | null, string | null, number]>(
             "UPDATE messages SET text = ?, edits = ?, choices = ? WHERE id = ? RETURNING id, role, text, choices",
@@ -1316,7 +1340,7 @@ export function saveStore(savesDir: string) {
     ): Reply[] {
       using db = open(id);
       return db.transaction(() => {
-        const { narrator, player, state, edits } = latestTurn(db, messageId);
+        const { narrator, player, state, edits } = latestTurn(db, messageId, true);
         deleteAfter(db, player.id);
         const replacement = db
           .query<ChoicesRow, [string, string | null, string | null, string | null, string | null]>(

@@ -33,10 +33,19 @@ export type State = {
    */
   threadsPlan: Record<string, string>;
   /**
+   * Each Plot Thread's question, by its truth: what it turns on, fixed once when it begins, so each move asks only whether play has
+   * answered it, as a question rewritten every move moved on with play and no thread closed in 160 rounds. A Save from before it has none.
+   */
+  threadsQuestion: Record<string, string>;
+  /** Each Plot Thread's plan's due hour on storyTime's hours, by its truth, so code tells a move whose plan is due. */
+  threadsDue: Record<string, number>;
+  /**
    * By each Plot Thread's truth, who World Moves On gave their own part of it, kept in npcKnows. Apart from what they learn in
    * play, as a move took anything in npcKnows for their part and never gave the people with only that one. A Save from before it has none.
    */
   threadParts: Record<string, string[]>;
+  /** By name, the words of each part World Moves On gave them, which the npcKnows cap keeps, as dropping the oldest lost people their own secrets. */
+  npcParts: Record<string, string[]>;
   summary: string;
   /** How many of the Narrator's replies the summary covers, as it is written only every few replies. 0 in a Save from before it, so its next reply writes one. */
   summaryReplies: number;
@@ -57,8 +66,11 @@ export type State = {
   era: string;
 };
 
-/** `day` counts days since the Opening, as Narrators add whole numbers far better than they work an in-world calendar. The player never sees it. */
-export type StoryTime = { day: number; date: string; timeOfDay: string };
+/**
+ * `day` counts days since the Opening, as Narrators add whole numbers far better than they work an in-world calendar. `hours` counts
+ * story hours since then, code adding up each reply's hours_passed, so it holds in any world's calendar. The player sees neither.
+ */
+export type StoryTime = { day: number; date: string; timeOfDay: string; hours?: number; dateDue?: boolean };
 
 export type Chapter = { lastMessage: number | null; title: string };
 
@@ -76,7 +88,10 @@ export const openingState: State = {
   plotThreads: [],
   threadsNow: {},
   threadsPlan: {},
+  threadsQuestion: {},
+  threadsDue: {},
   threadParts: {},
+  npcParts: {},
   summary: "",
   summaryReplies: 0,
   recentSummary: "",
@@ -106,7 +121,10 @@ export const StateSections = {
   plotThreads: stringList,
   threadsNow: z.record(z.string(), z.string()),
   threadsPlan: z.record(z.string(), z.string()),
+  threadsQuestion: z.record(z.string(), z.string()),
+  threadsDue: z.record(z.string(), z.number()),
   threadParts: z.record(z.string(), stringList),
+  npcParts: z.record(z.string(), stringList),
   summary: z.string(),
   summaryReplies: z.number().int().nonnegative(),
   recentSummary: z.string(),
@@ -114,7 +132,9 @@ export const StateSections = {
   worldBrief: z.string(),
   chapters: z.array(z.object({ lastMessage: z.number().int().nullable(), title: z.string() })),
   chapterReady: z.boolean(),
-  storyTime: z.object({ day: z.number().int(), date: z.string(), timeOfDay: z.string() }).nullable(),
+  storyTime: z
+    .object({ day: z.number().int(), date: z.string(), timeOfDay: z.string(), hours: z.number().optional(), dateDue: z.boolean().optional() })
+    .nullable(),
   pcAppearance: z.string(),
   era: z.string(),
 } satisfies { [Section in keyof State]: z.ZodType<State[Section]> };
@@ -167,7 +187,14 @@ export const StateOperation = z.discriminatedUnion("op", [
   z.object({ op: z.literal("resolve_plot_thread"), thread: nonEmpty }),
   z.object({ op: z.literal("set_pc_appearance"), appearance: nonEmpty }),
   z.object({ op: z.literal("set_era"), era: nonEmpty }),
-  z.object({ op: z.literal("set_story_time"), days_passed: z.number().int().min(0), date: nonEmpty.nullable(), time_of_day: nonEmpty }),
+  z.object({
+    op: z.literal("set_story_time"),
+    days_passed: z.number().int().min(0),
+    // Missing reads as unknown, so a reply from before it still moves the clock by its words.
+    hours_passed: z.preprocess((hours) => hours ?? null, z.number().min(0).nullable()),
+    date: nonEmpty.nullable(),
+    time_of_day: nonEmpty,
+  }),
 ]);
 export type StateOperation = z.infer<typeof StateOperation>;
 
@@ -175,14 +202,33 @@ const findNpc = (state: State, name: string) => state.npcs.find((npc) => npc.nam
 
 export const named = (full: string, mark: string) => full.toLowerCase() === mark.toLowerCase() || full.toLowerCase().split(" ").includes(mark.toLowerCase());
 
+/** How many letters must change to turn one word into the other. */
+function editDistance(one: string, other: string) {
+  let row = Array.from({ length: other.length + 1 }, (_, at) => at);
+  for (let at = 1; at <= one.length; at++) {
+    const next = [at];
+    for (let to = 1; to <= other.length; to++) next[to] = Math.min(row[to]! + 1, next[to - 1]! + 1, row[to - 1]! + (one[at - 1] === other[to - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[other.length]!;
+}
+
 /** Narrators shorten names, so part of one counts when it can only mean one person. */
 export function findPerson<Npc extends { name: string }>(npcs: Npc[], mark: string) {
   const exact = npcs.find(({ name }) => name === mark);
   if (exact) return exact;
   // Or every word of it a name of theirs, as a speaker named without their title was added as a second person and portrait.
-  const words = mark.split(/\s+/);
+  // Its title left out where a full name remains, as a thread's "Reverend Amos Thorne" and a page's "Amos Thorne" were kept as two
+  // people, but not from "Mrs. Owen", who is no Owen Kade.
+  const untitled = mark.split(/\s+/).filter((word) => !TITLES.has(word.toLowerCase().replace(/\.$/, "")));
+  const words = untitled.length >= 2 ? untitled : mark.split(/\s+/);
   const partly = npcs.filter(({ name }) => named(name, mark) || words.every((word) => nameForms(name).includes(word)));
-  return partly.length === 1 ? partly[0] : undefined;
+  if (partly.length === 1) return partly[0];
+  // Or, matching no one, every word after its first where two or more remain, as a garbled "Rerend Amos Thorne" or a
+  // "Constable Owen Price" whose title is also a surname became a second person.
+  const rest = mark.split(/\s+/).slice(1);
+  const byRest = partly.length === 0 && rest.length >= 2 ? npcs.filter(({ name }) => rest.every((word) => nameForms(name).includes(word))) : [];
+  return byRest.length === 1 ? byRest[0] : undefined;
 }
 
 const itemWords = (item: string) =>
@@ -217,6 +263,8 @@ export const MAX_PLOT_THREADS = 8;
 
 /** The most an NPC's list of what they know keeps, newest last, so the lists of a crowded scene stay a few lines each. */
 export const MAX_NPC_KNOWS = 12;
+// Of those, how many may be parts of threads, which the cap keeps.
+const MAX_PARTS = 4;
 
 // Saying what someone doesn't know, which an NPC's list read as what they do, and which goes stale once they learn it.
 // Any verb of knowing or learning denied, or with nothing or no one as what is known, as "has not heard of", "heard nothing of"
@@ -322,12 +370,24 @@ function mergeNpc(state: State, name: string, into: string) {
   mergeNpcKnows(state, name, into);
 }
 
+/** At most MAX_NPC_KNOWS of what someone knows, dropping the oldest, but never their parts, as those were their secrets. */
+const capped = (knows: string[], parts: string[] = []) => {
+  const learned = knows.filter((fact) => !parts.includes(fact));
+  const room = learned.slice(Math.max(0, learned.length - Math.max(0, MAX_NPC_KNOWS - (knows.length - learned.length))));
+  return knows.filter((fact) => parts.includes(fact) || room.includes(fact));
+};
+const own = (record: Record<string, string[]>, name: string) => (Object.hasOwn(record, name) ? record[name]! : []);
+
 function mergeNpcKnows(state: State, name: string, into: string) {
+  if (Object.hasOwn(state.npcParts, name)) {
+    const { [name]: given = [], ...parts } = state.npcParts;
+    state.npcParts = { ...parts, [into]: [...new Set([...own(parts, into), ...given])] };
+  }
   if (!Object.hasOwn(state.npcKnows, name)) return;
   const { [name]: knew = [], ...knows } = state.npcKnows;
-  const kept = Object.hasOwn(knows, into) ? knows[into]! : [];
+  const kept = own(knows, into);
   // The kept one's own last, shared ones too, so the cap drops the other's first.
-  state.npcKnows = { ...knows, [into]: [...knew.filter((fact) => !kept.includes(fact)), ...kept].slice(-MAX_NPC_KNOWS) };
+  state.npcKnows = { ...knows, [into]: capped([...knew.filter((fact) => !kept.includes(fact)), ...kept], own(state.npcParts, into)) };
 }
 
 /** What this reply made of each Plot Thread's truth it changed, its amended truth or null once resolved. */
@@ -385,12 +445,21 @@ function apply(state: State, operation: StateOperation, threads: ThreadsSoFar = 
       return take(state.status[operation.kind], operation.text) ? undefined : "not there";
     case "add_npc": {
       // No two people share a name, so adding someone already there gives them the looks they now have, as update_npc would.
-      const npc = findNpc(state, operation.name);
+      // By another form of a full name with a title too, as a garbled speaker label, "Rerend Amos Thorne", was added as a second
+      // person and portrait. Only three words or more, so a short name spelled otherwise, "mara" beside "Mara", stays its own.
+      const titled = operation.name.split(/\s+/).length >= 3;
+      const found = titled ? findPerson(state.npcs, operation.name) : undefined;
+      // Only where its first word is a title, or a misspelling of one or of their own name, so a father "Thomas Owen Price" isn't
+      // taken for Owen Price.
+      const first = operation.name.split(/\s+/)[0]!.toLowerCase().replace(/\.$/, "");
+      const forms = [...TITLES, ...(found?.name.toLowerCase().split(/\s+/) ?? [])];
+      const same = found && (TITLES.has(first) || forms.some((word) => word.length >= 5 && first.length >= 5 && editDistance(first, word) <= 2));
+      const npc = findNpc(state, operation.name) ?? (same ? found : undefined);
       if (npc) npc.appearance = lasting(operation.appearance);
       else state.npcs.push({ name: operation.name, appearance: lasting(operation.appearance) });
       // What World Moves On gave them to know before they were met, under the name a thread gave them.
       const unmet = Object.keys(state.npcKnows).find(
-        (name) => name !== operation.name && !findNpc(state, name) && (named(operation.name, name) || named(name, operation.name)),
+        (name) => name !== operation.name && !findNpc(state, name) && (findPerson([{ name }], operation.name) || findPerson([{ name: operation.name }], name)),
       );
       if (unmet) mergeNpcKnows(state, unmet, operation.name);
       return;
@@ -409,12 +478,13 @@ function apply(state: State, operation: StateOperation, threads: ThreadsSoFar = 
       const name = findPerson(state.npcs, operation.name)?.name;
       if (!name) return "no such NPC";
       if (!/\p{L}/u.test(operation.fact)) return "no words";
-      const fact = knownOnly(operation.fact);
+      // Without a trailing run of symbols, as a reviewer's "+#+#+#" was kept and sent in every prompt after.
+      const fact = knownOnly(operation.fact.replace(/[^\p{L}\p{N}\s.!?"'’)]{3,}$/u, "").trim());
       if (!fact) return "only what they don't know";
       // Own keys only, as a name such as "constructor" would find what every object has.
       const knows = Object.hasOwn(state.npcKnows, name) ? state.npcKnows[name]! : [];
       if (!addOnce(knows, fact)) return "already there";
-      state.npcKnows = { ...state.npcKnows, [name]: knows.slice(-MAX_NPC_KNOWS) };
+      state.npcKnows = { ...state.npcKnows, [name]: capped(knows, own(state.npcParts, name)) };
       return;
     }
     case "set_scene": {
@@ -477,6 +547,11 @@ function apply(state: State, operation: StateOperation, threads: ThreadsSoFar = 
       state.threadsNow = { ...others, [truth]: operation.now };
       const { [thread]: _planned, ...otherPlans } = state.threadsPlan;
       state.threadsPlan = operation.plan ? { ...otherPlans, [truth]: operation.plan } : otherPlans;
+      // A Turn's plan has no hour on the clock, so the old one goes with the old plan.
+      const { [thread]: _due, ...otherDue } = state.threadsDue;
+      state.threadsDue = otherDue;
+      const { [thread]: question, ...otherQuestions } = state.threadsQuestion;
+      if (question) state.threadsQuestion = { ...otherQuestions, [truth]: question };
       const { [thread]: parts, ...otherParts } = state.threadParts;
       if (parts) state.threadParts = { ...otherParts, [truth]: parts };
       replaceOnce(state.plotThreads, thread, truth);
@@ -492,6 +567,10 @@ function apply(state: State, operation: StateOperation, threads: ThreadsSoFar = 
       state.threadsNow = open;
       const { [thread]: _plan, ...openPlans } = state.threadsPlan;
       state.threadsPlan = openPlans;
+      const { [thread]: _question, ...openQuestions } = state.threadsQuestion;
+      state.threadsQuestion = openQuestions;
+      const { [thread]: _due, ...openDue } = state.threadsDue;
+      state.threadsDue = openDue;
       const { [thread]: _parts, ...openParts } = state.threadParts;
       state.threadParts = openParts;
       threads.became.set(thread, null);
@@ -507,17 +586,49 @@ function apply(state: State, operation: StateOperation, threads: ThreadsSoFar = 
       return;
     case "set_story_time": {
       const { time_of_day } = operation;
-      // The date wins over days_passed when they disagree, as models gave the day count there, doubling it each time (day 280 in 30 rounds).
-      const days_passed = operation.date === state.storyTime?.date ? 0 : operation.days_passed;
-      // A new day kept on the old date would put the story on the wrong day, so it waits for a Turn that names one.
-      const date = operation.date ?? (days_passed === 0 ? state.storyTime?.date : undefined);
+      const before = state.storyTime;
+      // A new day only where the hours or the words reach one, as a ten-yard walk from a quarter to six to a quarter past was given
+      // a day and the next date, and a date once moved on never comes back. Not a date the clock is waiting on, nor a clock it lacks.
+      const wentBack = (hourOf(time_of_day) ?? 24) < (hourOf(before?.timeOfDay ?? "") ?? 0);
+      const reached =
+        operation.days_passed === 0 ||
+        !before ||
+        before.dateDue ||
+        before.hours === undefined ||
+        operation.hours_passed === null ||
+        wentBack ||
+        Math.floor((before.hours + operation.hours_passed) / 24) > Math.floor(before.hours / 24);
+      const date = (reached ? operation.date : null) ?? before?.date;
       if (date === undefined) return "no date";
+      // The date wins over days_passed when they disagree, as models gave the day count there, doubling it each time (day 280 in
+      // 30 rounds); and a day the clock already rolled, waiting on its date, isn't counted again when the date comes.
+      const claimed = !reached || operation.date === before?.date ? 0 : operation.days_passed;
+      const days = before?.dateDue && date !== before.date ? Math.max(0, claimed - 1) : claimed;
+      const hours = clockHours(before, (before?.day ?? 1) + days, time_of_day, operation.hours_passed);
+      // Past midnight on the clock is a new day, as a reply from ten at night to three in the morning gave no days or date, and
+      // the story stayed on Monday to the end.
+      // Only where the words go back past midnight, or, naming no hour, where this reply's own hours crossed it, as hours
+      // over-counted on talk would put an afternoon on the next day.
+      const [from, to] = [hourOf(before?.timeOfDay ?? ""), hourOf(time_of_day)];
+      const crossed = operation.hours_passed !== null && Math.floor(hours / 24) > Math.floor((before?.hours ?? hours) / 24);
+      const wordsRoll = from !== undefined && to !== undefined ? to < from : crossed;
+      const day = Math.max((before?.day ?? 1) + days, wordsRoll ? Math.floor(hours / 24) + 1 : 0);
+      // Back to a clock time the words give, where far from the count, so it never drifts from what the page says; never to
+      // words alone, as "three in the morning" reads as morning's nine.
+      const at = clockTimeOf(time_of_day);
+      const named = at === undefined ? undefined : (day - 1) * 24 + at;
+      const clock = named !== undefined && Math.abs(hours - named) > DRIFT_HOURS ? named : hours;
+      const newDay = day > (before?.day ?? 1);
       // Never back within a day, as a reply that did so had started the story over from its first morning.
-      const [was, now] = [dayPart(state.storyTime?.timeOfDay), dayPart(time_of_day)];
+      const [was, now] = [dayPart(before?.timeOfDay), dayPart(time_of_day)];
       // From night on, the small hours and the next morning come after, as "past midnight" refused them all for five rounds.
       const wraps = was !== undefined && was >= NIGHT && now !== undefined && (now >= NIGHT || now <= MORNING);
-      if (days_passed === 0 && date === state.storyTime?.date && was !== undefined && now !== undefined && now < was && !wraps) return "earlier than now";
-      state.storyTime = { day: (state.storyTime?.day ?? 1) + days_passed, date, timeOfDay: withoutDate(time_of_day, date) };
+      // By the hours too, as clock times such as "3 pm" to "9 am" have no part of the day in words to compare.
+      const hoursBack = from !== undefined && to !== undefined && to < from && !nightWraps(from, to);
+      if (!newDay && date === before?.date && ((was !== undefined && now !== undefined && now < was && !wraps) || hoursBack)) return "earlier than now";
+      // A new day with no date of its own keeps the old one until a Turn names it, as code can't reckon a world's calendar.
+      const dateDue = (newDay || before?.dateDue) && date === before?.date;
+      state.storyTime = { day, date, timeOfDay: withoutDate(time_of_day, date), hours: clock, ...(dateDue && { dateDue: true }) };
       return;
     }
   }
@@ -545,9 +656,10 @@ const DAY_PARTS: [RegExp, number][] = [
 // out into the rain" redrew a portrait. The weather and the road's dirt too, as "rain-dark shoulders" redrew one soaked, and a
 // passing pallor, bonds or a garment taken off and put down, as "coat folded over a barrel" redrew one coatless, or carried on
 // an arm, as another man's coat "under his arm" stayed in a constable's looks.
+// Bare feet too, as a man was drawn barefoot in the morning from the night before.
 // shortcut: whole comma clauses by these words; add a word when another passing state sticks.
 const PASSING =
-  /\b(?:holding|carrying|carried|clutch(?:ing|ed)|gripp(?:ing|ed)|kneeling|crouching|sitting|seated|lying|leaning|standing (?:at|in|by|on|beside|over|before)|gone (?:out|off|away|into|to|back)|in (?:his|her|their|one) (?:other )?hand|in hand|held (?:high|low|up|out)|rain-\w+|wet|soaked|sodden|drenched|dripping|damp|dusty|dust|mud-\w+|muddied|windblown|caked|crusted|drained|ashen|flushed|(?:wrists|hands|arms|ankles) (?:bound|tied)|(?:bound|tied) (?:before|behind)|manacled|shackled|in irons|(?:taken|pulled|shrugged) off|(?:coat|jacket|cloak|hat|cap|shirt|boots) off|folded (?:over|on|across)|left (?:below|behind)|(?:under|over|across) (?:his|her|their|one|an?) arms?|tucked)\b/i;
+  /\b(?:holding|carrying|carried|clutch(?:ing|ed)|gripp(?:ing|ed)|kneeling|crouching|sitting|seated|lying|leaning|standing (?:at|in|by|on|beside|over|before)|gone (?:out|off|away|into|to|back)|in (?:his|her|their|one) (?:other )?hand|in hand|held (?:high|low|up|out)|rain-\w+|wet|soaked|sodden|drenched|dripping|damp|dusty|dust|mud-\w+|muddied|windblown|caked|crusted|drained|ashen|flushed|(?:wrists|hands|arms|ankles) (?:bound|tied)|(?:bound|tied) (?:before|behind)|manacled|shackled|in irons|(?:taken|pulled|shrugged) off|(?:coat|jacket|cloak|hat|cap|shirt|boots) off|bare-?foot(?:ed)?|folded (?:over|on|across)|left (?:below|behind)|(?:under|over|across) (?:his|her|their|one|an?) arms?|tucked)\b/i;
 /** The looks without their passing clauses, or as written if nothing else is left. */
 const lasting = (appearance: string) => {
   const kept = appearance
@@ -557,6 +669,57 @@ const lasting = (appearance: string) => {
     .trim();
   return kept || appearance;
 };
+
+/**
+ * Whether going from one hour back to an earlier one is the night running on past midnight: from night, about eight on, to the
+ * next morning, as the words' own check has it, so evening to mid-morning is still a story starting over.
+ */
+const nightWraps = (from: number, to: number) => from >= 20 && to < 12;
+
+// Hours the count may stray from a clock time the words give before it is set back to it.
+const DRIFT_HOURS = 3;
+
+/**
+ * The story hours since the Opening after a set_story_time: the old count plus the reply's hours_passed, or the hours its words
+ * moved on when it gives none, never short of the days passed. A Save from before it starts from its day and time of day.
+ */
+function clockHours(was: StoryTime | null, day: number, timeOfDay: string, passed: number | null) {
+  // A first Story Time starts at its own hour of day 1.
+  const start = was?.hours ?? (was ? (was.day - 1) * 24 + (hourOf(was.timeOfDay) ?? 12) : (hourOf(timeOfDay) ?? 12));
+  const [from, to] = [hourOf(was?.timeOfDay ?? ""), hourOf(timeOfDay)];
+  // Forward within the day, or on through the night into the small hours, as words going back from evening to the next morning
+  // are a story starting over, not a night passing, but "11 pm" to "1 am" is two hours.
+  const byWords = from === undefined || to === undefined ? 0 : to >= from ? to - from : nightWraps(from, to) ? to + 24 - from : 0;
+  // More than the days passed allow is the running total, as a reply gave 29.65 hours since the opening for a quarter hour's talk.
+  const fits = passed !== null && passed <= (day - (was?.day ?? 1) + 1) * 24;
+  // A first Story Time is its own hour, as hours_passed then counts from nothing the clock had.
+  const hours = start + (!was ? 0 : fits ? passed : day === was.day ? byWords : 0);
+  // A new day the hours didn't reach, as days_passed is the surer of the two.
+  return Math.max(hours, (day - 1) * 24);
+}
+
+// Checked in order, as "afternoon" holds "noon" and "midnight" holds "night".
+const HOURS: [RegExp, number][] = [
+  [/midnight/, 0],
+  [/afternoon/, 15],
+  [/noon|midday/, 12],
+  [/dawn|sunrise|daybreak/, 6],
+  [/morning/, 9],
+  [/dusk|sunset|twilight/, 18],
+  [/evening/, 19],
+  [/night/, 22],
+];
+
+/** The hour a time of day gives as a clock time, such as "9:30 pm", or undefined. */
+function clockTimeOf(timeOfDay: string) {
+  const clock = /\b(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m\b/i.exec(timeOfDay);
+  return clock ? (Number(clock[1]) % 12) + (clock[3]!.toLowerCase() === "p" ? 12 : 0) + Number(clock[2] ?? 0) / 60 : undefined;
+}
+
+/** The hour a time of day names, by its clock time or its words, or undefined when it names neither. */
+export function hourOf(timeOfDay: string) {
+  return clockTimeOf(timeOfDay) ?? HOURS.find(([words]) => words.test(timeOfDay.toLowerCase()))?.[1];
+}
 
 const [MORNING, NIGHT] = [2, 6];
 /** Where in the day a time of day falls, in order, or undefined for words that don't say. */
@@ -659,6 +822,9 @@ export const WorldEdit = z.discriminatedUnion("edit", [
     update: WorldUpdate,
     now: z.record(z.string(), z.string()).optional(),
     plan: z.record(z.string(), z.string()).optional(),
+    // World Moves On's: by truth, the question of each thread that had none, and each plan's due hour on storyTime's hours.
+    question: z.record(z.string(), z.string()).optional(),
+    due: z.record(z.string(), z.number()).optional(),
     made: z.number().int().min(0).optional(),
     moved: z.boolean().optional(),
     // World Moves On's: by name, each person's own part of the threads it wrote, kept as what they know.
@@ -715,23 +881,32 @@ export function applyEdit(state: State, edit: WorldEdit): State {
       const plans = Object.fromEntries(Object.entries(state.threadsPlan).filter(([truth]) => !Object.hasOwn(edit.now ?? {}, truth)));
       const plan = { ...plans, ...edit.plan };
       const threadsPlan = Object.fromEntries(merged.plotThreads.flatMap((truth) => (Object.hasOwn(plan, truth) ? [[truth, plan[truth]!]] : [])));
+      // A question once set stays, and a due hour goes with the plan a move rewrote.
+      const question = { ...edit.question, ...state.threadsQuestion };
+      const threadsQuestion = Object.fromEntries(merged.plotThreads.flatMap((truth) => (Object.hasOwn(question, truth) ? [[truth, question[truth]!]] : [])));
+      const due = { ...Object.fromEntries(Object.entries(state.threadsDue).filter(([truth]) => !Object.hasOwn(edit.now ?? {}, truth))), ...edit.due };
+      const threadsDue = Object.fromEntries(merged.plotThreads.flatMap((truth) => (Object.hasOwn(due, truth) ? [[truth, due[truth]!]] : [])));
       // Under the name of someone met, or as named until they are, when add_npc takes it up.
-      const npcKnows = { ...state.npcKnows };
-      for (const [name, parts] of Object.entries(edit.knows ?? {})) {
-        const key = findPerson(state.npcs, name)?.name ?? name;
-        const knew = Object.hasOwn(npcKnows, key) ? npcKnows[key]! : [];
-        const known = parts.map(knownOnly).filter((part) => part && !knew.includes(part));
-        if (known.length > 0 || knew.length > 0) npcKnows[key] = [...knew, ...known].slice(-MAX_NPC_KNOWS);
-      }
       const had = (truth: string) => (Object.hasOwn(state.threadParts, truth) ? state.threadParts[truth]! : []);
       const given = (truth: string) => (edit.parts && Object.hasOwn(edit.parts, truth) ? edit.parts[truth]! : []);
+      const partTakers = new Set(Object.values(edit.parts ?? {}).flat());
+      const npcKnows = { ...state.npcKnows };
+      const npcParts = { ...state.npcParts };
+      for (const [name, parts] of Object.entries(edit.knows ?? {})) {
+        const key = findPerson(state.npcs, name)?.name ?? name;
+        const knew = own(npcKnows, key);
+        const known = parts.map(knownOnly).filter((part) => part && !knew.includes(part));
+        // shortcut: the last few parts only, so a long story's turnover of threads can't fill the cap with them; keep more if old secrets go missing.
+        if (partTakers.has(name) && known.length > 0) npcParts[key] = [...own(npcParts, key), ...known].slice(-MAX_PARTS);
+        if (known.length > 0 || knew.length > 0) npcKnows[key] = capped([...knew, ...known], own(npcParts, key));
+      }
       const threadParts = Object.fromEntries(
         merged.plotThreads.flatMap((truth) => {
           const names = [...new Set([...had(truth), ...given(truth)])];
           return names.length > 0 ? [[truth, names]] : [];
         }),
       );
-      return { ...state, ...merged, threadsNow, threadsPlan, npcKnows, threadParts };
+      return { ...state, ...merged, threadsNow, threadsPlan, threadsQuestion, threadsDue, npcKnows, npcParts, threadParts };
     }
     case "inventory":
       return { ...state, inventory: { wearing: edit.wearing, carrying: edit.carrying } };
@@ -742,7 +917,7 @@ export function applyEdit(state: State, edit: WorldEdit): State {
     case "status":
       return { ...state, status: { health: edit.health, injuries: edit.injuries.slice(-MAX_STATUS), conditions: edit.conditions.slice(-MAX_STATUS) } };
     case "storyTime":
-      return { ...state, storyTime: { day: state.storyTime?.day ?? 1, date: edit.date, timeOfDay: edit.timeOfDay } };
+      return { ...state, storyTime: { ...state.storyTime, day: state.storyTime?.day ?? 1, date: edit.date, timeOfDay: edit.timeOfDay, dateDue: undefined } };
     case "chapterTitle":
       return { ...state, chapters: state.chapters.map((chapter, index) => (index === edit.index ? { ...chapter, title: edit.title } : chapter)) };
     // A second close before any new Message would make an empty Chapter.
@@ -805,7 +980,9 @@ export function introduce(state: State, people: z.infer<typeof Person>[], pcName
 
 // Articles and titles only: words such as "old" describe someone rather than stand before their name.
 const TITLES = new Set(
-  "the a an mr mrs ms miss mx dr doctor sir dame lady lord madam officer detective captain father mother sister brother aunt uncle".split(" "),
+  "the a an mr mrs ms miss mx dr doctor sir dame lady lord madam officer detective captain father mother sister brother aunt uncle reverend rev sergeant inspector lieutenant colonel commander admiral professor".split(
+    " ",
+  ),
 );
 const PARTICLES = new Set(["van", "von", "de", "der", "den", "del", "della", "di", "da", "du", "la", "le", "bin", "ibn", "al", "el", "y", "dos", "das"]);
 
